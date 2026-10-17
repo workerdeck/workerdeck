@@ -53,16 +53,17 @@ struct SessionListView: View {
 
   var body: some View {
     NavigationStack(path: $path) {
-      Group {
-        if let model {
-          content(model)
-        } else {
-          ProgressView()
+      chrome(
+        Group {
+          if let model {
+            content(model)
+          } else {
+            ProgressView()
+          }
         }
-      }
-      .navigationTitle("Sessions")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar { toolbar }
+        .navigationTitle("Sessions")
+        .navigationBarTitleDisplayMode(.inline)
+      )
       .navigationDestination(for: SessionRoute.self) { route in
         destination(route)
       }
@@ -754,8 +755,46 @@ struct SessionListView: View {
   /// brought nothing this control shows. `if let model` also moved *inside* the
   /// item, because an optional at the top of a `ToolbarItem` makes the item
   /// itself conditional, which is another way to lose identity.
+  // iOS 26 floats search and + at the bottom, like Contacts; earlier systems keep all five in the top bar.
+  @ViewBuilder
+  private func chrome(_ content: some View) -> some View {
+    if #available(iOS 26, *) {
+      content.toolbar { glassToolbar }
+    } else {
+      content.toolbar { toolbar }
+    }
+  }
+
+  @available(iOS 26, *)
+  @ToolbarContentBuilder
+  private var glassToolbar: some ToolbarContent {
+    leadingItems
+    filterItem
+    DefaultToolbarItem(kind: .search, placement: .bottomBar)
+    ToolbarSpacer(.fixed, placement: .bottomBar)
+    ToolbarItem(id: "add", placement: .bottomBar) {
+      addButton
+    }
+  }
+
   @ToolbarContentBuilder
   private var toolbar: some ToolbarContent {
+    leadingItems
+    ToolbarItem(id: "search", placement: .topBarTrailing) {
+      Button {
+        searchOpen.toggle()
+      } label: {
+        Label("Search", systemImage: "magnifyingglass")
+      }
+    }
+    filterItem
+    ToolbarItem(id: "add", placement: .topBarTrailing) {
+      addButton
+    }
+  }
+
+  @ToolbarContentBuilder
+  private var leadingItems: some ToolbarContent {
     ToolbarItem(id: "hosts", placement: .topBarLeading) {
       Button { showHostManager = true } label: {
         Label("Servers", systemImage: "server.rack")
@@ -766,13 +805,10 @@ struct SessionListView: View {
         Label("Settings", systemImage: "gearshape")
       }
     }
-    ToolbarItem(id: "search", placement: .topBarTrailing) {
-      Button {
-        searchOpen.toggle()
-      } label: {
-        Label("Search", systemImage: "magnifyingglass")
-      }
-    }
+  }
+
+  @ToolbarContentBuilder
+  private var filterItem: some ToolbarContent {
     ToolbarItem(id: "filter", placement: .topBarTrailing) {
       Group {
         if let model {
@@ -785,9 +821,6 @@ struct SessionListView: View {
             changed: { model.syncConfig() })
         }
       }
-    }
-    ToolbarItem(id: "add", placement: .topBarTrailing) {
-      addButton
     }
   }
 
@@ -836,7 +869,16 @@ private struct SessionSearch: ViewModifier {
   @Binding var text: String
   @State private var active = false
 
+  @ViewBuilder
   func body(content: Content) -> some View {
+    if #available(iOS 26, *) {
+      content.searchable(text: $text, prompt: "Search sessions")
+    } else {
+      drawer(content)
+    }
+  }
+
+  private func drawer(_ content: Content) -> some View {
     Group {
       if open {
         content

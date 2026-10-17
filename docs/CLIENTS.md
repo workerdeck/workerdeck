@@ -1023,10 +1023,12 @@ there is no per-row disclosure and no `1/3` chip that was also its handle. How m
 carries is three `ViewConfig` fields - `subagents`, `shells`, `tasks`, each `all` / `active` /
 `none` (labelled All / Active / Hide) - offered in the funnel's "Show under each session" section
 as menu pickers, persisted with the rest of the config. The funnel fills while a facet filters
-*or* a display is off its default (`facetFilterCount`, `displayCustomized`). Search is its own
-toolbar button: the `.searchable` bar is applied only while it is open (`SessionSearch`), its
-Cancel closes it, and closing clears the query, so a hidden search can never be what empties the
-list. `ViewConfig`'s lenient `init(from:)` is
+*or* a display is off its default (`facetFilterCount`, `displayCustomized`). On iOS 26 search
+and + float in the bottom bar, like Contacts (`glassToolbar`: `DefaultToolbarItem(kind: .search)`,
+Live tab only), and the top bar keeps Servers, Settings and the funnel so the title fits. Before
+iOS 26 search is its own top-bar button: the `.searchable` bar is applied only while it is open
+(`SessionSearch`), its Cancel closes it, and closing clears the query, so a hidden search can never
+be what empties the list. `ViewConfig`'s lenient `init(from:)` is
 what lets that key be added: a config stored by an older build decodes with the new field at its
 default rather than failing and resetting every preference the person had. The claim is
 **pressed, not asserted**: `WorkerDeckAppUITests` runs the `UIPREVIEW=sessions` fixture and checks
