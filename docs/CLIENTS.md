@@ -1374,6 +1374,12 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   `GET /sessions/:id`, the core `McpServers` (wrapped by `McpModel`, whose `revision` is the only recompose signal) and
   `skill_sections`; their pages are a stack that system back pops. Files (`session/HostFilesScreen.kt`) is
   `HostFiles.session(cwd)` plus `HostFileEditor`, offered only when the session record says files are served.
+- **Read marks carry item counts, and a reopened session catches up.** Opening a row reads `SessionList.since` before
+  the list's `markSeen` moves it; `SessionsModel` holds that mark (a rotation redraws the same seam) and the screen
+  hands it to `Session.set_recap`. While the screen is started it marks with `Session.seen()`; on stop and on leave
+  it trues the mark up once from a fresh `GET /sessions/:id` (`SessionList.mark_session`). `Session.catch_up()` is the
+  bar above the composer (jump puts the seam at the top, dismiss clears the recap); rows above the seam draw at 45%,
+  as on iOS. No setting gates it (iOS has a Catch-up mode toggle; Android has no settings screen).
 - **Approvals and questions dock above the status strip** (`session/PromptView.kt`), drawn like the
   iOS terminal prompts: a strip ruled in the prompt's tint, a body that scrolls under a cap of half
   the screen (220 dp floor), and the actions pinned below it. Only the head of the queue is drawn,

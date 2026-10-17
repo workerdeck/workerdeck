@@ -9,6 +9,7 @@ import bi.atomic.workerdeck.core.ffi.HttpCall
 import bi.atomic.workerdeck.core.ffi.Outgoing
 import bi.atomic.workerdeck.core.ffi.Metrics
 import bi.atomic.workerdeck.core.ffi.PromptKind
+import bi.atomic.workerdeck.core.ffi.ReadMark
 import bi.atomic.workerdeck.core.ffi.Selection
 import bi.atomic.workerdeck.core.ffi.toggleLabel
 import java.util.concurrent.CopyOnWriteArrayList
@@ -364,6 +365,26 @@ class SessionModelTest {
         model.close()
     }
 
+    @Test
+    fun aReadMarkFromTheLastVisitDrawsTheSeamAndTheCatchUpBarUntilDismissed() {
+        val transport = FakeTransport()
+        val mark = ReadMark(1u, System.currentTimeMillis() - 42 * 60_000.0)
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0), recap = mark)
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        listener.onMessage(socket, user(1, "first"))
+        (2..4).forEach { listener.onMessage(socket, reply(it, "reply $it")) }
+        eventually("the catch-up bar") { model.ui.value.catchUp != null }
+        val catchUp = model.ui.value.catchUp!!
+        assertTrue(catchUp.text, catchUp.count > 0u)
+        assertTrue(model.ui.value.rows[catchUp.row.toInt()].recap)
+        eventually("what was seen") { (model.seen.value?.itemCount ?: 0u) >= 4u }
+        model.clearRecap()
+        eventually("the bar gone") { model.ui.value.catchUp == null && model.ui.value.rows.none { it.recap } }
+        model.close()
+    }
+
     private companion object {
         const val VIEW =
             """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_view","name":"CodexImageView","input":{"path":"/tmp/v.png"}}]},"parentToolUseId":null,"uuid":"a-2","seq":2,"ts":1}}"""
@@ -408,6 +429,9 @@ class SessionModelTest {
 
         const val SHELL_ROW =
             """{"type":"event","event":{"type":"user_message","parentToolUseId":null,"synthetic":true,"replay":true,"seq":2,"ts":1,"shell":{"id":"sh_1","sessionId":"s1","ordinal":1,"command":"npm run dev","label":"npm run dev","cwd":"/r","owner":"user","status":"running","startedAt":1,"bytes":0,"cols":80,"rows":24},"message":{"role":"user","content":"<local-command-stdout>${'$'} npm run dev\nlistening</local-command-stdout>"}}}"""
+
+        fun reply(seq: Int, text: String) =
+            """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"text","text":"$text"}]},"parentToolUseId":null,"uuid":"a$seq","seq":$seq,"ts":1}}"""
 
         fun user(seq: Int, text: String) =
             """{"type":"event","event":{"type":"user_message","message":{"role":"user","content":"$text"},"parentToolUseId":null,"uuid":"u$seq","seq":$seq,"ts":1}}"""

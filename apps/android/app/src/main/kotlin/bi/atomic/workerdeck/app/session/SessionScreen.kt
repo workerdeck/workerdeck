@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -54,6 +56,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.ui.Palette
@@ -61,6 +66,8 @@ import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Metrics
 import bi.atomic.workerdeck.core.ffi.Outgoing
+import bi.atomic.workerdeck.core.ffi.ReadMark
+import bi.atomic.workerdeck.core.ffi.SeenCounts
 import bi.atomic.workerdeck.core.ffi.composerInsert
 
 private val FONT_SIZE = 13.sp
@@ -69,7 +76,16 @@ private val SIDE_PADDING = 8.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: String, entry: Entry? = null, onBack: () -> Unit) {
+fun SessionScreen(
+    client: GatewayClient,
+    sessionId: String,
+    fallbackTitle: String,
+    entry: Entry? = null,
+    recap: ReadMark? = null,
+    onSeen: (SeenCounts) -> Unit = {},
+    onLeave: (SeenCounts?) -> Unit = {},
+    onBack: () -> Unit,
+) {
     BackHandler(onBack = onBack)
     val dark = isSystemInDarkTheme()
     val palette = remember(dark) { Palette.of(dark) }
@@ -85,8 +101,20 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                 Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2 - RAIL_WIDTH).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
             }
             val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
-            val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry).also { images.host = it::hostImagePath } }
-            DisposableEffect(model) { onDispose { model.close() } }
+            val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry, recap).also { images.host = it::hostImagePath } }
+            val lifecycle = LocalLifecycleOwner.current.lifecycle
+            DisposableEffect(model, lifecycle) {
+                val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) onLeave(model.seen.value) }
+                lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycle.removeObserver(observer)
+                    onLeave(model.seen.value)
+                    model.close()
+                }
+            }
+            // Collected only while started, so a session behind another app never marks itself read.
+            val seen by model.seen.collectAsStateWithLifecycle()
+            LaunchedEffect(seen) { seen?.let(onSeen) }
             val context = LocalContext.current
             val bookmarks = remember(client, sessionId) { SessionBookmarks(BookmarkStore.of(context), client.gateway.id, sessionId) }
             LaunchedEffect(metrics) { model.resize(metrics) }
@@ -149,6 +177,9 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     )
                 }
                 Column(Modifier.navigationBarsPadding()) {
+                    ui.catchUp?.takeIf { ui.progress == null }?.let { catchUp ->
+                        CatchUpBar(catchUp.text, onJump = { model.jumpToTop(catchUp.row.toInt()) }, onDismiss = model::clearRecap)
+                    }
                     ui.prompt?.let { prompt ->
                         PendingPrompt(
                             prompt = prompt,
@@ -355,5 +386,28 @@ private fun EmptyState(cwd: String?, canRunShell: Boolean) {
                 }
             }
         }
+    }
+}
+
+// "N new rows since you were last here", above the composer: the seam is in the transcript, this is the way back.
+@Composable
+private fun CatchUpBar(text: String, onJump: () -> Unit, onDismiss: () -> Unit) {
+    val colors = Wd.colors
+    Row(
+        Modifier
+            .testTag("catch-up-bar")
+            .padding(start = 8.dp, end = 8.dp, top = 6.dp)
+            .fillMaxWidth()
+            .background(colors.secondary.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
+            .padding(start = 10.dp, end = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val small = MaterialTheme.typography.bodySmall
+        Text("※", style = small, color = colors.secondary)
+        Text(text, style = small, color = colors.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        val pad = PaddingValues(horizontal = 8.dp)
+        TextButton(onClick = onJump, contentPadding = pad, modifier = Modifier.height(36.dp)) { Text("jump", style = small, color = colors.accent) }
+        TextButton(onClick = onDismiss, contentPadding = pad, modifier = Modifier.height(36.dp)) { Text("dismiss", style = small, color = colors.secondary) }
     }
 }

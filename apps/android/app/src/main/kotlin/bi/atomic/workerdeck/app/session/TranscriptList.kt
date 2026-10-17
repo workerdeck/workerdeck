@@ -1,5 +1,6 @@
 package bi.atomic.workerdeck.app.session
 
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
@@ -36,10 +37,15 @@ import bi.atomic.workerdeck.core.LayoutRow
 import bi.atomic.workerdeck.core.LineImage
 import bi.atomic.workerdeck.core.ffi.imageUnavailable
 import androidx.compose.foundation.Image
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import bi.atomic.workerdeck.core.TranscriptLine
 import kotlinx.coroutines.flow.distinctUntilChanged
+
+// Rows above the recap seam were read on an earlier visit: dimmed, the same as the iOS cell.
+private const val READ_ALPHA = 0.45f
 
 // Bottom-anchored rows from the core's layout, lines only for the window the core holds. Shared by the session and
 // the sub-agent takeover; `rows` is one snapshot, so the key lambda never reads a shorter list than `count`.
@@ -63,6 +69,7 @@ fun TranscriptList(
     val haptics = LocalHapticFeedback.current
     val list = rememberLazyListState()
     val count = rows.size
+    val recapRow = remember(rows) { rows.indexOfFirst { it.recap }.takeIf { it >= 0 } }
     LaunchedEffect(list, count) {
         snapshotFlow { list.layoutInfo.visibleItemsInfo.map { it.index } }
             .distinctUntilChanged()
@@ -73,7 +80,10 @@ fun TranscriptList(
     }
     LaunchedEffect(jump) {
         val row = jump?.row ?: return@LaunchedEffect
-        if (row < count) list.scrollToItem(count - 1 - row)
+        if (row >= count) return@LaunchedEffect
+        list.scrollToItem(count - 1 - row)
+        // The list grows from the bottom, so a row lands there; the recap seam reads down from the top instead.
+        if (jump.top) list.scrollBy(-(list.layoutInfo.viewportSize.height - rows[row].height.toFloat()).coerceAtLeast(0f))
     }
     Box(modifier) {
     LazyColumn(Modifier.fillMaxSize().testTag("transcript"), state = list, reverseLayout = true) {
@@ -85,7 +95,8 @@ fun TranscriptList(
                 Spacer(Modifier.height(height))
             } else {
                 val line = with(density) { lineHeight.toDp() }
-                Column(Modifier.fillMaxWidth().height(height), verticalArrangement = Arrangement.Bottom) {
+                val read = recapRow != null && row < recapRow
+                Column(Modifier.fillMaxWidth().height(height).alpha(if (read) READ_ALPHA else 1f), verticalArrangement = Arrangement.Bottom) {
                     if (menu != null && menu.openRow == row) {
                         DropdownMenu(expanded = true, onDismissRequest = menu.onDismiss, content = menu.content)
                     }

@@ -13,6 +13,9 @@ import bi.atomic.workerdeck.core.ffi.metaCall
 import bi.atomic.workerdeck.core.ffi.StepKind
 import bi.atomic.workerdeck.core.ffi.ListException
 import bi.atomic.workerdeck.core.ffi.ListGroup
+import bi.atomic.workerdeck.core.ffi.ReadMark
+import bi.atomic.workerdeck.core.ffi.SeenCounts
+import bi.atomic.workerdeck.core.ffi.getSessionCall
 import bi.atomic.workerdeck.core.ffi.SessionList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -50,6 +53,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     private var clients: Map<String, GatewayClient> = emptyMap()
     private var errors: Map<String, String> = emptyMap()
     private var poll: Job? = null
+    private val recaps = mutableMapOf<String, ReadMark?>()
 
     // The paired gateways, in pairing order; the list merges them. Re-attaching the same set is a no-op.
     fun attach(gateways: List<Gateway>) {
@@ -168,12 +172,38 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleTeam(hostId: String, sessionId: String) = update { list.toggleTeam(hostId, sessionId) }
 
-    fun markSeen(hostId: String, sessionId: String) {
-        if (list.markSeen(hostId, sessionId, System.currentTimeMillis().toDouble())) {
-            prefs.edit().putString("marks", list.marksJson()).apply()
-            state.value = state.value.copy(groups = draw())
+    // Opening reads the old mark before moving it: that is where the catch-up seam goes. Held here, not on the
+    // screen, so a rotation redraws the same seam instead of one from the marks the screen has written since.
+    fun open(hostId: String, sessionId: String) {
+        recaps.clear()
+        recaps["$hostId:$sessionId"] = list.since(hostId, sessionId)
+        markSeen(hostId, sessionId)
+    }
+
+    fun recap(hostId: String, sessionId: String): ReadMark? = recaps["$hostId:$sessionId"]
+
+    fun markSeen(hostId: String, sessionId: String) = saveMarks(list.markSeen(hostId, sessionId, now()))
+
+    // Only while the session is really on screen: a mark from anywhere else is how an unread badge stops working.
+    fun mark(hostId: String, sessionId: String, seen: SeenCounts) =
+        saveMarks(list.mark(hostId, sessionId, seen.itemCount, seen.activity, seen.prose, seen.turns, now()))
+
+    // The in-view marks ran off the attach snapshot's counters, so leaving trues the mark up once from a fresh read.
+    fun finalizeSeen(hostId: String, sessionId: String, itemCount: UInt) {
+        val client = clients[hostId] ?: return
+        viewModelScope.launch {
+            val answer = runCatching { client.answer(getSessionCall(sessionId)) }.getOrNull() ?: return@launch
+            if (answer.status.toInt() == 200) saveMarks(list.markSession(hostId, sessionId, itemCount, answer.body, now()))
         }
     }
+
+    private fun saveMarks(moved: Boolean) {
+        if (!moved) return
+        prefs.edit().putString("marks", list.marksJson()).apply()
+        state.value = state.value.copy(groups = draw())
+    }
+
+    private fun now() = System.currentTimeMillis().toDouble()
 
     // Unpairing drops the gateway from the list along with its read marks; a new pairing gets a new id.
     fun forget(gateway: Gateway) {

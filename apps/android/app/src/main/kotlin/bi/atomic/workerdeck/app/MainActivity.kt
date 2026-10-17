@@ -119,7 +119,7 @@ private fun App(store: GatewayStore) {
             gateways,
             onOpen = { hostId, sessionId, title, entry ->
                 sessions.select(hostId, sessionId)
-                sessions.markSeen(hostId, sessionId)
+                sessions.open(hostId, sessionId)
                 open = listOf(hostId, sessionId, title) + entryParts(entry)
             },
             onAdd = { adding = true },
@@ -132,7 +132,15 @@ private fun App(store: GatewayStore) {
             },
         )
     } else {
-        SessionScreen(client, target[1], target[2], entryOf(target.drop(3))) {
+        SessionScreen(
+            client,
+            target[1],
+            target[2],
+            entryOf(target.drop(3)),
+            recap = sessions.recap(target[0], target[1]),
+            onSeen = { sessions.mark(target[0], target[1], it) },
+            onLeave = { seen -> seen?.let { sessions.finalizeSeen(target[0], target[1], it.itemCount) } },
+        ) {
             sessions.markSeen(target[0], target[1])
             open = null
         }

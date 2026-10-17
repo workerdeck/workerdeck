@@ -6,6 +6,7 @@ import bi.atomic.workerdeck.core.ShellGrid
 import bi.atomic.workerdeck.core.SessionWorker
 import bi.atomic.workerdeck.core.Snapshots
 import bi.atomic.workerdeck.core.TranscriptLine
+import bi.atomic.workerdeck.core.ffi.CatchUp
 import bi.atomic.workerdeck.core.ffi.Changed
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Effect
@@ -18,8 +19,10 @@ import bi.atomic.workerdeck.core.ffi.ModePicker
 import bi.atomic.workerdeck.core.ffi.ModelPicker
 import bi.atomic.workerdeck.core.ffi.Prompt
 import bi.atomic.workerdeck.core.ffi.PromptKind
+import bi.atomic.workerdeck.core.ffi.ReadMark
 import bi.atomic.workerdeck.core.ffi.ReplayProgress
 import bi.atomic.workerdeck.core.ffi.RowMenu
+import bi.atomic.workerdeck.core.ffi.SeenCounts
 import bi.atomic.workerdeck.core.ffi.ScrubCluster
 import bi.atomic.workerdeck.core.ffi.ScrubPeek
 import bi.atomic.workerdeck.core.ffi.Session
@@ -73,6 +76,7 @@ data class SessionUi(
     val usage: SessionUsageView? = null,
     val skills: List<SkillSection> = emptyList(),
     val canRunShell: Boolean = false,
+    val catchUp: CatchUp? = null,
 ) {
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
@@ -87,7 +91,7 @@ sealed interface Entry {
     data class Reveal(val toolUseId: String) : Entry
 }
 
-data class Jump(val row: Int, val nonce: Long)
+data class Jump(val row: Int, val nonce: Long, val top: Boolean = false)
 
 // The open sub-agent takeover: one agent's own rows, read through the core's frame window.
 data class FrameView(
@@ -108,7 +112,14 @@ data class ShellView(val id: String, val sized: Boolean = false, val grid: Shell
 // Drives one core `Session` over one socket, for as long as its screen is shown: the screen calls `close()` when it
 // leaves. Everything that touches the session, the socket and the window runs on the worker's thread; effects arrive
 // there too, so `handle` and the readers call the session directly.
-class SessionModel(private val client: Transport, private val sessionId: String, metrics: Metrics, entry: Entry? = null) : AutoCloseable, PromptActions {
+// `recap` is the read mark taken when the session was opened: fixed for the screen's life, so the seam does not walk.
+class SessionModel(
+    private val client: Transport,
+    private val sessionId: String,
+    metrics: Metrics,
+    entry: Entry? = null,
+    recap: ReadMark? = null,
+) : AutoCloseable, PromptActions {
     private var pending = entry
     private val session = Session(0, true, UUID.randomUUID().toString(), metrics)
     private val state = MutableStateFlow(SessionUi())
@@ -128,6 +139,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     private var usagePoll: Job? = null
     private val extrasState = MutableStateFlow(sessionExtrasUnknown())
     val extras: StateFlow<SessionExtras> = extrasState
+    private val seenState = MutableStateFlow<SeenCounts?>(null)
+    val seen: StateFlow<SeenCounts?> = seenState
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val composer = ComposerModel(sessionId, client, scope)
 
@@ -139,7 +152,10 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     @Volatile private var generation = 0
 
     init {
-        worker.act { it.setWallClock(System.currentTimeMillis().toDouble()) + it.setNavigation(true, true) + it.takeEffects() }
+        worker.act { session ->
+            session.setWallClock(System.currentTimeMillis().toDouble()) + session.setNavigation(true, true) +
+                recap?.let { session.setRecap(it.itemCount, it.seenAt) }.orEmpty() + session.takeEffects()
+        }
         scope.launch {
             val answer = client.answer(getSessionCall(sessionId))
             if (answer.status.toInt() in 200..299) sessionExtras(answer.body)?.let { extrasState.value = it }
@@ -161,6 +177,15 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     fun press(row: Int, line: Int) = worker.act { it.pressLine(row.toUInt(), line.toUInt()) }
 
     fun reconnect() = worker.act { it.reconnectNow() }
+
+    fun jumpToTop(row: Int) {
+        state.value = state.value.copy(jump = Jump(row, (state.value.jump?.nonce ?: 0) + 1, top = true))
+    }
+
+    fun clearRecap() = worker.act {
+        state.value = state.value.copy(catchUp = null)
+        it.setRecap(null, null)
+    }
 
     // A long-press asks the core what this row offers; a row with nothing to offer opens no menu.
     fun openMenu(row: Int, inFrame: Boolean) = worker.act { session ->
@@ -387,7 +412,11 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         }
         if (changed.progress || changed.transcript) ui = ui.copy(progress = session.replayProgress())
         if (changed.shells) readShell()
+        if (changed.transcript) ui = ui.copy(catchUp = session.catchUp())
         state.value = ui
+        if (ui.connection == ConnectionState.LIVE && ui.progress == null && (changed.transcript || changed.chrome || seenState.value == null)) {
+            seenState.value = session.seen()
+        }
         if (changed.chrome) ui.usage?.let(::pollProfiles)
         if (changed.transcript || changed.prompt) readRail()
         if (changed.frames || changed.transcript || changed.prompt) readFrame()
