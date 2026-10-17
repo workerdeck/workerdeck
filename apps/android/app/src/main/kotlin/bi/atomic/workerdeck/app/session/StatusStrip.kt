@@ -28,11 +28,19 @@ import bi.atomic.workerdeck.app.ui.modeTint
 import bi.atomic.workerdeck.app.ui.statusTint
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.SessionChrome
+import bi.atomic.workerdeck.core.ffi.SessionUsageView
 
 // The terminal theme's status line: a flat band under a hairline. Connection trouble takes the status slot, since a
 // session status over a dead socket is a stale reading shown as a live one.
 @Composable
-fun StatusStrip(chrome: SessionChrome?, connection: ConnectionState, onReconnect: () -> Unit, onPicker: (Picker) -> Unit) {
+fun StatusStrip(
+    chrome: SessionChrome?,
+    connection: ConnectionState,
+    usage: SessionUsageView?,
+    onReconnect: () -> Unit,
+    onPicker: (Picker) -> Unit,
+    onMeter: (Meter) -> Unit,
+) {
     val colors = Wd.colors
     Column(Modifier.fillMaxWidth().background(colors.background)) {
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.separator))
@@ -41,32 +49,35 @@ fun StatusStrip(chrome: SessionChrome?, connection: ConnectionState, onReconnect
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (connection == ConnectionState.LIVE) {
-                val status = chrome?.status.orEmpty()
-                val label = chrome?.statusLabel?.takeIf { it.isNotEmpty() } ?: "Connected"
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(Modifier.size(7.dp).background(statusTint(status, colors), CircleShape))
-                    Text(label, style = MaterialTheme.typography.labelMedium, color = colors.secondary)
-                    if (chrome?.busy == true) CircularProgressIndicator(Modifier.size(10.dp), strokeWidth = 1.5.dp, color = colors.secondary)
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (connection == ConnectionState.LIVE) {
+                    val status = chrome?.status.orEmpty()
+                    val label = chrome?.statusLabel?.takeIf { it.isNotEmpty() } ?: "Connected"
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(Modifier.size(7.dp).background(statusTint(status, colors), CircleShape))
+                        Text(label, style = MaterialTheme.typography.labelMedium, color = colors.secondary)
+                        if (chrome?.busy == true) CircularProgressIndicator(Modifier.size(10.dp), strokeWidth = 1.5.dp, color = colors.secondary)
+                    }
+                } else {
+                    val (label, tint) = when (connection) {
+                        ConnectionState.CONNECTING -> "Connecting" to colors.secondary
+                        ConnectionState.RECONNECTING -> "Reconnecting" to colors.orange
+                        ConnectionState.OFFLINE -> "Offline · tap to retry" to colors.red
+                        ConnectionState.UNREACHABLE -> "Unreachable · tap to retry" to colors.red
+                        ConnectionState.LIVE -> "" to colors.secondary
+                    }
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = tint,
+                        modifier = Modifier.clickable(onClick = onReconnect),
+                    )
                 }
-            } else {
-                val (label, tint) = when (connection) {
-                    ConnectionState.CONNECTING -> "Connecting" to colors.secondary
-                    ConnectionState.RECONNECTING -> "Reconnecting" to colors.orange
-                    ConnectionState.OFFLINE -> "Offline · tap to retry" to colors.red
-                    ConnectionState.UNREACHABLE -> "Unreachable · tap to retry" to colors.red
-                    ConnectionState.LIVE -> "" to colors.secondary
-                }
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = tint,
-                    modifier = Modifier.clickable(onClick = onReconnect),
-                )
+                val model = chrome?.modelLabel
+                Chip(model ?: "Model", if (model == null) colors.secondary else colors.primary, Modifier.weight(1f, fill = false)) { onPicker(Picker.MODEL) }
+                Chip(chrome?.modeLabel ?: "Mode", modeTint(chrome?.permissionMode, colors)) { onPicker(Picker.MODE) }
             }
-            val model = chrome?.modelLabel
-            Chip(model ?: "Model", if (model == null) colors.secondary else colors.primary, Modifier.weight(1f, fill = false)) { onPicker(Picker.MODEL) }
-            Chip(chrome?.modeLabel ?: "Mode", modeTint(chrome?.permissionMode, colors)) { onPicker(Picker.MODE) }
+            usage?.let { UsageHud(it, onMeter) }
         }
     }
 }

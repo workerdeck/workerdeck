@@ -24,12 +24,20 @@ import bi.atomic.workerdeck.core.ffi.ScrubCluster
 import bi.atomic.workerdeck.core.ffi.ScrubPeek
 import bi.atomic.workerdeck.core.ffi.Session
 import bi.atomic.workerdeck.core.ffi.SessionChrome
+import bi.atomic.workerdeck.core.ffi.SessionUsageView
+import bi.atomic.workerdeck.core.ffi.listProfilesCall
 import bi.atomic.workerdeck.core.ffi.Selection
+import java.util.Collections
 import java.util.UUID
+import java.util.WeakHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.Response
@@ -51,6 +59,7 @@ data class SessionUi(
     val planLines: List<TranscriptLine> = emptyList(),
     val jump: Jump? = null,
     val rail: List<ScrubCluster> = emptyList(),
+    val usage: SessionUsageView? = null,
 ) {
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
@@ -103,6 +112,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     private var railSize: RailSize? = null
     private var frameRailSize: RailSize? = null
     private var bookmarkIds: List<String> = emptyList()
+    private var usagePoll: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val composer = ComposerModel(sessionId, client, scope)
 
@@ -224,6 +234,12 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         emptyList()
     }
 
+    // The meter sheets' reset and freshness lines move with the clock, not with the session.
+    fun refreshUsage() = worker.act {
+        readUsage()
+        emptyList()
+    }
+
     fun setModel(model: String?) = worker.act { it.setModel(model) }
 
     fun setEffort(effort: String?) = worker.act { it.setEffort(effort) }
@@ -326,7 +342,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
             ui = ui.copy(title = session.sessionTitle(), connection = session.connection(), error = session.takeProtocolError() ?: ui.error)
         }
         if (changed.chrome) {
-            ui = ui.copy(chrome = session.chrome(), modelPicker = session.modelPicker(), modePicker = session.modePicker())
+            ui = ui.copy(chrome = session.chrome(), modelPicker = session.modelPicker(), modePicker = session.modePicker(), usage = usageNow())
             composer.read(session)
         }
         if (changed.prompt) ui = ui.copy(prompt = session.prompt())
@@ -336,6 +352,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         if (changed.progress || changed.transcript) ui = ui.copy(progress = session.replayProgress())
         if (changed.shells) readShell()
         state.value = ui
+        if (changed.chrome) ui.usage?.let(::pollProfiles)
         if (changed.transcript || changed.prompt) readRail()
         if (changed.frames || changed.transcript || changed.prompt) readFrame()
         if (pending != null && ui.connection == ConnectionState.LIVE && ui.progress == null && ui.rows.isNotEmpty()) enter()
@@ -351,6 +368,32 @@ class SessionModel(private val client: Transport, private val sessionId: String,
             null -> Unit
         }
         pending = null
+    }
+
+    private fun usageNow(): SessionUsageView = session.usage(System.currentTimeMillis().toDouble())
+
+    private fun readUsage() {
+        state.value = state.value.copy(usage = usageNow())
+    }
+
+    // Seeded from this gateway's last body so a session switch does not draw replayed numbers; 404 = predates profiles.
+    private fun pollProfiles(usage: SessionUsageView) {
+        if (usagePoll != null || usage.profile == null || !usage.rateLimits) return
+        profileBodies[client]?.let { if (session.setProfiles(it)) readUsage() }
+        usagePoll = scope.launch {
+            while (isActive) {
+                val answer = client.answer(listProfilesCall())
+                if (answer.status.toInt() == 404) return@launch
+                if (answer.status.toInt() in 200..299) {
+                    profileBodies[client] = answer.body
+                    worker.act {
+                        if (it.setProfiles(answer.body)) readUsage()
+                        emptyList()
+                    }
+                }
+                delay(60_000)
+            }
+        }
     }
 
     private fun readFrame() {
@@ -382,6 +425,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         state.value = state.value.copy(startRow = lines.startRow, lines = lines.rows)
     }
 }
+
+private val profileBodies: MutableMap<Transport, String> = Collections.synchronizedMap(WeakHashMap())
 
 data class RailSize(val railH: Double, val viewportH: Double)
 

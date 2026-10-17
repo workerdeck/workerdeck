@@ -89,7 +89,7 @@ fun PickerSheet(
                 Picker.MODEL -> models?.title ?: "Select model"
                 Picker.MODE -> "Select mode"
             }
-            Header(title, close)
+            SheetHeader(title, close)
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
                 when (picker) {
                     Picker.MODEL -> {
@@ -97,11 +97,11 @@ fun PickerSheet(
                         if (main.isEmpty()) Empty("This session hasn't reported its models yet.")
                         else Card(main.map { SheetRow(it.title, it.summary, it.selected, it.isDefault, onClick = choose(it, onModel)) })
                         models?.more?.takeIf { it.isNotEmpty() }?.let { more ->
-                            Heading("More models")
+                            SheetHeading("More models")
                             Card(more.map { SheetRow(it.title, it.summary, it.selected, it.isDefault, onClick = choose(it, onModel)) })
                         }
                         models?.efforts?.takeIf { it.isNotEmpty() }?.let { efforts ->
-                            Heading("Effort")
+                            SheetHeading("Effort")
                             Card(efforts.map { SheetRow(it.title, it.summary, it.selected, it.isDefault, onClick = choose(it, onEffort)) })
                         }
                     }
@@ -133,7 +133,7 @@ fun PickerSheet(
 }
 
 @Composable
-private fun Header(title: String, onClose: () -> Unit) {
+internal fun SheetHeader(title: String, onClose: () -> Unit) {
     val colors = Wd.colors
     Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 14.dp)) {
         IconButton(
@@ -147,7 +147,7 @@ private fun Header(title: String, onClose: () -> Unit) {
 }
 
 @Composable
-private fun Heading(text: String) {
+internal fun SheetHeading(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.labelLarge,

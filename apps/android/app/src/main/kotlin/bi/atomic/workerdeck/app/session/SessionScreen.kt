@@ -89,9 +89,17 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
             var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
             var picker by rememberSaveable { mutableStateOf<Picker?>(null) }
             var clearing by rememberSaveable { mutableStateOf(false) }
+            var meter by rememberSaveable { mutableStateOf<Meter?>(null) }
             val chrome = ui.chrome
             Column(Modifier.fillMaxSize().imePadding()) {
-                SessionTopBar(ui.title ?: fallbackTitle, onBack, model::reconnect, onClearContext = if (chrome?.canClearContext == true) ({ clearing = true }) else null)
+                SessionTopBar(
+                    ui.title ?: fallbackTitle,
+                    onBack,
+                    model::reconnect,
+                    onClearContext = if (chrome?.canClearContext == true) ({ clearing = true }) else null,
+                    onMeter = if (ui.usage != null) ({ meter = it }) else null,
+                    contextMeter = ui.usage?.contextUsage == true,
+                )
                 ui.error?.let { Text(it, color = Wd.colors.red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp)) }
                 ui.progress?.let { p ->
                     val fraction = if (p.target > 0) (p.seq.toFloat() / p.target).coerceIn(0f, 1f) else 0f
@@ -139,7 +147,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                             actions = model,
                         )
                     }
-                    StatusStrip(chrome, ui.connection, model::reconnect) { picker = it }
+                    StatusStrip(chrome, ui.connection, ui.usage, model::reconnect, onPicker = { picker = it }, onMeter = { meter = it })
                     Composer(
                         composer = model.composer,
                         draft = draft,
@@ -176,6 +184,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } },
                 )
             }
+            meter?.let { MeterSheet(it, ui.usage, model::refreshUsage) { meter = null } }
             picker?.let {
                 PickerSheet(
                     picker = it,
@@ -194,7 +203,14 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SessionTopBar(title: String, onBack: () -> Unit, onReconnect: () -> Unit, onClearContext: (() -> Unit)?) {
+private fun SessionTopBar(
+    title: String,
+    onBack: () -> Unit,
+    onReconnect: () -> Unit,
+    onClearContext: (() -> Unit)?,
+    onMeter: ((Meter) -> Unit)?,
+    contextMeter: Boolean,
+) {
     val colors = Wd.colors
     var menu by remember { mutableStateOf(false) }
     Column {
@@ -216,6 +232,24 @@ private fun SessionTopBar(title: String, onBack: () -> Unit, onReconnect: () -> 
                                 onReconnect()
                             },
                         )
+                        onMeter?.let { open ->
+                            if (contextMeter) {
+                                DropdownMenuItem(
+                                    text = { Text("Context") },
+                                    onClick = {
+                                        menu = false
+                                        open(Meter.CONTEXT)
+                                    },
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Usage") },
+                                onClick = {
+                                    menu = false
+                                    open(Meter.USAGE)
+                                },
+                            )
+                        }
                         onClearContext?.let { clear ->
                             DropdownMenuItem(
                                 text = { Text("Clear context") },

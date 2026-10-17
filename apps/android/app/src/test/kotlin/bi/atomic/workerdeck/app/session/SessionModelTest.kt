@@ -342,6 +342,28 @@ class SessionModelTest {
         model.close()
     }
 
+    @Test
+    fun theMetersReadTheTranscriptThenTheAccountsProfileRow() {
+        val transport = FakeTransport()
+        transport.answers = { call ->
+            if (call.path == "/profiles") HttpAnswer(200u, "application/json", PROFILES) else HttpAnswer(404u, null, "")
+        }
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, METERED)
+        listener.onMessage(socket, CONTEXT_USAGE)
+        listener.onMessage(socket, FIVE_HOUR)
+        eventually("the context ring") { model.ui.value.usage?.context != null }
+        assertEquals("62", model.ui.value.usage?.context?.ringLabel)
+        eventually("the account's weekly window") { model.ui.value.usage?.windows?.any { it.key == "seven_day" } == true }
+        val usage = model.ui.value.usage!!
+        assertEquals(listOf("five_hour", "seven_day"), usage.windows.map { it.key }.take(2))
+        assertTrue(usage.spend?.weekText.orEmpty(), usage.spend != null)
+        assertEquals(1, transport.calls.count { it.path == "/profiles" })
+        model.close()
+    }
+
     private companion object {
         const val VIEW =
             """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_view","name":"CodexImageView","input":{"path":"/tmp/v.png"}}]},"parentToolUseId":null,"uuid":"a-2","seq":2,"ts":1}}"""
@@ -368,6 +390,18 @@ class SessionModelTest {
             """{"type":"event","event":{"type":"permission_requested","seq":1,"ts":1,"request":{"id":"r1","toolName":"AskUserQuestion","toolUseId":"t1","input":{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"a"},{"label":"b"}]}]}}}}"""
 
         const val RESOLVED = """{"type":"event","event":{"type":"permission_resolved","requestId":"r1","seq":2,"ts":1}}"""
+
+        const val METERED =
+            """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Metered","status":"idle","cwd":"/r","createdAt":1,"profile":"p1","lastSeq":0,"pendingPermissionCount":0,"capabilities":{"rateLimits":true}}}"""
+
+        const val CONTEXT_USAGE =
+            """{"type":"event","event":{"type":"context_usage","usage":{"totalTokens":124000,"maxTokens":200000,"percentage":62,"model":"claude-opus-4-6","categories":[{"name":"Messages","tokens":98000,"color":"#497eae"}]},"seq":1,"ts":1760000001000}}"""
+
+        const val FIVE_HOUR =
+            """{"type":"event","event":{"type":"rate_limit","info":{"status":"allowed","rateLimitType":"five_hour","utilization":34},"seq":2,"ts":1760000002000}}"""
+
+        const val PROFILES =
+            """{"profiles":[{"name":"p1","usage":{"seven_day":{"info":{"status":"allowed","utilization":71},"updatedAt":1760000003000}},"spend":{"weekUsd":41.2,"monthUsd":160,"weekByModel":{},"unpricedShare":0}}]}"""
 
         const val ATTACHED =
             """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Deck work","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"""
