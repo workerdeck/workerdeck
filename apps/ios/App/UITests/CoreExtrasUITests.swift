@@ -4,9 +4,7 @@ import XCTest
 final class CoreExtrasUITests: XCTestCase {
   @MainActor
   func testSheetsOpenWithTheirContent() throws {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "coreextras"
-    app.launch()
+    let app = launchPreview("coreextras")
 
     app.buttons["Skills"].tap()
     XCTAssertTrue(app.staticTexts["wrapup"].waitForExistence(timeout: 10))
@@ -43,9 +41,7 @@ final class CoreExtrasUITests: XCTestCase {
   // into the SwiftUI TextEditor gets no keyboard focus under XCUITest here; the save and 409 rules are core tests.
   @MainActor
   func testHostFilesBrowseAndOpen() throws {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "coreextras"
-    app.launch()
+    let app = launchPreview("coreextras")
 
     app.buttons["Files"].tap()
     XCTAssertTrue(app.staticTexts["workerdeck"].waitForExistence(timeout: 10))
@@ -64,22 +60,12 @@ final class CoreExtrasUITests: XCTestCase {
   // The folder picker keeps folders and symlinks only.
   @MainActor
   func testFolderPickerShowsOnlyFolders() throws {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "folders"
-    app.launch()
+    let app = launchPreview("folders")
 
     XCTAssertTrue(app.staticTexts["workerdeck"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["scratch"].exists)
     XCTAssertFalse(app.staticTexts["notes.md"].exists)
     XCTAssertTrue(app.buttons["Use projects"].exists)
     snap(app, "folders")
-  }
-
-  @MainActor
-  private func snap(_ app: XCUIApplication, _ name: String) {
-    let attachment = XCTAttachment(screenshot: app.screenshot())
-    attachment.name = name
-    attachment.lifetime = .keepAlways
-    add(attachment)
   }
 }

@@ -280,12 +280,15 @@ the command and the xcodegen scheme gotcha that comes with adding a second targe
 **Android Gradle wants Android Studio's JDK** (`JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`,
 what `scripts/android.sh` falls back to): the default JDK 26 fails with a bare "26.0.1", and a GraalVM 21 picked by
 `java_home -v 21` compiles but fails the unit tests in `jlink`.
-**The UI suite is heavy (about 6 minutes, every test relaunches the app over the 60-turn fixture), so it runs
+**The UI suite is heavy (about 5 minutes, every test relaunches the app over the 60-turn fixture), so it runs
 in tiers.** While a slice is in progress run only the classes it touches (`-only-testing:WorkerDeckAppUITests/<Class>`);
 the full suite runs once before a commit. Logic belongs in a Rust unit test, not a UI assertion. Build the core with
 `apps/ios/scripts/build-core.sh --sim` for test runs (simulator and macOS slices only; the phone needs the default
 build), never `--debug` for an app build: that links a simulator app that dies in dyld at launch, one macOS crash
 dialog per test. Prefix the test command with `taskpolicy -b` to keep the machine responsive while it runs.
+Every test launches through `launchPreview` (`App/UITests/UITestSupport.swift`), which sets `UIPREVIEW_STILL` (animations
+off); a test reaches a far row through a jump (the rail, the catch-up bar), never a run of swipes, and takes
+screenshots only under `TEST_RUNNER_WD_UI_SNAPS=1` (a failure records its own).
 **Anything touching the APNs payload, the device route or the app's tap handling needs
 `pnpm smoke:push`** - it costs no tokens, but it is the only way to raise a notification without
 waiting for a session to decide to, and a tap is the only gate the delegate's main-thread contract

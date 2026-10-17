@@ -5,9 +5,7 @@ import XCTest
 final class CoreUsageUITests: XCTestCase {
   @MainActor
   func testMetersOpenTheContextAndUsageSheets() throws {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "core"
-    app.launch()
+    let app = launchPreview("core")
 
     let ring = app.buttons["Context ring"]
     XCTAssertTrue(ring.waitForExistence(timeout: 20), "no context ring on the status line")
@@ -40,12 +38,5 @@ final class CoreUsageUITests: XCTestCase {
   // A `LabeledContent` row reads as one element whose label joins both halves.
   private func has(_ app: XCUIApplication, _ needle: String) -> Bool {
     app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", needle)).firstMatch.exists
-  }
-
-  private func snap(_ app: XCUIApplication, _ name: String) {
-    let shot = XCTAttachment(screenshot: app.screenshot())
-    shot.name = name
-    shot.lifetime = .keepAlways
-    add(shot)
   }
 }

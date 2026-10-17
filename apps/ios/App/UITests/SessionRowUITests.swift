@@ -6,9 +6,7 @@ final class SessionRowUITests: XCTestCase {
   // press to appear look identical in a screenshot to rows that are simply there.
   @MainActor
   func testStepRowsDrawWithoutAPressAndFollowTheFilterMenu() throws {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "sessions"
-    app.launch()
+    let app = launchPreview("sessions")
 
     // Three cards carry a running agent; under the default only the running one
     // of each draws, so a completed sweep does not bury the list.
@@ -20,13 +18,13 @@ final class SessionRowUITests: XCTestCase {
     XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'fable'")).firstMatch.waitForExistence(timeout: 3))
 
     choose(app, display: "Agents", value: "Hide")
-    XCTAssertFalse(steps.firstMatch.waitForExistence(timeout: 3), "hiding left sub-agent rows behind")
+    XCTAssertTrue(steps.firstMatch.waitForNonExistence(timeout: 3), "hiding left sub-agent rows behind")
     XCTAssertTrue(app.navigationBars["Sessions"].exists, "the menu pushed a row")
 
     let task = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Update the docs'"))
     XCTAssertTrue(task.firstMatch.waitForExistence(timeout: 3))
     choose(app, display: "Tasks", value: "Hide")
-    XCTAssertFalse(task.firstMatch.waitForExistence(timeout: 3), "hiding left task rows behind")
+    XCTAssertTrue(task.firstMatch.waitForNonExistence(timeout: 3), "hiding left task rows behind")
 
     let row = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Session 2 Title'")).firstMatch
     XCTAssertTrue(row.waitForExistence(timeout: 3))
@@ -39,9 +37,7 @@ final class SessionRowUITests: XCTestCase {
   // through to the row would open the session instead of stopping the task.
   @MainActor
   func testStopDoesNotOpenTheRow() throws {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "sessions"
-    app.launch()
+    let app = launchPreview("sessions")
 
     let stop = app.buttons["Stop node packages/cli/cli.ts --port 4179"]
     XCTAssertTrue(stop.waitForExistence(timeout: 8), "a stoppable task drew no stop button")
@@ -75,9 +71,7 @@ final class SessionRowUITests: XCTestCase {
   // up AND the list is still what we are looking at.
   @MainActor
   func testOverflowOpensAMenuInsteadOfTheSession() throws {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "sessions"
-    app.launch()
+    let app = launchPreview("sessions")
 
     let overflow = app.descendants(matching: .any).matching(identifier: "Session actions")
     XCTAssertTrue(overflow.firstMatch.waitForExistence(timeout: 8))
@@ -94,9 +88,7 @@ final class SessionRowUITests: XCTestCase {
   // (the web's 0.21.0 bug), so a task must never route as an agent.
   @MainActor
   func testStepsPressToTheirOwnDestination() throws {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "steps"
-    app.launch()
+    let app = launchPreview("steps")
 
     let agent = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Explore'")).firstMatch
     XCTAssertTrue(agent.waitForExistence(timeout: 8))

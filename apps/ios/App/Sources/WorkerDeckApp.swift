@@ -27,7 +27,13 @@ struct WorkerDeckApp: App {
       // see UIPreviewHarness. Absent (always, outside a simulator check) this is
       // one environment lookup at launch.
       if let preview = UIPreview.active {
-        UIPreviewHarness(variant: preview)
+        if UIPreview.still {
+          UIPreviewHarness(variant: preview)
+            .transaction { $0.disablesAnimations = true }
+            .onAppear { UIView.setAnimationsEnabled(false) }
+        } else {
+          UIPreviewHarness(variant: preview)
+        }
       } else {
         RootView()
           .environment(delegate.hosts)

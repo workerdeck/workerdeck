@@ -31,6 +31,9 @@ enum UIPreview: String {
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
   }
+
+  // Set by the UI tests: animations off, so a test waits on state rather than on a transition.
+  static var still: Bool { ProcessInfo.processInfo.environment["UIPREVIEW_STILL"] == "1" }
 }
 
 // Canned rollups through the app's own core list: a preview proves only what the list ships if it derives the same

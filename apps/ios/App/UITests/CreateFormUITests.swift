@@ -1,20 +1,15 @@
 import XCTest
 
 final class CreateFormUITests: XCTestCase {
-  // The modes on offer come from the chosen profile's engine: claude offers Plan, codex does not, and switching back
-  // re-adopts the claude profile's own default.
+  // The modes on offer come from the chosen profile's engine (a Rust test); this checks the picker drives the form.
   @MainActor
   func testSwitchingProfileChangesTheOfferedModes() throws {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "createform"
-    app.launch()
+    let app = launchPreview("createform")
 
     let mode = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Mode'")).firstMatch
     XCTAssertTrue(mode.waitForExistence(timeout: 8), "no mode row")
     XCTAssertTrue(mode.label.contains("Plan"), "the profile's default mode was not adopted: \(mode.label)")
     XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Profile'")).firstMatch.exists, "no profile picker")
-
-    XCTAssertTrue(offeredModes(app, mode).contains("Plan"))
 
     app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Profile'")).firstMatch.tap()
     let codex = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'openai'")).firstMatch

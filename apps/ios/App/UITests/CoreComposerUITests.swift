@@ -2,7 +2,8 @@ import UIKit
 import XCTest
 
 // The core composer over `CoreReplayFixture`: its commands, skills, peers and files are canned, and an upload lands
-// after a short wait under an id that names the file.
+// after a short wait under an id that names the file. Which suggestions match and what a skill types are Rust tests;
+// these check that each source reaches the field.
 final class CoreComposerUITests: XCTestCase {
   @MainActor
   func testCompletionsInsertTokens() throws {
@@ -26,15 +27,8 @@ final class CoreComposerUITests: XCTestCase {
     app.typeText("@field")
     let file = app.buttons.matching(identifier: "Suggestion").firstMatch
     XCTAssertTrue(file.waitForExistence(timeout: 3), "no file suggestion for @field")
-    snap(app, "completion-2-file")
     file.tap()
     XCTAssertEqual(field.value as? String, "/review #Release-Lead @src/composer/field.swift ")
-
-    app.typeText("/pd")
-    XCTAssertTrue(app.buttons.matching(identifier: "Suggestion").firstMatch.waitForExistence(timeout: 3), "no skill")
-    app.buttons.matching(identifier: "Suggestion").firstMatch.tap()
-    XCTAssertEqual(field.value as? String, "/review #Release-Lead @src/composer/field.swift $pdf ")
-    snap(app, "completion-3-styled")
   }
 
   @MainActor
@@ -67,10 +61,9 @@ final class CoreComposerUITests: XCTestCase {
     app.buttons["Close"].tap()
   }
 
+  @MainActor
   private func launch() -> XCUIApplication {
-    let app = XCUIApplication()
-    app.launchEnvironment["UIPREVIEW"] = "core"
-    app.launch()
+    let app = launchPreview("core")
     XCTAssertTrue(text(app, containing: "Turn 60:").waitForExistence(timeout: 20), "the session did not open")
     return app
   }
@@ -80,16 +73,5 @@ final class CoreComposerUITests: XCTestCase {
       UIColor.systemTeal.setFill()
       context.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
     }
-  }
-
-  private func text(_ app: XCUIApplication, containing needle: String) -> XCUIElement {
-    app.textViews.matching(NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", needle, needle)).firstMatch
-  }
-
-  private func snap(_ app: XCUIApplication, _ name: String) {
-    let shot = XCTAttachment(screenshot: app.screenshot())
-    shot.name = name
-    shot.lifetime = .keepAlways
-    add(shot)
   }
 }
