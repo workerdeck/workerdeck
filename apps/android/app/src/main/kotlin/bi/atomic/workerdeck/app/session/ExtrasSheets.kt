@@ -71,7 +71,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class ExtrasSheet { INFO, MCP, SKILLS }
+enum class ExtrasSheet { INFO, FILES, MCP, SKILLS }
 
 // Every level of the `/mcp` stack reads the core's last answer; `revision` tells Compose when that answer moved.
 class McpModel(private val servers: McpServers, private val transport: Transport) {
@@ -128,6 +128,7 @@ fun ExtrasSheetHost(
     val close: () -> Unit = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
     val root = when (sheet) {
         ExtrasSheet.INFO -> "Session info"
+        ExtrasSheet.FILES -> "Files"
         ExtrasSheet.MCP -> "MCP servers"
         ExtrasSheet.SKILLS -> "Skills"
     }
@@ -146,7 +147,7 @@ fun ExtrasSheetHost(
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
                 when (val page = pages.last()) {
                     is Page.Root -> when (sheet) {
-                        ExtrasSheet.INFO -> InfoBody(model, chrome)
+                        ExtrasSheet.INFO, ExtrasSheet.FILES -> InfoBody(model, chrome)
                         ExtrasSheet.MCP -> mcp?.let { McpRoot(it, push) }
                         ExtrasSheet.SKILLS -> SkillsRoot(skills, push)
                     }

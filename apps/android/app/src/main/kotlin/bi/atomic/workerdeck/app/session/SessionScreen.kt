@@ -103,7 +103,12 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     onClearContext = if (chrome?.canClearContext == true) ({ clearing = true }) else null,
                     onMeter = if (ui.usage != null) ({ meter = it }) else null,
                     contextMeter = ui.usage?.contextUsage == true,
-                    sheets = listOfNotNull(ExtrasSheet.INFO, ExtrasSheet.MCP.takeIf { extras.mcp }, ExtrasSheet.SKILLS.takeIf { extras.skills }),
+                    sheets = listOfNotNull(
+                        ExtrasSheet.INFO,
+                        ExtrasSheet.FILES.takeIf { extras.files && extras.cwd != null },
+                        ExtrasSheet.MCP.takeIf { extras.mcp },
+                        ExtrasSheet.SKILLS.takeIf { extras.skills },
+                    ),
                     onSheet = { extrasSheet = it },
                 )
                 ui.error?.let { Text(it, color = Wd.colors.red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp)) }
@@ -191,7 +196,10 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                 )
             }
             meter?.let { MeterSheet(it, ui.usage, model::refreshUsage) { meter = null } }
-            extrasSheet?.let { sheet ->
+            val cwd = extras.cwd
+            if (extrasSheet == ExtrasSheet.FILES && cwd != null) {
+                HostFilesScreen(client, cwd) { extrasSheet = null }
+            } else extrasSheet?.let { sheet ->
                 ExtrasSheetHost(
                     sheet = sheet,
                     model = model,
@@ -261,6 +269,7 @@ private fun SessionTopBar(
                                     Text(
                                         when (sheet) {
                                             ExtrasSheet.INFO -> "Session info"
+                                            ExtrasSheet.FILES -> "Files"
                                             ExtrasSheet.MCP -> "MCP servers"
                                             ExtrasSheet.SKILLS -> "Skills"
                                         },
