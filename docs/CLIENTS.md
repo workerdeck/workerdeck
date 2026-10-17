@@ -783,10 +783,9 @@ static SPA.
   embedding was broken only in the mode anyone reading it would run.
 ## `apps/ios`
 
-**Rust-only from 2026-10-16 (`refactor/rust`, Tobias's call).** Every session opens on
+**Rust-only since 2026-10-16 (Tobias's call).** Every session opens on
 `CoreSessionView` over the Rust core (`WorkerDeckSession`, linked unconditionally); there is no
-toggle and no Swift fallback, and a phone app that is not fully featured until the migration ends
-is accepted. The Swift session screen (`SessionView`, `TranscriptViewModel`, the cards renderer,
+toggle and no Swift fallback. The Swift session screen (`SessionView`, `TranscriptViewModel`, the cards renderer,
 the composer, the status bar, the sheets and the host file browser) is deleted, so paragraphs
 below that describe them are history until slice 7 rewrites this section. Deep links still land:
 a push's `seq` (epoch-checked), a task step's tool call, a sub-agent step's takeover and a shell
