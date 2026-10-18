@@ -1327,6 +1327,13 @@ agent section (name, team, sharing, brief). Team moves are **same-gateway only**
 cross-gateway invitations stay on the web and VS Code, and drag-to-team is out. `UIPREVIEW=teams`
 draws every state from canned rows.
 
+- **Agent conversations.** `CoreFollowSession` swaps the screen in place and shows "Starting a new
+  conversation" until the successor's first frame. An archive opens on its own route that never follows:
+  banner from `Session.archived_view` (one `GET /agents` read), Go to current, no composer or actions. Row
+  long-press: Conversations sheet, New conversation (gated, hint as subtitle), Delete agent... (replaces Retire
+  and Close on agent rows); Past agents sit in the filter menu. Send again / Dismiss and Retry start show on the
+  session screen only (the list reads `GET /sessions`). `CoreArchivedUITests` over `UIPREVIEW=corearchived`.
+
 ## `apps/android`
 
 The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android library over

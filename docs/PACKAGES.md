@@ -2628,6 +2628,13 @@ snapshots in `docs/NATIVE-CORE-SNAPSHOTS.md`; little-endian, no version byte):
   (0 default, `0x01000000|index`, `0x02rrggbb`), `u8 attrs` (1 bold, 2 dim, 4 italic,
   8 underline, 16 inverse, 32 strike), `u32+bytes text`.
 
+- **Agent conversations (`vm::conversations`).** Selection, follow, list filter, `archived_view`,
+  `new_conversation_gate`, `clear_context_offered` are ports held to the TS goldens; history and past-agent rows
+  (date, duration) format in Rust from a UTC offset the platform passes, not the locale. FFI:
+  `agent_conversations`, `past_agents`, `agent_notice` (`undelivered`, `startFailed`), `Session.archived_view`,
+  chrome `agent_id`/`agent_name`/`new_conversation_blocked`, the Delete agent strings, and REST calls for
+  restart/retire with `expected_session_id`, retry start, settle undelivered, conversations, retired agents.
+
 ## `apps/docs`
 
 Astro site → Pages via `docs.yml`. `examples` - dev entries with root-level deps
