@@ -31,6 +31,8 @@ import {
   usePeerSessions,
   useProfileUsage,
   useToolCallHost,
+  stashHandedFiles,
+  successorOf,
   type ClientToolHandler,
   type ConnectionState,
   type TranscriptState,
@@ -134,6 +136,11 @@ export interface SessionPanelProps {
   emptyState?: ReactNode
   onLinkClick?: (href: string) => boolean | void
   clientTools?: Record<string, ClientToolHandler>
+  // The agent moved this conversation to `successor` (live, or read off an archived attach). The host decides whether the view follows.
+  onSuperseded?: (successor: string) => void
+  // This view followed its agent here from `carryFrom`: the unsent draft and staged files come along, and a brief
+  // starting line shows until the first frame.
+  carryFrom?: string
   fontSize?: number
   className?: string
 }
@@ -242,6 +249,8 @@ export function SessionPanel({
   emptyState,
   onLinkClick,
   onOpenFile,
+  onSuperseded,
+  carryFrom,
   fontSize,
   className,
 }: SessionPanelProps) {
@@ -466,12 +475,24 @@ export function SessionPanel({
   const attachments = useAttachments(client, sessionId, {
     capabilities,
     engine: state.engine,
+    carryFrom,
   })
   const hostFiles = useHostFileSearch(client, state.cwd)
   // Read here rather than taken as a prop, the way file search is: every embedding that has a
   // gateway has the sessions list, and a host that has to wire it would be a host that forgets to.
   const peers = usePeerSessions(client, sessionId, peerMentions)
-  const draft = useDraft(client, sessionId)
+  const draft = useDraft(client, sessionId, carryFrom)
+  const successor = successorOf(state)
+  const handOver = useRef({ attachments, onSuperseded })
+  handOver.current = { attachments, onSuperseded }
+  useEffect(() => {
+    if (!sessionId || successor === undefined) {
+      return
+    }
+    stashHandedFiles(client, sessionId, handOver.current.attachments.files())
+    handOver.current.onSuperseded?.(successor)
+  }, [client, sessionId, successor])
+  const startingHandover = carryFrom !== undefined && state.session === undefined
   // Stable identity: an inline arrow here would bust the Composer's `triggers`
   // memo on every streaming re-render, and with it every prompt-area callback
   // keyed on the triggers.
@@ -653,6 +674,11 @@ export function SessionPanel({
               Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some events may not render.
             </Notice>
           ) : null}
+          {startingHandover ? (
+            <div role="status" className="px-3 pt-2 text-center text-body-sm text-fg-3">
+              Starting a new conversation…
+            </div>
+          ) : null}
           {protocolError ? (
             <Notice level="error" onDismiss={() => setProtocolError(undefined)}>
               {protocolError}
@@ -680,13 +706,7 @@ export function SessionPanel({
             />
           ) : null}
           {framedShellId !== undefined ? (
-            <ShellTerminal
-              key={framedShellId}
-              handle={handle}
-              shellId={framedShellId}
-              onOpenUrl={onLinkClick}
-              fontSize={cell.fontSize}
-            />
+            <ShellTerminal key={framedShellId} handle={handle} shellId={framedShellId} onOpenUrl={onLinkClick} fontSize={cell.fontSize} />
           ) : (
             <BookmarkProvider value={bookmarkHandle}>
               <TaskControlProvider value={taskControl}>

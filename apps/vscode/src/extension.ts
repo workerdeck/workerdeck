@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { hostCommands, pickCommand, registerCommands, sessionCommands, viewCommands } from './commands.ts'
 import { startDevReload } from './dev-reload.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
+import { agentOf, followTargetOf } from './follow.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
 import { AgentAvatarCache } from './agent-avatars.ts'
 import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
@@ -55,9 +56,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const infoOf = (hostId: string, sessionId: string) => model.sessionsOf(hostId).find((s) => s.id === sessionId)
   const titleOf = (hostId: string, sessionId: string) => sessionTitle(infoOf(hostId, sessionId), sessionId)
   const avatars = new AgentAvatarCache(store, context.globalStorageUri)
-  const sessionRef = (hostId: string, sessionId: string, cwd?: string): SessionRef | undefined => {
+  const sessionRef = (hostId: string, sessionId: string, cwd?: string, agentId?: string): SessionRef | undefined => {
     const host = store.get(hostId)
-    return host ? { host, sessionId, cwd: cwd ?? infoOf(hostId, sessionId)?.cwd } : undefined
+    if (!host) {
+      return undefined
+    }
+    const info = infoOf(hostId, sessionId)
+    const agent = agentId ?? agentOf(info)
+    return { host, sessionId, cwd: cwd ?? info?.cwd, ...(agent === undefined ? {} : { agentId: agent }) }
   }
 
   const markSeen = (surface: AnySurface, force = false) => {
@@ -187,6 +193,10 @@ export function activate(context: vscode.ExtensionContext): void {
       void model.refresh().then(() => markSeen(surface, true))
     },
     focused: (surface) => registry.setFocused(surface),
+    superseded: (surface, successor) => {
+      followSurface(surface, successor)
+      void model.refresh().then(() => followSurface(surface))
+    },
     peerAvatars: (hostId) => {
       const sessions = model.sessionsOf(hostId)
       avatars.ensure({ [hostId]: sessions })
@@ -212,7 +222,7 @@ export function activate(context: vscode.ExtensionContext): void {
     sessionChanged: (session) => {
       void context.workspaceState.update(
         ACTIVE_SESSION_KEY,
-        session ? { hostId: session.host.id, sessionId: session.sessionId, cwd: session.cwd } : undefined,
+        session ? { hostId: session.host.id, sessionId: session.sessionId, cwd: session.cwd, agentId: session.agentId } : undefined,
       )
       registry.changed()
     },
@@ -254,6 +264,28 @@ export function activate(context: vscode.ExtensionContext): void {
     tab.setAvatar(avatars.iconFor(info))
     if (info.agent?.avatar) {
       avatars.ensure({ [session.host.id]: [info] })
+    }
+  }
+  const followSurface = (surface: AnySurface, successor?: string) => {
+    const shown = surface.session
+    const agentId = shown && (shown.agentId ?? agentOf(infoOf(shown.host.id, shown.sessionId)))
+    if (!shown || agentId === undefined) {
+      return
+    }
+    surface.markAgent(agentId)
+    const session: SessionRef = { ...shown, agentId }
+    const target = followTargetOf(session, model.sessionsOf(session.host.id), successor, surface.left)
+    if (target === undefined || registry.find(session.host.id, target)) {
+      return
+    }
+    const next: SessionRef = { ...session, sessionId: target, cwd: infoOf(session.host.id, target)?.cwd ?? session.cwd }
+    surface.follow(next)
+    if (surface instanceof SessionEditorTab) {
+      if (panel.heldSession && sameRef(panel.heldSession, session)) {
+        panel.hold(next, titleOf(next.host.id, next.sessionId))
+      }
+      syncTab(surface)
+      registry.changed()
     }
   }
   const moveToPanel = async (tab: SessionEditorTab) => {
@@ -376,6 +408,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
   model.onDidChange(() => {
+    for (const surface of registry.all()) {
+      followSurface(surface)
+    }
     for (const tab of registry.tabs()) {
       syncTab(tab)
     }
@@ -397,7 +432,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Must stay after the registry subscribers above, so restoring feeds the status bar and the `when` keys the way selecting would.
   const remembered = context.workspaceState.get<SurfaceState>(ACTIVE_SESSION_KEY)
   if (remembered) {
-    const ref = sessionRef(remembered.hostId, remembered.sessionId, remembered.cwd)
+    const ref = sessionRef(remembered.hostId, remembered.sessionId, remembered.cwd, remembered.agentId)
     if (ref) {
       panel.restore(ref)
     } else {
@@ -491,7 +526,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.window.registerWebviewPanelSerializer(SessionEditorTab.viewType, {
       deserializeWebviewPanel: async (webviewPanel, state: SurfaceState | undefined) => {
-        const ref = state && sessionRef(state.hostId, state.sessionId, state.cwd)
+        const ref = state && sessionRef(state.hostId, state.sessionId, state.cwd, state.agentId)
         if (!ref || registry.tabFor(ref.host.id, ref.sessionId)) {
           webviewPanel.dispose()
           return

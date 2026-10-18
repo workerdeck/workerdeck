@@ -11,7 +11,14 @@ import {
   type StatusLabelInput,
   errorMessage,
 } from '@workerdeck/protocol'
-import { runTeamMove, teamMoveMessage, withdrawTeamInvitation, type TeamInvitation, type TeamMoveOutcome, type WorkerDeckClient } from '@workerdeck/client'
+import {
+  runTeamMove,
+  teamMoveMessage,
+  withdrawTeamInvitation,
+  type TeamInvitation,
+  type TeamMoveOutcome,
+  type WorkerDeckClient,
+} from '@workerdeck/client'
 import {
   AlertDialog,
   AlertDialogClose,
@@ -312,12 +319,7 @@ export function SessionsSidebar() {
       }
       case 'restart': {
         if (agent) {
-          agentCall(row, 'Could not restart the agent', async (client) => {
-            const restarted = await client.restartAgent(agent.id)
-            if (restarted.session && row.info.id === activeId) {
-              open({ ...row, info: restarted.session })
-            }
-          })
+          agentCall(row, 'Could not restart the agent', (client) => client.restartAgent(agent.id))
         }
         break
       }

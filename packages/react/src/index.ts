@@ -43,7 +43,9 @@ export {
   rateLimitWindows,
   seedFromSessionInfo,
   shellRowText,
+  successorOf,
 } from './lib/transcript.ts'
+export { stashHandedFiles } from './lib/conversation-follow.ts'
 export type { ProducedFileRef, ShellItem, ToolResultImageRef, TranscriptItem, TranscriptState } from './lib/transcript.ts'
 export { recapLine, summarizeSince, type RecapInput, type RecapSummary } from './lib/recap.ts'
 export { useShellTerminal } from './hooks/use-shell-terminal.ts'

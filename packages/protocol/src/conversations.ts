@@ -38,6 +38,27 @@ export function followTarget(
   return rows.find((row) => row.hostId === selection.gateway && !row.info.archived && row.info.agent?.id === selection.agentId)?.info.id
 }
 
+export type FollowRow = { hostId: string; info: Pick<SessionInfo, 'id' | 'archived' | 'agent'> }
+
+export type FollowInput = {
+  selection: ConversationSelection | undefined
+  shown: string
+  rows?: readonly FollowRow[]
+  successor?: string
+  // Sessions this view already followed away from: a list polled before the rotation must not pull it back.
+  left: ReadonlySet<string>
+}
+
+// Where a view showing `shown` moves next, if anywhere. The list wins because it resolves every rotation the view
+// missed; the one-hop successor covers a list that lags.
+export function followStep({ selection, shown, rows, successor, left }: FollowInput): string | undefined {
+  if (selection?.kind !== 'agent') {
+    return undefined
+  }
+  const listed = rows ? followTarget(selection, rows) : undefined
+  return [listed, successor].find((id) => id !== undefined && id !== shown && !left.has(id))
+}
+
 export function conversationsOf(agent: Pick<AgentInfo, 'sessionId' | 'pastSessions' | 'conversations'>): ConversationRow[] {
   const known = agent.conversations ?? []
   const listed = new Set(known.map((entry) => entry.sessionId))

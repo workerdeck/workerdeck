@@ -45,7 +45,7 @@ export type SidebarState = {
 }
 
 // What a session tab persists across a window reload (`bridge.setState`), read back by the panel serializer.
-export type SurfaceState = { hostId: string; sessionId: string; cwd?: string }
+export type SurfaceState = { hostId: string; sessionId: string; cwd?: string; agentId?: string }
 
 export type TransportToHost =
   | {
@@ -82,6 +82,7 @@ export type PanelToHost =
   | { kind: 'wd-ready' }
   | { kind: 'wd-focus' }
   | { kind: 'wd-focus-held' }
+  | { kind: 'wd-superseded'; sessionId: string; successor: string }
   | { kind: 'wd-open-path'; path: string; line?: number }
   | { kind: 'wd-open-url'; url: string }
   | {
@@ -112,6 +113,10 @@ export type HostToPanel =
         hostName: string
         cwd?: string
         unseen?: { itemCount: number; since: number }
+        // Set when the surface shows an agent rather than one conversation; it rides window reloads.
+        agentId?: string
+        // The conversation this surface just followed its agent away from.
+        carryFrom?: string
       }
       // The bottom panel's info state: the session it last showed now lives in an editor tab.
       held?: { title: string }

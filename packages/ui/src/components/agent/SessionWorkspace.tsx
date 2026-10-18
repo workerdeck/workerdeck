@@ -40,6 +40,8 @@ export interface SessionWorkspaceProps {
   unseen?: SessionPanelProps['unseen']
   readOnly?: SessionPanelProps['readOnly']
   onVitals?: SessionPanelProps['onVitals']
+  onSuperseded?: SessionPanelProps['onSuperseded']
+  carryFrom?: SessionPanelProps['carryFrom']
   defaultRailWidth?: number
   defaultRailCollapsed?: boolean
   onRailChange?: (rail: { width: number; collapsed: boolean }) => void
@@ -79,6 +81,8 @@ export function SessionWorkspace({
   unseen,
   readOnly,
   onVitals,
+  onSuperseded,
+  carryFrom,
   defaultRailWidth = 260,
   defaultRailCollapsed,
   onRailChange,
@@ -244,6 +248,8 @@ export function SessionWorkspace({
             unseen={unseen}
             readOnly={readOnly}
             onVitals={onVitals}
+            onSuperseded={onSuperseded}
+            carryFrom={carryFrom}
             className="min-h-0 flex-1"
           />
         </div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { isJobRun, sessionState, type SessionInfo, type SessionRow, errorMessage } from '@workerdeck/protocol'
+import { isJobRun, sessionListed, sessionState, type SessionInfo, type SessionRow, errorMessage } from '@workerdeck/protocol'
 import { clientFor, currentHosts, isLocal, onHostsChange, type GatewayHost } from '../lib/hosts.ts'
 import { createPolledStore } from '../lib/store.ts'
 import { useUnseen } from './useUnseen.ts'
@@ -39,7 +39,7 @@ async function loadSessions(): Promise<void> {
         return { host, sessions: [], error: 'unusable address' }
       }
       try {
-        return { host, sessions: await client.listSessions() }
+        return { host, sessions: (await client.listSessions()).filter(sessionListed) }
       } catch (e) {
         // Keep this gateway's last good rows, because one failed poll is a blip.
         return { host, sessions: previous.get(host.id)?.sessions ?? [], error: errorMessage(e) }

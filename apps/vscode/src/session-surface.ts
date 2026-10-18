@@ -23,6 +23,8 @@ export type SessionRef = {
   host: GatewayHost
   sessionId: string
   cwd: string | undefined
+  // Present when the surface shows an agent: it follows that agent to every new conversation.
+  agentId?: string
 }
 
 export type SurfaceKind = 'panel' | 'editor'
@@ -38,6 +40,7 @@ export type SurfaceDelegate = {
   visibilityChanged: (surface: AnySurface) => void
   focused: (surface: AnySurface) => void
   peerAvatars: (hostId: string) => Record<string, AgentAvatarImage>
+  superseded: (surface: AnySurface, successor: string) => void
 }
 
 function sameImages(a: Record<string, AgentAvatarImage>, b: Record<string, AgentAvatarImage>): boolean {
@@ -73,6 +76,9 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
   // visible marks the session seen, and `show()` awaits the focus command in between. Re-reading afterwards
   // returned the mark that opening had just moved, which cost the recap seam, the dimming and the jump target.
   #unseen: { itemCount: number; since: number } | undefined
+  #carryFrom: string | undefined
+  // Conversations this surface followed away from, so a list polled before the rotation cannot pull it back.
+  #left = new Set<string>()
   #transports: WebviewTransportHost | undefined
   #peerAvatarsSent: Record<string, AgentAvatarImage> | undefined
 
@@ -146,11 +152,15 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
 
   // Take a session on (or drop it). Readings belong to the session, so a different one resets them; re-taking the
   // one already on screen does not remount the panel, and nothing would re-send the vitals if they were cleared.
-  protected setSession(session: SessionRef | undefined, options: { focus?: boolean } = {}): void {
+  protected setSession(session: SessionRef | undefined, options: { focus?: boolean; carryFrom?: string } = {}): void {
     if (!session || !this.#session || !sameSession(this.#session, session.host.id, session.sessionId)) {
       this.vitals = undefined
       this.subagentToolUseId = undefined
       this.shellId = undefined
+      this.#carryFrom = options.carryFrom
+      if (options.carryFrom === undefined) {
+        this.#left = new Set()
+      }
     }
     this.#session = session
     this.#unseen = session ? this.delegate.unseen(session.host.id, session.sessionId) : undefined
@@ -159,6 +169,27 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
       this.#focusPending = true
     }
     this.pushSession()
+  }
+
+  get left(): ReadonlySet<string> {
+    return this.#left
+  }
+
+  // A surface restored before the list loaded learns that its session is an agent's only from the first poll.
+  markAgent(agentId: string): void {
+    if (this.#session && this.#session.agentId === undefined) {
+      this.#session = { ...this.#session, agentId }
+    }
+  }
+
+  // The agent this surface shows moved to a new conversation: same surface, new session, never focused.
+  follow(session: SessionRef): void {
+    const from = this.#session
+    if (!from) {
+      return
+    }
+    this.#left.add(from.sessionId)
+    this.setSession(session, { carryFrom: from.sessionId })
   }
 
   protected held(): { title: string } | undefined {
@@ -190,6 +221,8 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
         hostName: session.host.name,
         cwd: session.cwd,
         unseen: this.#unseen,
+        ...(session.agentId === undefined ? {} : { agentId: session.agentId }),
+        ...(this.#carryFrom === undefined ? {} : { carryFrom: this.#carryFrom }),
       },
     })
     if (focus) {
@@ -294,6 +327,12 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
         return
       }
       case 'wd-focus-held': {
+        return
+      }
+      case 'wd-superseded': {
+        if (this.#session?.sessionId === msg.sessionId) {
+          this.delegate.superseded(this, msg.successor)
+        }
         return
       }
     }

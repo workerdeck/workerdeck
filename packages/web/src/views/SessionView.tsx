@@ -25,6 +25,7 @@ import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { nudgeSessions, useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useAgentAvatars } from '@/hooks/useAgentAvatars.ts'
+import { useAgentFollow, type AgentFollow } from '@/hooks/useAgentFollow.ts'
 
 // Split in two so the inner view takes a *defined* client: a link can outlive the gateway it named, and hooks cannot
 // be skipped while we find that out.
@@ -33,6 +34,7 @@ export function SessionView() {
   const { ready } = useHosts()
   const navigate = useNavigate()
   const client = clientFor(hostId)
+  const follow = useAgentFollow(hostId, sessionId)
 
   useEffect(() => {
     // Not until the probe has answered: the implicit gateway does not exist at first paint, and bouncing off it here
@@ -47,10 +49,12 @@ export function SessionView() {
   if (!client) {
     return null
   }
-  return <SessionViewInner key={`${hostId}:${sessionId}`} hostId={hostId} sessionId={sessionId} client={client} />
+  return <SessionViewInner key={`${hostId}:${sessionId}`} hostId={hostId} sessionId={sessionId} client={client} follow={follow} />
 }
 
-function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessionId: string; client: WorkerDeckClient }) {
+type SessionViewInnerProps = { hostId: string; sessionId: string; client: WorkerDeckClient; follow: AgentFollow }
+
+function SessionViewInner({ hostId, sessionId, client, follow }: SessionViewInnerProps) {
   const navigate = useNavigate()
   const { subagent, sn, reveal, rn, shell, shn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
   // The workspace asks for this record too and nothing de-dupes, but one small GET beats threading the panel's
@@ -170,6 +174,8 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}
       onRailChange={setRail}
+      onSuperseded={follow.superseded}
+      carryFrom={follow.carryFrom}
       unseen={unseen}
       onVitals={(vitals) => {
         // Only `itemCount`: the socket is its sole source, and `activity`/`turns` ride the effect above instead.

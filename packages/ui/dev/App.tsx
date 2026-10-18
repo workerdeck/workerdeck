@@ -204,6 +204,7 @@ export function App() {
       retry: () => {},
       remove: (key: string) => setAttachmentCount((n) => Math.max(0, n - (key ? 1 : 0))),
       clear: () => setAttachmentCount(0),
+      files: () => [],
       dismissError: () => {},
     }
   }, [attachmentCount])

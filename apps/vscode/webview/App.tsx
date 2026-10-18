@@ -22,6 +22,8 @@ type Shown = {
   hostName: string
   cwd?: string
   unseen?: { itemCount: number; since: number }
+  agentId?: string
+  carryFrom?: string
 }
 
 export function App({
@@ -71,7 +73,7 @@ export function App({
           // What an editor tab hands the serializer on window reload; harmless in the bottom panel.
           const session = msg.session
           bridge.setState<SurfaceState | undefined>(
-            session ? { hostId: session.hostId, sessionId: session.sessionId, cwd: session.cwd } : undefined,
+            session ? { hostId: session.hostId, sessionId: session.sessionId, cwd: session.cwd, agentId: session.agentId } : undefined,
           )
         } else if (msg.kind === 'wd-set-model') {
           controls.current?.setModel(msg.model)
@@ -182,6 +184,8 @@ export function App({
         controlsSurface="external"
         focusComposerOnClick
         unseen={catchUp ? shown.unseen : undefined}
+        carryFrom={shown.carryFrom}
+        onSuperseded={(successor) => bridge.post({ kind: 'wd-superseded', sessionId: shown.sessionId, successor })}
         onControls={(c) => {
           controls.current = c
           tryFocus()
