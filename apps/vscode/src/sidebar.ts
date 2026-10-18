@@ -439,10 +439,10 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       return []
     }
     const items: (vscode.QuickPickItem & { run: () => Promise<void> })[] = []
-    if (info.status === 'failed') {
+    if (record?.startFailed !== undefined) {
       items.push({
         label: '$(debug-restart) Retry start',
-        detail: 'Start the new conversation that failed to start',
+        detail: record.startFailed,
         run: () => this.#agentCall(hostId, 'could not start the new conversation', (client) => client.retryAgentStart(agentId)),
       })
     }

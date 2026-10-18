@@ -197,10 +197,10 @@ export function SessionCardActions({
               >
                 New conversation
               </Item>
-              {info.status === 'failed' ? (
+              {agentInfo?.startFailed !== undefined ? (
                 <Item
                   icon={<RotateCcw />}
-                  title="Start the new conversation that failed to start"
+                  title={agentInfo.startFailed}
                   onClick={() => onAction({ kind: 'retry-start' })}
                 >
                   Retry start

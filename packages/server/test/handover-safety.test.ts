@@ -137,6 +137,8 @@ describe('handover: the successor is durable before the intent goes', () => {
     const pending = stored(dir, agent.id).pending!
     expect(pending.startError).toBe('engine refused')
     expect((await call(base, `/agents/${agent.id}/restart`, 'POST', {})).status).toBe(409)
+    const listed = (await (await call(base, '/agents', 'GET')).json()) as { agents: AgentInfo[] }
+    expect(listed.agents.find((entry) => entry.id === agent.id)?.startFailed).toBe('engine refused')
 
     failing = undefined
     const retried = await call(base, `/agents/${agent.id}/retry-start`, 'POST', {})
@@ -144,6 +146,7 @@ describe('handover: the successor is durable before the intent goes', () => {
     const body = (await retried.json()) as AgentResponse
     expect(body.session!.id).toBe(pending.to)
     expect(body.agent.undelivered).toBe('continue')
+    expect(body.agent.startFailed).toBeUndefined()
     expect(built.filter((runner) => runner.id === pending.to).at(-1)!.sent).toEqual([])
     expect(stored(dir, agent.id).pending).toBeUndefined()
   })

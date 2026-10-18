@@ -397,8 +397,9 @@ export class AgentService {
       roster: _roster,
       pending: _handover,
       retiredAt: _retired,
-      ...info
+      ...rest
     } = agent
+    const info: AgentInfo = agent.pending?.startError === undefined ? rest : { ...rest, startFailed: agent.pending.startError }
     if (!this.#avatars) {
       return info
     }
