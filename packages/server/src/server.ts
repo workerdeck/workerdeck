@@ -23,6 +23,7 @@ import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
 import { restartAgent, rerollAvatar } from './routes/agents.ts'
+import { createHistoryReader } from './services/history-reader.ts'
 import { createQueueSocketHub } from './routes/queue-ws.ts'
 import { upgradeSession } from './routes/session-upgrade.ts'
 import { dispatchRoute, httpRoutes } from './routes/table.ts'
@@ -423,6 +424,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const hostFileRootPaths = options.hostFiles?.roots ?? options.allowedCwdRoots
   const hostFiles = hostFileRootPaths?.length ? createHostFileRoots(hostFileRootPaths) : null
 
+  const history =
+    options.historyReader ?? createHistoryReader({ profile: (name) => profiles.get(name), sessionEnvFor: factory.sessionEnvFor })
+
   const ctx: ServerContext = {
     options,
     basePath,
@@ -441,6 +445,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     avatars: options.avatars,
     registry,
     parking,
+    history,
     engineSleep,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
     bridge,

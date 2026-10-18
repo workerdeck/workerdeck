@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import * as nodeModule from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { createFileSessionStore, isDormant, reloadPlan, type CarriedSession, type SessionStore } from '@workerdeck/server'
+import { createFileSessionStore, reloadPlan, type CarriedSession, type SessionStore } from '@workerdeck/server'
 import type { CliFlags } from '../config.ts'
 import type { Instance } from '../lib/instance.ts'
 import { installShutdown } from '../lib/shutdown.ts'
@@ -37,7 +37,7 @@ async function persistProvider(parking: Parking, runner: CarriedRunner): Promise
   parking.touch(runner)
   await parking.flush(runner.id)
   const record = await parking.get(runner.id)
-  return record && !isDormant(record) && record.parkedAt >= before ? how : 'lost'
+  return record && record.kind !== 'dormant' && record.kind !== 'archived' && record.parkedAt >= before ? how : 'lost'
 }
 
 // Runs the gateway inside a shell that can re-evaluate every module under `packages/` in place, carrying the live

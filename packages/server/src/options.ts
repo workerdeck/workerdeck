@@ -1,3 +1,4 @@
+import type { HistoryReader } from './services/history-reader.ts'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ClaudeAuthProbe, EngineAdapter, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import type { JobQueue, QueueAdapter } from '@workerdeck/queue'
@@ -134,6 +135,8 @@ export type WorkerServerOptions = {
     onError?: (error: unknown) => void
   }
   createEngineRunner?: (context: EngineRunnerContext) => Runner | Promise<Runner>
+  // Reads a past conversation from its engine's own store; the default spawns nothing that can resume it.
+  historyReader?: HistoryReader
   engines?: Partial<Record<ProfileEngine, EngineAdapter>>
   // Errors the gateway swallows because nobody is waiting on them (a usage refresh, a queue stats frame, a webhook
   // that never answered). Silent by default; `where` names the site.

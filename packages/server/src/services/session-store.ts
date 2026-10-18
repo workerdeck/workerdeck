@@ -33,7 +33,26 @@ export type DormantSessionRecord = {
   savedAt: number
 }
 
-export type StoredSessionRecord = ParkedSessionRecord | DormantSessionRecord
+export type ArchivedSessionRecord = {
+  kind: 'archived'
+  id: string
+  info: SessionInfo
+  config: SessionRunnerConfig
+  agentId?: string
+  engineSessionId?: string
+  profile?: string
+  snapshot?: RunnerSnapshot
+  staged?: true
+  archivedAt: number
+}
+
+export type RunnableSessionRecord = ParkedSessionRecord | DormantSessionRecord
+
+export type StoredSessionRecord = RunnableSessionRecord | ArchivedSessionRecord
+
+export function isArchived(record: StoredSessionRecord): record is ArchivedSessionRecord {
+  return record.kind === 'archived'
+}
 
 export function isDormant(record: StoredSessionRecord): record is DormantSessionRecord {
   return record.kind === 'dormant'
@@ -206,6 +225,10 @@ function parseRecord(value: unknown): StoredSessionRecord | null {
     return null
   }
   record.info = withCurrentCapabilities(record.info)
+  if (record.kind === 'archived') {
+    const archived = record as Partial<ArchivedSessionRecord>
+    return typeof archived.archivedAt === 'number' ? (archived as ArchivedSessionRecord) : null
+  }
   if (record.kind === 'dormant') {
     const dormant = record as Partial<DormantSessionRecord>
     if (typeof dormant.sdkSessionId !== 'string' || typeof dormant.savedAt !== 'number') {

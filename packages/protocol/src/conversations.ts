@@ -15,6 +15,8 @@ export type ConversationSelection =
 
 export type ConversationRow = AgentConversation & { current: boolean }
 
+export type AgentConversationsResponse = { conversations: (ConversationRow & { session?: SessionInfo })[] }
+
 export function sessionListed(info: Pick<SessionInfo, 'archived'>): boolean {
   return info.archived !== true
 }

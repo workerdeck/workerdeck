@@ -3,7 +3,7 @@ import type { SessionInfo } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { fail } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
-import type { StoredSessionRecord } from '../services/session-store.ts'
+import { isArchived, type StoredSessionRecord } from '../services/session-store.ts'
 
 export type ResolvedSession = { runner: Runner | undefined; parked: StoredSessionRecord | null; info: SessionInfo }
 
@@ -27,4 +27,11 @@ export function requireLive(runner: Runner | undefined, why: string): Runner {
     fail(409, `session is parked (${why})`)
   }
   return runner
+}
+
+// Reads stay open on a past conversation; everything else would change or wake it. Erasing it is the one exception.
+export function requireWritable(resolved: ResolvedSession, method: string | undefined, erase: boolean): void {
+  if (resolved.parked && isArchived(resolved.parked) && method !== 'GET' && method !== 'HEAD' && !erase) {
+    fail(409, 'conversation is archived')
+  }
 }

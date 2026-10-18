@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -37,10 +37,10 @@ import {
 } from './approvals.ts'
 import { CODEX_CATALOG } from './catalog.ts'
 import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
-import { incompleteHistoryNotice, loadHistory, replayTurns, type HistorySink, type ResumedHistory } from './history.ts'
+import { asReplay, incompleteHistoryNotice, loadHistory, replayTurns, type HistorySink, type ResumedHistory } from './history.ts'
 import {
   emitDelta,
-  fileProducedEvent,
+  producedFileEvent,
   itemCompleted,
   itemContext,
   itemProgress,
@@ -846,14 +846,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       return
     }
     this.#producedPaths.add(path)
-    let bytes: number | undefined
-    try {
-      const stat = statSync(path)
-      if (stat.isFile()) {
-        bytes = stat.size
-      }
-    } catch {}
-    this.core.emit(fileProducedEvent(path, toolUseId, bytes))
+    this.core.emit(producedFileEvent(path, toolUseId))
   }
 
   async #backfillHistory(): Promise<void> {
@@ -1328,6 +1321,6 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   }
 
   #markReplay(body: SessionEventBody): SessionEventBody {
-    return this.#replayingHistory && (body.type === 'assistant_message' || body.type === 'user_message') ? { ...body, replay: true } : body
+    return this.#replayingHistory ? asReplay(body) : body
   }
 }

@@ -19,7 +19,7 @@ import { handleAttachments } from './attachments.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
 import { handleProjectIcon } from './project-icon.ts'
-import { requireLive, resolveSession, type ResolvedSession } from './session-lookup.ts'
+import { requireLive, requireWritable, resolveSession, type ResolvedSession } from './session-lookup.ts'
 import { handleShells } from './shells.ts'
 import { handleToolResult } from './tool-results.ts'
 import { sleepRunner } from './sleep.ts'
@@ -49,7 +49,7 @@ const ITEM_HANDLERS: ItemHandlers = {
   'background-task': handleBackgroundTask,
   'project-icon': ({ ctx, req, res, info }) => handleProjectIcon(ctx.projects, req, res, info.cwd),
   'tool-result': ({ req, res, route, runner, parked }) => {
-    const snapshot = parked && !isDormant(parked) ? parked.snapshot.events : undefined
+    const snapshot = parked && !isDormant(parked) ? parked.snapshot?.events : undefined
     handleToolResult(
       req,
       res,
@@ -74,6 +74,7 @@ export async function handleSessions(
     return
   }
   const resolved = await resolveSession(ctx, route.id, auth)
+  requireWritable(resolved, req.method, route.kind === 'session' && req.method === 'DELETE')
   const handler = ITEM_HANDLERS[route.kind] as (call: SessionCall<ItemKind>) => Promise<void> | void
   await handler({ ...resolved, ctx, req, res, auth, route })
 }
@@ -170,7 +171,7 @@ async function handlePeers({ ctx, req, res, route }: SessionCall<'peers'>): Prom
 
 function handleFiles({ req, res, route, runner, parked }: SessionCall<'files'>): void {
   requireMethod(req, 'GET')
-  const snapshotFiles = parked && !isDormant(parked) ? parked.snapshot.vfs : undefined
+  const snapshotFiles = parked && !isDormant(parked) ? parked.snapshot?.vfs : undefined
   const vfs =
     runner?.vfs ??
     (snapshotFiles && {

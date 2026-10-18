@@ -1,7 +1,8 @@
-import { errorMessage, type MessageOrigin } from '@workerdeck/protocol'
+import { errorMessage, type MessageOrigin, type SessionEventBody } from '@workerdeck/protocol'
 import { randomUUID } from 'node:crypto'
 import { withoutPeerContext } from '../../lib/peers.ts'
-import { historyUserText, itemCompleted, type ItemSink } from './items.ts'
+import { historyUserText, itemCompleted, producedFileEvent, type ItemSink } from './items.ts'
+import { CodexAgentTracker } from './subagents.ts'
 import type { AppServerConnection, AppServerHistoryTurn, AppServerUserMessageItem } from './types.ts'
 
 export type ResumedHistory = { turns: AppServerHistoryTurn[]; partial: boolean }
@@ -39,6 +40,42 @@ export async function loadHistory(
 
 export function incompleteHistoryNotice(reason: string): string {
   return `Resumed thread history is incomplete: older turns could not be loaded (${reason})`
+}
+
+export function asReplay(body: SessionEventBody): SessionEventBody {
+  return body.type === 'assistant_message' || body.type === 'user_message' ? { ...body, replay: true } : body
+}
+
+export function codexHistoryEvents(
+  turns: readonly AppServerHistoryTurn[],
+  options: { threadId?: string; model?: string } = {},
+): SessionEventBody[] {
+  const events: SessionEventBody[] = []
+  const produced = new Set<string>()
+  let replaying = false
+  const sink: HistorySink = {
+    agents: new CodexAgentTracker(),
+    model: () => options.model,
+    rootThreadId: () => options.threadId,
+    replaying: () => replaying,
+    partials: () => true,
+    emit: (body) => {
+      events.push(replaying ? asReplay(body) : body)
+    },
+    fileProduced: (path, toolUseId) => {
+      if (!produced.has(path)) {
+        produced.add(path)
+        events.push(producedFileEvent(path, toolUseId))
+      }
+    },
+    finalText: () => {},
+    closed: () => false,
+    setReplaying: (value) => {
+      replaying = value
+    },
+  }
+  replayTurns(sink, turns)
+  return events
 }
 
 export function replayTurns(sink: HistorySink, turns: readonly AppServerHistoryTurn[]): void {

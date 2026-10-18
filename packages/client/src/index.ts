@@ -1,4 +1,5 @@
 import type {
+  AgentConversationsResponse,
   AgentInfo,
   AgentResponse,
   CompleteAccountRequest,
@@ -180,6 +181,10 @@ export class WorkerDeckClient {
 
   async restartAgent(id: string, prompt?: string): Promise<AgentResponse> {
     return await this.#call('POST', this.#agent(id, '/restart'), prompt === undefined ? {} : { prompt })
+  }
+
+  async agentConversations(id: string): Promise<AgentConversationsResponse> {
+    return await this.#call('GET', this.#agent(id, '/conversations'))
   }
 
   async retireAgent(id: string, request: RetireAgentRequest = {}): Promise<{ retired: string[]; released: string[] }> {

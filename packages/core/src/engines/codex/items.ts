@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { statSync } from 'node:fs'
 import type { ContentBlock, FilePatch, SessionEventBody } from '@workerdeck/protocol'
 import { parseUnifiedDiff } from '../../lib/patch.ts'
 import type { CodexAgent, CodexAgentTracker, ItemScope } from './subagents.ts'
@@ -382,6 +383,17 @@ export function historyUserText(item: AppServerUserMessageItem): string {
     return text
   }
   return images > 0 ? `[${images === 1 ? 'image' : `${images} images`}]` : ''
+}
+
+export function producedFileEvent(path: string, toolUseId: string): SessionEventBody {
+  let bytes: number | undefined
+  try {
+    const stat = statSync(path)
+    if (stat.isFile()) {
+      bytes = stat.size
+    }
+  } catch {}
+  return fileProducedEvent(path, toolUseId, bytes)
 }
 
 export function fileProducedEvent(path: string, toolUseId: string, bytes: number | undefined): SessionEventBody {

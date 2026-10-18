@@ -1,10 +1,12 @@
 import type { ParkedExecution, Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type AgentRef, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import { engineOf } from '../lib/profile-env.ts'
 import type { SessionRegistry } from './registry.ts'
 import {
+  isArchived,
   isDormant,
   isLiveRecord,
+  type ArchivedSessionRecord,
   type DormantSessionRecord,
   type ParkedSessionRecord,
   type SessionStore,
@@ -43,6 +45,7 @@ export class SessionParkManager {
   #watches = new Map<string, () => void>()
   #closed = false
   #renaming: Promise<void> | undefined
+  #archiving = new Set<string>()
 
   constructor(options: SessionParkOptions) {
     this.#options = options
@@ -60,7 +63,7 @@ export class SessionParkManager {
   async hydrate(): Promise<void> {
     const floor = Date.now() + (this.#options.expiredGraceMs ?? 60_000)
     for (const record of await this.#options.store.list()) {
-      if (isDormant(record)) {
+      if (isDormant(record) || isArchived(record)) {
         continue
       }
       for (const execution of record.executions) {
@@ -123,6 +126,10 @@ export class SessionParkManager {
         }
         case 'session_closed': {
           if (this.#closed) {
+            return
+          }
+          if (this.#archiving.has(runner.id)) {
+            this.#forgetSession(runner.id)
             return
           }
           this.discard(runner.id).catch((error: unknown) => this.#options.onError?.(error, { sessionId: runner.id, phase: 'discard' }))
@@ -291,7 +298,7 @@ export class SessionParkManager {
     await Promise.all(this.#storeOps.values())
     const records = await this.#options.store.list()
     return records
-      .filter((record) => this.#options.registry.get(record.id) === undefined)
+      .filter((record) => !isArchived(record) && this.#options.registry.get(record.id) === undefined)
       .map((record) => (isDormant(record) ? { ...record.info, engineAsleep: true } : record.info))
   }
 
@@ -340,6 +347,58 @@ export class SessionParkManager {
     await this.#queue(sessionId, () => this.#options.store.delete(sessionId))
   }
 
+  // Blocks every later write for the session (dormant, live, forget, discard), then waits out the ones already queued.
+  async fence(sessionId: string): Promise<void> {
+    this.#archiving.add(sessionId)
+    await this.#storeOps.get(sessionId)
+  }
+
+  unfence(sessionId: string): void {
+    this.#archiving.delete(sessionId)
+  }
+
+  // The archive of a fenced session, from its live runner or its stored record; undefined when neither exists.
+  async archiveOf(
+    sessionId: string,
+    link: { agentId?: string; agent?: AgentRef; supersededBy?: string },
+  ): Promise<ArchivedSessionRecord | undefined> {
+    const runner = this.#options.registry.get(sessionId)
+    const stored = runner ? undefined : await this.#queue(sessionId, () => this.#options.store.get(sessionId))
+    if (stored && isArchived(stored)) {
+      return stored
+    }
+    const config = runner ? this.#configs.get(sessionId) : stored?.config
+    const source = runner?.info() ?? stored?.info
+    if (!config || !source) {
+      return undefined
+    }
+    const { engineAsleep: _asleep, ...info } = source
+    const snapshot = runner?.snapshot?.() ?? (stored && !isDormant(stored) ? stored.snapshot : undefined)
+    return {
+      kind: 'archived',
+      id: sessionId,
+      info: {
+        ...info,
+        status: 'closed',
+        pendingPermissionCount: 0,
+        archived: true,
+        ...(link.supersededBy ? { supersededBy: link.supersededBy } : {}),
+        ...(link.agent ? { agent: link.agent } : {}),
+      },
+      config: { ...config, meta: info.meta, statusLabel: info.statusLabel },
+      ...(link.agentId ? { agentId: link.agentId } : {}),
+      ...(info.sdkSessionId ? { engineSessionId: info.sdkSessionId } : {}),
+      ...(info.profile ? { profile: info.profile } : {}),
+      ...(snapshot ? { snapshot } : {}),
+      archivedAt: Date.now(),
+    }
+  }
+
+  async saveArchive(record: ArchivedSessionRecord): Promise<void> {
+    this.#archiving.add(record.id)
+    await this.#queue(record.id, () => this.#options.store.save(record))
+  }
+
   close(): void {
     this.#closed = true
     for (const timer of this.#timers.values()) {
@@ -369,6 +428,9 @@ export class SessionParkManager {
   }
 
   async #rememberDormant(runner: Runner): Promise<void> {
+    if (this.#archiving.has(runner.id)) {
+      return
+    }
     const config = this.#ownedConfig(runner)
     const info = runner.info()
     if (!config || !(info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume) {
@@ -393,6 +455,9 @@ export class SessionParkManager {
   }
 
   async #forgetDormant(sessionId: string): Promise<void> {
+    if (this.#archiving.has(sessionId)) {
+      return
+    }
     this.#remembered.delete(sessionId)
     try {
       await this.#queue(sessionId, () => this.#options.store.delete(sessionId))
@@ -402,6 +467,9 @@ export class SessionParkManager {
   }
 
   async #persistLive(runner: Runner): Promise<void> {
+    if (this.#archiving.has(runner.id)) {
+      return
+    }
     const config = this.#ownedConfig(runner)
     if (!config || !this.#options.persistLive || !runner.snapshot) {
       return
@@ -495,7 +563,7 @@ export class SessionParkManager {
 
   async #rebuild(id: string): Promise<Runner | undefined> {
     const record = await this.#queue(id, () => this.#options.store.get(id))
-    if (!record) {
+    if (!record || isArchived(record)) {
       return undefined
     }
     let runner: Runner

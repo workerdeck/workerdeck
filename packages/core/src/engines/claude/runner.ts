@@ -35,12 +35,10 @@ import { isSlashCommand } from '../../lib/local-command.ts'
 import {
   type UsageRateLimits,
   defaultModelFromSdk,
-  isSyntheticUserText,
   mcpStatusInfo,
   modelOptionsFromSdk,
   normalizeSdkMessage,
   rateLimitEventsFromUsage,
-  toApiMessage,
 } from '../../lib/normalize.ts'
 import type {
   ClearContextOptions,
@@ -54,13 +52,14 @@ import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.t
 import { QUESTIONS_DISABLED_MESSAGE, approvalResolution, type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
 import { hostTitle } from '../../lib/title.ts'
 import { resolveInstructions } from '../../lib/instructions.ts'
-import { PEER_MCP_SERVER, withPeerContext, withoutPeerContextMessage } from '../../lib/peers.ts'
+import { PEER_MCP_SERVER, withPeerContext } from '../../lib/peers.ts'
 import { liveContextFromReading, withDeadline, type LiveContext } from '../../lib/session-report.ts'
 import { assertEffort, effortDefaultFor } from '../../lib/effort.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
 import { agentResetFields } from '../../lib/context-reset.ts'
 import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
 import { AddressedThinking, apiMessageId } from './addressed-thinking.ts'
+import { claudeHistoryEvent } from './history.ts'
 import { CLAUDE_CATALOG } from './catalog.ts'
 import { SubagentTracker } from './subagents.ts'
 import { tailTaskOutput, taskOutputRoots } from './task-output.ts'
@@ -510,28 +509,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       if (this.core.closed) {
         return
       }
-      if (m.type === 'user') {
-        const raw = toApiMessage(m.message)
-        const { message, origin } = m.parent_tool_use_id == null ? withoutPeerContextMessage(raw) : { message: raw }
-        this.core.emit({
-          type: 'user_message',
-          message,
-          parentToolUseId: m.parent_tool_use_id,
-          replay: true,
-          synthetic: isSyntheticUserText(message) ? true : undefined,
-          ...(origin ? { origin } : {}),
-          uuid: m.uuid,
-        })
-      } else if (m.type === 'assistant') {
-        this.core.emit(
-          this.#addressed.stamp(apiMessageId(m.message), {
-            type: 'assistant_message',
-            message: toApiMessage(m.message),
-            parentToolUseId: m.parent_tool_use_id,
-            replay: true,
-            uuid: m.uuid,
-          }),
-        )
+      const body = claudeHistoryEvent(m, this.#addressed)
+      if (body) {
+        this.core.emit(body)
       }
     }
   }

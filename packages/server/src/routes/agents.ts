@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AVATAR_SEED_MAX } from '@workerdeck/core'
 import {
+  conversationsOf,
   isOwnerName,
   isSharing,
   type AgentConfig,
+  type AgentConversationsResponse,
   type AgentResponse,
   type CreateAgentRequest,
   type InviteRemoteMemberRequest,
@@ -61,6 +63,11 @@ export async function handleAgents(
     const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { prompt?: unknown }
     const restarted = await restartAgent(ctx, agent, typeof body.prompt === 'string' ? body.prompt : undefined, auth)
     await respond(ctx, res, 200, restarted.agent, restarted.session)
+    return
+  }
+  if (action === 'conversations') {
+    requireMethod(req, 'GET')
+    json(res, 200, await conversationsFor(ctx, agent, auth))
     return
   }
   if (action === 'avatar') {
@@ -395,6 +402,20 @@ async function sendImage(req: IncomingMessage, res: ServerResponse, image: Avata
     return
   }
   res.writeHead(200, headers).end(Buffer.from(image.png))
+}
+
+// Each row is checked on its own: seeing the agent today says nothing about who could see a past conversation.
+async function conversationsFor(ctx: ServerContext, agent: StoredAgent, auth: AuthContext): Promise<AgentConversationsResponse> {
+  const rows = await Promise.all(
+    conversationsOf(ctx.agents.public(agent)).map(async (row) => {
+      const info = await sessionInfoOf(ctx, row.sessionId)
+      if (!info) {
+        return { ...row, transcript: 'unavailable' as const }
+      }
+      return ctx.auth.canSee(auth, info) ? { ...row, session: ctx.projects.withProject(info) } : undefined
+    }),
+  )
+  return { conversations: rows.filter((row) => row !== undefined) }
 }
 
 // A fresh session for the agent, its old one closed and kept: `POST /agents/:id/restart` and the agent's own `context_reset`.

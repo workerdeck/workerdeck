@@ -1,7 +1,15 @@
 import type { IncomingMessage } from 'node:http'
 import type { WebSocket } from 'ws'
 import { isSlashCommand, type Runner } from '@workerdeck/core'
-import { CLIENT_ID_MAX, PROTOCOL_VERSION, SHELL_COMMAND_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
+import {
+  CLIENT_ID_MAX,
+  PROTOCOL_VERSION,
+  SHELL_COMMAND_MAX,
+  type ClientFrame,
+  type ServerFrame,
+  type SessionEvent,
+  type SessionInfo,
+} from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { bypassDisabled, permissionDecision, refuseJobInput, refusePermissionMode } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
@@ -110,6 +118,54 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
   })
 }
 
+export const ARCHIVE_UNREADABLE_CODE = 1011
+
+// A past conversation: one replay of what the engine's store holds, then silence. Commands are refused, prompts acked.
+export function attachArchive(
+  ctx: ServerContext,
+  ws: WebSocket,
+  info: SessionInfo,
+  events: readonly SessionEvent[] | undefined,
+  req: IncomingMessage,
+): void {
+  const url = new URL(req.url ?? '/', 'http://internal')
+  const afterSeq = Number(url.searchParams.get('afterSeq') ?? '0') || 0
+  const send = (frame: ServerFrame): void => {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify(frame))
+    }
+  }
+  send({
+    type: 'attached',
+    protocolVersion: PROTOCOL_VERSION,
+    session: ctx.projects.withProject({ ...info, lastSeq: events?.length ?? 0 }),
+    replayingFrom: afterSeq,
+    acks: true,
+  })
+  if (!events) {
+    send({ type: 'protocol_error', message: 'this conversation could not be read from the engine store; retrying' })
+    ws.close(ARCHIVE_UNREADABLE_CODE, 'history unreadable')
+    return
+  }
+  for (const event of events) {
+    if (event.seq > afterSeq) {
+      send({ type: 'event', event })
+    }
+  }
+  ws.on('message', (data: Buffer) => {
+    let frame: ClientFrame | undefined
+    try {
+      frame = JSON.parse(data.toString('utf8')) as ClientFrame
+    } catch {
+      frame = undefined
+    }
+    send({ type: 'protocol_error', message: 'conversation is archived' })
+    if (frame?.type === 'user_message' && typeof frame.clientId === 'string' && frame.clientId.length <= CLIENT_ID_MAX) {
+      send({ type: 'ack', clientId: frame.clientId })
+    }
+  })
+}
+
 async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Runner, access: AttachAccess, client: Client): Promise<void> {
   const { attachmentStore, bridge } = ctx
   switch (frame.type) {
@@ -161,7 +217,10 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       return
     }
     case 'set_permission_mode': {
-      const refused = refusePermissionMode(frame.mode, { operator: access.operator, disableBypass: bypassDisabled(ctx.options.disableBypassPermissions) })
+      const refused = refusePermissionMode(frame.mode, {
+        operator: access.operator,
+        disableBypass: bypassDisabled(ctx.options.disableBypassPermissions),
+      })
       if (refused) {
         throw new Error(refused)
       }
