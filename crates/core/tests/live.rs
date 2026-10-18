@@ -809,3 +809,39 @@ fn an_archive_attach_with_a_new_epoch_resets_but_the_same_epoch_resumes() {
     assert_eq!(host.opens.last(), Some(&0));
     assert!(host.live.state().items.is_empty());
 }
+
+#[test]
+fn an_agent_session_offers_new_conversation_instead_of_clear_context() {
+    let mut host = Host::new();
+    host.open();
+    host.frame(
+        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+            "session": {"id": "s1", "status": "running", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0,
+                "capabilities": {"clearContext": true}, "agent": {"id": "ag", "name": "WD-Test"}}}),
+        0.0,
+    );
+    let chrome = host.live.chrome();
+    assert!(!chrome.can_clear_context);
+    assert_eq!(chrome.agent_id.as_deref(), Some("ag"));
+    assert_eq!(chrome.agent_name.as_deref(), Some("WD-Test"));
+    assert_eq!(chrome.new_conversation_blocked.as_deref(), Some("Finish or stop the current turn first"));
+    assert_eq!(host.live.archived_view(None), None);
+}
+
+#[test]
+fn an_archived_agent_conversation_reads_as_deleted_once_the_agents_are_known() {
+    use wd_native::vm::conversations::{AgentBinding, ArchivedKind};
+    let mut host = Host::new();
+    host.open();
+    host.frame(
+        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+            "session": {"id": "s1", "status": "closed", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0,
+                "archived": true, "agent": {"id": "ag", "name": "WD-Test"}}}),
+        0.0,
+    );
+    assert_eq!(host.live.chrome().agent_id, None);
+    assert_eq!(host.live.archived_view(None).unwrap().kind, ArchivedKind::Past);
+    assert_eq!(host.live.archived_view(Some(&[])).unwrap().kind, ArchivedKind::Deleted);
+    let alive = [AgentBinding { id: "ag".into(), session_id: Some("s2".into()) }];
+    assert_eq!(host.live.archived_view(Some(&alive)).unwrap().current.as_deref(), Some("s2"));
+}

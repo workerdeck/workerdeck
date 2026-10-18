@@ -14,6 +14,7 @@ use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
 use crate::vm::composer_lists::{Skill, SlashCommand, skills, slash_commands};
+use crate::vm::conversations::{AgentBinding, ArchivedView, archived_view, clear_context_offered, new_conversation_gate};
 use crate::vm::pickers::{ModePicker, ModelPicker, PickerSource, mode_picker, model_picker};
 use crate::vm::prompt::{Prompt, PromptBody, Selection, answered_input, prompt_for};
 use crate::vm::session_chrome::{SessionChrome, session_chrome};
@@ -261,7 +262,21 @@ impl LiveSession {
         chrome.archived = self.archived();
         chrome.enabled &= !chrome.archived;
         chrome.superseded_by = self.superseded_by.clone();
+        if let Some(info) = self.session_info() {
+            chrome.can_clear_context &= clear_context_offered(info);
+            chrome.agent_name = info.agent.as_ref().map(|agent| agent.name.clone());
+            chrome.agent_id = info.agent.as_ref().filter(|_| !chrome.archived).map(|agent| agent.id.clone());
+            if chrome.agent_id.is_some() {
+                let status = serde_json::from_value(Value::String(chrome.status.clone())).unwrap_or(info.status);
+                let live = SessionInfo { status, ..info.clone() };
+                chrome.new_conversation_blocked = new_conversation_gate(Some(&live)).reason;
+            }
+        }
         chrome
+    }
+
+    pub fn archived_view(&self, agents: Option<&[AgentBinding]>) -> Option<ArchivedView> {
+        archived_view(self.session_info()?, agents)
     }
 
     pub fn archived(&self) -> bool {

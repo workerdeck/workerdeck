@@ -6,6 +6,7 @@ use wd_native::planner::fmt_cost;
 use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, ProjectIcon, SessionInfo, Sharing};
 use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
 use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
+use wd_native::vm::conversations::new_conversation_gate;
 use wd_native::vm::conversations::session_listed;
 use wd_native::vm::create_form::{AgentSeed as FormSeed, SeedLead};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
@@ -177,6 +178,8 @@ pub struct ListRow {
     pub session_status: String,
     pub pending_permissions: u32,
     pub running_agents: u32,
+    // Why New conversation waits (a turn or a request in flight); None offers it. Agents only.
+    pub new_conversation_blocked: Option<String>,
 }
 
 // A Member the lead's tray holds in Auto: a picture to tap, which opens that Member.
@@ -524,6 +527,7 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         session_status: serde_json::to_value(info.status).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default(),
         pending_permissions: info.pending_permission_count,
         running_agents: vm::running_subagents(info).len() as u32,
+        new_conversation_blocked: info.agent.as_ref().and_then(|_| new_conversation_gate(Some(info)).reason),
     }
 }
 

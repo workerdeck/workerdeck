@@ -406,6 +406,12 @@ fn conversations_fn(fn_name: &str, a: &Args) -> Value {
             let rows: Vec<SessionRow> = a.get(1);
             out(conversations::follow_target(&selection, &rows))
         }
+        "archivedView" => {
+            let agents: Option<Vec<conversations::AgentBinding>> = a.opt(1);
+            out(conversations::archived_view(&a.info(0), agents.as_deref()))
+        }
+        "newConversationGate" => out(conversations::new_conversation_gate(Some(&a.info(0)))),
+        "clearContextOffered" => out(conversations::clear_context_offered(&a.info(0))),
         _ => panic!("conversations.{fn_name} has no Rust binding"),
     }
 }

@@ -201,6 +201,13 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   }
 
   func hostImage(_ path: String) -> HostImageFetch { session.hostImagePath(sessionId: sessionId, path: path) }
+
+  func archivedView(agentsBody: String?) -> ArchivedView? {
+    let now = Date()
+    return session.archivedView(
+      agentsBody: agentsBody, nowMs: now.timeIntervalSince1970 * 1000,
+      offsetMinutes: Int32(TimeZone.current.secondsFromGMT(for: now) / 60))
+  }
   func backgroundTask(_ toolUseId: String) { worker.act { $0.backgroundTask(toolUseId: toolUseId) } }
 
   func sleep() {

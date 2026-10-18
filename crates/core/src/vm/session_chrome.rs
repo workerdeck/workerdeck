@@ -26,6 +26,10 @@ pub struct SessionChrome {
     pub attachment_kinds: Vec<String>,
     pub archived: bool,
     pub superseded_by: Option<String>,
+    // An agent's current conversation: New conversation replaces Clear context, and says why while it waits.
+    pub agent_id: Option<String>,
+    pub agent_name: Option<String>,
+    pub new_conversation_blocked: Option<String>,
 }
 
 pub const SEND_NOW_AFTER_MS: i64 = 5000;
@@ -108,6 +112,9 @@ pub fn session_chrome(
             .unwrap_or_default(),
         archived: false,
         superseded_by: None,
+        agent_id: None,
+        agent_name: None,
+        new_conversation_blocked: None,
     }
 }
 

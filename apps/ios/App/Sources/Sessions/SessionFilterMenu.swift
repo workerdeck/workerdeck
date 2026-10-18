@@ -26,12 +26,14 @@ struct FilterMenu: View, Equatable {
   let hosts: [Gateway]
   let adapters: [String]
   let projects: [ProjectChoice]
+  let pastAgents: [PastAgentEntry]
   let list: SessionList
   let changed: () -> Void
+  let openPast: (PastAgentEntry) -> Void
 
   nonisolated static func == (lhs: FilterMenu, rhs: FilterMenu) -> Bool {
     lhs.hosts == rhs.hosts && lhs.adapters == rhs.adapters && lhs.projects == rhs.projects
-      && lhs.filter == rhs.filter
+      && lhs.filter == rhs.filter && lhs.pastAgents == rhs.pastAgents
   }
 
   private static let states: [(RowState, String)] = [
@@ -90,6 +92,18 @@ struct FilterMenu: View, Equatable {
         display("Agents", .agent, filter.agents)
         display("Shells", .shell, filter.shells)
         display("Tasks", .task, filter.tasks)
+      }
+      if !pastAgents.isEmpty {
+        Section {
+          Menu("Past agents") {
+            ForEach(pastAgents) { entry in
+              Button(action: { openPast(entry) }) {
+                Text(entry.agent.name)
+                Text(entry.agent.detail)
+              }
+            }
+          }
+        }
       }
     } label: {
       Label(

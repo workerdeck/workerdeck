@@ -14,8 +14,11 @@ fn every_r1_call_names_its_route() {
     assert_eq!(background_task_call("s".into(), None), call("POST", "/sessions/s/tasks/background", None));
     assert_eq!(kill_shell_call("s".into(), "x".into()), call("POST", "/sessions/s/shells/x/kill", None));
     assert_eq!(list_agents_call(), call("GET", "/agents", None));
-    assert_eq!(restart_agent_call("a".into(), None), call("POST", "/agents/a/restart", Some("{}")));
-    assert_eq!(retire_agent_call("a".into(), Some(RetireMembers::Release)), call("DELETE", "/agents/a", Some(r#"{"members":"release"}"#)));
+    assert_eq!(restart_agent_call("a".into(), None, None), call("POST", "/agents/a/restart", Some("{}")));
+    assert_eq!(
+        retire_agent_call("a".into(), Some(RetireMembers::Release), None),
+        call("DELETE", "/agents/a", Some(r#"{"members":"release"}"#))
+    );
     assert_eq!(reroll_avatar_call("a".into(), None), call("POST", "/agents/a/avatar", Some("{}")));
     assert_eq!(meta_call(), call("GET", "/meta", None));
     assert_eq!(list_profiles_call(), call("GET", "/profiles", None));
@@ -59,4 +62,35 @@ fn rest_error_classifies_the_answer() {
     assert_eq!(parked, Some(RestError { status: 409, kind: RestErrorKind::Conflict, message: "parked".into() }));
     assert_eq!(rest_error(200, Some("text/html".into()), "".into()).map(|e| e.kind), Some(RestErrorKind::NotGateway));
     assert_eq!(rest_error(0, None, "".into()).map(|e| e.kind), Some(RestErrorKind::Transport));
+}
+
+#[test]
+fn conversation_answers_read_into_sheet_rows() {
+    let rows = wdffi::agent_conversations(
+        r#"{"conversations":[{"sessionId":"b","current":true,"startedAt":0},{"sessionId":"a","current":false,"title":"Old"}]}"#.into(),
+        60_000.0,
+        0,
+    )
+    .unwrap();
+    assert_eq!((rows[0].session_id.as_str(), rows[0].current, rows[0].duration.as_deref()), ("b", true, Some("1m")));
+    assert_eq!(rows[0].title, "Untitled conversation");
+    assert_eq!(rows[1].title, "Old");
+    assert!(wdffi::agent_conversations("{}".into(), 0.0, 0).is_none());
+    let past = wdffi::past_agents(
+        r#"{"retired":[{"id":"x","name":"Gone","retiredAt":0,"pastSessions":["s"],"conversations":[]}]}"#.into(),
+        0.0,
+        0,
+    )
+    .unwrap();
+    assert_eq!(past[0].detail, "Deleted Today 00:00 \u{00B7} 1 conversation");
+    let agents = r#"{"agents":[{"id":"ag","name":"A","createdAt":0,"updatedAt":0,"pastSessions":[],"config":{},"undelivered":"go on"}]}"#;
+    let notice = wdffi::agent_notice(agents.into(), "ag".into()).unwrap();
+    assert_eq!((notice.undelivered.as_deref(), notice.start_failed), (Some("go on"), None));
+    assert_eq!(wdffi::agent_notice(agents.into(), "other".into()), None);
+    let failed =
+        r#"{"agents":[{"id":"ag","name":"A","createdAt":0,"updatedAt":0,"pastSessions":[],"config":{},"startFailed":"spawn ENOENT"}]}"#;
+    assert_eq!(wdffi::agent_notice(failed.into(), "ag".into()).unwrap().start_failed.as_deref(), Some("spawn ENOENT"));
+    let quiet = r#"{"agents":[{"id":"ag","name":"A","createdAt":0,"updatedAt":0,"pastSessions":[],"config":{}}]}"#;
+    assert_eq!(wdffi::agent_notice(quiet.into(), "ag".into()), None);
+    assert_eq!(wdffi::retire_agent_call("ag".into(), None, Some("s1".into())).body.as_deref(), Some(r#"{"expectedSessionId":"s1"}"#));
 }

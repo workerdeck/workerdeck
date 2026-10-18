@@ -25,7 +25,10 @@ mod scrubber;
 mod usage;
 pub use bookmarks::{Bookmarks, RowMenu};
 pub use composer::Composer;
-pub use conversations::{ConversationFollow, ConversationSelection, selection_of};
+pub use conversations::{
+    AgentNotice, ArchivedKind, ArchivedView, ConversationFollow, ConversationItem, ConversationSelection, PastAgent, agent_conversations,
+    agent_notice, delete_agent_message, delete_agent_title, new_conversation_hint, past_agents, selection_of,
+};
 pub use create_form::{CreateForm, CreateFormFields, CreateFormState, FormLead, FormProfile};
 pub use extras::{
     Fact, McpSection, McpServerDetail, McpServerRow, McpServers, McpStatus, McpToolDetail, McpToolRow, SessionExtras, SkillRow,
@@ -213,6 +216,9 @@ pub struct SessionChrome {
     pub attachment_kinds: Vec<String>,
     pub archived: bool,
     pub superseded_by: Option<String>,
+    pub agent_id: Option<String>,
+    pub agent_name: Option<String>,
+    pub new_conversation_blocked: Option<String>,
 }
 
 impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
@@ -236,6 +242,9 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
             attachment_kinds: c.attachment_kinds,
             archived: c.archived,
             superseded_by: c.superseded_by,
+            agent_id: c.agent_id,
+            agent_name: c.agent_name,
+            new_conversation_blocked: c.new_conversation_blocked,
         }
     }
 }
@@ -600,6 +609,14 @@ impl Session {
 
     pub fn queued(&self) -> u32 {
         self.live().queued() as u32
+    }
+
+    // The banner over a read-only conversation, None while the session is live. `agents_body` is a `GET /agents`
+    // answer; None (not read yet, or refused) never calls the agent deleted.
+    pub fn archived_view(&self, agents_body: Option<String>, now_ms: f64, offset_minutes: i32) -> Option<ArchivedView> {
+        let agents = agents_body.and_then(|body| conversations::agent_bindings(&body));
+        let view = self.live().archived_view(agents.as_deref())?;
+        Some(ArchivedView::of(&view, now_ms, offset_minutes))
     }
 
     pub fn chrome(&self) -> SessionChrome {

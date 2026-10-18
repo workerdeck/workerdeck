@@ -27,7 +27,8 @@ struct SessionListView: View {
   @State private var renameText = ""
   @State private var pendingStatus: ListItem?
   @State private var statusText = ""
-  @State private var pendingRetire: ListItem?
+  @State private var pendingDelete: ListItem?
+  @State private var history: ConversationsTarget?
   @State private var pendingCrossing: Crossing?
 
   private struct Crossing {
@@ -136,6 +137,12 @@ struct SessionListView: View {
       }
     case .create(let hostId, let seed):
       createScreen(hostId, seed)
+    case .conversation(let hostId, let sessionId):
+      if let model, let context = model.context(for: hostId) {
+        CoreFollowSession(sessionId: sessionId, hostId: hostId, client: context.client, list: model, entry: nil, pinned: true)
+      } else {
+        missingHost
+      }
     }
   }
 
@@ -276,23 +283,25 @@ struct SessionListView: View {
       Text("A short line under the name, on every client. Leave it empty to clear it.")
     }
     .confirmationDialog(
-      "Retire \(pendingRetire?.row.agent ?? "this agent")?",
-      isPresented: Binding(get: { pendingRetire != nil }, set: { if !$0 { pendingRetire = nil } }),
+      deleteAgentTitle(name: pendingDelete?.row.agent ?? "this agent"),
+      isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
       titleVisibility: .visible
     ) {
-      Button("Retire", role: .destructive) {
-        if let row = pendingRetire {
-          Task { await model.retire(row) }
+      Button("Delete agent", role: .destructive) {
+        if let row = pendingDelete {
+          Task { await model.deleteAgent(row) }
         }
-        pendingRetire = nil
+        pendingDelete = nil
       }
-      Button("Cancel", role: .cancel) { pendingRetire = nil }
+      Button("Cancel", role: .cancel) { pendingDelete = nil }
     } message: {
-      Text(
-        "The agent and its session end. "
-          + (pendingRetire?.row.lead == true
-            ? "Its members are released and stay as agents. " : "")
-          + "Past conversations stay resumable from the engine's store.")
+      Text(deleteAgentMessage(name: pendingDelete?.row.agent ?? "This agent"))
+    }
+    .sheet(item: $history) { target in
+      ConversationsSheet(target: target, model: model) { route in
+        history = nil
+        path.append(route)
+      }
     }
     .alert(
       "Join another owner's team?",
@@ -473,14 +482,17 @@ struct SessionListView: View {
     RowChrome(
       row: row,
       onClose: {
-        if row.closed {
+        if row.row.agentId != nil {
+          pendingDelete = row
+        } else if row.closed {
           Task { await model.close(row) }
         } else {
           pendingClose = row
         }
       },
       onRename: { beginRename(row) },
-      onRestart: row.row.agentId == nil ? nil : { Task { await model.restart(row) } })
+      onRestart: row.row.agentId == nil || row.row.newConversationBlocked != nil
+        ? nil : { Task { await model.restart(row) } })
   }
 
   private func beginRename(_ row: ListItem) {
@@ -574,6 +586,15 @@ struct SessionListView: View {
         Task { await model.restart(row) }
       } label: {
         Label("New conversation", systemImage: "arrow.counterclockwise")
+        Text(row.row.newConversationBlocked ?? newConversationHint())
+      }
+      .disabled(row.row.newConversationBlocked != nil)
+      if let target = ConversationsTarget(row) {
+        Button {
+          history = target
+        } label: {
+          Label("Conversations", systemImage: "clock.arrow.circlepath")
+        }
       }
     }
     if row.row.canSleep {
@@ -584,7 +605,11 @@ struct SessionListView: View {
       }
     }
     Divider()
-    if row.closed {
+    if agent != nil {
+      Button(role: .destructive) { pendingDelete = row } label: {
+        Label("Delete agent…", systemImage: "trash")
+      }
+    } else if row.closed {
       Button(role: .destructive) {
         Task { await model.close(row) }
       } label: {
@@ -593,11 +618,6 @@ struct SessionListView: View {
     } else {
       Button(role: .destructive) { pendingClose = row } label: {
         Label("Close", systemImage: "xmark.circle")
-      }
-    }
-    if agent != nil {
-      Button(role: .destructive) { pendingRetire = row } label: {
-        Label("Retire agent…", systemImage: "person.badge.minus")
       }
     }
   }
@@ -817,8 +837,10 @@ struct SessionListView: View {
             hosts: hosts.hosts.map { FilterMenu.Gateway(id: $0.id, name: $0.displayName) },
             adapters: model.adapters,
             projects: model.projects,
+            pastAgents: model.pastAgents,
             list: model.list,
-            changed: { model.syncConfig() })
+            changed: { model.syncConfig() },
+            openPast: { history = ConversationsTarget(past: $0) })
         }
       }
     }
@@ -913,7 +935,9 @@ private struct RowChrome: ViewModifier {
     content
       .swipeActions(edge: .trailing) {
         Button(role: .destructive, action: onClose) {
-          if row.closed {
+          if row.row.agentId != nil {
+            Label("Delete agent", systemImage: "trash")
+          } else if row.closed {
             Label("Remove", systemImage: "trash")
           } else {
             Label("Close", systemImage: "xmark.circle")

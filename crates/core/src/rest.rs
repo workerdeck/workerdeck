@@ -642,6 +642,8 @@ pub struct SessionInfo {
     pub archived: Option<bool>,
     #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
     pub superseded_by: Option<String>,
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -823,6 +825,12 @@ pub struct AgentInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     pub past_sessions: Vec<String>,
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub conversations: Option<Vec<AgentConversation>>,
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub undelivered: Option<String>,
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub start_failed: Option<String>,
     pub config: AgentConfig,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead: Option<String>,
@@ -832,6 +840,58 @@ pub struct AgentInfo {
     pub remote_lead: Option<RemoteLead>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_members: Option<Vec<RemoteMember>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentConversation {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationRow {
+    #[serde(flatten)]
+    pub conversation: AgentConversation,
+    pub current: bool,
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub session: Option<SessionInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentConversationsResponse {
+    pub conversations: Vec<ConversationRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetiredAgentInfo {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
+    pub retired_at: f64,
+    #[serde(default)]
+    pub past_sessions: Vec<String>,
+    #[serde(default)]
+    pub conversations: Vec<AgentConversation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetiredAgentsResponse {
+    pub retired: Vec<RetiredAgentInfo>,
 }
 
 // `GET /sessions/:id/events/:seq/result`: the whole result as one string, folded by the reducer's rule.

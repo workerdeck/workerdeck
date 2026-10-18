@@ -162,6 +162,7 @@ final class SessionListModel {
     ensureAgentAvatars()
     await syncAppBadge()
     await ensureMetas()
+    await ensurePastAgents()
   }
 
   private func ensureAgentAvatars() {
@@ -461,19 +462,53 @@ final class SessionListModel {
     }
   }
 
+  // Names the conversation the row showed, so a row read before another client's rotation never rotates twice.
   func restart(_ item: ListItem) async {
-    guard let agentId = item.row.agentId else { return }
+    guard let agentId = item.row.agentId, item.row.newConversationBlocked == nil else { return }
     await agentAct(on: item, "Could not start a new conversation") {
-      try await $0.perform(restartAgentCall(id: agentId, prompt: nil))
+      try await $0.perform(restartAgentCall(id: agentId, prompt: nil, expectedSessionId: item.sessionId))
     }
   }
 
-  func retire(_ item: ListItem) async {
-    guard let agentId = item.row.agentId else { return }
-    await agentAct(on: item, "Could not retire the agent") {
-      try await $0.perform(retireAgentCall(id: agentId))
+  // The one removal for an agent: its conversations stay under Past agents and its members are released.
+  func deleteAgent(_ item: ListItem) async {
+    guard let agentId = item.row.agentId, let hostId = item.hostUUID else { return }
+    await agentAct(on: item, "Could not delete the agent") {
+      try await $0.perform(retireAgentCall(id: agentId, members: .release, expectedSessionId: item.sessionId))
+    }
+    await refreshPastAgents(hostId)
+  }
+
+  // MARK: - Conversations
+
+  private(set) var pastAgents: [PastAgentEntry] = []
+  private var pastRead: Set<UUID> = []
+
+  func refreshPastAgents(_ hostId: UUID) async {
+    guard let client = context(for: hostId)?.client else { return }
+    let answer = await client.answer(retiredAgentsCall())
+    let now = Date()
+    let read = answer.status == 200 ? WorkerDeckCore.pastAgents(body: answer.body, nowMs: now.timeIntervalSince1970 * 1000, offsetMinutes: Self.offset(now)) : nil
+    pastRead.insert(hostId)
+    pastAgents = pastAgents.filter { $0.hostId != hostId } + (read ?? []).map { PastAgentEntry(hostId: hostId, agent: $0) }
+  }
+
+  private func ensurePastAgents() async {
+    for host in hostStore.hosts where !pastRead.contains(host.id) && snapshots[host.id]?.probe == .connected {
+      await refreshPastAgents(host.id)
     }
   }
+
+  // Nil when the gateway could not answer; the sheet says so instead of showing an empty history.
+  func conversations(hostId: UUID, agentId: String) async -> [ConversationItem]? {
+    guard let client = context(for: hostId)?.client else { return nil }
+    let answer = await client.answer(agentConversationsCall(id: agentId))
+    let now = Date()
+    guard answer.status == 200 else { return nil }
+    return agentConversations(body: answer.body, nowMs: now.timeIntervalSince1970 * 1000, offsetMinutes: Self.offset(now))
+  }
+
+  static func offset(_ date: Date) -> Int32 { Int32(TimeZone.current.secondsFromGMT(for: date) / 60) }
 
   // Nil while the gateway has not said it runs agents.
   func agentSeed(for hostId: UUID) -> NewAgentSeed? {

@@ -273,18 +273,45 @@ fn sharing_name(sharing: Sharing) -> Option<&'static str> {
     }
 }
 
-pub fn restart_agent(id: &str, prompt: Option<&str>) -> HttpCall {
-    let body = prompt.map_or_else(|| json!({}), |prompt| json!({ "prompt": prompt }));
-    HttpCall::with("POST", format!("{}/restart", agent(id)), body)
+// `expected_session_id` is the conversation the caller is looking at: a request against one the agent already left is refused.
+pub fn restart_agent(id: &str, prompt: Option<&str>, expected_session_id: Option<&str>) -> HttpCall {
+    let mut body = Map::new();
+    if let Some(prompt) = prompt {
+        body.insert("prompt".to_owned(), json!(prompt));
+    }
+    if let Some(expected) = expected_session_id {
+        body.insert("expectedSessionId".to_owned(), json!(expected));
+    }
+    HttpCall::with("POST", format!("{}/restart", agent(id)), Value::Object(body))
 }
 
-pub fn retire_agent(id: &str, members: Option<RetireMembers>) -> HttpCall {
-    let body = match members {
-        Some(RetireMembers::Release) => json!({ "members": "release" }),
-        Some(RetireMembers::Retire) => json!({ "members": "retire" }),
-        None => json!({}),
-    };
-    HttpCall::with("DELETE", agent(id), body)
+pub fn retire_agent(id: &str, members: Option<RetireMembers>, expected_session_id: Option<&str>) -> HttpCall {
+    let mut body = Map::new();
+    match members {
+        Some(RetireMembers::Release) => _ = body.insert("members".to_owned(), json!("release")),
+        Some(RetireMembers::Retire) => _ = body.insert("members".to_owned(), json!("retire")),
+        None => {}
+    }
+    if let Some(expected) = expected_session_id {
+        body.insert("expectedSessionId".to_owned(), json!(expected));
+    }
+    HttpCall::with("DELETE", agent(id), Value::Object(body))
+}
+
+pub fn retry_agent_start(id: &str) -> HttpCall {
+    HttpCall::with("POST", format!("{}/retry-start", agent(id)), json!({}))
+}
+
+pub fn settle_undelivered(id: &str, send: bool) -> HttpCall {
+    HttpCall::with("POST", format!("{}/undelivered", agent(id)), json!({ "send": send }))
+}
+
+pub fn agent_conversations(id: &str) -> HttpCall {
+    HttpCall::get(format!("{}/conversations", agent(id)))
+}
+
+pub fn retired_agents() -> HttpCall {
+    HttpCall::get("/agents?retired=1".to_owned())
 }
 
 pub fn reroll_avatar(id: &str, seed: Option<&str>) -> HttpCall {
@@ -499,11 +526,20 @@ mod tests {
     #[test]
     fn agent_actions_always_send_an_object() {
         assert_eq!(list_agents(), call("GET", "/agents", None));
-        assert_eq!(restart_agent("a", None), call("POST", "/agents/a/restart", Some("{}")));
-        assert_eq!(restart_agent("a", Some("go")).body.as_deref(), Some(r#"{"prompt":"go"}"#));
-        assert_eq!(retire_agent("a/1", None), call("DELETE", "/agents/a%2F1", Some("{}")));
-        assert_eq!(retire_agent("a", Some(RetireMembers::Release)).body.as_deref(), Some(r#"{"members":"release"}"#));
-        assert_eq!(retire_agent("a", Some(RetireMembers::Retire)).body.as_deref(), Some(r#"{"members":"retire"}"#));
+        assert_eq!(restart_agent("a", None, None), call("POST", "/agents/a/restart", Some("{}")));
+        assert_eq!(restart_agent("a", Some("go"), None).body.as_deref(), Some(r#"{"prompt":"go"}"#));
+        assert_eq!(restart_agent("a", None, Some("s1")).body.as_deref(), Some(r#"{"expectedSessionId":"s1"}"#));
+        assert_eq!(retire_agent("a/1", None, None), call("DELETE", "/agents/a%2F1", Some("{}")));
+        assert_eq!(retire_agent("a", Some(RetireMembers::Release), None).body.as_deref(), Some(r#"{"members":"release"}"#));
+        assert_eq!(retire_agent("a", Some(RetireMembers::Retire), None).body.as_deref(), Some(r#"{"members":"retire"}"#));
+        assert_eq!(
+            retire_agent("a", Some(RetireMembers::Release), Some("s1")).body.as_deref(),
+            Some(r#"{"members":"release","expectedSessionId":"s1"}"#)
+        );
+        assert_eq!(retry_agent_start("a"), call("POST", "/agents/a/retry-start", Some("{}")));
+        assert_eq!(settle_undelivered("a", true), call("POST", "/agents/a/undelivered", Some(r#"{"send":true}"#)));
+        assert_eq!(agent_conversations("a b"), call("GET", "/agents/a%20b/conversations", None));
+        assert_eq!(retired_agents(), call("GET", "/agents?retired=1", None));
         assert_eq!(reroll_avatar("a", None), call("POST", "/agents/a/avatar", Some("{}")));
         assert_eq!(reroll_avatar("a", Some("x")).body.as_deref(), Some(r#"{"seed":"x"}"#));
     }

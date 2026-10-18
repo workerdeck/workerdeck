@@ -17,6 +17,10 @@ struct CoreSessionView: View {
   @State private var confirmClose = false
   @State private var extras = CoreExtras()
   @State private var meterSheet: CoreMeterSheet?
+  @State private var archived: ArchivedView?
+  @State private var notice: AgentNotice?
+  @State private var confirmDelete = false
+  @State private var actionError: String?
   private let hostId: UUID
   private let sessionId: String
   private let client: WorkerClient?
@@ -24,16 +28,20 @@ struct CoreSessionView: View {
   private let composerServices: CoreComposerServices
   private var carry: ComposerCarry?
   private var onSuperseded: ((String) -> Void)?
+  private var onGoToCurrent: ((String) -> Void)?
+  private var handover = false
 
   init(
     sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry? = nil, carry: ComposerCarry? = nil,
-    onSuperseded: ((String) -> Void)? = nil
+    handover: Bool = false, onSuperseded: ((String) -> Void)? = nil, onGoToCurrent: ((String) -> Void)? = nil
   ) {
     self.hostId = hostId
     self.sessionId = sessionId
     self.client = client
     self.carry = carry
+    self.handover = handover
     self.onSuperseded = onSuperseded
+    self.onGoToCurrent = onGoToCurrent
     composerServices = .live(client: client)
     _model = State(
       initialValue: CoreSessionModel(
@@ -55,15 +63,22 @@ struct CoreSessionView: View {
 
   var body: some View {
     let ui = model.ui
+    let readOnly = ui.chrome?.archived == true
     VStack(spacing: 0) {
       CoreStatusLine(ui: ui, reconnect: model.reconnect, openMeter: { meterSheet = $0 })
+      CoreConversationBars(
+        archived: readOnly ? archived : nil, notice: readOnly ? nil : notice,
+        starting: handover && (ui.chrome?.status ?? "").isEmpty,
+        goToCurrent: onGoToCurrent, settle: settleUndelivered, retryStartNow: retryStart)
       transcriptArea(ui)
-      if let prompt = ui.prompt {
-        Divider()
-        CorePromptCard(prompt: prompt, planLines: ui.planLines, model: model)
-          .id(prompt.requestId)
+      if !readOnly {
+        if let prompt = ui.prompt {
+          Divider()
+          CorePromptCard(prompt: prompt, planLines: ui.planLines, model: model)
+            .id(prompt.requestId)
+        }
+        CoreComposer(model: model, scroll: scroll, services: composerServices, carry: carry)
       }
-      CoreComposer(model: model, scroll: scroll, services: composerServices, carry: carry)
     }
     .modifier(CoreRowExtras(actions: rowActions, viewing: $viewing, revision: bookmarks.revision, onBookmarks: syncBookmarks))
     .navigationTitle(ui.title ?? "Session")
@@ -84,6 +99,21 @@ struct CoreSessionView: View {
     } message: {
       Text("The session keeps running and starts a fresh conversation. The old one stays resumable.")
     }
+    .confirmationDialog(
+      deleteAgentTitle(name: ui.chrome?.agentName ?? "this agent"), isPresented: $confirmDelete, titleVisibility: .visible
+    ) {
+      Button("Delete agent", role: .destructive, action: deleteAgent)
+    } message: {
+      Text(deleteAgentMessage(name: ui.chrome?.agentName ?? "This agent"))
+    }
+    .alert(
+      "Something went wrong", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })
+    ) {
+      Button("OK", role: .cancel) { actionError = nil }
+    } message: {
+      Text(actionError ?? "")
+    }
+    .task(id: AgentRead(archived: readOnly, agentId: ui.chrome?.agentId)) { await readAgents() }
     .confirmationDialog("Close this session?", isPresented: $confirmClose, titleVisibility: .visible) {
       // Over REST rather than the socket: leaving tears the socket down at once, and a close must outlive the screen.
       Button("Close session", role: .destructive) {
@@ -170,17 +200,96 @@ struct CoreSessionView: View {
         if usage.contextUsage { Button("Context", systemImage: "chart.pie") { meterSheet = .context } }
         Button("Usage", systemImage: "gauge") { meterSheet = .usage }
       }
+      if let agentId = chrome?.agentId {
+        Button(action: { newConversation(agentId) }) {
+          Label("New conversation", systemImage: "arrow.counterclockwise")
+          Text(chrome?.newConversationBlocked ?? newConversationHint())
+        }
+        .disabled(client == nil || chrome?.newConversationBlocked != nil)
+      }
       if chrome?.canClearContext == true {
         Button("Clear context", systemImage: "eraser") { confirmClear = true }
       }
-      if model.ui.extras.canSleep {
+      if model.ui.extras.canSleep, chrome?.archived != true {
         Button("Sleep", systemImage: "moon.zzz", action: model.sleep)
       }
-      Button("Close session", systemImage: "xmark.circle", role: .destructive) { confirmClose = true }
-        .disabled(client == nil)
-      CoreExtrasMenu(extras: extras)
+      if chrome?.agentId != nil {
+        Button("Delete agent…", systemImage: "trash", role: .destructive) { confirmDelete = true }
+          .disabled(client == nil)
+      } else if chrome?.archived != true {
+        Button("Close session", systemImage: "xmark.circle", role: .destructive) { confirmClose = true }
+          .disabled(client == nil)
+      }
+      if chrome?.archived != true { CoreExtrasMenu(extras: extras) }
     } label: {
       Label("Session", systemImage: "ellipsis.circle")
+    }
+  }
+
+  private struct AgentRead: Hashable {
+    let archived: Bool
+    let agentId: String?
+  }
+
+  // One `GET /agents` serves both reads: whether an archived conversation's agent still exists (and where it is now),
+  // and what a live agent asks of the user (an undelivered first message, a new conversation that did not start).
+  private func readAgents() async {
+    guard let chrome = model.ui.chrome, chrome.archived || chrome.agentId != nil else {
+      archived = nil
+      notice = nil
+      return
+    }
+    var body: String?
+    if let client {
+      let answer = await client.answer(listAgentsCall())
+      body = answer.status == 200 ? answer.body : nil
+    }
+    archived = model.archivedView(agentsBody: body)
+    notice = body.flatMap { body in chrome.agentId.flatMap { agentNotice(agentsBody: body, agentId: $0) } }
+  }
+
+  private func agentAction(_ failure: String, _ call: HttpCall, then: @escaping @MainActor (Data) -> Void = { _ in }) {
+    guard let client else { return }
+    Task { @MainActor in
+      do {
+        then(try await client.perform(call))
+      } catch {
+        actionError = "\(failure): \(SessionListModel.describe(error))"
+      }
+    }
+  }
+
+  // The answer names the new conversation; following it at once beats waiting for the old socket's superseded frame.
+  private func newConversation(_ agentId: String) {
+    agentAction(
+      "Could not start a new conversation", restartAgentCall(id: agentId, prompt: nil, expectedSessionId: sessionId)
+    ) { data in
+      if let next = createdAgent(body: String(decoding: data, as: UTF8.self))?.sessionId, next != sessionId {
+        onSuperseded?(next)
+      }
+    }
+  }
+
+  // The conversation is archived under the screen, which reattaches to show it read-only with the deleted banner.
+  private func deleteAgent() {
+    guard let agentId = model.ui.chrome?.agentId else { return }
+    agentAction("Could not delete the agent", retireAgentCall(id: agentId, members: .release, expectedSessionId: sessionId)) {
+      _ in model.reconnect()
+    }
+  }
+
+  private func settleUndelivered(_ send: Bool) {
+    guard let agentId = notice?.agentId else { return }
+    agentAction(send ? "Could not send it again" : "Could not dismiss it", settleUndeliveredCall(id: agentId, send: send)) {
+      _ in Task { await readAgents() }
+    }
+  }
+
+  private func retryStart() {
+    guard let agentId = model.ui.chrome?.agentId else { return }
+    agentAction("Could not start the conversation", retryAgentStartCall(id: agentId)) { _ in
+      model.reconnect()
+      Task { await readAgents() }
     }
   }
 
@@ -207,7 +316,9 @@ struct CoreSessionView: View {
     CoreWarnings(mismatch: ui.extras.mismatch, error: ui.error, onDismiss: model.dismissError)
     CoreTranscriptView(model: model, scroll: scroll, imageLoader: images, hideThinking: !settings.showThinking)
       .overlay {
-        if ui.main.rows.isEmpty, ui.progress == nil, ui.connection == .live {
+        if ui.main.rows.isEmpty, ui.progress == nil, archived?.unavailable == true {
+          ContentUnavailableView("Transcript unavailable", systemImage: "clock.badge.questionmark")
+        } else if ui.main.rows.isEmpty, ui.progress == nil, ui.connection == .live, ui.chrome?.archived != true {
           CoreEmptyState(cwd: ui.extras.cwd, canRunShell: ui.canRunShell)
         }
       }
@@ -420,7 +531,8 @@ struct CorePromptCard: View {
 }
 
 // One session route's screen. An agent's card follows the agent to each next conversation in place, handing the
-// draft and its files over; a push for an old turn, or a session the list does not hold, stays put.
+// draft and its files over; a push for an old turn, a past conversation opened from history (`pinned`), or a session
+// the list does not hold, stays put. Go to current leaves a past conversation for the agent's live one.
 struct CoreFollowSession: View {
   private let hostId: UUID
   private let client: WorkerClient
@@ -431,14 +543,18 @@ struct CoreFollowSession: View {
   @State private var shown: String
   @State private var carry = ComposerCarry()
 
-  init(sessionId: String, hostId: UUID, client: WorkerClient, list: SessionListModel, entry: CoreEntry?) {
+  init(sessionId: String, hostId: UUID, client: WorkerClient, list: SessionListModel, entry: CoreEntry?, pinned: Bool = false) {
     self.hostId = hostId
     self.client = client
     self.list = list
     self.entry = entry
     opened = sessionId
     _shown = State(initialValue: sessionId)
-    if case .seq = entry {
+    if pinned {
+      _follow = State(
+        initialValue: ConversationFollow(
+          selection: .session(gateway: hostId.uuidString, sessionId: sessionId), current: sessionId))
+    } else if case .seq = entry {
       _follow = State(
         initialValue: ConversationFollow(
           selection: .session(gateway: hostId.uuidString, sessionId: sessionId), current: sessionId))
@@ -450,9 +566,17 @@ struct CoreFollowSession: View {
   var body: some View {
     CoreSessionView(
       sessionId: shown, hostId: hostId, client: client, entry: shown == opened ? entry : nil, carry: carry,
-      onSuperseded: superseded
+      handover: handover, onSuperseded: superseded, onGoToCurrent: goToCurrent
     )
     .id(shown)
+  }
+
+  @State private var handover = false
+
+  private func goToCurrent(_ current: String) {
+    follow = ConversationFollow.open(list: list.list, hostId: hostId.uuidString, sessionId: current)
+    handover = false
+    shown = current
   }
 
   private func superseded(_ successor: String) {
@@ -466,6 +590,7 @@ struct CoreFollowSession: View {
   private func move(_ target: String?) {
     guard let target else { return }
     carry.model?.retarget(sessionId: target)
+    handover = true
     shown = target
   }
 }

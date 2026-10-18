@@ -80,6 +80,7 @@ final class CoreSessionModel {
 
   func usage(at date: Date) -> SessionUsageView? { driver?.usage(now: date) }
   func hostImage(_ path: String) -> HostImageFetch? { driver?.hostImage(path) }
+  func archivedView(agentsBody: String?) -> ArchivedView? { driver?.archivedView(agentsBody: agentsBody) }
   func backgroundTask(_ toolUseId: String) { driver?.backgroundTask(toolUseId) }
   func sleep() { driver?.sleep() }
   func dismissError() { driver?.dismissError() }

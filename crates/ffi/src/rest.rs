@@ -197,18 +197,38 @@ pub fn update_agent_call(id: String, patch: AgentPatch) -> HttpCall {
     calls::update_agent(&id, &patch).into()
 }
 
-#[uniffi::export(default(prompt = None))]
-pub fn restart_agent_call(id: String, prompt: Option<String>) -> HttpCall {
-    calls::restart_agent(&id, prompt.as_deref()).into()
+#[uniffi::export(default(prompt = None, expected_session_id = None))]
+pub fn restart_agent_call(id: String, prompt: Option<String>, expected_session_id: Option<String>) -> HttpCall {
+    calls::restart_agent(&id, prompt.as_deref(), expected_session_id.as_deref()).into()
 }
 
-#[uniffi::export(default(members = None))]
-pub fn retire_agent_call(id: String, members: Option<RetireMembers>) -> HttpCall {
+#[uniffi::export(default(members = None, expected_session_id = None))]
+pub fn retire_agent_call(id: String, members: Option<RetireMembers>, expected_session_id: Option<String>) -> HttpCall {
     let members = members.map(|m| match m {
         RetireMembers::Release => calls::RetireMembers::Release,
         RetireMembers::Retire => calls::RetireMembers::Retire,
     });
-    calls::retire_agent(&id, members).into()
+    calls::retire_agent(&id, members, expected_session_id.as_deref()).into()
+}
+
+#[uniffi::export]
+pub fn retry_agent_start_call(id: String) -> HttpCall {
+    calls::retry_agent_start(&id).into()
+}
+
+#[uniffi::export]
+pub fn settle_undelivered_call(id: String, send: bool) -> HttpCall {
+    calls::settle_undelivered(&id, send).into()
+}
+
+#[uniffi::export]
+pub fn agent_conversations_call(id: String) -> HttpCall {
+    calls::agent_conversations(&id).into()
+}
+
+#[uniffi::export]
+pub fn retired_agents_call() -> HttpCall {
+    calls::retired_agents().into()
 }
 
 #[uniffi::export(default(seed = None))]

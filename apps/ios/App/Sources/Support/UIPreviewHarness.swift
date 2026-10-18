@@ -25,6 +25,7 @@ enum UIPreview: String {
   case sessions
   case teams
   case core
+  case corearchived
   case coreextras
   case createform
 
@@ -302,8 +303,8 @@ private struct SessionsPreview: View {
         ToolbarItem(id: "filter", placement: .topBarTrailing) {
           let _ = revision
           FilterMenu(
-            filter: model.list.filter(), hosts: [], adapters: ["claude", "codex"], projects: [], list: model.list,
-            changed: { revision += 1 })
+            filter: model.list.filter(), hosts: [], adapters: ["claude", "codex"], projects: [], pastAgents: [],
+            list: model.list, changed: { revision += 1 }, openPast: { _ in })
         }
       }
       .navigationDestination(for: SessionRoute.self) { route in
@@ -595,6 +596,14 @@ struct UIPreviewHarness: View {
       .environment(UnreadModel())
       .environment(PushCoordinator())
       .environment(CoreMediaFixture.bookmarks)
+
+    case .corearchived:
+      // A past agent conversation with no gateway behind it: the banner, the transcript, and no composer.
+      NavigationStack { CoreSessionView(fixture: CoreReplayFixture.archivedFrames) }
+        .environment(AppSettings())
+        .environment(UnreadModel())
+        .environment(PushCoordinator())
+        .environment(CoreMediaFixture.bookmarks)
 
     case .coreextras:
       CoreExtrasPreview()

@@ -32,6 +32,8 @@ enum SessionRoute: Hashable {
     hostId: UUID, sessionId: String, seq: Int? = nil, epoch: Int? = nil,
     subagent: String? = nil, reveal: String? = nil, shell: String? = nil)
   case create(hostId: UUID, seed: CreateSessionSeed)
+  // A past conversation opened from an agent's history: read-only, and it never follows the agent.
+  case conversation(hostId: UUID, sessionId: String)
 
   // Where a step line under a session row goes. Here rather than at the list,
   // because the preview harness routes its own copy of the same rows: with the

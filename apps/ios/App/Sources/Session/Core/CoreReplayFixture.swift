@@ -90,6 +90,11 @@ enum CoreReplayFixture {
 
   // One running shell behind the last row, answered here instead of by a gateway: its attach replays a numbered
   // scrollback, typed input echoes, and Enter prints a listing and a fresh prompt.
+  static let archivedFrames = [
+    #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"fixture","title":"Past fixture","status":"closed","cwd":"/work/fixture","createdAt":1760000000000,"lastActivityAt":1760000600000,"lastSeq":1,"pendingPermissionCount":0,"archived":true,"supersededBy":"next","agent":{"id":"ag","name":"WD-Test"}}}"#,
+    #"{"type":"event","event":{"type":"user_message","message":{"role":"user","content":"Archived turn"},"parentToolUseId":null,"uuid":"u-1","seq":1,"ts":1760000001000}}"#,
+  ]
+
   static let shellId = "sh_fixture"
   static let shellCommand = "npm run dev"
   static let scrollback = 80
