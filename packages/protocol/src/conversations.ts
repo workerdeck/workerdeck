@@ -83,3 +83,54 @@ export type RetiredAgentInfo = {
 }
 
 export type RetiredAgentsResponse = { retired: RetiredAgentInfo[] }
+
+// What a read-only conversation says above its transcript. `agents` is the gateway's live agent list; until it has
+// loaded, a missing agent is not yet a deleted one.
+export type ArchivedView = {
+  kind: 'past' | 'deleted'
+  at: number
+  current?: string
+  unavailable: boolean
+}
+
+export function archivedView(
+  info: Pick<SessionInfo, 'id' | 'archived' | 'agent' | 'transcript' | 'createdAt' | 'lastActivityAt'>,
+  agents?: readonly Pick<AgentInfo, 'id' | 'sessionId'>[],
+): ArchivedView | undefined {
+  if (info.archived !== true) {
+    return undefined
+  }
+  const agent = info.agent && agents?.find((entry) => entry.id === info.agent!.id)
+  const deleted = info.agent !== undefined && agents !== undefined && !agent
+  const current = agent && agent.sessionId !== info.id ? agent.sessionId : undefined
+  return {
+    kind: deleted ? 'deleted' : 'past',
+    at: info.lastActivityAt ?? info.createdAt,
+    ...(current === undefined ? {} : { current }),
+    unavailable: info.transcript === 'unavailable',
+  }
+}
+
+export type NewConversationGate = { enabled: true } | { enabled: false; reason: string }
+
+export function newConversationGate(info: Pick<SessionInfo, 'status' | 'archived'> | undefined): NewConversationGate {
+  if (info === undefined || info.archived === true) {
+    return { enabled: true }
+  }
+  switch (info.status) {
+    case 'running':
+    case 'starting':
+      return { enabled: false, reason: 'Finish or stop the current turn first' }
+    case 'awaiting_approval':
+      return { enabled: false, reason: 'Answer the pending request first' }
+    default:
+      return { enabled: true }
+  }
+}
+
+export const NEW_CONVERSATION_HINT = 'Previous chat context is not carried over'
+
+// An agent rotates instead (New conversation); a typed `/clear` still clears within the current conversation.
+export function clearContextOffered(info: Pick<SessionInfo, 'agent' | 'archived'>): boolean {
+  return info.agent === undefined && info.archived !== true
+}

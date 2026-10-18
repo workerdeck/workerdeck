@@ -1,0 +1,47 @@
+{
+  "input": {
+    "fn": "clearContextOffered",
+    "calls": [
+      [
+        {
+          "id": "p",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          }
+        }
+      ],
+      [
+        {
+          "id": "b",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "archived": true
+        }
+      ]
+    ]
+  },
+  "output": [
+    true,
+    false,
+    false
+  ]
+}

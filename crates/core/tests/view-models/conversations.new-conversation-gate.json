@@ -1,0 +1,91 @@
+{
+  "input": {
+    "fn": "newConversationGate",
+    "calls": [
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "running",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "starting",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "awaiting_approval",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "parked",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "running",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "archived": true
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "enabled": true
+    },
+    {
+      "enabled": false,
+      "reason": "Finish or stop the current turn first"
+    },
+    {
+      "enabled": false,
+      "reason": "Finish or stop the current turn first"
+    },
+    {
+      "enabled": false,
+      "reason": "Answer the pending request first"
+    },
+    {
+      "enabled": true
+    },
+    {
+      "enabled": true
+    }
+  ]
+}

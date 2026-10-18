@@ -1162,6 +1162,38 @@ const CONVERSATIONS: VmCase[] = [
       [{ kind: 'session', gateway: 'mac', sessionId: 'zzz' }, []],
     ],
   },
+  {
+    module: 'conversations',
+    name: 'archived-view',
+    fn: 'archivedView',
+    calls: [
+      [info('a', { agent: FOLLOWER }), [{ id: 'ag', sessionId: 'a' }]],
+      [info('a', { agent: FOLLOWER, archived: true, supersededBy: 'b', lastActivityAt: 5000 }), [{ id: 'ag', sessionId: 'c' }]],
+      [info('a', { agent: FOLLOWER, archived: true }), [{ id: 'ag', sessionId: 'a' }]],
+      [info('a', { agent: FOLLOWER, archived: true }), []],
+      [info('a', { agent: FOLLOWER, archived: true, transcript: 'unavailable' })],
+      [info('p', { archived: true }), []],
+    ],
+  },
+  {
+    module: 'conversations',
+    name: 'new-conversation-gate',
+    fn: 'newConversationGate',
+    calls: [
+      [info('a', { status: 'idle' })],
+      [info('a', { status: 'running' })],
+      [info('a', { status: 'starting' })],
+      [info('a', { status: 'awaiting_approval' })],
+      [info('a', { status: 'parked' })],
+      [info('a', { status: 'running', archived: true })],
+    ],
+  },
+  {
+    module: 'conversations',
+    name: 'clear-context-offered',
+    fn: 'clearContextOffered',
+    calls: [[info('p')], [info('a', { agent: FOLLOWER })], [info('b', { archived: true })]],
+  },
 ]
 
 export const VM_CORPUS: VmCase[] = [

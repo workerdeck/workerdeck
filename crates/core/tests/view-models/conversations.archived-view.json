@@ -1,0 +1,144 @@
+{
+  "input": {
+    "fn": "archivedView",
+    "calls": [
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          }
+        },
+        [
+          {
+            "id": "ag",
+            "sessionId": "a"
+          }
+        ]
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          },
+          "archived": true,
+          "supersededBy": "b",
+          "lastActivityAt": 5000
+        },
+        [
+          {
+            "id": "ag",
+            "sessionId": "c"
+          }
+        ]
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          },
+          "archived": true
+        },
+        [
+          {
+            "id": "ag",
+            "sessionId": "a"
+          }
+        ]
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          },
+          "archived": true
+        },
+        []
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          },
+          "archived": true,
+          "transcript": "unavailable"
+        }
+      ],
+      [
+        {
+          "id": "p",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "archived": true
+        },
+        []
+      ]
+    ]
+  },
+  "output": [
+    null,
+    {
+      "kind": "past",
+      "at": 5000,
+      "current": "c",
+      "unavailable": false
+    },
+    {
+      "kind": "past",
+      "at": 1760000000000,
+      "unavailable": false
+    },
+    {
+      "kind": "deleted",
+      "at": 1760000000000,
+      "unavailable": false
+    },
+    {
+      "kind": "past",
+      "at": 1760000000000,
+      "unavailable": true
+    },
+    {
+      "kind": "past",
+      "at": 1760000000000,
+      "unavailable": false
+    }
+  ]
+}
