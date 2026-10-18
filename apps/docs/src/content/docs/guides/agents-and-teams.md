@@ -6,9 +6,9 @@ order: 13
 
 A **session** is one run. An **agent** is the identity that outlives it: a name, an avatar, a
 standing brief and the config its sessions start from, kept by the gateway in
-`<state-dir>/agents.json`. An agent owns one session at a time. Clearing, compaction, sleep and a
-gateway restart all keep that session; *New conversation* starts a fresh one under the same
-identity and team.
+`<state-dir>/agents.json`. An agent owns one session at a time, its current **conversation**.
+Compaction, sleep and a gateway restart all keep it; *New conversation* starts a fresh one under the
+same identity and team (see [Conversations](#conversations)).
 
 ## Create one
 
@@ -21,6 +21,24 @@ identity and team.
 
 The brief reaches the model as host instructions on every session the agent runs; it is not part
 of the session data clients receive.
+
+## Conversations
+
+*New conversation* in an agent's card menu (idle agents only) starts a clean conversation: same
+card, same place in the list, an empty transcript. Previous chat context is not carried over. An
+agent can do the same itself with the `context_reset` tool, which runs once its turn ends. A typed
+`/clear` still clears within the current conversation; agent cards offer no *Clear context*.
+
+The old conversation is archived: it leaves the list and stays readable, read-only, under
+*Conversations* on the agent (card menu on the dashboard and in VS Code, a long-press on the
+phones). Its history comes from the engine's own session store, so it follows that engine's
+retention: a transcript Claude Code or Codex has since pruned shows as unavailable. A view that
+shows an agent follows it into each new conversation and keeps an unsent draft as a draft.
+
+*Delete agent...* removes the agent from your agents and releases its team members. Its
+conversations stay readable under *Past agents*. Over REST: `POST /v1/agents/:id/restart` (New
+conversation), `GET /v1/agents/:id/conversations`, `GET /v1/agents?retired=1`, `DELETE
+/v1/agents/:id`; each change names the conversation it acts on with `expectedSessionId`.
 
 ## Teams
 
