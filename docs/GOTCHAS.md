@@ -1277,15 +1277,16 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
 
 ## Agent context reset (`context_reset`, `agentContextReset`)
 
-- **An agent gets a new session, not a `/clear`.** When the session is bound to an agent
-  (`agents.bySession`), the turn-end run is `restartAgent`, the same code as `POST /agents/:id/restart`:
-  a new session from the agent's stored config with the prompt as its first message, the old one
-  closed and kept, the agent rebound (`conversation` + 1). It runs under an operator `AuthContext`
-  carrying the old session's scope, because the stored config was vetted when it was stored, the
-  same trust a dormant wake extends. Limits key on `agent:<id>`, so they survive the session change.
-  No `conversation_reset` is emitted; the reason shows on the old session's `context_reset` call.
-  A failed restart leaves the old session as it was and goes to `onError`. Any other session keeps
-  the clear-then-prompt path below.
+- **An agent gets a new conversation, not a `/clear`.** When the session is bound to an agent
+  (`agents.bySession`), the turn-end run is `rotateAgent` (`routes/agent-handover.ts`), the same
+  handover as `POST /agents/:id/restart` ("New conversation"): a new session from the agent's stored
+  config with the prompt as its first message, the old one archived (read-only, off the list, kept in
+  the agent's `conversations`), the agent rebound. The schedule records `expectedSessionId`, so a reset
+  whose agent already moved on is dropped. It runs under an operator `AuthContext` carrying the old
+  session's scope, the same trust a dormant wake extends. Limits key on `agent:<id>`, so they survive
+  the session change. No `conversation_reset` is emitted; the old session gets `session_superseded`.
+  A failed rotation leaves the old conversation as it was and goes to `onError`. Any other session
+  keeps the clear-then-prompt path below. § Agent conversations has the handover itself.
 
 - **The tool schedules; the gateway runs it.** `context_reset` can only ever be called mid-turn, so
   the handler just records `{ prompt, reason }` in the server's `ContextResetService` and answers
@@ -1408,6 +1409,61 @@ has the shape; these are the ways to get it wrong.
   `perMinute` (10) per sender-target pair, `maxMessageChars` (16k) with "write a file, send the
   path" as the refusal.
 
+## Agent conversations (archives, handover, tombstones)
+
+An agent's sessions are its **conversations**; one is current, the rest are archived. The API says
+session, the UI says conversation.
+
+- **History comes from the engine's own store; the gateway keeps no transcript.** An archive is an
+  `ArchivedSessionRecord` (metadata, owner/scope for `canSee`, engine identity, recorded profile home,
+  cwd, `archivedAt`), never runner config. `services/history-reader.ts` serves it on a WS attach:
+  claude through `getSessionMessages` with the recorded `CLAUDE_CONFIG_DIR`, codex through an isolated
+  reader-owned app-server that only ever sends `initialize` and `thread/read`. It never calls
+  `createRunner`, `start` or `parking.resume`, authorizes before spawning, runs at most 2 at once with
+  a 20 s timeout, and always reaps its child. Retention follows the engine: a pruned transcript is
+  `transcript: 'unavailable'` (sticky), a transient failure is retryable. Provider (AI SDK) archives
+  keep the snapshot they had, else unavailable.
+- **The home is pinned at create.** `config.engineHome` is stamped when the session is made, so an
+  archive reads the store it was written to even after its profile changes.
+- **Archived is read-only on every path.** `requireWritable` (`routes/session-lookup.ts`) answers 409
+  `conversation is archived` on every mutating or waking route, WS command, execution result and
+  dormant wake. `GET /sessions` omits archives; `GET /agents/:id/conversations` lists them, `canSee`
+  per record. The one write is erase (`DELETE /sessions/:id`, operator only): it forgets the
+  gateway's content and keeps the history row as unavailable, never touching the engine store.
+- **An archive attach is one complete replay with index cursors.** A refetch resets the client's
+  archive transcript instead of appending; there is no live stream. A reconnect sends no `?epoch=`
+  yet, so rows resend and the handle dedups.
+- **One handover at a time per agent** (`AgentHandovers.run`, sorted multi-id lock, so retiring a lead
+  takes its whole crew in one order). Everything inside calls unlocked helpers. Every rotation and
+  retirement names `expectedSessionId`; a mismatch inside the lock is 409, so two requests from A never
+  run A to B to C. An omitted id counts as a mismatch.
+- **The gate.** From prepare until the old session is archived, its sends (user, peer, queued), wakes
+  and execution results are refused with 409 `conversation is rotating`. New conversation by hand needs
+  idle (`starting`, `running`, `awaiting_approval`, `parked` are busy; protocol `newConversationGate`
+  mirrors it); `context_reset` keeps its next-idle timing and gates at that idle.
+- **Prepare, commit, finish, recover.** Prepare fences the old session's parking queue and stages its
+  archive (a separate record, so dropping the stage never drops the session). Commit is one agent-store
+  write: new binding or tombstone, `conversations`, and a `pending` intent. Finish archives and closes
+  the old runner without discard, starts the successor and keeps `pending` until the successor is
+  durable (its record read back, or its engine identity known). `recoverHandovers` runs before the
+  gateway listens and finishes any committed intent, reusing an existing successor and never starting
+  a fresh engine conversation under its id. Any throw before commit lifts the gate untouched.
+- **A first message is never sent twice.** The prompt goes out between persisted `sending` and `sent`
+  marks. A crash in between without a durable engine identity sets `AgentInfo.undelivered`; the user
+  picks Send again or Dismiss (`POST /agents/:id/undelivered {send}`). A start that fails after commit
+  keeps the successor and offers Retry start (`POST /agents/:id/retry-start`, same id, never a second
+  rotation). A provider successor whose first turn is still in flight may not be snapshotable yet, so
+  its rotation can show Retry start until it is.
+- **Tombstones are not agents.** A retired agent is a separate variant (`retiredAt`, never cast to
+  `AgentInfo`): outside lookup, teams, relay publishing and name reservation; `patch`/`create` on its id
+  stay refused. `GET /agents?retired=1` lists visible ones (Past agents); their conversations read
+  through the same history route.
+- **Clients follow an agent, not a session.** A selection is `{ kind: 'agent' }` or `{ kind: 'session' }`
+  (`selectionOf`); `followStep` moves an agent view to the agent's current conversation on
+  `session_superseded`, on every list refresh and reconnect, never back to one it left. The draft and
+  staged files carry over unsent, pending approvals drop. History rows open a session selection, which
+  never moves. The native apps run the same rules from `crates/core` `vm::conversations`.
+
 ## Agents and teams (`/agents`, `SessionInfo.agent`)
 
 An agent is a gateway record (`AgentService`, `services/agents.ts`, persisted by an `AgentStore`)
@@ -1416,9 +1472,10 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
 - **The store is the source of truth; `SessionInfo.agent` is decoration.** `AgentService.decorate`
   rides `ProjectInfoService`'s `decorate` chain, so every `withProject` funnel (list, get, WS hello,
   notifications, peers) carries it, and parked or dormant records never embed it.
-- **Deleting an agent's session retires the agent** (`DELETE /sessions/:id`, members released,
-  operator only). No client draws a session-less agent, so one left behind was invisible yet still
-  held its name, and the next create under that name was refused as a duplicate.
+- **Deleting an agent keeps its history.** `DELETE /agents/:id` (and the legacy `DELETE
+  /sessions/:id` on an agent's current session) retires through the handover: the current session is
+  archived, the agent becomes a tombstone, members are released. A session-less live agent is never
+  left behind: no client draws one, and it would hold its name. § Agent conversations.
 - **The library default is an in-memory store**, so a host that forgets `agentStore` loses every
   agent on restart or hot reload while their sessions survive as plain cards. The CLI shipped that
   bug once: `stateDirDefaults` built `<state-dir>/agents.json` and `startInstance` never passed it
