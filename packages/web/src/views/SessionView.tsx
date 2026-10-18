@@ -26,6 +26,7 @@ import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { nudgeSessions, useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useAgentAvatars } from '@/hooks/useAgentAvatars.ts'
 import { useAgentFollow, type AgentFollow } from '@/hooks/useAgentFollow.ts'
+import { DeleteAgentDialog, type DeleteAgentTarget } from '@/components/DeleteAgentDialog.tsx'
 
 // Split in two so the inner view takes a *defined* client: a link can outlive the gateway it named, and hooks cannot
 // be skipped while we find that out.
@@ -33,8 +34,9 @@ export function SessionView() {
   const { hostId, sessionId } = useParams({ from: '/sessions/$hostId/$sessionId' })
   const { ready } = useHosts()
   const navigate = useNavigate()
+  const { agent } = useSearch({ from: '/sessions/$hostId/$sessionId' })
   const client = clientFor(hostId)
-  const follow = useAgentFollow(hostId, sessionId)
+  const follow = useAgentFollow(hostId, sessionId, agent)
 
   useEffect(() => {
     // Not until the probe has answered: the implicit gateway does not exist at first paint, and bouncing off it here
@@ -56,7 +58,7 @@ type SessionViewInnerProps = { hostId: string; sessionId: string; client: Worker
 
 function SessionViewInner({ hostId, sessionId, client, follow }: SessionViewInnerProps) {
   const navigate = useNavigate()
-  const { subagent, sn, reveal, rn, shell, shn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
+  const { subagent, sn, reveal, rn, shell, shn, agent } = useSearch({ from: '/sessions/$hostId/$sessionId' })
   // The workspace asks for this record too and nothing de-dupes, but one small GET beats threading the panel's
   // session state back out through a prop nobody else wants.
   const { info, error } = useSessionInfo(client, sessionId)
@@ -121,111 +123,134 @@ function SessionViewInner({ hostId, sessionId, client, follow }: SessionViewInne
     void navigate({ to: '/sessions' })
   }
 
+  const [deleting, setDeleting] = useState<DeleteAgentTarget>()
   const project = info?.cwd?.split('/').filter(Boolean).pop()
 
   return (
-    <SessionWorkspace
-      key={sessionId}
-      client={client}
-      sessionId={sessionId}
-      peerAvatars={peerAvatars}
-      transcriptVariant={variant}
-      transcriptFont={font}
-      hideThinking={thinking === 'hide'}
-      affordances={{ labels: actionStyle === 'labeled' }}
-      fontSize={panelFontSize}
-      openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
-      reveal={reveal ? { toolUseId: reveal, nonce: rn ?? 0 } : undefined}
-      subagents={polled?.subagents}
-      // Three rules keep this report → URL → panel round-trip from looping: no-op on match, `sn` rides through
-      // unchanged, and `replace` rather than push.
-      onSubagentChange={(toolUseId) => {
-        if (toolUseId === subagent) {
-          return
+    <>
+      <SessionWorkspace
+        key={sessionId}
+        client={client}
+        sessionId={sessionId}
+        peerAvatars={peerAvatars}
+        transcriptVariant={variant}
+        transcriptFont={font}
+        hideThinking={thinking === 'hide'}
+        affordances={{ labels: actionStyle === 'labeled' }}
+        fontSize={panelFontSize}
+        openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
+        reveal={reveal ? { toolUseId: reveal, nonce: rn ?? 0 } : undefined}
+        subagents={polled?.subagents}
+        // Three rules keep this report → URL → panel round-trip from looping: no-op on match, `sn` rides through
+        // unchanged, and `replace` rather than push.
+        onSubagentChange={(toolUseId) => {
+          if (toolUseId === subagent) {
+            return
+          }
+          void navigate({
+            to: '/sessions/$hostId/$sessionId',
+            params: { hostId, sessionId },
+            search: (prev) => (toolUseId === undefined ? { agent: prev.agent } : { subagent: toolUseId, sn: prev.sn, agent: prev.agent }),
+            replace: true,
+          })
+        }}
+        openShell={shell ? { shellId: shell, nonce: shn ?? 0 } : undefined}
+        shells={polled?.shells}
+        // The same three rules as the sub-agent pair above, plus: `subagent`/`sn` ride through untouched, so the
+        // sub-agent frame reads its own unchanged nonce and stays inert.
+        onShellChange={(shellId) => {
+          if (shellId === shell) {
+            return
+          }
+          void navigate({
+            to: '/sessions/$hostId/$sessionId',
+            params: { hostId, sessionId },
+            search: (prev) => ({ subagent: prev.subagent, sn: prev.sn, shell: shellId, shn: prev.shn, agent: prev.agent }),
+            replace: true,
+          })
+        }}
+        scrubber
+        bookmarks={bookmarks}
+        onToggleBookmark={toggleBookmark}
+        stickyPrompt
+        statusPlacement="bottom"
+        controlsSurface="status"
+        defaultRailWidth={rail.width}
+        defaultRailCollapsed={rail.collapsed}
+        onRailChange={setRail}
+        onSuperseded={follow.superseded}
+        onGoToCurrent={(current) =>
+          void navigate({
+            to: '/sessions/$hostId/$sessionId',
+            params: { hostId, sessionId: current },
+            search: info?.agent || agent ? { agent: info?.agent?.id ?? agent } : {},
+          })
         }
-        void navigate({
-          to: '/sessions/$hostId/$sessionId',
-          params: { hostId, sessionId },
-          search: toolUseId === undefined ? {} : (prev) => ({ subagent: toolUseId, sn: prev.sn }),
-          replace: true,
-        })
-      }}
-      openShell={shell ? { shellId: shell, nonce: shn ?? 0 } : undefined}
-      shells={polled?.shells}
-      // The same three rules as the sub-agent pair above, plus: `subagent`/`sn` ride through untouched, so the
-      // sub-agent frame reads its own unchanged nonce and stays inert.
-      onShellChange={(shellId) => {
-        if (shellId === shell) {
-          return
-        }
-        void navigate({
-          to: '/sessions/$hostId/$sessionId',
-          params: { hostId, sessionId },
-          search: (prev) => ({ subagent: prev.subagent, sn: prev.sn, shell: shellId, shn: prev.shn }),
-          replace: true,
-        })
-      }}
-      scrubber
-      bookmarks={bookmarks}
-      onToggleBookmark={toggleBookmark}
-      stickyPrompt
-      statusPlacement="bottom"
-      controlsSurface="status"
-      defaultRailWidth={rail.width}
-      defaultRailCollapsed={rail.collapsed}
-      onRailChange={setRail}
-      onSuperseded={follow.superseded}
-      carryFrom={follow.carryFrom}
-      unseen={unseen}
-      onVitals={(vitals) => {
-        // Only `itemCount`: the socket is its sole source, and `activity`/`turns` ride the effect above instead.
-        markSeen({ itemCount: vitals.itemCount })
-        nudgeSessions()
-      }}
-      header={({ actions }) => (
-        <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
-          {agentRow ? (
-            <AgentHeading row={agentRow} image={avatarOf(avatars, agentRow.info.agent)} className="shrink-0" />
-          ) : (
-            <span className="truncate text-body-sm font-medium text-fg-1">{info?.title ?? project ?? sessionId.slice(0, 8)}</span>
-          )}
-          {info?.engine && info.engine !== 'claude' ? (
-            <Badge variant="neutral" className="shrink-0">
-              {info.engine}
-            </Badge>
-          ) : null}
-          {info?.cwd ? (
-            <span className="min-w-0 truncate font-mono text-label text-fg-4" title={info.cwd}>
-              {info.cwd}
-            </span>
-          ) : null}
-          <span className="flex-1" />
-          <CopyButton value={sessionId} aria-label="Copy session id" />
-          <AlertDialog>
-            <AlertDialogTrigger
-              render={
-                <Button variant="ghost" size="icon-sm" aria-label="Close session">
-                  <Trash2 className="size-4 text-fg-3" />
-                </Button>
-              }
-            />
-            <AlertDialogContent>
-              <AlertDialogTitle>Close this session?</AlertDialogTitle>
-              <AlertDialogDescription>
-                The run is terminated on the server. You can pick it up later from “Resume a previous session” - the transcript is kept by
-                the engine, not by the gateway.
-              </AlertDialogDescription>
-              <div className="mt-4 flex justify-end gap-2">
-                <AlertDialogClose render={<Button variant="outline">Cancel</Button>} />
-                <Button variant="destructive" onClick={() => void close()}>
-                  Close session
-                </Button>
-              </div>
-            </AlertDialogContent>
-          </AlertDialog>
-          {actions}
-        </div>
-      )}
-    />
+        carryFrom={follow.carryFrom}
+        unseen={unseen}
+        onVitals={(vitals) => {
+          // Only `itemCount`: the socket is its sole source, and `activity`/`turns` ride the effect above instead.
+          markSeen({ itemCount: vitals.itemCount })
+          nudgeSessions()
+        }}
+        header={({ actions }) => (
+          <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
+            {agentRow ? (
+              <AgentHeading row={agentRow} image={avatarOf(avatars, agentRow.info.agent)} className="shrink-0" />
+            ) : (
+              <span className="truncate text-body-sm font-medium text-fg-1">{info?.title ?? project ?? sessionId.slice(0, 8)}</span>
+            )}
+            {info?.engine && info.engine !== 'claude' ? (
+              <Badge variant="neutral" className="shrink-0">
+                {info.engine}
+              </Badge>
+            ) : null}
+            {info?.cwd ? (
+              <span className="min-w-0 truncate font-mono text-label text-fg-4" title={info.cwd}>
+                {info.cwd}
+              </span>
+            ) : null}
+            <span className="flex-1" />
+            <CopyButton value={sessionId} aria-label="Copy session id" />
+            {info?.archived ? null : info?.agent ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Delete agent"
+                title="Delete agent…"
+                onClick={() => setDeleting({ hostId, agentId: info.agent!.id, name: info.agent!.name, sessionId })}
+              >
+                <Trash2 className="size-4 text-fg-3" />
+              </Button>
+            ) : (
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={
+                    <Button variant="ghost" size="icon-sm" aria-label="Close session">
+                      <Trash2 className="size-4 text-fg-3" />
+                    </Button>
+                  }
+                />
+                <AlertDialogContent>
+                  <AlertDialogTitle>Close this session?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The run is terminated on the server. You can pick it up later from “Resume a previous session” - the transcript is kept
+                    by the engine, not by the gateway.
+                  </AlertDialogDescription>
+                  <div className="mt-4 flex justify-end gap-2">
+                    <AlertDialogClose render={<Button variant="outline">Cancel</Button>} />
+                    <Button variant="destructive" onClick={() => void close()}>
+                      Close session
+                    </Button>
+                  </div>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            {actions}
+          </div>
+        )}
+      />
+      <DeleteAgentDialog target={deleting} onClose={() => setDeleting(undefined)} onDeleted={nudgeSessions} />
+    </>
   )
 }

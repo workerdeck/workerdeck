@@ -83,6 +83,7 @@ export type PanelToHost =
   | { kind: 'wd-focus' }
   | { kind: 'wd-focus-held' }
   | { kind: 'wd-superseded'; sessionId: string; successor: string }
+  | { kind: 'wd-go-to-current'; sessionId: string }
   | { kind: 'wd-open-path'; path: string; line?: number }
   | { kind: 'wd-open-url'; url: string }
   | {

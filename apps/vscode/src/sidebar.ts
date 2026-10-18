@@ -1,4 +1,14 @@
-import { STATUS_LABEL_EMOJI_MAX, STATUS_LABEL_TEXT_MAX, errorMessage, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
+import {
+  NEW_CONVERSATION_HINT,
+  STATUS_LABEL_EMOJI_MAX,
+  STATUS_LABEL_TEXT_MAX,
+  clearContextOffered,
+  errorMessage,
+  newConversationGate,
+  type AgentInfo,
+  type SessionInfo,
+  type StatusLabelInput,
+} from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import type { HostStore } from './hosts.ts'
 import {
@@ -10,6 +20,7 @@ import {
   type WorkerDeckClient,
 } from '@workerdeck/client'
 import { clientFor } from './gateway.ts'
+import { deleteAgentDetail, showConversations } from './conversations.ts'
 import { agentDefaultsCached, relayOfCached } from './machine.ts'
 import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
@@ -287,7 +298,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       detail: 'The line under the name in the list; the agent can change it with set_status',
       run: () => this.#setStatus(hostId, info),
     })
-    if (info.capabilities?.clearContext) {
+    if (info.capabilities?.clearContext && clearContextOffered(info)) {
       items.push({
         label: '$(clear-all) Clear context',
         detail: 'Start a fresh conversation - the old one stays resumable',
@@ -302,13 +313,26 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       })
     }
     items.push(...this.#teamItems(hostId, info))
-    items.push({
-      label: info.agent ? '$(trash) Delete agent' : '$(trash) Delete',
-      detail: info.agent ? 'Retire the agent and end its session; team members are released' : 'Remove the session from the gateway',
-      run: () => this.#deleteSession(hostId, sessionId),
-    })
-    const name = info.agent?.name ?? info.title ?? sessionId.slice(0, 8)
-    const picked = await vscode.window.showQuickPick(items, {
+    const agent = info.agent
+    items.push(
+      agent
+        ? {
+            label: '$(trash) Delete agent…',
+            detail: deleteAgentDetail(agent.name),
+            run: () => this.#deleteAgent(hostId, info),
+          }
+        : {
+            label: '$(trash) Delete',
+            detail: 'Remove the session from the gateway',
+            run: () => this.#deleteSession(hostId, sessionId),
+          },
+    )
+    const name = agent?.name ?? info.title ?? sessionId.slice(0, 8)
+    // Read here, not from the list: only the agent record carries a first message a crash may have kept.
+    const withAgent = agent
+      ? this.#agentRecord(hostId, agent.id).then((record) => [...this.#recoveryItems(hostId, info, record), ...items])
+      : items
+    const picked = await vscode.window.showQuickPick(withAgent, {
       title: info.owner ? `${name} · owner ${info.owner}` : name,
       placeHolder: 'Session actions',
     })
@@ -373,22 +397,110 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         })
       }
       items.push({
-        label: '$(debug-restart) New conversation',
-        detail: 'Restart the agent in a fresh session; the old one stays resumable',
-        run: () => this.#agentCall(hostId, 'could not restart the agent', (client) => client.restartAgent(agent.id)),
+        label: '$(history) Conversations…',
+        detail: "This agent's conversations; past ones open read-only",
+        run: () =>
+          showConversations(
+            { store: this.#store, selectSession: this.#delegate.selectSession },
+            { hostId, agentId: agent.id, name: agent.name },
+          ),
       })
+      const gate = newConversationGate(info)
       items.push({
-        label: '$(person-remove) Retire agent',
-        detail: agent.leads ? 'End the agent and its session; members are released' : 'End the agent and its session',
+        label: '$(debug-restart) New conversation',
+        description: gate.enabled ? undefined : gate.reason,
+        detail: NEW_CONVERSATION_HINT,
         run: async () => {
-          const ok = await vscode.window.showWarningMessage(`Retire ${agent.name}?`, { modal: true }, 'Retire')
-          if (ok === 'Retire') {
-            await this.#agentCall(hostId, 'could not retire the agent', (client) => client.retireAgent(agent.id))
+          if (!gate.enabled) {
+            void vscode.window.showInformationMessage(`WorkerDeck: ${gate.reason}.`)
+            return
           }
+          await this.#newConversation(hostId, info.id, agent.id)
         },
       })
     }
     return items
+  }
+
+  async #agentRecord(hostId: string, agentId: string): Promise<AgentInfo | undefined> {
+    const host = this.#store.get(hostId)
+    const client = host && (await clientFor(this.#store, host))
+    const agents = await client?.listAgents().catch((): AgentInfo[] | undefined => undefined)
+    return agents?.find((candidate) => candidate.id === agentId)
+  }
+
+  #recoveryItems(
+    hostId: string,
+    info: SessionInfo,
+    record: AgentInfo | undefined,
+  ): (vscode.QuickPickItem & { run: () => Promise<void> })[] {
+    const agentId = info.agent?.id
+    if (agentId === undefined) {
+      return []
+    }
+    const items: (vscode.QuickPickItem & { run: () => Promise<void> })[] = []
+    if (info.status === 'failed') {
+      items.push({
+        label: '$(debug-restart) Retry start',
+        detail: 'Start the new conversation that failed to start',
+        run: () => this.#agentCall(hostId, 'could not start the new conversation', (client) => client.retryAgentStart(agentId)),
+      })
+    }
+    if (record?.undelivered !== undefined) {
+      items.push(
+        {
+          label: '$(send) Send again',
+          description: 'first message may not have arrived',
+          detail: record.undelivered,
+          run: () => this.#agentCall(hostId, 'could not send the message again', (client) => client.settleUndelivered(agentId, true)),
+        },
+        {
+          label: '$(close) Dismiss',
+          detail: 'Drop the first message that may not have arrived',
+          run: () => this.#agentCall(hostId, 'could not dismiss the message', (client) => client.settleUndelivered(agentId, false)),
+        },
+      )
+    }
+    return items
+  }
+
+  async #newConversation(hostId: string, sessionId: string, agentId: string): Promise<void> {
+    const host = this.#store.get(hostId)
+    const client = host && (await clientFor(this.#store, host))
+    if (!client) {
+      return
+    }
+    try {
+      await client.restartAgent(agentId, undefined, sessionId)
+    } catch (err) {
+      const message = errorMessage(err)
+      if (message.includes('retry starting it first')) {
+        const choice = await vscode.window.showErrorMessage(`WorkerDeck: ${message}`, 'Retry start')
+        if (choice === 'Retry start') {
+          await this.#agentCall(hostId, 'could not start the new conversation', (retry) => retry.retryAgentStart(agentId))
+        }
+      } else {
+        void vscode.window.showErrorMessage(`WorkerDeck: could not start a new conversation - ${message}`)
+      }
+    }
+    await this.#model.refresh()
+  }
+
+  // The panel showing the agent stays on its last conversation, which turns into a read-only archive.
+  async #deleteAgent(hostId: string, info: SessionInfo): Promise<void> {
+    const agent = info.agent
+    if (!agent) {
+      return
+    }
+    const confirmed = await vscode.window.showWarningMessage(
+      `Delete ${agent.name}?`,
+      { modal: true, detail: deleteAgentDetail(agent.name) },
+      'Delete agent',
+    )
+    if (confirmed !== 'Delete agent') {
+      return
+    }
+    await this.#agentCall(hostId, 'could not delete the agent', (client) => client.retireAgent(agent.id, { expectedSessionId: info.id }))
   }
 
   // The picker draws the candidates, so it lives in this webview; a request before the view has booted waits for `onReady`.
@@ -692,8 +804,11 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       return
     }
     const info = this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)
+    if (info?.agent) {
+      return await this.#deleteAgent(hostId, info)
+    }
     const confirmed = await vscode.window.showWarningMessage(
-      info?.agent ? `Delete agent ${info.agent.name}?` : `Delete session "${info?.title ?? sessionId.slice(0, 8)}"?`,
+      `Delete session "${info?.title ?? sessionId.slice(0, 8)}"?`,
       { modal: true },
       'Delete',
     )

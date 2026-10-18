@@ -9,6 +9,7 @@ import { AgentAvatarCache } from './agent-avatars.ts'
 import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
 import { HostStore } from './hosts.ts'
 import { createAgent, createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
+import { showPastAgents } from './conversations.ts'
 import { SessionPanelView } from './panel.ts'
 import { SessionEditorTab, sessionTitle } from './session-tab.ts'
 import { SurfaceRegistry } from './surfaces.ts'
@@ -193,6 +194,12 @@ export function activate(context: vscode.ExtensionContext): void {
       void model.refresh().then(() => markSeen(surface, true))
     },
     focused: (surface) => registry.setFocused(surface),
+    goToCurrent: (surface, sessionId) => {
+      const shown = surface.session
+      if (shown) {
+        void selectSession(shown.host.id, sessionId)
+      }
+    },
     superseded: (surface, successor) => {
       followSurface(surface, successor)
       void model.refresh().then(() => followSurface(surface))
@@ -563,6 +570,7 @@ export function activate(context: vscode.ExtensionContext): void {
         'workerdeck.newSession': () => createSession(sessionFlow),
         'workerdeck.newAgent': () => createAgent(sessionFlow),
         'workerdeck.resumeSession': () => resumeSession(sessionFlow),
+        'workerdeck.pastAgents': () => showPastAgents({ store, selectSession }),
         'workerdeck.refreshSessions': () => model.refresh(),
       },
     ),

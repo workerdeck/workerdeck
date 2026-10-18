@@ -45,7 +45,8 @@ export {
   shellRowText,
   successorOf,
 } from './lib/transcript.ts'
-export { stashHandedFiles } from './lib/conversation-follow.ts'
+export { conversationReadOnly, needsArchiveCheck, shownSession, stashHandedFiles } from './lib/conversation-follow.ts'
+export { useArchivedView, type ArchivedConversation } from './hooks/use-archived-view.ts'
 export type { ProducedFileRef, ShellItem, ToolResultImageRef, TranscriptItem, TranscriptState } from './lib/transcript.ts'
 export { recapLine, summarizeSince, type RecapInput, type RecapSummary } from './lib/recap.ts'
 export { useShellTerminal } from './hooks/use-shell-terminal.ts'

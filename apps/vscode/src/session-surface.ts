@@ -41,6 +41,7 @@ export type SurfaceDelegate = {
   focused: (surface: AnySurface) => void
   peerAvatars: (hostId: string) => Record<string, AgentAvatarImage>
   superseded: (surface: AnySurface, successor: string) => void
+  goToCurrent: (surface: AnySurface, sessionId: string) => void
 }
 
 function sameImages(a: Record<string, AgentAvatarImage>, b: Record<string, AgentAvatarImage>): boolean {
@@ -327,6 +328,10 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
         return
       }
       case 'wd-focus-held': {
+        return
+      }
+      case 'wd-go-to-current': {
+        this.delegate.goToCurrent(this, msg.sessionId)
         return
       }
       case 'wd-superseded': {

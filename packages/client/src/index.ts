@@ -9,6 +9,7 @@ import type {
   ConnectAccountResponse,
   CreateAgentRequest,
   RetireAgentRequest,
+  RetiredAgentInfo,
   UpdateAgentRequest,
   CreateJobRequest,
   CreateProfileRequest,
@@ -154,6 +155,11 @@ export class WorkerDeckClient {
   // Operator-only: a gateway without agents, or a scoped caller, answers 404.
   async listAgents(): Promise<AgentInfo[]> {
     return await this.#pick('GET', '/agents', 'agents')
+  }
+
+  // Deleted agents, kept for their conversation history.
+  async retiredAgents(): Promise<RetiredAgentInfo[]> {
+    return await this.#pick('GET', '/agents?retired=1', 'retired')
   }
 
   async createAgent(request: CreateAgentRequest): Promise<AgentResponse> {

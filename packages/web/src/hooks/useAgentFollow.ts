@@ -9,7 +9,7 @@ type Trail = { hostId: string; sessionId: string; selection?: ConversationSelect
 export type AgentFollow = { carryFrom?: string; superseded: (successor: string) => void }
 
 // `replace`, so Back never lands on the conversation the agent left.
-export function useAgentFollow(hostId: string, sessionId: string): AgentFollow {
+export function useAgentFollow(hostId: string, sessionId: string, agentId?: string): AgentFollow {
   const navigate = useNavigate()
   const { snapshots } = useSessions()
   const rows = useMemo<FollowRow[]>(
@@ -21,6 +21,9 @@ export function useAgentFollow(hostId: string, sessionId: string): AgentFollow {
   const trail = useRef<Trail>({ hostId, sessionId, left: new Set() })
   if (trail.current.hostId !== hostId || trail.current.sessionId !== sessionId) {
     trail.current = { hostId, sessionId, left: new Set() }
+  }
+  if (trail.current.selection === undefined && agentId !== undefined) {
+    trail.current.selection = { kind: 'agent', gateway: hostId, agentId }
   }
   if (trail.current.selection === undefined) {
     const row = rows.find((candidate) => candidate.hostId === hostId && candidate.info.id === sessionId)
@@ -43,7 +46,13 @@ export function useAgentFollow(hostId: string, sessionId: string): AgentFollow {
         left: new Set([...from.left, from.sessionId]),
         carryFrom: from.sessionId,
       }
-      void navigate({ to: '/sessions/$hostId/$sessionId', params: { hostId: from.hostId, sessionId: target }, replace: true })
+      const agent = from.selection?.kind === 'agent' ? from.selection.agentId : undefined
+      void navigate({
+        to: '/sessions/$hostId/$sessionId',
+        params: { hostId: from.hostId, sessionId: target },
+        search: agent === undefined ? {} : { agent },
+        replace: true,
+      })
     },
     [navigate],
   )

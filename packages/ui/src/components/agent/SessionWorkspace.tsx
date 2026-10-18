@@ -42,6 +42,7 @@ export interface SessionWorkspaceProps {
   onVitals?: SessionPanelProps['onVitals']
   onSuperseded?: SessionPanelProps['onSuperseded']
   carryFrom?: SessionPanelProps['carryFrom']
+  onGoToCurrent?: SessionPanelProps['onGoToCurrent']
   defaultRailWidth?: number
   defaultRailCollapsed?: boolean
   onRailChange?: (rail: { width: number; collapsed: boolean }) => void
@@ -83,6 +84,7 @@ export function SessionWorkspace({
   onVitals,
   onSuperseded,
   carryFrom,
+  onGoToCurrent,
   defaultRailWidth = 260,
   defaultRailCollapsed,
   onRailChange,
@@ -250,6 +252,7 @@ export function SessionWorkspace({
             onVitals={onVitals}
             onSuperseded={onSuperseded}
             carryFrom={carryFrom}
+            onGoToCurrent={onGoToCurrent}
             className="min-h-0 flex-1"
           />
         </div>

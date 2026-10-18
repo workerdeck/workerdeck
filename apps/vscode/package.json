@@ -159,6 +159,12 @@
         "icon": "$(history)"
       },
       {
+        "command": "workerdeck.pastAgents",
+        "title": "Past Agents",
+        "category": "WorkerDeck",
+        "icon": "$(archive)"
+      },
+      {
         "command": "workerdeck.showSearch",
         "title": "Search Sessions",
         "category": "WorkerDeck",
@@ -399,6 +405,11 @@
           "command": "workerdeck.resumeSession",
           "when": "view == workerdeck.sessions",
           "group": "1_workerdeck@1"
+        },
+        {
+          "command": "workerdeck.pastAgents",
+          "when": "view == workerdeck.sessions",
+          "group": "1_workerdeck@2"
         },
         {
           "command": "workerdeck.refreshSessions",

@@ -6,7 +6,15 @@ import { SessionStatusIcon } from './SessionStatusIcon.tsx'
 import { formatRelativeTime, friendlyModel } from '../../lib/format.ts'
 import { vendorTextClass } from './EngineIcon.tsx'
 
-export function MemberCard({ member, avatars }: { member: SessionRow; avatars?: AgentAvatars }) {
+export function MemberCard({
+  member,
+  avatars,
+  onConversations,
+}: {
+  member: SessionRow
+  avatars?: AgentAvatars
+  onConversations?: () => void
+}) {
   const { info } = member
   const name = info.agent?.name ?? sessionLabel(info)
   const state = info.engineAsleep && member.state === 'idle' ? 'Asleep' : STATE_LABELS[member.state]
@@ -39,7 +47,14 @@ export function MemberCard({ member, avatars }: { member: SessionRow; avatars?: 
       {notes.length ? <span className="text-label text-info">{notes.join(' · ')}</span> : null}
       <div className="flex items-center justify-between text-label text-fg-4">
         {model ? <span className={vendorTextClass(info.engine ?? 'claude', info.model)}>{model}</span> : <span />}
-        <span>Click to open</span>
+        {onConversations ? (
+          <button type="button" onClick={onConversations} className="underline-offset-2 hover:text-fg-1 hover:underline">
+            Conversations
+            {info.agent?.conversation !== undefined && info.agent.conversation > 1 ? ` (${info.agent.conversation})` : ''}
+          </button>
+        ) : (
+          <span>Click to open</span>
+        )}
       </div>
     </div>
   )

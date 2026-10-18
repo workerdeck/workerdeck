@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { WorkerDeckClient } from '@workerdeck/client'
-import { conversationsOf, followTarget, selectionOf, sessionListed, type SessionInfo } from '@workerdeck/protocol'
+import { archivedView, conversationsOf, followTarget, selectionOf, sessionListed, type SessionInfo } from '@workerdeck/protocol'
 import { followStep } from '@workerdeck/protocol'
-import { carryDraft, stashHandedFiles, takeHandedFiles } from '../src/lib/conversation-follow.ts'
+import {
+  carryDraft,
+  conversationReadOnly,
+  needsArchiveCheck,
+  shownSession,
+  stashHandedFiles,
+  takeHandedFiles,
+} from '../src/lib/conversation-follow.ts'
 import { clearDrafts, draftKey, readDraft, writeDraft } from '../src/lib/draft-store.ts'
 import { applyEvent, initialTranscriptState, successorOf } from '../src/lib/transcript.ts'
 
@@ -88,6 +95,39 @@ describe('follow', () => {
       followStep({ selection: { kind: 'session', gateway: 'g', sessionId: 'a' }, shown: 'a', rows, successor: 'b', left: new Set() }),
     ).toBeUndefined()
     expect(followStep({ selection: undefined, shown: 'a', rows, successor: 'b', left: new Set() })).toBeUndefined()
+  })
+})
+
+describe('archived view', () => {
+  it('renders an archived conversation read-only, whatever the host asked', () => {
+    expect(conversationReadOnly(false, { archived: true })).toBe(true)
+    expect(conversationReadOnly(false, {})).toBe(false)
+    expect(conversationReadOnly(true, undefined)).toBe(true)
+  })
+
+  it('re-reads an agent conversation that ended under the view and shows the archive it became', () => {
+    const live = { id: 'c', agent, createdAt: 1, status: 'idle' } as SessionInfo
+    expect(needsArchiveCheck(live, 'running')).toBe(false)
+    expect(needsArchiveCheck(live, 'closed')).toBe(true)
+    expect(needsArchiveCheck({ ...live, agent: undefined }, 'closed')).toBe(false)
+    expect(needsArchiveCheck({ ...live, archived: true }, 'closed')).toBe(false)
+    const archived = { ...live, archived: true as const, lastActivityAt: 9 }
+    expect(shownSession(live, undefined)).toBe(live)
+    expect(shownSession(live, { ...live, status: 'closed' })).toBe(live)
+    expect(shownSession(live, archived)).toBe(archived)
+  })
+
+  it('says agent deleted once the agent list lacks it, and past with a way back while it lives', () => {
+    const archived = { id: 'c', agent, archived: true as const, createdAt: 1, lastActivityAt: 9 } as SessionInfo
+    expect(archivedView(archived, [])).toEqual({ kind: 'deleted', at: 9, unavailable: false })
+    expect(archivedView(archived)).toEqual({ kind: 'past', at: 9, unavailable: false })
+    expect(archivedView(archived, [{ id: 'ag', sessionId: 'd' }])).toEqual({ kind: 'past', at: 9, current: 'd', unavailable: false })
+    expect(archivedView({ ...archived, archived: undefined }, [])).toBeUndefined()
+  })
+
+  it('keeps a deleted agent selection on its last conversation instead of moving it', () => {
+    const selection = { kind: 'agent' as const, gateway: 'g', agentId: 'ag' }
+    expect(followStep({ selection, shown: 'c', rows: [], left: new Set() })).toBeUndefined()
   })
 })
 

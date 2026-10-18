@@ -24,6 +24,8 @@ import {
   type SubagentInfo,
 } from '@workerdeck/protocol'
 import {
+  conversationReadOnly,
+  useArchivedView,
   useAttachments,
   useClaudeSession,
   useDraft,
@@ -74,6 +76,7 @@ import {
 import type { FileLinkOpener } from '../terminal/file-link.tsx'
 import { backgroundableSince, SEND_NOW_AFTER_MS } from '../terminal/live-tool.ts'
 import { useTicker } from '../terminal/items.tsx'
+import { ArchivedBanner } from './ArchivedBanner.tsx'
 import { ApprovalPrompts, type ApprovalPromptProps } from './ApprovalPrompts.tsx'
 import { SessionPanelProviders } from './session-panel-providers.tsx'
 import { useCatchUp } from './use-catch-up.ts'
@@ -141,6 +144,8 @@ export interface SessionPanelProps {
   // This view followed its agent here from `carryFrom`: the unsent draft and staged files come along, and a brief
   // starting line shows until the first frame.
   carryFrom?: string
+  // "Go to current" on a past conversation's banner; without it the banner offers no way back.
+  onGoToCurrent?: (sessionId: string) => void
   fontSize?: number
   className?: string
 }
@@ -241,7 +246,7 @@ export function SessionPanel({
   onControls,
   focusComposerOnClick = false,
   unseen,
-  readOnly = false,
+  readOnly: hostReadOnly = false,
   approvalPrompts,
   toolHost,
   clientTools,
@@ -251,6 +256,7 @@ export function SessionPanel({
   onOpenFile,
   onSuperseded,
   carryFrom,
+  onGoToCurrent,
   fontSize,
   className,
 }: SessionPanelProps) {
@@ -464,6 +470,8 @@ export function SessionPanel({
     [bookmarkSet, onToggleBookmark],
   )
 
+  const archive = useArchivedView(client, state.session, state.status)
+  const readOnly = conversationReadOnly(hostReadOnly, archive.session)
   const canBackgroundTasks = !readOnly && capabilities.backgroundTasks === true
   const taskControl = useMemo<TaskControlHandle | undefined>(
     () => (canBackgroundTasks ? { background: backgroundTask } : undefined),
@@ -531,9 +539,9 @@ export function SessionPanel({
     context: capabilities.contextUsage,
     usage: capabilities.rateLimits,
     info: true,
-    mcp: capabilities.mcpStatus,
-    skills: capabilities.skillsList,
-    files: hostFiles.available,
+    mcp: capabilities.mcpStatus && archive.view === undefined,
+    skills: capabilities.skillsList && archive.view === undefined,
+    files: hostFiles.available && archive.view === undefined,
   }
   const actionsMenu = (
     <Menu>
@@ -674,6 +682,7 @@ export function SessionPanel({
               Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some events may not render.
             </Notice>
           ) : null}
+          {archive.view ? <ArchivedBanner view={archive.view} onGoToCurrent={onGoToCurrent} /> : null}
           {startingHandover ? (
             <div role="status" className="px-3 pt-2 text-center text-body-sm text-fg-3">
               Starting a new conversation…

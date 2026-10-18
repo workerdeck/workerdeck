@@ -1,10 +1,18 @@
 import type { ReactNode, SyntheticEvent } from 'react'
-import type { SessionRow, Sharing } from '@workerdeck/protocol'
+import {
+  NEW_CONVERSATION_HINT,
+  clearContextOffered,
+  newConversationGate,
+  type AgentInfo,
+  type SessionRow,
+  type Sharing,
+} from '@workerdeck/protocol'
 import { Button, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, cn } from '@workerdeck/ui'
 import {
   BedDouble,
   Eraser,
   Globe,
+  History,
   Lock,
   LogOut,
   MessageSquareText,
@@ -12,9 +20,10 @@ import {
   Smile,
   Pencil,
   RotateCcw,
+  Send,
   Trash2,
   Ungroup,
-  UserMinus,
+  X,
   UserPlus,
   Users,
 } from 'lucide-react'
@@ -32,7 +41,10 @@ export type CardAction =
   | { kind: 'sharing'; sharing: Sharing }
   | { kind: 'dissolve' }
   | { kind: 'restart' }
-  | { kind: 'retire' }
+  | { kind: 'retry-start' }
+  | { kind: 'undelivered'; send: boolean }
+  | { kind: 'conversations' }
+  | { kind: 'delete' }
 
 // Leads first, then solo agents: anything top-level can take members.
 export function teamLeads(rows: SessionRow[], hostId: string | undefined, exclude?: SessionRow): SessionRow[] {
@@ -57,22 +69,27 @@ export function SessionCardActions({
   row,
   rows,
   allowShared = true,
+  agentInfo,
   onAction,
 }: {
   row: SessionRow
   rows: SessionRow[]
   allowShared?: boolean
+  // The agent's own record, where this gateway lets the caller list agents: it carries a first message a crash may have kept.
+  agentInfo?: AgentInfo
   onAction: (action: CardAction) => void
 }) {
   const { info } = row
   const agent = info.agent
   const leads = agent?.lead === undefined && !agent?.leads ? teamLeads(rows, row.hostId, row) : []
   const canSleep = info.capabilities?.engineSleep && info.status === 'idle' && !info.engineAsleep
+  const gate = newConversationGate(info)
+  const undelivered = agentInfo?.undelivered
 
   return (
     // The card is one big select target and React events bubble out of portals, so the menu's clicks stop here.
     <span className="flex shrink-0 items-center" onClick={stop} onDoubleClick={stop}>
-      {info.capabilities?.clearContext ? (
+      {info.capabilities?.clearContext && clearContextOffered(info) ? (
         <QuickAction
           label="Clear context"
           title="Clear the conversation - the session keeps running and the old conversation stays resumable"
@@ -92,8 +109,8 @@ export function SessionCardActions({
       ) : null}
       <QuickAction
         label={agent ? 'Delete agent' : 'Close session'}
-        title={agent ? 'Retire the agent and end its session; team members are released' : 'Close session'}
-        onClick={() => onAction({ kind: 'close' })}
+        title={agent ? 'Delete agent…' : 'Close session'}
+        onClick={() => onAction({ kind: agent ? 'delete' : 'close' })}
       >
         <Trash2 className="size-3 text-fg-3" />
       </QuickAction>
@@ -168,12 +185,43 @@ export function SessionCardActions({
           ) : null}
           {agent ? (
             <>
-              <Item icon={<RotateCcw />} onClick={() => onAction({ kind: 'restart' })}>
+              <MenuSeparator />
+              <Item icon={<History />} onClick={() => onAction({ kind: 'conversations' })}>
+                Conversations…
+              </Item>
+              <Item
+                icon={<RotateCcw />}
+                disabled={!gate.enabled}
+                title={gate.enabled ? NEW_CONVERSATION_HINT : gate.reason}
+                onClick={() => onAction({ kind: 'restart' })}
+              >
                 New conversation
               </Item>
+              {info.status === 'failed' ? (
+                <Item
+                  icon={<RotateCcw />}
+                  title="Start the new conversation that failed to start"
+                  onClick={() => onAction({ kind: 'retry-start' })}
+                >
+                  Retry start
+                </Item>
+              ) : null}
+              {undelivered !== undefined ? (
+                <>
+                  <div className="max-w-64 truncate px-2 pt-1.5 pb-1 text-label text-fg-4" title={undelivered}>
+                    First message may not have arrived
+                  </div>
+                  <Item icon={<Send />} onClick={() => onAction({ kind: 'undelivered', send: true })}>
+                    Send again
+                  </Item>
+                  <Item icon={<X />} onClick={() => onAction({ kind: 'undelivered', send: false })}>
+                    Dismiss
+                  </Item>
+                </>
+              ) : null}
               <MenuSeparator />
-              <Item icon={<UserMinus />} destructive onClick={() => onAction({ kind: 'retire' })}>
-                Retire agent…
+              <Item icon={<Trash2 />} destructive onClick={() => onAction({ kind: 'delete' })}>
+                Delete agent…
               </Item>
             </>
           ) : null}

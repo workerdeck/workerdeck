@@ -461,3 +461,16 @@ describe('error mapping', () => {
     await expect(client.toolResultImage('s1', 1, 't1', 0)).rejects.toThrow('image part request failed with 404')
   })
 })
+
+describe('agent conversations', () => {
+  it('lists deleted agents from the retired view', async () => {
+    const calls: string[] = []
+    const retired = [{ id: 'ag', name: 'WD-Test', retiredAt: 5, pastSessions: ['a'], conversations: [{ sessionId: 'a' }] }]
+    const client = makeClient((url, init) => {
+      calls.push(`${init?.method} ${String(url)}`)
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ retired }) } as unknown as Response)
+    })
+    await expect(client.retiredAgents()).resolves.toEqual(retired)
+    expect(calls).toEqual(['GET http://host/v1/agents?retired=1'])
+  })
+})

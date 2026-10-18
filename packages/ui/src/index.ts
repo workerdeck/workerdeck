@@ -62,6 +62,7 @@ export {
   type SessionVitals,
   type TerminalMetrics,
 } from './components/agent/SessionPanel.tsx'
+export { ArchivedBanner, type ArchivedBannerProps } from './components/agent/ArchivedBanner.tsx'
 export { TerminalTranscript, Transcript, type TerminalTranscriptProps, type TranscriptProps } from './components/agent/Transcript.tsx'
 export { TerminalSurface, type TerminalSurfaceProps } from './components/terminal/surface.tsx'
 export { TerminalItemView } from './components/terminal/TerminalTranscript.tsx'
@@ -243,3 +244,11 @@ export {
   rateLimitWindowSeconds,
   toolInputPreview,
 } from './lib/format.ts'
+export {
+  archivedBannerText,
+  conversationDate,
+  conversationRowText,
+  conversationSpan,
+  type ArchivedBannerText,
+  type ConversationRowText,
+} from './lib/conversations.ts'

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
 import {
+  NEW_CONVERSATION_HINT,
   STATUS_LABEL_EMOJI_MAX,
   STATUS_LABEL_TEXT_MAX,
   filterRows,
@@ -21,7 +22,6 @@ import {
 } from '@workerdeck/client'
 import {
   AlertDialog,
-  AlertDialogClose,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogTitle,
@@ -48,9 +48,12 @@ import {
   rowOwner,
   type GroupTarget,
 } from '@workerdeck/ui'
-import { ChevronDown, Layers, Plus, RefreshCw, Search, UserPlus } from 'lucide-react'
+import { Archive, ChevronDown, Layers, Plus, RefreshCw, Search, UserPlus } from 'lucide-react'
 import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { NewAgentDialog } from '@/components/NewAgentDialog.tsx'
+import { ConversationsDialog, PastAgentsDialog, type ConversationsTarget } from '@/components/ConversationsDialog.tsx'
+import { DeleteAgentDialog, type DeleteAgentTarget } from '@/components/DeleteAgentDialog.tsx'
+import { agentOn, useAgents } from '@/hooks/useAgents.ts'
 import { SessionCardActions, teamLeads, teamMembers, type CardAction } from './SessionCardActions.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { clientFor, hostById, primaryHost } from '@/lib/hosts.ts'
@@ -83,7 +86,10 @@ export function SessionsSidebar() {
   const [renaming, setRenaming] = useState<SessionRow>()
   const [labeling, setLabeling] = useState<SessionRow>()
   const [avatarFor, setAvatarFor] = useState<SessionRow>()
-  const [retiring, setRetiring] = useState<SessionRow>()
+  const [deleting, setDeleting] = useState<DeleteAgentTarget>()
+  const [conversationsOf, setConversationsOf] = useState<ConversationsTarget>()
+  const [pastAgents, setPastAgents] = useState(false)
+  const { byHost: agentsByHost, refresh: refreshAgents } = useAgents()
   const [crossing, setCrossing] = useState<CrossOwnerQuestion>()
   // Kept after close so the dialog does not re-render against another gateway while it fades out.
   const [target, setTarget] = useState<Partial<GroupTarget>>({})
@@ -119,15 +125,26 @@ export function SessionsSidebar() {
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
       // Cleared explicitly, because an omitted `search` inherits the current one and would carry a framed sub-agent along.
-      search: {},
+      search: agentSearch(row),
     })
+
+  // The current conversation opens as the agent (it follows the next rotation), a past one as itself, read-only.
+  const openConversation = (agent: ConversationsTarget, sessionId: string, current: boolean) => {
+    setConversationsOf(undefined)
+    setPastAgents(false)
+    void navigate({
+      to: '/sessions/$hostId/$sessionId',
+      params: { hostId: agent.hostId, sessionId },
+      search: current && !agent.deleted ? { agent: agent.agentId } : {},
+    })
+  }
 
   const subagentNonce = useRef(0)
   const openSubagent = (row: SessionRow, toolUseId: string) =>
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
-      search: { subagent: toolUseId, sn: ++subagentNonce.current },
+      search: { subagent: toolUseId, sn: ++subagentNonce.current, ...agentSearch(row) },
     })
 
   const shellNonce = useRef(0)
@@ -135,7 +152,7 @@ export function SessionsSidebar() {
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
-      search: { shell: shellId, shn: ++shellNonce.current },
+      search: { shell: shellId, shn: ++shellNonce.current, ...agentSearch(row) },
     })
 
   const killShell = (row: SessionRow, shellId: string) => {
@@ -233,8 +250,33 @@ export function SessionsSidebar() {
       return
     }
     void call(client)
-      .then(() => refresh())
+      .then(() => {
+        void refresh()
+        void refreshAgents()
+      })
       .catch((e: unknown) => toast.error(errorMessage(e, failure)))
+  }
+
+  const retryStart = (row: SessionRow, agentId: string) =>
+    agentCall(row, 'Could not start the new conversation', (client) => client.retryAgentStart(agentId))
+
+  const newConversation = (row: SessionRow, agentId: string) => {
+    const client = clientFor(row.hostId)
+    if (!client) {
+      return
+    }
+    void client
+      .restartAgent(agentId, undefined, row.info.id)
+      .then(() => toast.success(`New conversation started. ${NEW_CONVERSATION_HINT}`))
+      .catch((e: unknown) => {
+        const message = errorMessage(e, 'Could not start a new conversation')
+        if (message.includes('retry starting it first')) {
+          toast.error(message, { action: { label: 'Retry start', onClick: () => retryStart(row, agentId) } })
+          return
+        }
+        toast.error(message)
+      })
+      .finally(() => void refresh())
   }
 
   const clearContext = (row: SessionRow) => {
@@ -319,12 +361,34 @@ export function SessionsSidebar() {
       }
       case 'restart': {
         if (agent) {
-          agentCall(row, 'Could not restart the agent', (client) => client.restartAgent(agent.id))
+          newConversation(row, agent.id)
         }
         break
       }
-      case 'retire': {
-        setRetiring(row)
+      case 'retry-start': {
+        if (agent) {
+          retryStart(row, agent.id)
+        }
+        break
+      }
+      case 'undelivered': {
+        if (agent) {
+          agentCall(row, action.send ? 'Could not send the message again' : 'Could not dismiss the message', (client) =>
+            client.settleUndelivered(agent.id, action.send),
+          )
+        }
+        break
+      }
+      case 'conversations': {
+        if (agent) {
+          setConversationsOf({ hostId: row.hostId, agentId: agent.id, name: agent.name })
+        }
+        break
+      }
+      case 'delete': {
+        if (agent) {
+          setDeleting({ hostId: row.hostId, agentId: agent.id, name: agent.name, sessionId: row.info.id })
+        }
         break
       }
     }
@@ -351,7 +415,7 @@ export function SessionsSidebar() {
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
-      search: task.toolUseId ? { reveal: task.toolUseId, rn: ++revealNonce.current } : {},
+      search: task.toolUseId ? { reveal: task.toolUseId, rn: ++revealNonce.current, ...agentSearch(row) } : agentSearch(row),
     })
 
   const newAgent = (
@@ -376,6 +440,9 @@ export function SessionsSidebar() {
           </MenuItem>
           <MenuItem onClick={() => startCreate({})}>
             <Plus className="size-3.5 text-fg-3" /> New one-off session
+          </MenuItem>
+          <MenuItem onClick={() => setPastAgents(true)}>
+            <Archive className="size-3.5 text-fg-3" /> Past agents…
           </MenuItem>
         </MenuContent>
       </Menu>
@@ -454,11 +521,15 @@ export function SessionsSidebar() {
             onTeamMove={teamMove}
             relays={relays}
             avatars={avatars}
+            onAgentConversations={(row) =>
+              row.info.agent && setConversationsOf({ hostId: row.hostId, agentId: row.info.agent.id, name: row.info.agent.name })
+            }
             rowActions={(row) => (
               <SessionCardActions
                 row={row}
                 rows={rows}
                 allowShared={agentDefaults[row.hostId]?.allowShared !== false}
+                agentInfo={agentOn(agentsByHost, row.hostId, row.info.agent?.id)}
                 onAction={(action) => onCardAction(row, action)}
               />
             )}
@@ -528,33 +599,35 @@ export function SessionsSidebar() {
         }}
       />
 
-      <AlertDialog open={retiring !== undefined} onOpenChange={(next) => !next && setRetiring(undefined)}>
-        <AlertDialogContent>
-          <AlertDialogTitle>Retire {retiring?.info.agent?.name ?? 'this agent'}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            The agent and its session end. {retiring?.info.agent?.leads ? 'Its members are released and stay as agents. ' : ''}Past
-            conversations stay resumable from the engine&apos;s store.
-          </AlertDialogDescription>
-          <div className="mt-4 flex justify-end gap-2">
-            <AlertDialogClose render={<Button variant="outline">Cancel</Button>} />
-            <Button
-              variant="destructive"
-              onClick={() => {
-                const row = retiring
-                const agent = row?.info.agent
-                setRetiring(undefined)
-                if (row && agent) {
-                  agentCall(row, 'Could not retire the agent', (client) => client.retireAgent(agent.id))
-                }
-              }}
-            >
-              Retire
-            </Button>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteAgentDialog
+        target={deleting}
+        onClose={() => setDeleting(undefined)}
+        onDeleted={() => {
+          void refresh()
+          void refreshAgents()
+        }}
+      />
+
+      <ConversationsDialog
+        target={conversationsOf}
+        onClose={() => setConversationsOf(undefined)}
+        onOpen={(agent, row) => openConversation(agent, row.sessionId, row.current)}
+      />
+
+      <PastAgentsDialog
+        open={pastAgents}
+        onClose={() => setPastAgents(false)}
+        onPick={(agent) => {
+          setPastAgents(false)
+          setConversationsOf(agent)
+        }}
+      />
     </>
   )
+}
+
+function agentSearch(row: SessionRow): { agent?: string } {
+  return row.info.agent ? { agent: row.info.agent.id } : {}
 }
 
 type CrossOwnerQuestion = { move: TeamMove; resolve: (yes: boolean) => void }

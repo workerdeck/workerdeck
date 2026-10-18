@@ -18,6 +18,7 @@ import {
   toggleTeamExpanded,
   isGroupCollapsed,
   toggleGroupCollapsed,
+  clearContextOffered,
 } from '@workerdeck/protocol'
 import type {
   HostRelays,
@@ -75,6 +76,8 @@ export interface SessionBrowserProps {
   onKillShell?: (row: SessionRow, shellId: string) => void
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
   avatars?: AgentAvatars
+  // A "Conversations" link on an agent's hover card.
+  onAgentConversations?: (row: SessionRow) => void
   // Makes cards draggable onto each other: the middle of a card joins its team, a member dropped outside leaves.
   // Reject with an Error to draw its message under the card.
   onTeamMove?: (move: TeamMove) => Promise<void> | void
@@ -122,6 +125,7 @@ export function SessionBrowser({
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
+  onAgentConversations,
   avatars,
   onTeamMove,
   relays,
@@ -375,9 +379,8 @@ export function SessionBrowser({
                         now={now}
                         onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
                         onSelectMember={(member) => onSelect?.(member, { meta: false, ctrl: false, alt: false })}
-                        renderLead={(tray) =>
-                          item(row, 'card', { className: row.context ? 'opacity-50' : undefined, teamTray: tray })
-                        }
+                        onConversations={onAgentConversations}
+                        renderLead={(tray) => item(row, 'card', { className: row.context ? 'opacity-50' : undefined, teamTray: tray })}
                         renderMember={(member) => item(member, 'member')}
                       />
                     )
@@ -500,7 +503,7 @@ function SessionRowItem({
                 <Pencil className="size-3 text-fg-3" />
               </RowAction>
             ) : null}
-            {onClearContext && info.capabilities?.clearContext ? (
+            {onClearContext && info.capabilities?.clearContext && clearContextOffered(info) ? (
               <RowAction
                 label="Clear context"
                 title="Clear the conversation - the session keeps running and the old conversation stays resumable"
@@ -567,6 +570,7 @@ function TeamBlock({
   now,
   onToggle,
   onSelectMember,
+  onConversations,
   renderLead,
   renderMember,
 }: {
@@ -578,6 +582,7 @@ function TeamBlock({
   now?: number
   onToggle: () => void
   onSelectMember: (member: SessionRow) => void
+  onConversations?: (member: SessionRow) => void
   renderLead: (tray?: ReactNode) => ReactNode
   renderMember: (member: SessionRow) => ReactNode
 }) {
@@ -605,7 +610,7 @@ function TeamBlock({
               </button>
             }
           >
-            <MemberCard member={member} avatars={avatars} />
+            <MemberCard member={member} avatars={avatars} onConversations={onConversations ? () => onConversations(member) : undefined} />
           </HoverCard>
         )
       })}
@@ -655,7 +660,17 @@ function TeamBlock({
 }
 
 // A member Auto keeps only for its linger window: a hairline fills left to right and the row leaves when it is full.
-function LingerBar({ member, selected, peeked, now }: { member: SessionRow; selected?: SessionRow; peeked?: ReadonlySet<string>; now?: number }) {
+function LingerBar({
+  member,
+  selected,
+  peeked,
+  now,
+}: {
+  member: SessionRow
+  selected?: SessionRow
+  peeked?: ReadonlySet<string>
+  now?: number
+}) {
   const clock = now ?? Date.now()
   const start = teamLingerStart(member, selected && sessionKey(selected), clock, peeked)
   if (start === undefined) {
