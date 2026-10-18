@@ -14,6 +14,12 @@ import {
 } from './session-store.ts'
 
 // The context handed to parking's onError: which session, and which lifecycle step failed.
+export class SessionFenced extends Error {
+  constructor(readonly sessionId: string) {
+    super(`session ${sessionId} is being handed over`)
+  }
+}
+
 export type ParkErrorContext = { sessionId: string; phase: 'park' | 'remember' | 'resume' | 'discard' }
 
 const SETTLED_MAX = 4096
@@ -30,6 +36,7 @@ export type SessionParkOptions = {
   onParked?: (sessionId: string, executionId: string) => void
   onResumed?: (sessionId: string, runner: Runner) => void
   onError?: (error: unknown, context: ParkErrorContext) => void
+  engineHome?: (profile: string | undefined, engine: NonNullable<SessionInfo['engine']>) => ArchivedSessionRecord['home']
 }
 
 export class SessionParkManager {
@@ -317,6 +324,9 @@ export class SessionParkManager {
       return settled === undefined ? undefined : { applied: false, sessionId: settled }
     }
     const runner = await this.ensureLive(sessionId)
+    if (this.#archiving.has(sessionId)) {
+      throw new SessionFenced(sessionId)
+    }
     if (!runner) {
       this.#forget(executionId)
       return undefined
@@ -347,10 +357,15 @@ export class SessionParkManager {
     await this.#queue(sessionId, () => this.#options.store.delete(sessionId))
   }
 
-  // Blocks every later write for the session (dormant, live, forget, discard), then waits out the ones already queued.
+  // Blocks every later write and wake for the session, then waits out the writes and the wake already under way.
   async fence(sessionId: string): Promise<void> {
     this.#archiving.add(sessionId)
+    await this.#resuming.get(sessionId)?.catch(() => undefined)
     await this.#storeOps.get(sessionId)
+  }
+
+  fenced(sessionId: string): boolean {
+    return this.#archiving.has(sessionId)
   }
 
   unfence(sessionId: string): void {
@@ -374,6 +389,7 @@ export class SessionParkManager {
     }
     const { engineAsleep: _asleep, ...info } = source
     const snapshot = runner?.snapshot?.() ?? (stored && !isDormant(stored) ? stored.snapshot : undefined)
+    const home = this.#options.engineHome?.(info.profile, engineOf(info))
     return {
       kind: 'archived',
       id: sessionId,
@@ -389,6 +405,7 @@ export class SessionParkManager {
       ...(link.agentId ? { agentId: link.agentId } : {}),
       ...(info.sdkSessionId ? { engineSessionId: info.sdkSessionId } : {}),
       ...(info.profile ? { profile: info.profile } : {}),
+      ...(home ? { home } : {}),
       ...(snapshot ? { snapshot } : {}),
       archivedAt: Date.now(),
     }
@@ -548,6 +565,9 @@ export class SessionParkManager {
     while (this.#renaming) {
       await this.#renaming
     }
+    if (this.#archiving.has(id)) {
+      return undefined
+    }
     const inFlight = this.#resuming.get(id)
     if (inFlight) {
       return inFlight
@@ -572,6 +592,11 @@ export class SessionParkManager {
     } catch (error) {
       this.#options.onError?.(error, { sessionId: id, phase: 'resume' })
       throw error
+    }
+    // A handover fenced the session while the factory ran: the conversation is leaving, so this runner never registers.
+    if (this.#archiving.has(id)) {
+      runner.close('server')
+      return undefined
     }
     if (runner.id !== id) {
       runner.close('error')

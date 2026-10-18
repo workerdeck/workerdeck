@@ -76,8 +76,13 @@ function gatedAvatars(): AvatarProvider & { hold(): void; release(): void; waiti
   }
 }
 
-async function startGateway(dir?: string, extra: Pick<WorkerServerOptions, 'authenticate' | 'avatars'> = { avatars: fakeAvatars() }) {
+// `ownQuery` gives every session its own fake query: closing one session then ends only its own stream.
+async function startGateway(
+  dir?: string,
+  { ownQuery, ...extra }: Pick<WorkerServerOptions, 'authenticate' | 'avatars'> & { ownQuery?: boolean } = { avatars: fakeAvatars() },
+) {
   const harness = fakeHarness()
+  const queryFn: typeof harness.queryFn = ownQuery ? (params) => fakeHarness().queryFn(params) : harness.queryFn
   const server = createWorkerServer({
     allowUnauthenticated: extra.authenticate === undefined,
     ...extra,
@@ -85,7 +90,7 @@ async function startGateway(dir?: string, extra: Pick<WorkerServerOptions, 'auth
     ...(dir
       ? { parking: { store: createFileSessionStore({ dir }), parkDelayMs: 10 }, agentStore: createFileAgentStore(join(dir, 'agents.json')) }
       : {}),
-    buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
+    buildRunnerConfig: (req) => ({ ...req, queryFn }),
   })
   servers.push(server)
   const { base, wsBase } = await listenOn(server)
@@ -253,7 +258,7 @@ describe('agents', () => {
   })
 
   it('restarts an agent into a fresh session, keeping its identity and its team', async () => {
-    const { base, server } = await startGateway()
+    const { base, server } = await startGateway(undefined, { avatars: fakeAvatars(), ownQuery: true })
     const lead = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
     const member = (
       await call<AgentResponse>(base, '/agents', 'POST', { name: 'Pip', config: { cwd: '/tmp/project' }, lead: lead.agent.id })

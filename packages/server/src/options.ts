@@ -111,6 +111,8 @@ export type WorkerServerOptions = {
   // The `context_reset` tool: an agent clears its own conversation between turns and continues from a prompt it wrote.
   // Available unless `false`; a session gets it from its request, then its profile's `defaults`, then `default` here.
   agentContextReset?: false | AgentContextResetOptions
+  // How long a new conversation's start may take before its handover answers without waiting further; omitted: 30 s.
+  agentStartupTimeoutMs?: number
   // Reasoning effort per model, keyed by catalog value or resolved id; a profile's `defaults.efforts` wins per key.
   effortDefaults?: Record<string, string>
   bridge?: BridgeHubOptions

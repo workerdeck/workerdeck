@@ -19,13 +19,15 @@ import {
   type HistoryFn,
 } from '@workerdeck/core'
 import { errorMessage, type ProfileEngine, type ProfileInfo, type SessionEventBody } from '@workerdeck/protocol'
-import { cliConfigDir } from '../lib/profile-env.ts'
+import { cliConfigDir, codexHomeDir, engineOf } from '../lib/profile-env.ts'
+import type { EngineHome } from './session-store.ts'
 
 export type HistoryTarget = {
   sessionId: string
   engine: ProfileEngine
   engineSessionId?: string
   profile?: string
+  home?: EngineHome
   cwd: string
 }
 
@@ -148,7 +150,7 @@ export function createHistoryReader(options: HistoryReaderOptions = {}): History
     signal: AbortSignal,
   ): Promise<HistoryRead> {
     const env = envFor(profile)
-    const configDir = profile?.configDir ?? cliConfigDir(env)
+    const configDir = target.home?.claudeConfigDir ?? profile?.configDir ?? cliConfigDir(env)
     const messages =
       canonicalDir(configDir) === canonicalDir(cliConfigDir(gatewayEnv))
         ? await abortable((options.claudeHistory ?? claudeSessionMessages)(sessionId, { dir: target.cwd }), signal)
@@ -177,9 +179,14 @@ export function createHistoryReader(options: HistoryReaderOptions = {}): History
     return JSON.parse(stdout) as Awaited<ReturnType<HistoryFn>>
   }
 
-  async function readCodex(threadId: string, profile: ProfileInfo | undefined, signal: AbortSignal): Promise<HistoryRead> {
+  async function readCodex(
+    threadId: string,
+    profile: ProfileInfo | undefined,
+    home: string | undefined,
+    signal: AbortSignal,
+  ): Promise<HistoryRead> {
     const connect = options.codexConnect ?? defaultCodexConnect
-    const connection = connect({ env: codexChildEnv(envFor(profile), profile?.codexHome) })
+    const connection = connect({ env: codexChildEnv(envFor(profile), home ?? profile?.codexHome) })
     const onAbort = () => connection.close()
     signal.addEventListener('abort', onAbort, { once: true })
     try {
@@ -214,22 +221,46 @@ export function createHistoryReader(options: HistoryReaderOptions = {}): History
         return Promise.resolve(MISSING)
       }
       const engineSessionId = target.engineSessionId
+      const pinned = target.engine === 'codex' ? target.home?.codexHome : target.home?.claudeConfigDir
       let profile: ProfileInfo | undefined
       if (target.profile !== undefined) {
         profile = options.profile?.(target.profile)
-        if (options.profile && !profile) {
+        if (options.profile && !profile && !pinned) {
           return Promise.resolve({ kind: 'failed', error: `unknown profile: ${target.profile}` })
         }
+      }
+      if (profile && pinned && engineOf(profile) !== target.engine) {
+        profile = undefined
       }
       if (profile?.engine === 'provider') {
         return Promise.resolve(MISSING)
       }
       const job: Job =
         target.engine === 'codex'
-          ? (jobSignal) => readCodex(engineSessionId, profile, jobSignal)
+          ? (jobSignal) => readCodex(engineSessionId, profile, target.home?.codexHome, jobSignal)
           : (jobSignal) => readClaude(target, engineSessionId, profile, jobSignal)
       return run(job, signal)
     },
+  }
+}
+
+export function engineHomeOf(
+  profile: ProfileInfo | undefined,
+  engine: ProfileEngine,
+  sessionEnvFor: (profile: ProfileInfo) => Record<string, string | undefined>,
+  gatewayEnv: Record<string, string | undefined> = process.env,
+): EngineHome | undefined {
+  const env = (): Record<string, string | undefined> => (profile ? sessionEnvFor(profile) : gatewayEnv)
+  switch (engine) {
+    case 'claude': {
+      return { claudeConfigDir: profile?.configDir ?? cliConfigDir(env()) }
+    }
+    case 'codex': {
+      return { codexHome: profile?.codexHome ?? codexHomeDir(env()) }
+    }
+    default: {
+      return undefined
+    }
   }
 }
 

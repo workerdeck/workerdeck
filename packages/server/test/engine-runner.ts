@@ -20,7 +20,17 @@ export class EngineRunner implements Runner {
     this.id = id
   }
 
+  hold: Promise<void> | undefined
+  failStart: string | undefined
+
   async start(): Promise<void> {
+    await this.hold
+    if (this.failStart !== undefined) {
+      this.#emit({ type: 'session_error', message: this.failStart })
+      this.#status = 'failed'
+      this.#emit({ type: 'status_changed', status: 'failed' })
+      return
+    }
     this.#sdkSessionId = this.config.resume ?? `engine-${this.id}`
     if (this.config.prompt) {
       this.sendMessage(this.config.prompt)

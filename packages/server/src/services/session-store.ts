@@ -33,6 +33,8 @@ export type DormantSessionRecord = {
   savedAt: number
 }
 
+export type EngineHome = { claudeConfigDir?: string; codexHome?: string }
+
 export type ArchivedSessionRecord = {
   kind: 'archived'
   id: string
@@ -41,6 +43,7 @@ export type ArchivedSessionRecord = {
   agentId?: string
   engineSessionId?: string
   profile?: string
+  home?: EngineHome
   snapshot?: RunnerSnapshot
   staged?: true
   archivedAt: number

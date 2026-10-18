@@ -57,6 +57,16 @@ describe('staleAttach', () => {
   it('accepts a warm attach with nothing missed', () => {
     expect(staleAttach(frame(500, info({ lastSeq: 500 })), held(500))).toBe(false)
   })
+
+  it('flags the first attach that finds the session archived, even past the held seq', () => {
+    expect(staleAttach(frame(500, info({ lastSeq: 900, archived: true, epoch: 7 })), held(500))).toBe(true)
+  })
+
+  it('flags a log with another epoch and keeps one with the same epoch', () => {
+    const archived = seedFromSessionInfo({ ...initialTranscriptState, lastSeq: 40 }, info({ lastSeq: 40, archived: true, epoch: 7 }))
+    expect(staleAttach(frame(40, info({ lastSeq: 40, archived: true, epoch: 7 })), archived)).toBe(false)
+    expect(staleAttach(frame(40, info({ lastSeq: 40, archived: true, epoch: 8 })), archived)).toBe(true)
+  })
 })
 
 describe('transcript cache store', () => {

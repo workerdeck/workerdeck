@@ -13,7 +13,13 @@ import {
   type HistoryFn,
 } from '@workerdeck/core'
 import type { ProfileInfo, SessionEvent, SessionEventBody } from '@workerdeck/protocol'
-import { createHistoryReader, type HistoryReaderOptions, type HistoryTarget, type ReaderChild } from '../src/services/history-reader.ts'
+import {
+  createHistoryReader,
+  engineHomeOf,
+  type HistoryReaderOptions,
+  type HistoryTarget,
+  type ReaderChild,
+} from '../src/services/history-reader.ts'
 
 const dirs: string[] = []
 
@@ -398,5 +404,77 @@ describe('history reader: scheduling and engines', () => {
     const reader = createHistoryReader({ claudeHistory, profile: () => undefined })
     expect(await reader.read({ ...claudeTarget, profile: 'gone' })).toEqual({ kind: 'failed', error: 'unknown profile: gone' })
     expect(claudeHistory).not.toHaveBeenCalled()
+  })
+})
+
+describe('history reader: the engine home recorded at archive time', () => {
+  it("reads claude history from the recorded config dir after the profile's dir changed", async () => {
+    const gatewayDir = temp('wd-hr-gw-')
+    const recorded = temp('wd-hr-recorded-')
+    const moved = temp('wd-hr-moved-')
+    const { spawnChild, children } = fakeSpawn()
+    const reader = createHistoryReader({
+      gatewayEnv: gatewayEnvWith(gatewayDir),
+      profile: () => ({ name: 'work', configDir: moved }),
+      sessionEnvFor: () => ({ ...gatewayEnvWith(moved) }),
+      spawnChild,
+      claudeSdkEntry: () => '/sdk/sdk.mjs',
+    })
+    const pending = reader.read({ ...claudeTarget, profile: 'work', home: { claudeConfigDir: recorded } })
+    await vi.waitFor(() => expect(children).toHaveLength(1))
+    expect(children[0]!.env.CLAUDE_CONFIG_DIR).toBe(recorded)
+    children[0]!.exit(0, JSON.stringify(CLAUDE_FIXTURE))
+    expect((await pending).kind).toBe('ok')
+  })
+
+  it('reads claude history for a deleted profile from the recorded config dir', async () => {
+    const gatewayDir = temp('wd-hr-gw-')
+    const recorded = temp('wd-hr-recorded-')
+    const { spawnChild, children } = fakeSpawn()
+    const claudeHistory = vi.fn(async () => CLAUDE_FIXTURE)
+    const reader = createHistoryReader({
+      gatewayEnv: gatewayEnvWith(gatewayDir),
+      profile: () => undefined,
+      claudeHistory,
+      spawnChild,
+      claudeSdkEntry: () => '/sdk/sdk.mjs',
+    })
+    const pending = reader.read({ ...claudeTarget, profile: 'gone', home: { claudeConfigDir: recorded } })
+    await vi.waitFor(() => expect(children).toHaveLength(1))
+    expect(children[0]!.env.CLAUDE_CONFIG_DIR).toBe(recorded)
+    children[0]!.exit(0, JSON.stringify(CLAUDE_FIXTURE))
+    expect((await pending).kind).toBe('ok')
+
+    const inProcess = createHistoryReader({ gatewayEnv: gatewayEnvWith(gatewayDir), profile: () => undefined, claudeHistory, spawnChild })
+    expect((await inProcess.read({ ...claudeTarget, profile: 'gone', home: { claudeConfigDir: gatewayDir } })).kind).toBe('ok')
+    expect(claudeHistory).toHaveBeenCalledOnce()
+  })
+
+  it('reads codex history from the recorded home after the profile moved or was deleted', async () => {
+    const homes: unknown[] = []
+    const { connect } = fakeCodex(codexAnswers())
+    let profile: ProfileInfo | undefined = { name: 'codex', engine: 'codex', codexHome: '/homes/new' }
+    const reader = createHistoryReader({
+      codexConnect: (options) => {
+        homes.push(options.env.CODEX_HOME)
+        return connect(options)
+      },
+      profile: () => profile,
+    })
+    const target: HistoryTarget = { ...codexTarget, profile: 'codex', home: { codexHome: '/homes/old' } }
+    expect((await reader.read(target)).kind).toBe('ok')
+    profile = undefined
+    expect((await reader.read(target)).kind).toBe('ok')
+    expect(homes).toEqual(['/homes/old', '/homes/old'])
+  })
+
+  it('resolves only the two store dirs, the way a read would, and nothing for the provider engine', () => {
+    const env = { CLAUDE_CONFIG_DIR: '/env/claude', CODEX_HOME: '/env/codex', ANTHROPIC_API_KEY: 'secret' }
+    expect(engineHomeOf({ name: 'p', configDir: '/p/claude' }, 'claude', () => env, env)).toEqual({ claudeConfigDir: '/p/claude' })
+    expect(engineHomeOf({ name: 'p' }, 'claude', () => env, {})).toEqual({ claudeConfigDir: '/env/claude' })
+    expect(engineHomeOf(undefined, 'claude', () => ({}), env)).toEqual({ claudeConfigDir: '/env/claude' })
+    expect(engineHomeOf({ name: 'c', engine: 'codex' }, 'codex', () => env, {})).toEqual({ codexHome: '/env/codex' })
+    expect(engineHomeOf({ name: 'c', engine: 'codex', codexHome: '/c/home' }, 'codex', () => env, env)).toEqual({ codexHome: '/c/home' })
+    expect(engineHomeOf(undefined, 'provider', () => env, env)).toBeUndefined()
   })
 })

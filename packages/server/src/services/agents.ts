@@ -245,14 +245,19 @@ export class AgentService {
     })
   }
 
-  updatePending(id: string, change: Partial<HandoverIntent> | null): Promise<StoredAgent | AgentRefusal> {
+  // `also` lands in the same write, so clearing the intent and what it leaves behind can never be split by a crash.
+  updatePending(
+    id: string,
+    change: Partial<HandoverIntent> | null,
+    also: (agent: StoredAgent) => StoredAgent = (agent) => agent,
+  ): Promise<StoredAgent | AgentRefusal> {
     return this.#transition(async () => {
       const current = this.#agents.get(id) ?? this.#tombstones.get(id)
       if (!current?.pending) {
         return { status: 404, error: `no pending change for agent ${id}` }
       }
       const { pending, ...rest } = current
-      const next: StoredAgent = change === null ? rest : { ...rest, pending: { ...pending, ...change } }
+      const next: StoredAgent = also(change === null ? rest : { ...rest, pending: { ...pending, ...change } })
       const stored: StoredAgent = { ...next, schema: AGENT_SCHEMA, updatedAt: this.#now() }
       await this.#apply([stored], [])
       ;(stored.retiredAt === undefined ? this.#agents : this.#tombstones).set(stored.id, stored)
@@ -818,7 +823,7 @@ export class AgentService {
   retire(
     id: string,
     members: 'release' | 'retire',
-    handover?: { expected: string | undefined; intent: HandoverIntent },
+    handover?: { expected: string | undefined; intents: ReadonlyMap<string, HandoverIntent> },
   ): Promise<RetireOutcome | AgentRefusal> {
     return this.#transition(async () => {
       const agent = this.#agents.get(id)
@@ -836,7 +841,7 @@ export class AgentService {
       const at = this.#now()
       const released =
         members === 'release' ? crew.map(({ lead: _lead, remoteLead: _remote, ...rest }) => ({ ...rest, updatedAt: at })) : []
-      const tombstones = retired.map((gone) => tombstoneOf(gone, at, gone.id === id ? handover?.intent : undefined))
+      const tombstones = retired.map((gone) => tombstoneOf(gone, at, handover?.intents.get(gone.id)))
       await this.#apply([...tombstones, ...released], [])
       for (const gone of retired) {
         this.#agents.delete(gone.id)

@@ -41,6 +41,10 @@ export async function upgradeSession(
     return
   }
   const runner = await parking.ensureLive(route.id).catch(() => undefined)
+  if (!runner && parking.fenced(route.id)) {
+    refuseUpgrade(socket, '503 Service Unavailable')
+    return
+  }
   if (!runner || !auth.canSee(authCtx, runner.info())) {
     refuseUpgrade(socket, '404 Not Found')
     return

@@ -13,6 +13,7 @@ export type HandoverIntent = {
   prompt?: string
   promptState: 'unsent' | 'sending' | 'sent'
   archive?: ArchivedSessionRecord
+  startError?: string
   startedAt: number
 }
 

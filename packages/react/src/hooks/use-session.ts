@@ -56,6 +56,12 @@ export function staleAttach(frame: AttachedFrame, held: TranscriptState): boolea
   if (frame.session.lastSeq < held.lastSeq) {
     return true
   }
+  if (frame.session.archived === true && held.session?.archived !== true) {
+    return true
+  }
+  if (frame.session.epoch !== undefined && held.session?.epoch !== undefined && frame.session.epoch !== held.session.epoch) {
+    return true
+  }
   return held.session !== undefined && frame.session.createdAt !== held.session.createdAt
 }
 

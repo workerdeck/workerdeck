@@ -179,8 +179,20 @@ export class WorkerDeckClient {
     return await this.#call('DELETE', this.#agent(id, `/remote-members/${encodeURIComponent(agent)}`))
   }
 
-  async restartAgent(id: string, prompt?: string): Promise<AgentResponse> {
-    return await this.#call('POST', this.#agent(id, '/restart'), prompt === undefined ? {} : { prompt })
+  // `expectedSessionId` is the conversation the caller is looking at: a request against one the agent already left is refused.
+  async restartAgent(id: string, prompt?: string, expectedSessionId?: string): Promise<AgentResponse> {
+    return await this.#call('POST', this.#agent(id, '/restart'), {
+      ...(prompt === undefined ? {} : { prompt }),
+      ...(expectedSessionId === undefined ? {} : { expectedSessionId }),
+    })
+  }
+
+  async retryAgentStart(id: string): Promise<AgentResponse> {
+    return await this.#call('POST', this.#agent(id, '/retry-start'), {})
+  }
+
+  async settleUndelivered(id: string, send: boolean): Promise<AgentResponse> {
+    return await this.#call('POST', this.#agent(id, '/undelivered'), { send })
   }
 
   async agentConversations(id: string): Promise<AgentConversationsResponse> {

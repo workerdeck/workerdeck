@@ -2,6 +2,13 @@
 export class AgentHandovers {
   #tails = new Map<string, Promise<void>>()
   #gated = new Set<string>()
+  readonly startupTimeoutMs: number
+  readonly onError: (error: unknown) => void
+
+  constructor(options: { startupTimeoutMs?: number; onError?: (error: unknown) => void } = {}) {
+    this.startupTimeoutMs = options.startupTimeoutMs ?? 30_000
+    this.onError = options.onError ?? (() => {})
+  }
 
   async run<T>(agentIds: readonly string[], step: () => Promise<T>): Promise<T> {
     const ids = [...new Set(agentIds)].sort()

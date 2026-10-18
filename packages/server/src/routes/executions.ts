@@ -5,6 +5,7 @@ import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 import { ROTATING } from '../services/handovers.ts'
+import { SessionFenced } from '../services/parking.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
 export async function handleExecutionResult(
@@ -55,7 +56,12 @@ export async function handleExecutionResult(
   if (holder !== undefined && ctx.handovers.gated(holder)) {
     fail(409, ROTATING)
   }
-  const applied = await parking.submitResult(executionId, result)
+  const applied = await parking.submitResult(executionId, result).catch((error: unknown) => {
+    if (error instanceof SessionFenced) {
+      fail(409, ROTATING)
+    }
+    throw error
+  })
   if (!applied) {
     fail(404, 'execution not found (unknown id, or its session has ended)')
   }

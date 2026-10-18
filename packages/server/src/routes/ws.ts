@@ -131,6 +131,8 @@ export function attachArchive(
 ): void {
   const url = new URL(req.url ?? '/', 'http://internal')
   const afterSeq = Number(url.searchParams.get('afterSeq') ?? '0') || 0
+  // A cursor only skips rows in the log it was numbered in; without the archive's epoch it is a live cursor, so all rows go.
+  const from = url.searchParams.get('epoch') === String(info.epoch) ? afterSeq : 0
   const send = (frame: ServerFrame): void => {
     if (ws.readyState === ws.OPEN) {
       ws.send(JSON.stringify(frame))
@@ -139,7 +141,7 @@ export function attachArchive(
   send({
     type: 'attached',
     protocolVersion: PROTOCOL_VERSION,
-    session: ctx.projects.withProject({ ...info, lastSeq: events?.length ?? 0 }),
+    session: ctx.projects.withProject(info),
     replayingFrom: afterSeq,
     acks: true,
   })
@@ -149,7 +151,7 @@ export function attachArchive(
     return
   }
   for (const event of events) {
-    if (event.seq > afterSeq) {
+    if (event.seq > from) {
       send({ type: 'event', event })
     }
   }
@@ -182,6 +184,9 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       // matched on the whole message by the CLI, so nothing may be appended to one, and a failure
       // to resolve is silent - a hint must never lose the text it was a hint about.
       const mentions = ctx.peers && !isSlashCommand(frame.text) ? await mentionsFor(ctx.peers, runner.id, frame.text).catch(() => []) : []
+      if (ctx.handovers.gated(runner.id) || ctx.registry.get(runner.id) !== runner) {
+        throw new Error(ROTATING)
+      }
       const options = mentions.length > 0 ? { mentions } : undefined
       if (!frame.attachmentIds?.length) {
         runner.sendMessage(frame.text, undefined, options)

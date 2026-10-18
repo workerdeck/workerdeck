@@ -23,7 +23,7 @@ import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
 import { rerollAvatar } from './routes/agents.ts'
-import { createHistoryReader } from './services/history-reader.ts'
+import { createHistoryReader, engineHomeOf } from './services/history-reader.ts'
 import { AgentHandovers, ROTATING } from './services/handovers.ts'
 import { recoverHandovers, rotateAgent } from './routes/agent-handover.ts'
 import { createQueueSocketHub } from './routes/queue-ws.ts'
@@ -81,7 +81,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const corsOrigins = options.cors?.origins.length ? new Set(options.cors.origins) : undefined
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
   const diagnose: DiagnosticSink = options.onDiagnostic ?? (() => {})
-  const handovers = new AgentHandovers()
+  const handovers = new AgentHandovers({
+    startupTimeoutMs: options.agentStartupTimeoutMs,
+    onError: (error) => diagnose(error, 'agent-handover'),
+  })
   const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter => options.engines?.[engine ?? 'claude'] ?? getEngineAdapter(engine)
 
   const pricing = mergePricing(options.pricing?.overrides)
@@ -265,6 +268,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     onParking: (sessionId) => queue?.canParkSession(sessionId) ?? true,
     onParked: (sessionId, executionId) => void queue?.onSessionParking(sessionId, executionId),
     onResumed: (sessionId, runner) => queue?.onSessionResumed(sessionId, runner),
+    engineHome: (name, engine) => {
+      const profile = name === undefined ? undefined : profiles.get(name)
+      return name !== undefined && !profile ? undefined : engineHomeOf(profile, engine, factory.sessionEnvFor)
+    },
   })
 
   const peers =

@@ -29,7 +29,7 @@ import {
 } from '../services/agents.ts'
 import type { StoredAgent } from '../services/agent-store.ts'
 import type { AvatarImage } from '../services/avatars.ts'
-import { retireAgentSafely, rotateAgent } from './agent-handover.ts'
+import { retireAgentSafely, retryStart, rotateAgent, settleUndelivered } from './agent-handover.ts'
 import { vetCreateRequest } from './create-vet.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
@@ -73,33 +73,25 @@ export async function handleAgents(
   if (action === 'restart') {
     requireMethod(req, 'POST')
     const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { prompt?: unknown; expectedSessionId?: unknown }
+    // Captured before the lock: an older client that names no session still never turns two requests into two rotations.
     const restarted = await rotateAgent(ctx, agent.id, auth, {
       prompt: typeof body.prompt === 'string' && body.prompt !== '' ? body.prompt : undefined,
-      expected: stringOr(body.expectedSessionId),
+      expected: 'expectedSessionId' in body ? stringOr(body.expectedSessionId) : agent.sessionId,
       requireIdle: true,
     })
     await respond(ctx, res, 200, restarted.agent, restarted.session)
     return
   }
+  if (action === 'retry-start') {
+    requireMethod(req, 'POST')
+    const retried = await retryStart(ctx, agent.id, auth)
+    await respond(ctx, res, 200, retried.agent, retried.session)
+    return
+  }
   if (action === 'undelivered') {
     requireMethod(req, 'POST')
     const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { send?: unknown }
-    const prompt = agent.undelivered
-    if (prompt === undefined) {
-      fail(404, 'nothing is waiting to be sent')
-    }
-    if (body.send === true) {
-      const runner = agent.sessionId === undefined ? undefined : await ctx.parking.ensureLive(agent.sessionId)
-      if (!runner) {
-        fail(409, `${agent.name} has no conversation to send it to`)
-      }
-      runner.sendMessage(prompt)
-    }
-    const cleared = await agents.patch(agent.id, ({ undelivered: _gone, ...next }) => next)
-    if (isAgentRefusal(cleared)) {
-      fail(cleared.status, cleared.error)
-    }
-    await respond(ctx, res, 200, cleared)
+    await respond(ctx, res, 200, await settleUndelivered(ctx, agent.id, body.send === true))
     return
   }
   if (action === 'conversations') {
@@ -150,7 +142,8 @@ export async function handleAgents(
     return
   }
   const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as RetireAgentRequest
-  const outcome = await retireAgent(ctx, agent, body.members === 'retire' ? 'retire' : 'release', stringOr(body.expectedSessionId))
+  const expected = 'expectedSessionId' in body ? stringOr(body.expectedSessionId) : agent.sessionId
+  const outcome = await retireAgent(ctx, agent, body.members === 'retire' ? 'retire' : 'release', expected)
   json(res, 200, { retired: outcome.retired.map((a) => a.id), released: outcome.released.map((a) => a.id) })
 }
 
@@ -158,7 +151,7 @@ export async function retireAgent(
   ctx: ServerContext,
   agent: StoredAgent,
   members: 'release' | 'retire',
-  expected?: string,
+  expected: string | undefined,
 ): Promise<RetireOutcome> {
   return await retireAgentSafely(ctx, agent.id, members, expected)
 }

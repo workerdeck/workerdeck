@@ -327,6 +327,10 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       return { delivered: false, reason: held }
     }
     const runner = (await deps.refs.parking?.ensureLive(sessionId)) ?? registry().get(sessionId)
+    const heldNow = deps.refuse?.(sessionId)
+    if (heldNow) {
+      return { delivered: false, reason: heldNow }
+    }
     if (!runner) {
       return { delivered: false, reason: `session ${sessionId} could not be woken` }
     }

@@ -11,7 +11,7 @@ import type { SessionItemRoute, SessionRoute } from '../lib/parse-route.ts'
 import { permissionDecision } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { isDormant } from '../services/session-store.ts'
+import { isArchived, isDormant } from '../services/session-store.ts'
 import type { ServerContext } from '../context.ts'
 import { ROTATING } from '../services/handovers.ts'
 import { vetCreateRequest } from './create-vet.ts'
@@ -147,12 +147,15 @@ async function handleSession({ ctx, req, res, auth, route, runner, parked, info 
     json(res, 200, { session: projects.withProject(live.info()) })
     return
   }
+  if (parked && isArchived(parked) && !ctx.auth.isOperator(auth)) {
+    fail(403, 'only an operator can erase a past conversation')
+  }
   const agent = ctx.agents.bySession(route.id)
   if (agent) {
     if (!ctx.auth.isOperator(auth)) {
       fail(403, `${agent.name} is an agent; only an operator can delete it`)
     }
-    await retireAgent(ctx, agent, 'release')
+    await retireAgent(ctx, agent, 'release', route.id)
   }
   registry.remove(route.id)
   bridge.remove(route.id)
