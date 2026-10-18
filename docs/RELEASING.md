@@ -1596,6 +1596,22 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   `pnpm typecheck`, full `pnpm test`, gatekeeper; Team Auto seen in web and Storybook only, not
   yet in VS Code.
 
+  **3.14.0** - **agent conversations and the Rust native core, cut 2026-10-19** (tag `v3.14.0`). A
+  **minor**, protocol stays **1** (every addition is optional: `SessionInfo.archived`/`supersededBy`/
+  `transcript`, `AgentInfo.conversations`/`undelivered`/`startFailed`, event `session_superseded`, which
+  old decoders drop). An agent's sessions are its conversations: New conversation and the agent's own
+  `context_reset` rotate it to a fresh session through one safe handover (per-agent lock, gate,
+  `expectedSessionId`, a durable intent that startup recovery finishes, a first message never sent
+  twice, Retry start), the old one archived read-only and served from the engine's own store (no
+  gateway transcript copy). Delete agent replaces Retire and leaves a tombstone, so history stays
+  under Past agents. Every client follows an agent into its new conversation and has the
+  Conversations list, Past agents, Delete agent..., idle-only New conversation, no Clear context on
+  agent cards. Also in it: `refactor/rust` merged, so iOS runs on the Rust core and Android is new
+  (not on a store); gateway replay keeps only state below the last `/clear`; web `McpDialog`
+  refetches after a refused action. **Verified**: `pnpm lint`, typecheck, full `pnpm test`
+  (serial), cargo test/clippy, gatekeeper, paid `smoke:agent-rotation` claude 13/13 + codex 13/13
+  (server, 2026-10-18).
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
