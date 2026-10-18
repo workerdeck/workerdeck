@@ -82,7 +82,8 @@
       "reason": "Answer the pending request first"
     },
     {
-      "enabled": true
+      "enabled": false,
+      "reason": "Finish or stop the current turn first"
     },
     {
       "enabled": true

@@ -120,6 +120,7 @@ export function newConversationGate(info: Pick<SessionInfo, 'status' | 'archived
   switch (info.status) {
     case 'running':
     case 'starting':
+    case 'parked':
       return { enabled: false, reason: 'Finish or stop the current turn first' }
     case 'awaiting_approval':
       return { enabled: false, reason: 'Answer the pending request first' }
