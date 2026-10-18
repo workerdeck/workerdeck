@@ -1123,6 +1123,47 @@ const PROMPT: VmCase[] = [
   },
 ]
 
+const FOLLOWER: AgentRef = { id: 'ag', name: 'WD-Test' }
+
+const CONVERSATION_ROWS = [
+  row('mac', info('a', { agent: FOLLOWER, archived: true, supersededBy: 'b' })),
+  row('box', info('x', { agent: FOLLOWER })),
+  row('mac', info('p')),
+  row('mac', info('c', { agent: FOLLOWER })),
+]
+
+const CONVERSATIONS: VmCase[] = [
+  {
+    module: 'conversations',
+    name: 'session-listed',
+    fn: 'sessionListed',
+    calls: [[info('a')], [info('b', { archived: true })], [info('c', { agent: FOLLOWER, supersededBy: 'd' })]],
+  },
+  {
+    module: 'conversations',
+    name: 'selection-of',
+    fn: 'selectionOf',
+    calls: [
+      ['mac', info('a', { agent: FOLLOWER })],
+      ['mac', info('a', { agent: FOLLOWER, archived: true, supersededBy: 'b' })],
+      ['box', info('p')],
+    ],
+  },
+  {
+    module: 'conversations',
+    name: 'follow-target',
+    fn: 'followTarget',
+    calls: [
+      [{ kind: 'agent', gateway: 'mac', agentId: 'ag' }, CONVERSATION_ROWS],
+      [{ kind: 'agent', gateway: 'box', agentId: 'ag' }, CONVERSATION_ROWS],
+      [{ kind: 'agent', gateway: 'mac', agentId: 'gone' }, CONVERSATION_ROWS],
+      [{ kind: 'agent', gateway: 'mac', agentId: 'ag' }, CONVERSATION_ROWS.slice(0, 3)],
+      [{ kind: 'session', gateway: 'mac', sessionId: 'a' }, CONVERSATION_ROWS],
+      [{ kind: 'session', gateway: 'mac', sessionId: 'zzz' }, []],
+    ],
+  },
+]
+
 export const VM_CORPUS: VmCase[] = [
   ...SESSION_LIST,
   ...AGENTS,
@@ -1136,4 +1177,5 @@ export const VM_CORPUS: VmCase[] = [
   ...STATUS_LABEL,
   ...TRANSCRIPT,
   ...PROMPT,
+  ...CONVERSATIONS,
 ]

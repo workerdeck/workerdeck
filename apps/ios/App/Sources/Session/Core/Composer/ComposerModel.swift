@@ -16,6 +16,13 @@ struct CoreComposerServices: Sendable {
   }
 }
 
+// What a session screen hands the next one when its agent rotates: the draft and the composer with its staged files.
+@MainActor
+final class ComposerCarry {
+  var draft = ""
+  var model: ComposerModel?
+}
+
 // The core `Composer` plus what only the app can do: wait, move bytes, keep thumbnails. Every rule is the core's.
 @MainActor
 @Observable
@@ -130,6 +137,22 @@ final class ComposerModel {
     core.removeAttachment(id: id)
     staged[id] = nil
     thumbnails[id] = nil
+    readChips()
+  }
+
+  // The screen moved on to the agent's next conversation: the files go up again there, under the ids the core hands out.
+  func retarget(sessionId: String) {
+    search?.cancel()
+    for move in core.retarget(sessionId: sessionId) {
+      let picked = staged.removeValue(forKey: move.replaces)
+      thumbnails[move.upload.id] = thumbnails.removeValue(forKey: move.replaces)
+      guard let picked else {
+        core.removeAttachment(id: move.upload.id)
+        continue
+      }
+      staged[move.upload.id] = picked
+      start(move.upload, picked)
+    }
     readChips()
   }
 

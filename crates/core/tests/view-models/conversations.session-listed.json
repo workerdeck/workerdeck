@@ -1,0 +1,48 @@
+{
+  "input": {
+    "fn": "sessionListed",
+    "calls": [
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ],
+      [
+        {
+          "id": "b",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "archived": true
+        }
+      ],
+      [
+        {
+          "id": "c",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          },
+          "supersededBy": "d"
+        }
+      ]
+    ]
+  },
+  "output": [
+    true,
+    false,
+    true
+  ]
+}

@@ -127,9 +127,9 @@ struct SessionListView: View {
   private func destination(_ route: SessionRoute) -> some View {
     switch route {
     case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal, let shell):
-      if let context = model?.context(for: hostId) {
-        CoreSessionView(
-          sessionId: sessionId, hostId: hostId, client: context.client,
+      if let model, let context = model.context(for: hostId) {
+        CoreFollowSession(
+          sessionId: sessionId, hostId: hostId, client: context.client, list: model,
           entry: SessionRoute.entry(seq: seq, epoch: epoch, subagent: subagent, reveal: reveal, shell: shell))
       } else {
         missingHost

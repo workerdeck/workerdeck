@@ -104,6 +104,7 @@ pub struct LiveSession {
     catalog: Vec<ModelOption>,
     catalog_requested: bool,
     finished: bool,
+    superseded_by: Option<String>,
     effects: Vec<Effect>,
 }
 
@@ -145,6 +146,7 @@ impl LiveSession {
             catalog: Vec::new(),
             catalog_requested: false,
             finished: false,
+            superseded_by: None,
             effects: Vec::new(),
         };
         session.pump();
@@ -256,7 +258,19 @@ impl LiveSession {
         let effort = self.picker_source().shown_effort();
         let mut chrome = session_chrome(&self.state, self.init_model(), self.can_run_shell(), self.queued() as u32, effort);
         chrome.can_sleep &= self.sleep_sent_at != Some(self.state.last_seq);
+        chrome.archived = self.archived();
+        chrome.enabled &= !chrome.archived;
+        chrome.superseded_by = self.superseded_by.clone();
         chrome
+    }
+
+    pub fn archived(&self) -> bool {
+        self.session_info().is_some_and(|info| info.archived == Some(true))
+    }
+
+    // The conversation that replaced this one: from the live `session_superseded`, or an archive attach naming it.
+    pub fn superseded_by(&self) -> Option<&str> {
+        self.superseded_by.as_deref()
     }
 
     pub fn commands(&self) -> Vec<SlashCommand> {
@@ -778,7 +792,15 @@ impl LiveSession {
         if frame.session.last_seq < held.last_seq {
             return true;
         }
-        held.session.as_ref().is_some_and(|session| session.created_at != frame.session.created_at)
+        let held = held.session.as_deref();
+        if frame.session.archived == Some(true) && held.and_then(|session| session.archived) != Some(true) {
+            return true;
+        }
+        let epoch = held.and_then(|session| session.epoch);
+        if frame.session.epoch.is_some() && epoch.is_some() && frame.session.epoch != epoch {
+            return true;
+        }
+        held.is_some_and(|session| session.created_at != frame.session.created_at)
     }
 
     fn attach(&mut self, frame: Box<AttachedFrame>) {
@@ -792,6 +814,11 @@ impl LiveSession {
             return;
         }
         self.end_hold();
+        if frame.session.archived == Some(true)
+            && let Some(successor) = &frame.session.superseded_by
+        {
+            self.superseded_by = Some(successor.clone());
+        }
         seed_from_session_info(&mut self.state, &frame.session);
         self.dirty = true;
         self.changed.chrome = true;
@@ -821,6 +848,10 @@ impl LiveSession {
                 }
             }
             Body::SystemInit { model, .. } if self.init_model.is_none() => self.init_model = Some(model.clone()),
+            Body::SessionSuperseded(successor) => {
+                self.superseded_by = Some(successor.clone());
+                self.changed.chrome = true;
+            }
             _ => {}
         }
         let seq = event.seq;

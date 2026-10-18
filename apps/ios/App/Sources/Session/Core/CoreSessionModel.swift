@@ -21,11 +21,14 @@ final class CoreSessionModel {
   private var pinRequested: String?
   private var entry: CoreEntry?
 
-  init(sessionId: String, baseURL: String, authKey: String?, fixture: [String]? = nil, entry: CoreEntry? = nil) {
+  init(
+    sessionId: String, baseURL: String, authKey: String?, fixture: [String]? = nil, entry: CoreEntry? = nil,
+    composer: Composer? = nil
+  ) {
     self.fixture = fixture
     self.entry = entry
     self.sessionId = sessionId
-    composer = Composer(sessionId: sessionId)
+    self.composer = composer ?? Composer(sessionId: sessionId)
     self.baseURL = baseURL
     self.authKey = authKey
   }

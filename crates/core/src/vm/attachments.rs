@@ -217,6 +217,25 @@ impl Attachments {
         self.items.retain(|a| a.id != id);
     }
 
+    // Every staged file goes up again into `session_id` under a fresh id, so an answer still in flight for the old
+    // session settles nothing. Answers each new upload with the id it replaces.
+    pub fn retarget(&mut self, session_id: &str) -> Vec<(u64, Upload)> {
+        let old: Vec<u64> = self.items.iter().map(|a| a.id).collect();
+        let mut moved = Vec::new();
+        for id in old {
+            self.next += 1;
+            let next = self.next;
+            let Some(item) = self.items.iter_mut().find(|a| a.id == id) else { continue };
+            item.id = next;
+            item.state = AttachmentState::Uploading;
+            item.announce = true;
+            if let Some(upload) = self.start(next, Some(session_id)) {
+                moved.push((id, upload));
+            }
+        }
+        moved
+    }
+
     pub fn clear(&mut self) {
         self.items.clear();
     }
@@ -279,6 +298,22 @@ mod tests {
         staged.remove(second.id);
         assert!(!staged.has_failure());
         assert!(!staged.uploaded(second.id, Answer::new(200, JSON, r#"{"attachment":{"id":"x"}}"#)));
+    }
+
+    #[test]
+    fn a_retarget_uploads_every_file_again_under_a_new_id() {
+        let mut staged = Attachments::default();
+        let first = staged.add(Some("s1"), "a.png", "image/png").unwrap();
+        let second = staged.add(Some("s1"), "b.pdf", "application/pdf").unwrap();
+        staged.uploaded(first.id, Answer::new(200, JSON, r#"{"attachment":{"id":"att-1"}}"#));
+        let moved = staged.retarget("s2");
+        assert_eq!(moved.iter().map(|(old, _)| *old).collect::<Vec<_>>(), vec![first.id, second.id]);
+        assert!(moved.iter().all(|(old, upload)| upload.id != *old && upload.call.path.starts_with("/sessions/s2/attachments")));
+        assert!(staged.ready_ids().is_empty());
+        assert!(!staged.uploaded(second.id, Answer::new(200, JSON, r#"{"attachment":{"id":"stale"}}"#)));
+        staged.uploaded(moved[0].1.id, Answer::new(200, JSON, r#"{"attachment":{"id":"att-2"}}"#));
+        staged.uploaded(moved[1].1.id, Answer::new(200, JSON, r#"{"attachment":{"id":"att-3"}}"#));
+        assert_eq!(staged.ready_ids(), vec!["att-2", "att-3"]);
     }
 
     #[test]

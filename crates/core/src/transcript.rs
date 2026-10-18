@@ -820,7 +820,7 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
             level: NoticeLevel::Info,
             text: Str::from(format!("Session closed ({reason})")),
         }),
-        Body::Unknown => {}
+        Body::SessionSuperseded(_) | Body::Unknown => {}
     }
 }
 

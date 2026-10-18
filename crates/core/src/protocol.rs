@@ -338,6 +338,7 @@ pub enum Body {
     FileDelivered { path: String, bytes: f64, description: Option<String> },
     SessionError(String),
     SessionClosed(String),
+    SessionSuperseded(String),
     Unknown,
 }
 
@@ -883,6 +884,7 @@ fn decode_cold(ty: &str, e: &Value) -> Option<Body> {
         }
         "session_error" => Body::SessionError(text(e, "message")?),
         "session_closed" => Body::SessionClosed(text(e, "reason")?),
+        "session_superseded" => Body::SessionSuperseded(text(e, "successor")?),
         _ => Body::Unknown,
     })
 }

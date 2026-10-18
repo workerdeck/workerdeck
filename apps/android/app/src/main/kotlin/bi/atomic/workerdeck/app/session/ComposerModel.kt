@@ -35,7 +35,7 @@ data class ComposerUi(
 )
 
 // The core `Composer` plus what only the app can do: wait, move bytes, keep thumbnails. Every rule is the core's.
-class ComposerModel(sessionId: String, private val transport: Transport, private val scope: CoroutineScope) : AutoCloseable {
+class ComposerModel(sessionId: String, private val transport: Transport, private var scope: CoroutineScope) : AutoCloseable {
     private val core = CoreComposer(sessionId)
     private val state = MutableStateFlow(ComposerUi())
     val ui: StateFlow<ComposerUi> = state
@@ -138,6 +138,25 @@ class ComposerModel(sessionId: String, private val transport: Transport, private
         core.removeAttachment(id)
         staged.remove(id)
         state.update { it.copy(revision = it.revision + 1, chips = core.attachments(), thumbnails = it.thumbnails - id) }
+    }
+
+    // The screen moved on to the agent's next conversation: the files go up again there, under the ids the core hands out.
+    fun retarget(sessionId: String, scope: CoroutineScope) {
+        this.scope = scope
+        search?.cancel()
+        val moves = core.retarget(sessionId)
+        val thumbnails = state.value.thumbnails.toMutableMap()
+        for (move in moves) {
+            val picked = staged.remove(move.replaces)
+            thumbnails.remove(move.replaces)?.let { thumbnails[move.upload.id] = it }
+            if (picked == null) {
+                core.removeAttachment(move.upload.id)
+                continue
+            }
+            staged[move.upload.id] = picked
+            start(move.upload, picked)
+        }
+        state.update { it.copy(revision = it.revision + 1, chips = core.attachments(), thumbnails = thumbnails) }
     }
 
     private fun start(upload: Upload, picked: PickedFile) {

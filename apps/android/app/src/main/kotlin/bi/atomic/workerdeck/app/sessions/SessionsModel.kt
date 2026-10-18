@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.session.BookmarkStore
+import bi.atomic.workerdeck.core.ffi.ConversationFollow
 import bi.atomic.workerdeck.core.ffi.CreateForm
 import bi.atomic.workerdeck.core.ffi.ListStep
 import bi.atomic.workerdeck.core.ffi.metaCall
@@ -44,6 +45,9 @@ fun describe(error: Throwable): String = when (error) {
     else -> error.message?.takeIf { it.isNotBlank() } ?: "The gateway did not answer"
 }
 
+// The open session screen moves from `from` to `to`, the agent's current conversation.
+data class Retarget(val hostId: String, val from: String, val to: String)
+
 // The list is the core's `SessionList`: this model fetches, persists what the core hands back, and polls.
 class SessionsModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("sessions", Context.MODE_PRIVATE)
@@ -54,6 +58,9 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     private var errors: Map<String, String> = emptyMap()
     private var poll: Job? = null
     private val recaps = mutableMapOf<String, ReadMark?>()
+    private var follow: Pair<String, ConversationFollow>? = null
+    private val retargetState = MutableStateFlow<Retarget?>(null)
+    val retarget: StateFlow<Retarget?> = retargetState
 
     // The paired gateways, in pairing order; the list merges them. Re-attaching the same set is a no-op.
     fun attach(gateways: List<Gateway>) {
@@ -95,6 +102,10 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         }
         errors = next
         readMetas(answers.filter { it.second.isSuccess }.map { it.first })
+        follow?.let { (hostId, follow) ->
+            val from = follow.current()
+            follow.listed(list)?.let { retargetState.value = Retarget(hostId, from, it) }
+        }
         state.value = state.value.copy(groups = draw(), loaded = true, error = errorText())
         fetchAvatars()
     }
@@ -178,6 +189,33 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         recaps.clear()
         recaps["$hostId:$sessionId"] = list.since(hostId, sessionId)
         markSeen(hostId, sessionId)
+        follow(hostId, sessionId)
+    }
+
+    // The screen's selection: an agent's card follows the agent to its next conversation, anything else stays put.
+    fun follow(hostId: String, sessionId: String) {
+        if (follow?.let { it.first == hostId && it.second.current() == sessionId } == true) return
+        follow?.second?.close()
+        follow = hostId to ConversationFollow.open(list, hostId, sessionId)
+        retargetState.value = null
+    }
+
+    fun unfollow() {
+        follow?.second?.close()
+        follow = null
+        retargetState.value = null
+    }
+
+    // The shown session said which conversation replaced it; the list is re-read too, in case it moved on since.
+    fun superseded(hostId: String, sessionId: String, by: String) {
+        val (followed, follow) = follow ?: return
+        if (followed != hostId || follow.current() != sessionId) return
+        follow.superseded(by, list)?.let { retargetState.value = Retarget(hostId, sessionId, it) }
+        pullRefresh()
+    }
+
+    fun retargeted() {
+        retargetState.value = null
     }
 
     fun recap(hostId: String, sessionId: String): ReadMark? = recaps["$hostId:$sessionId"]
@@ -254,6 +292,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        follow?.second?.close()
         list.close()
     }
 }

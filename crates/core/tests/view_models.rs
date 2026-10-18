@@ -9,6 +9,7 @@ use wd_native::rest::{AgentInfo, ByModel, ChecklistItem, Entries, ModelOption, S
 use wd_native::transcript::{
     TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
+use wd_native::vm::conversations::{self, ConversationSelection};
 use wd_native::vm::session_list::{self as sl, CustomGroup, SessionRow, ViewConfig};
 use wd_native::vm::status_label::StatusLabelRead;
 use wd_native::vm::watermarks::{Watermark, Watermarks};
@@ -396,6 +397,19 @@ fn transcript_fn(fn_name: &str, a: &Args) -> Value {
     project(&state)
 }
 
+fn conversations_fn(fn_name: &str, a: &Args) -> Value {
+    match fn_name {
+        "sessionListed" => out(conversations::session_listed(&a.info(0))),
+        "selectionOf" => out(conversations::selection_of(&a.str(0).unwrap(), &a.info(1))),
+        "followTarget" => {
+            let selection: ConversationSelection = a.get(0);
+            let rows: Vec<SessionRow> = a.get(1);
+            out(conversations::follow_target(&selection, &rows))
+        }
+        _ => panic!("conversations.{fn_name} has no Rust binding"),
+    }
+}
+
 fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
     let a = Args(args);
     match module {
@@ -411,6 +425,7 @@ fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
         "status-label" => status_label_fn(fn_name, &a),
         "transcript" => transcript_fn(fn_name, &a),
         "prompt" => prompt_fn(fn_name, &a),
+        "conversations" => conversations_fn(fn_name, &a),
         _ => panic!("unknown view-model module {module}"),
     }
 }

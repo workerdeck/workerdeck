@@ -467,9 +467,19 @@ fn ever_connected_flips_on_the_first_open_only() {
 
 #[test]
 fn an_unknown_event_type_decodes_as_unknown_and_keeps_its_seq() {
-    let json = br#"{"type":"event","event":{"type":"session_superseded","successor":"b","seq":7,"ts":1}}"#;
+    let json = br#"{"type":"event","event":{"type":"session_renamed_someday","to":"b","seq":7,"ts":1}}"#;
     let Some(Frame::Event(event)) = decode_frame(json) else { panic!("expected an event") };
     assert_eq!(event.seq, 7);
+    assert!(matches!(event.body, wd_native::protocol::Body::Unknown));
+}
+
+#[test]
+fn session_superseded_names_its_successor() {
+    let json = br#"{"type":"event","event":{"type":"session_superseded","successor":"b","seq":7,"ts":1}}"#;
+    let Some(Frame::Event(event)) = decode_frame(json) else { panic!("expected an event") };
+    assert!(matches!(event.body, wd_native::protocol::Body::SessionSuperseded(ref id) if id == "b"));
+    let json = br#"{"type":"event","event":{"type":"session_superseded","seq":8,"ts":1}}"#;
+    let Some(Frame::Event(event)) = decode_frame(json) else { panic!("expected an event") };
     assert!(matches!(event.body, wd_native::protocol::Body::Unknown));
 }
 

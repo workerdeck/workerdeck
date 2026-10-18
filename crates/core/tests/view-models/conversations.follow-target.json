@@ -1,0 +1,438 @@
+{
+  "input": {
+    "fn": "followTarget",
+    "calls": [
+      [
+        {
+          "kind": "agent",
+          "gateway": "mac",
+          "agentId": "ag"
+        },
+        [
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "a",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              },
+              "archived": true,
+              "supersededBy": "b"
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "box",
+            "hostName": "Build Box",
+            "local": false,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "x",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              }
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "p",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "c",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              }
+            },
+            "unseen": 0
+          }
+        ]
+      ],
+      [
+        {
+          "kind": "agent",
+          "gateway": "box",
+          "agentId": "ag"
+        },
+        [
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "a",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              },
+              "archived": true,
+              "supersededBy": "b"
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "box",
+            "hostName": "Build Box",
+            "local": false,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "x",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              }
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "p",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "c",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              }
+            },
+            "unseen": 0
+          }
+        ]
+      ],
+      [
+        {
+          "kind": "agent",
+          "gateway": "mac",
+          "agentId": "gone"
+        },
+        [
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "a",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              },
+              "archived": true,
+              "supersededBy": "b"
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "box",
+            "hostName": "Build Box",
+            "local": false,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "x",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              }
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "p",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "c",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              }
+            },
+            "unseen": 0
+          }
+        ]
+      ],
+      [
+        {
+          "kind": "agent",
+          "gateway": "mac",
+          "agentId": "ag"
+        },
+        [
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "a",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              },
+              "archived": true,
+              "supersededBy": "b"
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "box",
+            "hostName": "Build Box",
+            "local": false,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "x",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              }
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "p",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0
+            },
+            "unseen": 0
+          }
+        ]
+      ],
+      [
+        {
+          "kind": "session",
+          "gateway": "mac",
+          "sessionId": "a"
+        },
+        [
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "a",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              },
+              "archived": true,
+              "supersededBy": "b"
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "box",
+            "hostName": "Build Box",
+            "local": false,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "x",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              }
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "p",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0
+            },
+            "unseen": 0
+          },
+          {
+            "hostId": "mac",
+            "hostName": "Mac mini",
+            "local": true,
+            "adapter": "claude",
+            "state": "idle",
+            "info": {
+              "id": "c",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0,
+              "agent": {
+                "id": "ag",
+                "name": "WD-Test"
+              }
+            },
+            "unseen": 0
+          }
+        ]
+      ],
+      [
+        {
+          "kind": "session",
+          "gateway": "mac",
+          "sessionId": "zzz"
+        },
+        []
+      ]
+    ]
+  },
+  "output": [
+    "c",
+    "x",
+    null,
+    null,
+    "a",
+    "zzz"
+  ]
+}

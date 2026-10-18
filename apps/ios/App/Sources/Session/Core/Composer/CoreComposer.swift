@@ -9,6 +9,7 @@ import WorkerDeckKit
 struct CoreComposer: View {
   let model: CoreSessionModel
   let scroll: TranscriptScrollModel
+  private let carry: ComposerCarry?
 
   @State private var composer: ComposerModel
   @State private var draft = ""
@@ -24,10 +25,15 @@ struct CoreComposer: View {
   private static let cell: CGFloat = 32
   private static let gap: CGFloat = 8
 
-  init(model: CoreSessionModel, scroll: TranscriptScrollModel, services: CoreComposerServices) {
+  init(model: CoreSessionModel, scroll: TranscriptScrollModel, services: CoreComposerServices, carry: ComposerCarry? = nil) {
     self.model = model
     self.scroll = scroll
-    _composer = State(initialValue: ComposerModel(core: model.composer, services: services))
+    self.carry = carry
+    let carried = carry?.model.flatMap { $0.core === model.composer ? $0 : nil }
+    let composer = carried ?? ComposerModel(core: model.composer, services: services)
+    carry?.model = composer
+    _composer = State(initialValue: composer)
+    _draft = State(initialValue: carry?.draft ?? "")
   }
 
   var body: some View {
@@ -101,6 +107,7 @@ struct CoreComposer: View {
       apply(composerInsert(draft: draft, text: text))
     }
     .task { await composer.pollPeers() }
+    .onChange(of: draft) { _, text in carry?.draft = text }
   }
 
   @ViewBuilder

@@ -84,6 +84,7 @@ fun SessionScreen(
     recap: ReadMark? = null,
     onSeen: (SeenCounts) -> Unit = {},
     onLeave: (SeenCounts?) -> Unit = {},
+    onSuperseded: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -101,7 +102,14 @@ fun SessionScreen(
                 Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2 - RAIL_WIDTH).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
             }
             val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
-            val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry, recap).also { images.host = it::hostImagePath } }
+            // A new id on the same screen is the agent's next conversation: the old model hands its composer over.
+            val shown = remember { arrayOfNulls<SessionModel>(1) }
+            val model = remember(client, sessionId) {
+                SessionModel(client, sessionId, metrics, entry, recap, carried = shown[0]?.releaseComposer()).also {
+                    shown[0] = it
+                    images.host = it::hostImagePath
+                }
+            }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             DisposableEffect(model, lifecycle) {
                 val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) onLeave(model.seen.value) }
@@ -128,6 +136,7 @@ fun SessionScreen(
             var extrasSheet by rememberSaveable { mutableStateOf<ExtrasSheet?>(null) }
             val extras by model.extras.collectAsStateWithLifecycle()
             val chrome = ui.chrome
+            LaunchedEffect(model, chrome?.supersededBy) { chrome?.supersededBy?.let(onSuperseded) }
             Column(Modifier.fillMaxSize().imePadding()) {
                 SessionTopBar(
                     ui.title ?: fallbackTitle,

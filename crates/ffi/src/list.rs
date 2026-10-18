@@ -6,6 +6,7 @@ use wd_native::planner::fmt_cost;
 use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, ProjectIcon, SessionInfo, Sharing};
 use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
 use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
+use wd_native::vm::conversations::session_listed;
 use wd_native::vm::create_form::{AgentSeed as FormSeed, SeedLead};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
 use wd_native::vm::session_list::{
@@ -381,7 +382,7 @@ impl State {
     fn rows(&self) -> Vec<SessionRow> {
         let mut out = Vec::new();
         for host in &self.hosts {
-            for info in &host.sessions {
+            for info in host.sessions.iter().filter(|info| session_listed(info)) {
                 let mark = self.marks.get(&host.id, &info.id);
                 out.push(SessionRow {
                     host_id: host.id.clone(),
@@ -544,6 +545,14 @@ pub struct SessionList {
 impl SessionList {
     fn state(&self) -> std::sync::MutexGuard<'_, State> {
         self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub(crate) fn rows(&self) -> Vec<SessionRow> {
+        self.state().rows()
+    }
+
+    pub(crate) fn info(&self, host_id: &str, session_id: &str) -> Option<SessionInfo> {
+        self.state().find(host_id, session_id).cloned()
     }
 
     // `agent_seed` for the create form, each lead with its owner so a cross-owner join can say so.

@@ -204,6 +204,12 @@ impl Composer {
         self.attachments.add(Some(&self.session_id).filter(|id| !id.is_empty()).map(String::as_str), name, media_type)
     }
 
+    // The screen moved to the agent's next conversation: the draft stays with the app, the files go up again there.
+    pub fn retarget(&mut self, session_id: &str) -> Vec<(u64, Upload)> {
+        self.session_id = session_id.to_owned();
+        self.attachments.retarget(session_id)
+    }
+
     pub fn retry_attachment(&mut self, id: u64) -> Option<Upload> {
         self.attachments.retry(id, Some(&self.session_id).filter(|id| !id.is_empty()).map(String::as_str))
     }

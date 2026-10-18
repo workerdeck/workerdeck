@@ -737,3 +737,75 @@ fn sleep_stays_off_from_the_send_until_the_session_answers_and_lists_flag_the_ch
     assert!(host.changed().chrome);
     assert_eq!(host.live.commands()[0].argument_hint.as_deref(), Some("<pr>"));
 }
+
+fn attach_archived(host: &mut Host, replaying_from: i64, last_seq: i64, epoch: i64, now: f64) {
+    host.frame(
+        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": replaying_from, "acks": true,
+            "session": {"id": "s1", "status": "closed", "cwd": "/repo", "createdAt": 1.0, "lastSeq": last_seq, "epoch": epoch,
+                "pendingPermissionCount": 0, "archived": true, "supersededBy": "s2"}}),
+        now,
+    );
+}
+
+#[test]
+fn a_live_session_superseded_event_reaches_the_chrome() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.take();
+    assert_eq!(host.live.chrome().superseded_by, None);
+    host.frame(event_frame(1, json!({"type": "session_superseded", "successor": "s2"})), 1.0);
+    assert!(host.changed().chrome);
+    assert_eq!(host.live.superseded_by(), Some("s2"));
+    assert_eq!(host.live.chrome().superseded_by.as_deref(), Some("s2"));
+    assert!(!host.live.chrome().archived);
+    assert!(host.live.state().items.is_empty());
+}
+
+#[test]
+fn an_archive_attach_names_its_successor_and_draws_read_only() {
+    let mut host = Host::new();
+    host.open();
+    attach_archived(&mut host, 0, 0, 1, 0.0);
+    let chrome = host.live.chrome();
+    assert!(chrome.archived);
+    assert!(!chrome.enabled);
+    assert_eq!(chrome.superseded_by.as_deref(), Some("s2"));
+}
+
+#[test]
+fn a_session_first_seen_archived_is_another_log() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.events("basic-turn", 1.0);
+    host.live.closed(2.0);
+    host.live.tick(2.5);
+    host.drain();
+    host.open();
+    attach_archived(&mut host, 15, 40, 1, 3.0);
+    assert_eq!(host.opens.last(), Some(&0));
+    assert!(host.live.state().items.is_empty());
+}
+
+#[test]
+fn an_archive_attach_with_a_new_epoch_resets_but_the_same_epoch_resumes() {
+    let mut host = Host::new();
+    host.open();
+    attach_archived(&mut host, 0, 15, 1, 0.0);
+    host.events("basic-turn", 1.0);
+    host.live.closed(2.0);
+    host.live.tick(2.5);
+    host.drain();
+    host.open();
+    attach_archived(&mut host, 15, 15, 1, 3.0);
+    assert_eq!(host.opens.last(), Some(&15));
+    assert!(!host.live.state().items.is_empty());
+    host.live.closed(4.0);
+    host.live.tick(4.5);
+    host.drain();
+    host.open();
+    attach_archived(&mut host, 15, 15, 2, 5.0);
+    assert_eq!(host.opens.last(), Some(&0));
+    assert!(host.live.state().items.is_empty());
+}

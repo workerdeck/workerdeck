@@ -22,15 +22,23 @@ struct CoreSessionView: View {
   private let client: WorkerClient?
   private var fixtureRecap: CatchUpMark?
   private let composerServices: CoreComposerServices
+  private var carry: ComposerCarry?
+  private var onSuperseded: ((String) -> Void)?
 
-  init(sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry? = nil) {
+  init(
+    sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry? = nil, carry: ComposerCarry? = nil,
+    onSuperseded: ((String) -> Void)? = nil
+  ) {
     self.hostId = hostId
     self.sessionId = sessionId
     self.client = client
+    self.carry = carry
+    self.onSuperseded = onSuperseded
     composerServices = .live(client: client)
     _model = State(
       initialValue: CoreSessionModel(
-        sessionId: sessionId, baseURL: client.baseURL.absoluteString, authKey: client.authKey, entry: entry))
+        sessionId: sessionId, baseURL: client.baseURL.absoluteString, authKey: client.authKey, entry: entry,
+        composer: carry?.model?.core))
   }
 
   // Frames replayed with no gateway behind them: `UIPREVIEW=core` and the UI tests.
@@ -55,7 +63,7 @@ struct CoreSessionView: View {
         CorePromptCard(prompt: prompt, planLines: ui.planLines, model: model)
           .id(prompt.requestId)
       }
-      CoreComposer(model: model, scroll: scroll, services: composerServices)
+      CoreComposer(model: model, scroll: scroll, services: composerServices, carry: carry)
     }
     .modifier(CoreRowExtras(actions: rowActions, viewing: $viewing, revision: bookmarks.revision, onBookmarks: syncBookmarks))
     .navigationTitle(ui.title ?? "Session")
@@ -116,6 +124,9 @@ struct CoreSessionView: View {
       model.close()
       if push.visibleSessionId == sessionId { push.visibleSessionId = nil }
       finalizeSeen()
+    }
+    .onChange(of: model.ui.chrome?.supersededBy) { _, successor in
+      if let successor { onSuperseded?(successor) }
     }
     .onChange(of: model.ui.seen) { _, seen in
       if scenePhase == .active, let seen { mark(seen) }
@@ -405,5 +416,56 @@ struct CorePromptCard: View {
       set.insert(label)
     }
     picked[index] = set
+  }
+}
+
+// One session route's screen. An agent's card follows the agent to each next conversation in place, handing the
+// draft and its files over; a push for an old turn, or a session the list does not hold, stays put.
+struct CoreFollowSession: View {
+  private let hostId: UUID
+  private let client: WorkerClient
+  private let list: SessionListModel
+  private let entry: CoreEntry?
+  private let opened: String
+  @State private var follow: ConversationFollow
+  @State private var shown: String
+  @State private var carry = ComposerCarry()
+
+  init(sessionId: String, hostId: UUID, client: WorkerClient, list: SessionListModel, entry: CoreEntry?) {
+    self.hostId = hostId
+    self.client = client
+    self.list = list
+    self.entry = entry
+    opened = sessionId
+    _shown = State(initialValue: sessionId)
+    if case .seq = entry {
+      _follow = State(
+        initialValue: ConversationFollow(
+          selection: .session(gateway: hostId.uuidString, sessionId: sessionId), current: sessionId))
+    } else {
+      _follow = State(initialValue: ConversationFollow.open(list: list.list, hostId: hostId.uuidString, sessionId: sessionId))
+    }
+  }
+
+  var body: some View {
+    CoreSessionView(
+      sessionId: shown, hostId: hostId, client: client, entry: shown == opened ? entry : nil, carry: carry,
+      onSuperseded: superseded
+    )
+    .id(shown)
+  }
+
+  private func superseded(_ successor: String) {
+    move(follow.superseded(by: successor, list: list.list))
+    Task {
+      await list.refresh()
+      move(follow.listed(list: list.list))
+    }
+  }
+
+  private func move(_ target: String?) {
+    guard let target else { return }
+    carry.model?.retarget(sessionId: target)
+    shown = target
   }
 }

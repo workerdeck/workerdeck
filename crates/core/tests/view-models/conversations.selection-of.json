@@ -1,0 +1,67 @@
+{
+  "input": {
+    "fn": "selectionOf",
+    "calls": [
+      [
+        "mac",
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          }
+        }
+      ],
+      [
+        "mac",
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          },
+          "archived": true,
+          "supersededBy": "b"
+        }
+      ],
+      [
+        "box",
+        {
+          "id": "p",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "kind": "agent",
+      "gateway": "mac",
+      "agentId": "ag"
+    },
+    {
+      "kind": "session",
+      "gateway": "mac",
+      "sessionId": "a"
+    },
+    {
+      "kind": "session",
+      "gateway": "box",
+      "sessionId": "p"
+    }
+  ]
+}

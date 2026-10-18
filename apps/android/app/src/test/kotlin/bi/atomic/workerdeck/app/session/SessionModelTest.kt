@@ -166,6 +166,40 @@ class SessionModelTest {
     }
 
     @Test
+    fun aSupersededSessionNamesItsSuccessorAndTheNextModelTakesTheComposerOver() {
+        val transport = FakeTransport()
+        var next = 0
+        transport.answers = { call ->
+            if (call.path.contains("attachments")) HttpAnswer(200u, "application/json", """{"attachment":{"id":"att_${++next}"}}""") else HttpAnswer(404u, null, "")
+        }
+        val old = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        listener.onMessage(socket, QUESTION)
+        eventually("the composer read the chrome") { old.composer.view("", 0).enabled }
+        eventually("the question") { old.ui.value.prompt != null }
+        old.composer.add(PickedFile("a.txt", "text/plain", "hi".toByteArray(), null))
+        eventually("the upload settled") { old.composer.ui.value.chips.singleOrNull()?.status == AttachmentStatus.Ready }
+        listener.onMessage(socket, SUPERSEDED)
+        eventually("the successor") { old.ui.value.chrome?.supersededBy == "s2" }
+
+        val successor = SessionModel(transport, "s2", Metrics(8.0, 16.0, 800.0, 13.0), carried = old.releaseComposer())
+        old.close()
+        eventually("the file went up again") { transport.uploads.any { it.first.path.startsWith("/sessions/s2/attachments") } }
+        eventually("the chip is ready again") { successor.composer.ui.value.chips.singleOrNull()?.status == AttachmentStatus.Ready }
+        eventually("a socket for the successor") { transport.sockets.size == 2 }
+        val (next2, nextListener) = transport.open()
+        nextListener.onMessage(next2, ATTACHED.replace("\"s1\"", "\"s2\""))
+        eventually("live") { successor.ui.value.connection == ConnectionState.LIVE }
+        assertEquals(null, successor.ui.value.prompt)
+        assertEquals(null, successor.ui.value.chrome?.supersededBy)
+        val outgoing = successor.composer.send("look", false) as Outgoing.Message
+        assertEquals(listOf("att_2"), outgoing.attachmentIds)
+        successor.close()
+    }
+
+    @Test
     fun aLostSocketReconnectsOnTheCoresSchedule() {
         val transport = FakeTransport()
         val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
@@ -409,6 +443,8 @@ class SessionModelTest {
 
         const val QUESTION =
             """{"type":"event","event":{"type":"permission_requested","seq":1,"ts":1,"request":{"id":"r1","toolName":"AskUserQuestion","toolUseId":"t1","input":{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"a"},{"label":"b"}]}]}}}}"""
+
+        const val SUPERSEDED = """{"type":"event","event":{"type":"session_superseded","successor":"s2","seq":3,"ts":1}}"""
 
         const val RESOLVED = """{"type":"event","event":{"type":"permission_resolved","requestId":"r1","seq":2,"ts":1}}"""
 

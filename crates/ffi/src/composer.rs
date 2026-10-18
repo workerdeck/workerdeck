@@ -216,6 +216,13 @@ impl From<files::Upload> for Upload {
     }
 }
 
+// A staged file going up again into another session: `upload.id` takes over from `replaces`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Reupload {
+    pub replaces: u64,
+    pub upload: Upload,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum AttachmentStatus {
     Uploading,
@@ -365,6 +372,10 @@ impl Composer {
 
     pub fn retry_attachment(&self, id: u64) -> Option<Upload> {
         self.lock().retry_attachment(id).map(Into::into)
+    }
+
+    pub fn retarget(&self, session_id: String) -> Vec<Reupload> {
+        self.lock().retarget(&session_id).into_iter().map(|(replaces, upload)| Reupload { replaces, upload: upload.into() }).collect()
     }
 
     // Status 0 for a transport failure.

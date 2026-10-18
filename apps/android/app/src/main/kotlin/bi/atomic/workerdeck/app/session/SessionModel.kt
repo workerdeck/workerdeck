@@ -115,6 +115,7 @@ class SessionModel(
     metrics: Metrics,
     entry: Entry? = null,
     recap: ReadMark? = null,
+    carried: ComposerModel? = null,
 ) : AutoCloseable, PromptActions {
     private var pending = entry
     private val session = Session(0, true, UUID.randomUUID().toString(), metrics)
@@ -138,7 +139,14 @@ class SessionModel(
     private val seenState = MutableStateFlow<SeenCounts?>(null)
     val seen: StateFlow<SeenCounts?> = seenState
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val composer = ComposerModel(sessionId, client, scope)
+    val composer = carried?.also { it.retarget(sessionId, scope) } ?: ComposerModel(sessionId, client, scope)
+    @Volatile private var composerReleased = false
+
+    // The successor's screen takes the draft's files over; this model stops feeding and closing them.
+    fun releaseComposer(): ComposerModel {
+        composerReleased = true
+        return composer
+    }
 
     fun hostImagePath(path: String): HostImageFetch = session.hostImagePath(sessionId, path)
     private var socket: WebSocket? = null
@@ -311,7 +319,7 @@ class SessionModel(
             emptyList()
         }
         worker.close()
-        composer.close()
+        if (!composerReleased) composer.close()
     }
 
     // The core panicked and the worker stopped: nothing more will arrive, so the screen says so and drops the socket.
@@ -392,7 +400,7 @@ class SessionModel(
                 skills = skillSections(session.skills()),
                 canRunShell = session.canRunShell(),
             )
-            composer.read(session)
+            if (!composerReleased) composer.read(session)
         }
         if (changed.prompt) ui = ui.copy(prompt = session.prompt())
         if ((changed.prompt || changed.transcript) && ui.prompt?.kind == PromptKind.PLAN) {

@@ -24,6 +24,8 @@ pub struct SessionChrome {
     pub send_now_at: Option<i64>,
     pub cwd: Option<String>,
     pub attachment_kinds: Vec<String>,
+    pub archived: bool,
+    pub superseded_by: Option<String>,
 }
 
 pub const SEND_NOW_AFTER_MS: i64 = 5000;
@@ -104,6 +106,8 @@ pub fn session_chrome(
                     .collect()
             })
             .unwrap_or_default(),
+        archived: false,
+        superseded_by: None,
     }
 }
 

@@ -19,11 +19,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
@@ -132,6 +134,13 @@ private fun App(store: GatewayStore) {
             },
         )
     } else {
+        val retarget by sessions.retarget.collectAsStateWithLifecycle()
+        LaunchedEffect(target[0], target[1]) { sessions.follow(target[0], target[1]) }
+        LaunchedEffect(retarget) {
+            val move = retarget ?: return@LaunchedEffect
+            sessions.retargeted()
+            if (move.hostId == target[0] && move.from == target[1]) open = listOf(target[0], move.to, target[2])
+        }
         SessionScreen(
             client,
             target[1],
@@ -140,8 +149,10 @@ private fun App(store: GatewayStore) {
             recap = sessions.recap(target[0], target[1]),
             onSeen = { sessions.mark(target[0], target[1], it) },
             onLeave = { seen -> seen?.let { sessions.finalizeSeen(target[0], target[1], it.itemCount) } },
+            onSuperseded = { sessions.superseded(target[0], target[1], it) },
         ) {
             sessions.markSeen(target[0], target[1])
+            sessions.unfollow()
             open = null
         }
     }

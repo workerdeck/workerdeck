@@ -13,6 +13,7 @@ use wd_native::vt::VtKey;
 mod avatar;
 mod bookmarks;
 mod composer;
+mod conversations;
 mod create_form;
 mod extras;
 mod files;
@@ -24,6 +25,7 @@ mod scrubber;
 mod usage;
 pub use bookmarks::{Bookmarks, RowMenu};
 pub use composer::Composer;
+pub use conversations::{ConversationFollow, ConversationSelection, selection_of};
 pub use create_form::{CreateForm, CreateFormFields, CreateFormState, FormLead, FormProfile};
 pub use extras::{
     Fact, McpSection, McpServerDetail, McpServerRow, McpServers, McpStatus, McpToolDetail, McpToolRow, SessionExtras, SkillRow,
@@ -209,6 +211,8 @@ pub struct SessionChrome {
     pub send_now_at: Option<i64>,
     pub cwd: Option<String>,
     pub attachment_kinds: Vec<String>,
+    pub archived: bool,
+    pub superseded_by: Option<String>,
 }
 
 impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
@@ -230,6 +234,8 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
             send_now_at: c.send_now_at,
             cwd: c.cwd,
             attachment_kinds: c.attachment_kinds,
+            archived: c.archived,
+            superseded_by: c.superseded_by,
         }
     }
 }

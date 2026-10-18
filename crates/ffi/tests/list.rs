@@ -1,4 +1,6 @@
-use wdffi::{ListError, ListFacet, ListGroupBy, ListSortBy, RowState, SessionList, StepKind, StepShow};
+use wdffi::{
+    ConversationFollow, ConversationSelection, ListError, ListFacet, ListGroupBy, ListSortBy, RowState, SessionList, StepKind, StepShow,
+};
 
 fn session(id: &str, status: &str, extra: &str) -> String {
     format!(r#"{{"id":"{id}","status":"{status}","cwd":"/work/app","createdAt":1000,"lastSeq":4{extra}}}"#)
@@ -267,4 +269,24 @@ fn a_new_agent_seed_waits_for_the_meta_lists_leads_first_and_follows_the_profile
     assert!(!list.agent_seed("h1".into(), None, None).unwrap().shared);
     list.remove_host("h1".into());
     assert!(list.agent_seed("h1".into(), None, None).is_none());
+}
+
+#[test]
+fn an_agent_row_selects_the_agent_and_follows_it_past_rotations() {
+    let list = SessionList::new(None, None);
+    let agent = r#","agent":{"id":"ag","name":"WD-Test"}"#;
+    let old = idle("a", &format!(r#"{agent},"archived":true,"supersededBy":"b""#));
+    list.set_host("h1".into(), "mac".into(), true, body(&[old, idle("c", agent)])).unwrap();
+    let rows: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).map(|r| r.session_id).collect();
+    assert_eq!(rows, ["c"]);
+    let selection = wdffi::selection_of(list.clone(), "h1".into(), "c".into());
+    assert_eq!(selection, ConversationSelection::Agent { gateway: "h1".into(), agent_id: "ag".into() });
+    let pushed = wdffi::selection_of(list.clone(), "h1".into(), "a".into());
+    assert_eq!(pushed, ConversationSelection::Session { gateway: "h1".into(), session_id: "a".into() });
+    let follow = ConversationFollow::new(selection, "c".into());
+    assert_eq!(follow.superseded("d".into(), list.clone()).as_deref(), Some("d"));
+    list.set_host("h1".into(), "mac".into(), true, body(&[idle("f", agent)])).unwrap();
+    assert_eq!(follow.listed(list.clone()).as_deref(), Some("f"));
+    assert_eq!(follow.current(), "f");
+    assert_eq!(ConversationFollow::new(pushed, "a".into()).superseded("b".into(), list), None);
 }
