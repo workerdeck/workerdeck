@@ -87,7 +87,7 @@ struct ComposerAttachmentStrip: View {
       .padding(.horizontal, 6)
       .padding(.top, 2)
     }
-    .frame(height: 62)
+    .frame(height: 72)
   }
 }
 
@@ -115,16 +115,18 @@ private struct ComposerAttachmentChip: View {
         .accessibilityIdentifier("Attachment")
       Button(action: onRemove) {
         Image(systemName: "xmark.circle.fill")
-          .font(.footnote)
+          .font(.system(size: 20))
           .symbolRenderingMode(.palette)
-          .foregroundStyle(Color.white, Color.black.opacity(0.55))
+          .foregroundStyle(Color.white, Color.black.opacity(0.6))
+          .frame(width: 40, height: 40)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .offset(x: 5, y: -5)
+      .offset(x: 18, y: -18)
       .accessibilityLabel("Remove \(chip.name)")
     }
-    .padding(.top, 5)
-    .padding(.trailing, 5)
+    .padding(.top, 10)
+    .padding(.trailing, 10)
   }
 
   @ViewBuilder
