@@ -1,11 +1,26 @@
 import { join } from 'node:path'
 import type { AgentInfo } from '@workerdeck/protocol'
+import type { ArchivedSessionRecord } from './session-store.ts'
 import { readJsonOrSync, writeJsonAtomicSync } from '../lib/atomic-file.ts'
 
 // Store-only fields, stripped from every `AgentInfo`: `schema` marks the record layout (`AGENT_SCHEMA`), `pendingJoin` is a
 // remote join the lead may already have accepted, and `roster` versions the team this agent leads.
+// A rotation or retirement committed to the agent record and not yet finished; recovery at startup completes it.
+export type HandoverIntent = {
+  op: 'rotate' | 'retire'
+  from?: string
+  to?: string
+  prompt?: string
+  promptState: 'unsent' | 'sending' | 'sent'
+  archive?: ArchivedSessionRecord
+  startedAt: number
+}
+
 export type StoredAgent = AgentInfo & {
   avatarSeed: string
+  pending?: HandoverIntent
+  // Set on a retired agent's tombstone: kept for its conversation history, outside every active lookup.
+  retiredAt?: number
   avatarRecipe?: unknown
   schema?: number
   pendingJoin?: { op: string; lead: string; at: number }

@@ -11,6 +11,7 @@ import {
   type CreateAgentRequest,
   type InviteRemoteMemberRequest,
   type RetireAgentRequest,
+  type RetiredAgentsResponse,
   type SessionInfo,
   type Sharing,
   type UpdateAgentRequest,
@@ -28,6 +29,7 @@ import {
 } from '../services/agents.ts'
 import type { StoredAgent } from '../services/agent-store.ts'
 import type { AvatarImage } from '../services/avatars.ts'
+import { retireAgentSafely, rotateAgent } from './agent-handover.ts'
 import { vetCreateRequest } from './create-vet.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
@@ -43,6 +45,10 @@ export async function handleAgents(
   if (rest === '') {
     requireMethod(req, 'GET', 'POST')
     if (req.method === 'GET') {
+      if (new URL(req.url ?? '', 'http://x').searchParams.get('retired') === '1') {
+        json(res, 200, { retired: agents.retiredList() } satisfies RetiredAgentsResponse)
+        return
+      }
       json(res, 200, { agents: agents.list() })
       return
     }
@@ -50,6 +56,12 @@ export async function handleAgents(
     return
   }
   const [id, action, ...extra] = rest.split('/').map(decodeURIComponent)
+  const tombstone = id === undefined ? undefined : agents.tombstone(id)
+  if (tombstone && action === 'conversations' && extra.length === 0) {
+    requireMethod(req, 'GET')
+    json(res, 200, await conversationsFor(ctx, tombstone, auth))
+    return
+  }
   const agent = id === undefined ? undefined : agents.get(id)
   if (!agent || extra.length > (action === 'remote-members' ? 1 : 0)) {
     fail(404, 'agent not found')
@@ -60,9 +72,34 @@ export async function handleAgents(
   }
   if (action === 'restart') {
     requireMethod(req, 'POST')
-    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { prompt?: unknown }
-    const restarted = await restartAgent(ctx, agent, typeof body.prompt === 'string' ? body.prompt : undefined, auth)
+    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { prompt?: unknown; expectedSessionId?: unknown }
+    const restarted = await rotateAgent(ctx, agent.id, auth, {
+      prompt: typeof body.prompt === 'string' && body.prompt !== '' ? body.prompt : undefined,
+      expected: stringOr(body.expectedSessionId),
+      requireIdle: true,
+    })
     await respond(ctx, res, 200, restarted.agent, restarted.session)
+    return
+  }
+  if (action === 'undelivered') {
+    requireMethod(req, 'POST')
+    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { send?: unknown }
+    const prompt = agent.undelivered
+    if (prompt === undefined) {
+      fail(404, 'nothing is waiting to be sent')
+    }
+    if (body.send === true) {
+      const runner = agent.sessionId === undefined ? undefined : await ctx.parking.ensureLive(agent.sessionId)
+      if (!runner) {
+        fail(409, `${agent.name} has no conversation to send it to`)
+      }
+      runner.sendMessage(prompt)
+    }
+    const cleared = await agents.patch(agent.id, ({ undelivered: _gone, ...next }) => next)
+    if (isAgentRefusal(cleared)) {
+      fail(cleared.status, cleared.error)
+    }
+    await respond(ctx, res, 200, cleared)
     return
   }
   if (action === 'conversations') {
@@ -113,26 +150,17 @@ export async function handleAgents(
     return
   }
   const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as RetireAgentRequest
-  const outcome = await retireAgent(ctx, agent, body.members === 'retire' ? 'retire' : 'release')
+  const outcome = await retireAgent(ctx, agent, body.members === 'retire' ? 'retire' : 'release', stringOr(body.expectedSessionId))
   json(res, 200, { retired: outcome.retired.map((a) => a.id), released: outcome.released.map((a) => a.id) })
 }
 
-export async function retireAgent(ctx: ServerContext, agent: StoredAgent, members: 'release' | 'retire'): Promise<RetireOutcome> {
-  const outcome = await ctx.agents.retire(agent.id, members)
-  if (isAgentRefusal(outcome)) {
-    fail(outcome.status, outcome.error)
-  }
-  for (const gone of outcome.retired) {
-    ctx.teams?.retiring(gone)
-  }
-  for (const gone of outcome.retired) {
-    const runner = gone.sessionId === undefined ? undefined : ctx.registry.get(gone.sessionId)
-    const status = runner?.info().status
-    if (runner && status !== 'closed' && status !== 'failed') {
-      runner.close('client')
-    }
-  }
-  return outcome
+export async function retireAgent(
+  ctx: ServerContext,
+  agent: StoredAgent,
+  members: 'release' | 'retire',
+  expected?: string,
+): Promise<RetireOutcome> {
+  return await retireAgentSafely(ctx, agent.id, members, expected)
 }
 
 async function createAgent(ctx: ServerContext, agents: AgentService, req: IncomingMessage, res: ServerResponse, auth: AuthContext) {
@@ -418,28 +446,13 @@ async function conversationsFor(ctx: ServerContext, agent: StoredAgent, auth: Au
   return { conversations: rows.filter((row) => row !== undefined) }
 }
 
-// A fresh session for the agent, its old one closed and kept: `POST /agents/:id/restart` and the agent's own `context_reset`.
-export async function restartAgent(
+export async function startSession(
   ctx: ServerContext,
   agent: StoredAgent,
   prompt: string | undefined,
   auth: AuthContext,
-): Promise<{ agent: StoredAgent; session: SessionInfo }> {
-  const previous = agent.sessionId === undefined ? undefined : ctx.registry.get(agent.sessionId)
-  const created = await startSession(ctx, agent, prompt, auth)
-  const status = previous?.info().status
-  if (previous && status !== 'closed' && status !== 'failed') {
-    previous.close('server')
-  }
-  const bound = await bindWithAvatar(ctx, agent, created)
-  if (isAgentRefusal(bound)) {
-    ctx.registry.get(created.id)?.close('server')
-    fail(bound.status, bound.error)
-  }
-  return { agent: bound, session: created }
-}
-
-async function startSession(ctx: ServerContext, agent: StoredAgent, prompt: string | undefined, auth: AuthContext): Promise<SessionInfo> {
+  id?: string,
+): Promise<SessionInfo> {
   const { config } = agent
   const request = {
     cwd: config.cwd,
@@ -459,6 +472,7 @@ async function startSession(ctx: ServerContext, agent: StoredAgent, prompt: stri
   const runner = await ctx.factory.createRunner(ctx.factory.buildRunnerConfig(vetted.request, principal), {
     brief: config.brief?.trim() || undefined,
     agent: true,
+    ...(id === undefined ? {} : { id }),
   })
   return runner.info()
 }

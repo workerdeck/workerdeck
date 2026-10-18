@@ -330,7 +330,9 @@ describe('context_reset through the gateway', () => {
     const moved = async (): Promise<AgentInfo> => ((await (await get(base, `/agents/${agent.id}`)).json()) as AgentResponse).agent
     await vi.waitFor(async () => expect((await moved()).sessionId).not.toBe(session!.id))
     const fresh = (await moved()).sessionId!
-    expect((await info(base, session!.id)).status).toBe('closed')
+    await vi.waitFor(async () =>
+      expect(await info(base, session!.id)).toMatchObject({ status: 'closed', archived: true, supersededBy: fresh }),
+    )
     expect(await info(base, fresh)).toMatchObject({ agentContextReset: true, agent: { name: 'Wren', conversation: 2 } })
     await vi.waitFor(() => expect(inputTexts(harness)).toEqual(['work', REQUEST.prompt]))
   })

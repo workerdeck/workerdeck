@@ -13,6 +13,7 @@ import {
 import type { ServerContext } from '../context.ts'
 import { bypassDisabled, permissionDecision, refuseJobInput, refusePermissionMode } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
+import { ROTATING } from '../services/handovers.ts'
 import { mentionsFor } from '../services/peers.ts'
 import { sleepRunner } from './sleep.ts'
 import { takesLocalCommands } from '../services/shell-directory.ts'
@@ -168,6 +169,9 @@ export function attachArchive(
 
 async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Runner, access: AttachAccess, client: Client): Promise<void> {
   const { attachmentStore, bridge } = ctx
+  if (ctx.handovers.gated(runner.id)) {
+    throw new Error(ROTATING)
+  }
   switch (frame.type) {
     case 'user_message': {
       const locked = refuseJobInput(runner.info(), ctx.options.disableBypassPermissions)

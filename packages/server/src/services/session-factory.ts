@@ -54,7 +54,7 @@ export type SessionFactoryDeps = {
 }
 
 // `agent` marks a create the agent is bound to only after the runner exists, as `brief` does for its brief.
-export type BuildOptions = { brief?: string; agent?: boolean }
+export type BuildOptions = { brief?: string; agent?: boolean; id?: string }
 
 // A dormant rebuild spreads the stored config back in, so the principal's flag can arrive on the request; a create
 // door passes it beside the request instead, because the host's hook and a job record see only the wire type.
@@ -326,7 +326,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   }
 
   const createRunner = async (config: SessionRunnerConfig, options?: BuildOptions): Promise<Runner> => {
-    const runner = registry.register(await buildRunner(config, undefined, undefined, options))
+    const runner = registry.register(await buildRunner(config, undefined, options?.id, options))
     // Watchers first, then start: a session must not emit anything before the things that persist and account for it are listening.
     parking.remember(runner.id, config)
     parking.watch(runner)

@@ -13,6 +13,7 @@ import type { AuthService } from './services/auth.ts'
 import type { AvailabilityTracker } from './services/availability.ts'
 import type { BridgeHub } from './services/bridge.ts'
 import type { EngineSleepTimers } from './services/engine-sleep.ts'
+import type { AgentHandovers } from './services/handovers.ts'
 import type { HistoryReader } from './services/history-reader.ts'
 import type { HostFileRoots } from './services/host-files.ts'
 import type { SessionParkManager } from './services/parking.ts'
@@ -46,6 +47,7 @@ export type ServerContext = {
   registry: SessionRegistry
   parking: SessionParkManager
   history: HistoryReader
+  handovers: AgentHandovers
   engineSleep: EngineSleepTimers
   // Undefined when peer messaging is off; the send path then resolves no `#` mentions.
   // The composed directory, relay included: what a session's `peers_list` answers.

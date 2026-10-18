@@ -50,6 +50,12 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
     })
   }
 
+  supersede(successor: string): void {
+    if (!this.core.closed) {
+      this.core.emit({ type: 'session_superseded', successor })
+    }
+  }
+
   setOwner(owner: string | undefined): void {
     this.config = { ...this.config, owner }
   }

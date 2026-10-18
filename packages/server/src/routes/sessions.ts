@@ -13,6 +13,7 @@ import { engineOf } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
 import { isDormant } from '../services/session-store.ts'
 import type { ServerContext } from '../context.ts'
+import { ROTATING } from '../services/handovers.ts'
 import { vetCreateRequest } from './create-vet.ts'
 import { retireAgent } from './agents.ts'
 import { handleAttachments } from './attachments.ts'
@@ -75,6 +76,9 @@ export async function handleSessions(
   }
   const resolved = await resolveSession(ctx, route.id, auth)
   requireWritable(resolved, req.method, route.kind === 'session' && req.method === 'DELETE')
+  if (req.method !== 'GET' && req.method !== 'HEAD' && ctx.handovers.gated(route.id)) {
+    fail(409, ROTATING)
+  }
   const handler = ITEM_HANDLERS[route.kind] as (call: SessionCall<ItemKind>) => Promise<void> | void
   await handler({ ...resolved, ctx, req, res, auth, route })
 }

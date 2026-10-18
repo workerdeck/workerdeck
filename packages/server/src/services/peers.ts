@@ -65,6 +65,8 @@ export type PeerServiceDeps = {
   defaultOwner?: () => string | undefined
   // A job running in bypass under `disableBypassPermissions: 'sessions'` takes no peer message (`refuseJobInput`).
   disableBypassPermissions?: BypassOption
+  // A reason to hold a message back from a session for now (an agent handover in flight).
+  refuse?: (sessionId: string) => string | undefined
   options?: PeerServiceOptions
 }
 
@@ -319,6 +321,10 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     }
     if (!underRateLimit(rateKey, sessionId)) {
       return { delivered: false, reason: `rate limit: at most ${perMinute} messages a minute to one session. Batch what you have to say.` }
+    }
+    const held = deps.refuse?.(sessionId)
+    if (held) {
+      return { delivered: false, reason: held }
     }
     const runner = (await deps.refs.parking?.ensureLive(sessionId)) ?? registry().get(sessionId)
     if (!runner) {

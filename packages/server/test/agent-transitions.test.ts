@@ -200,10 +200,11 @@ describe('agent mutation transitions', () => {
     await agents.update((await stored(agents, 'M2')).id, { lead: lead.id })
     applied.length = 0
     await agents.retire(lead.id, 'release')
-    expect(applied).toEqual([{ saves: ['M1', 'M2'], deletes: [lead.id] }])
-    expect((await store.list()).map((a) => [a.name, a.lead])).toEqual([
-      ['M1', undefined],
-      ['M2', undefined],
+    expect(applied).toEqual([{ saves: ['Lead', 'M1', 'M2'], deletes: [] }])
+    expect((await store.list()).map((a) => [a.name, a.lead, a.retiredAt !== undefined])).toEqual([
+      ['Lead', undefined, true],
+      ['M1', undefined, false],
+      ['M2', undefined, false],
     ])
   })
 
@@ -244,10 +245,13 @@ describe('agent mutation transitions', () => {
     const backing = createMemoryAgentStore()
     const legacy: AgentStore = {
       list: backing.list,
-      save: backing.save,
-      delete: () => {
-        throw new Error('disk full')
+      save: (agent) => {
+        if (agent.retiredAt !== undefined) {
+          throw new Error('disk full')
+        }
+        return backing.save(agent)
       },
+      delete: backing.delete,
     }
     const agents = await service(legacy)
     const lead = await stored(agents, 'Lead')

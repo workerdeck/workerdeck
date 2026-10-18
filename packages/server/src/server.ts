@@ -22,8 +22,10 @@ import { httpErrorStatus, json } from './lib/http.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
-import { restartAgent, rerollAvatar } from './routes/agents.ts'
+import { rerollAvatar } from './routes/agents.ts'
 import { createHistoryReader } from './services/history-reader.ts'
+import { AgentHandovers, ROTATING } from './services/handovers.ts'
+import { recoverHandovers, rotateAgent } from './routes/agent-handover.ts'
 import { createQueueSocketHub } from './routes/queue-ws.ts'
 import { upgradeSession } from './routes/session-upgrade.ts'
 import { dispatchRoute, httpRoutes } from './routes/table.ts'
@@ -79,6 +81,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const corsOrigins = options.cors?.origins.length ? new Set(options.cors.origins) : undefined
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
   const diagnose: DiagnosticSink = options.onDiagnostic ?? (() => {})
+  const handovers = new AgentHandovers()
   const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter => options.engines?.[engine ?? 'claude'] ?? getEngineAdapter(engine)
 
   const pricing = mergePricing(options.pricing?.overrides)
@@ -180,12 +183,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           ...options.agentContextReset,
           agentOf: (sessionId) => agents.bySession(sessionId)?.id,
           restartAgent: async (agentId, sessionId, prompt) => {
-            const agent = agents.get(agentId)
-            if (!agent || agent.sessionId !== sessionId) {
-              throw new Error('the agent moved to another session before its reset ran')
-            }
             const scope = registry.get(sessionId)?.info().scope
-            await restartAgent(ctx, agent, prompt, { ok: true, operator: true, ...(scope ? { scope } : {}) })
+            await rotateAgent(ctx, agentId, { ok: true, operator: true, ...(scope ? { scope } : {}) }, { prompt, expected: sessionId })
           },
           onError: (error) => diagnose(error, 'context-reset'),
         })
@@ -272,6 +271,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     options.peers?.enabled === false
       ? undefined
       : createPeerService({
+          refuse: (sessionId) => (handovers.gated(sessionId) ? ROTATING : undefined),
           refs: { registry, parking },
           projects,
           teams: {
@@ -446,6 +446,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     registry,
     parking,
     history,
+    handovers,
     engineSleep,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
     bridge,
@@ -536,6 +537,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       await stampOwners()
       teamLinks?.start()
       await parking.hydrate()
+      await recoverHandovers(ctx, (error) => diagnose(error, 'agent-handover'))
       await shells?.hydrate()
       for (const owner of [...agents.list(), ...(await parking.listInfo())].map((record) => record.owner)) {
         owners.retain(owner)

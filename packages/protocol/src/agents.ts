@@ -68,6 +68,8 @@ export type AgentInfo = {
   sessionId?: string
   pastSessions: string[]
   conversations?: AgentConversation[]
+  // The first message of a conversation a crash may have kept from the engine; the user sends it again or dismisses it.
+  undelivered?: string
   config: AgentConfig
   lead?: string
   order?: number
@@ -99,7 +101,7 @@ export type UpdateAgentRequest = {
   crossOwner?: boolean
 }
 
-export type RetireAgentRequest = { members?: 'release' | 'retire' }
+export type RetireAgentRequest = { members?: 'release' | 'retire'; expectedSessionId?: string }
 
 export type AgentsResponse = { agents: AgentInfo[] }
 

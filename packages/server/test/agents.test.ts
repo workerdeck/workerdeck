@@ -215,7 +215,8 @@ describe('agents', () => {
 
     const retired = await call<{ retired: string[]; released: string[] }>(base, `/agents/${lead.agent.id}`, 'DELETE')
     expect(retired.body).toEqual({ retired: [lead.agent.id], released: [member.agent.id] })
-    expect(server.registry.get(lead.session!.id)?.info().status).toBe('closed')
+    expect(server.registry.get(lead.session!.id)).toBeUndefined()
+    expect((await server.parking.get(lead.session!.id))?.info).toMatchObject({ archived: true, status: 'closed' })
     const left = (await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents
     expect(left).toHaveLength(1)
     expect(left[0]).not.toHaveProperty('lead')
@@ -267,7 +268,8 @@ describe('agents', () => {
     })
     expect(restarted.body.session!.id).not.toBe(member.session!.id)
     expect(restarted.body.session!.agent).toMatchObject({ name: 'Pip', team: 'Atlas', conversation: 2 })
-    expect(server.registry.get(member.session!.id)?.info().status).toBe('closed')
+    expect(server.registry.get(member.session!.id)).toBeUndefined()
+    expect((await server.parking.get(member.session!.id))?.info).toMatchObject({ archived: true, supersededBy: expect.any(String) })
   })
 
   it('adopts an existing session as an agent', async () => {

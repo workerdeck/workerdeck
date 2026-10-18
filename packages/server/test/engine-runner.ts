@@ -1,0 +1,99 @@
+import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
+import { ENGINE_CAPABILITIES, type SessionEvent, type SessionEventBody, type SessionInfo } from '@workerdeck/protocol'
+
+// A resumable engine stand-in: names its session on start, sends `prompt` like the real engines, and can be held busy.
+export class EngineRunner implements Runner {
+  readonly id: string
+  readonly pendingApprovals = []
+  readonly createdAt = Date.now()
+  readonly sent: string[] = []
+  #status: SessionInfo['status'] = 'starting'
+  #events: SessionEvent[] = []
+  #listeners = new Set<(event: SessionEvent) => void>()
+  #seq = 0
+  #sdkSessionId: string | undefined
+
+  constructor(
+    id: string,
+    readonly config: SessionRunnerConfig,
+  ) {
+    this.id = id
+  }
+
+  async start(): Promise<void> {
+    this.#sdkSessionId = this.config.resume ?? `engine-${this.id}`
+    if (this.config.prompt) {
+      this.sendMessage(this.config.prompt)
+    }
+    this.#emit({
+      type: 'system_init',
+      sdkSessionId: this.#sdkSessionId,
+      model: 'test-model',
+      cwd: this.config.cwd ?? '',
+      apiKeySource: 'user',
+      tools: [],
+      skills: [],
+      slashCommands: [],
+      permissionMode: 'default',
+      claudeCodeVersion: 'test',
+      mcpServers: [],
+    })
+    this.#status = 'idle'
+    this.#emit({ type: 'status_changed', status: 'idle' })
+  }
+
+  info(): SessionInfo {
+    return {
+      id: this.id,
+      sdkSessionId: this.#sdkSessionId,
+      status: this.#status,
+      cwd: this.config.cwd ?? '',
+      profile: this.config.profile,
+      engine: 'provider',
+      capabilities: { ...ENGINE_CAPABILITIES.provider, resume: true, resumeBackfill: true },
+      createdAt: this.createdAt,
+      lastSeq: this.#seq,
+      pendingPermissionCount: 0,
+      title: 'Archived talk',
+    }
+  }
+
+  subscribe(listener: (event: SessionEvent) => void, afterSeq = 0): () => void {
+    for (const event of this.#events) {
+      if (event.seq > afterSeq) {
+        listener(event)
+      }
+    }
+    this.#listeners.add(listener)
+    return () => this.#listeners.delete(listener)
+  }
+
+  sendMessage(text: string): void {
+    this.sent.push(text)
+  }
+  setTitle(): void {}
+  resolvePermission(): boolean {
+    return false
+  }
+  async interrupt(): Promise<void> {}
+  async setPermissionMode(): Promise<void> {}
+  async setModel(): Promise<void> {}
+  fail(): void {}
+  busy(): void {
+    this.#status = 'running'
+    this.#emit({ type: 'status_changed', status: 'running' })
+  }
+
+  close(): void {
+    this.#status = 'closed'
+    this.#emit({ type: 'session_closed', reason: 'server' })
+  }
+
+  #emit(body: SessionEventBody): void {
+    const event = { ...body, seq: ++this.#seq, ts: Date.now() } as SessionEvent
+    this.#events.push(event)
+    for (const listener of this.#listeners) {
+      listener(event)
+    }
+  }
+}

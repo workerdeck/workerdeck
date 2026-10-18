@@ -4,13 +4,15 @@ import {
   agentRef,
   isSharing,
   type AgentConfig,
+  type AgentConversation,
   type AgentInfo,
+  type RetiredAgentInfo,
   type SessionInfo,
   type Sharing,
   type UpdateAgentRequest,
 } from '@workerdeck/protocol'
 import { parseRelayPeerId, type RelayAgentEntry } from '@workerdeck/relay-client'
-import { AGENT_SCHEMA, type AgentStore, type StoredAgent } from './agent-store.ts'
+import { AGENT_SCHEMA, type AgentStore, type HandoverIntent, type StoredAgent } from './agent-store.ts'
 
 export type AgentServiceOptions = {
   store: AgentStore
@@ -117,6 +119,7 @@ export class AgentService {
   #agents = new Map<string, StoredAgent>()
   #joining = new Map<string, JoinReservation>()
   #retired = new Set<string>()
+  #tombstones = new Map<string, StoredAgent>()
   #frozen = new Set<string>()
   #queue: Promise<unknown> = Promise.resolve()
   #closed = false
@@ -143,13 +146,19 @@ export class AgentService {
     this.#frozen = new Set()
     this.#joining = new Map()
     const agents = new Map<string, StoredAgent>()
+    this.#tombstones = new Map()
     for (const agent of stored) {
       if ((agent.schema ?? 0) > AGENT_SCHEMA) {
         this.#frozen.add(agent.id)
         agents.set(agent.id, agent)
         continue
       }
-      const next = this.#gateway === undefined ? agent : normalizeAgent(agent, this.#gateway, this.#now())
+      if (agent.retiredAt !== undefined) {
+        this.#tombstones.set(agent.id, agent)
+        continue
+      }
+      const normalized = this.#gateway === undefined ? agent : normalizeAgent(agent, this.#gateway, this.#now())
+      const next = normalized.conversations ? normalized : { ...normalized, conversations: legacyConversations(normalized) }
       if (next !== agent) {
         changed.push(next)
       }
@@ -195,6 +204,61 @@ export class AgentService {
 
   get(id: string): StoredAgent | undefined {
     return this.#agents.get(id)
+  }
+
+  tombstone(id: string): StoredAgent | undefined {
+    return this.#tombstones.get(id)
+  }
+
+  retiredList(): RetiredAgentInfo[] {
+    return [...this.#tombstones.values()].map((agent) => this.retiredInfo(agent))
+  }
+
+  retiredInfo(agent: StoredAgent): RetiredAgentInfo {
+    const avatar = this.#avatars ? this.public({ ...agent, retiredAt: undefined }).avatar : undefined
+    return {
+      id: agent.id,
+      name: agent.name,
+      ...(agent.owner === undefined ? {} : { owner: agent.owner }),
+      ...(avatar === undefined ? {} : { avatar }),
+      retiredAt: agent.retiredAt ?? agent.updatedAt,
+      pastSessions: agent.pastSessions,
+      conversations: agent.conversations ?? legacyConversations(agent),
+    }
+  }
+
+  // Agents and tombstones whose last lifecycle change did not finish: the gateway completes them before serving.
+  unfinished(): StoredAgent[] {
+    return [...this.#agents.values(), ...this.#tombstones.values()].filter((agent) => agent.pending !== undefined)
+  }
+
+  // The commit point of a rotation: the new binding, the conversation boundary and the intent land in one write.
+  commitRotation(id: string, expected: string | undefined, intent: HandoverIntent): Promise<StoredAgent | AgentRefusal> {
+    return this.patch(id, (agent) => {
+      if (agent.sessionId !== expected) {
+        return { status: 409, error: `${agent.name} has moved to another conversation` }
+      }
+      if (agent.pending) {
+        return { status: 409, error: `${agent.name} is still finishing its last change` }
+      }
+      return { ...rotated(agent, intent.to!, this.#now()), pending: intent }
+    })
+  }
+
+  updatePending(id: string, change: Partial<HandoverIntent> | null): Promise<StoredAgent | AgentRefusal> {
+    return this.#transition(async () => {
+      const current = this.#agents.get(id) ?? this.#tombstones.get(id)
+      if (!current?.pending) {
+        return { status: 404, error: `no pending change for agent ${id}` }
+      }
+      const { pending, ...rest } = current
+      const next: StoredAgent = change === null ? rest : { ...rest, pending: { ...pending, ...change } }
+      const stored: StoredAgent = { ...next, schema: AGENT_SCHEMA, updatedAt: this.#now() }
+      await this.#apply([stored], [])
+      ;(stored.retiredAt === undefined ? this.#agents : this.#tombstones).set(stored.id, stored)
+      this.#changed()
+      return stored
+    })
   }
 
   bySession(sessionId: string): StoredAgent | undefined {
@@ -326,6 +390,8 @@ export class AgentService {
       schema: _schema,
       pendingJoin: _pending,
       roster: _roster,
+      pending: _handover,
+      retiredAt: _retired,
       ...info
     } = agent
     if (!this.#avatars) {
@@ -389,7 +455,7 @@ export class AgentService {
 
   create(agent: StoredAgent, joined?: RemoteJoin, crossOwner = false): Promise<StoredAgent | AgentRefusal> {
     return this.#transition(async () => {
-      if (this.#agents.has(agent.id) || this.#retired.has(agent.id)) {
+      if (this.#agents.has(agent.id) || this.#retired.has(agent.id) || this.#tombstones.has(agent.id)) {
         return { status: 409, error: `agent ${agent.id} already exists` }
       }
       if (agent.sessionId !== undefined && this.bySession(agent.sessionId)) {
@@ -400,6 +466,9 @@ export class AgentService {
         return taken
       }
       const next: StoredAgent = { ...agent }
+      if (next.sessionId !== undefined && !next.conversations) {
+        next.conversations = [{ sessionId: next.sessionId, startedAt: this.#now() }]
+      }
       if (joined) {
         if (!this.#holdsJoin(agent.id, joined)) {
           return { status: 409, error: `${agent.name} is no longer joining that team` }
@@ -440,9 +509,7 @@ export class AgentService {
       if (owner && owner.id !== id) {
         return { status: 409, error: 'that session already belongs to an agent' }
       }
-      const past =
-        agent.sessionId !== undefined && agent.sessionId !== sessionId ? [...agent.pastSessions, agent.sessionId] : agent.pastSessions
-      const next: StoredAgent = { ...agent, sessionId, pastSessions: past }
+      const next: StoredAgent = agent.sessionId === sessionId ? { ...agent } : rotated(agent, sessionId, this.#now())
       if (next.avatarRecipe === undefined && avatarRecipe !== undefined) {
         next.avatarRecipe = avatarRecipe
       }
@@ -748,11 +815,18 @@ export class AgentService {
     })
   }
 
-  retire(id: string, members: 'release' | 'retire'): Promise<RetireOutcome | AgentRefusal> {
+  retire(
+    id: string,
+    members: 'release' | 'retire',
+    handover?: { expected: string | undefined; intent: HandoverIntent },
+  ): Promise<RetireOutcome | AgentRefusal> {
     return this.#transition(async () => {
       const agent = this.#agents.get(id)
       if (!agent) {
         return { status: 404, error: `no such agent: ${id}` }
+      }
+      if (handover && agent.sessionId !== handover.expected) {
+        return { status: 409, error: `${agent.name} has moved to another conversation` }
       }
       if (this.#frozen.has(id)) {
         return { status: 409, error: `${agent.name} was written by a newer WorkerDeck; this one leaves it as it is` }
@@ -762,14 +836,15 @@ export class AgentService {
       const at = this.#now()
       const released =
         members === 'release' ? crew.map(({ lead: _lead, remoteLead: _remote, ...rest }) => ({ ...rest, updatedAt: at })) : []
-      await this.#apply(
-        released,
-        retired.map((gone) => gone.id),
-      )
+      const tombstones = retired.map((gone) => tombstoneOf(gone, at, gone.id === id ? handover?.intent : undefined))
+      await this.#apply([...tombstones, ...released], [])
       for (const gone of retired) {
         this.#agents.delete(gone.id)
         this.#joining.delete(gone.id)
         this.#retired.add(gone.id)
+      }
+      for (const tombstone of tombstones) {
+        this.#tombstones.set(tombstone.id, tombstone)
       }
       for (const member of released) {
         this.#agents.set(member.id, member)
@@ -860,6 +935,38 @@ export class AgentService {
 }
 
 // The op both gateways derive for an edge stored before operation ids, without talking to each other.
+function legacyConversations(agent: Pick<StoredAgent, 'sessionId' | 'pastSessions'>): AgentConversation[] {
+  return [...agent.pastSessions, ...(agent.sessionId === undefined ? [] : [agent.sessionId])].map((sessionId) => ({ sessionId }))
+}
+
+function rotated(agent: StoredAgent, to: string, at: number): StoredAgent {
+  const conversations = (agent.conversations ?? legacyConversations(agent)).map((entry) =>
+    entry.sessionId === agent.sessionId && entry.endedAt === undefined ? { ...entry, endedAt: at } : entry,
+  )
+  return {
+    ...agent,
+    sessionId: to,
+    pastSessions: agent.sessionId !== undefined && agent.sessionId !== to ? [...agent.pastSessions, agent.sessionId] : agent.pastSessions,
+    conversations: [...conversations, { sessionId: to, startedAt: at }],
+  }
+}
+
+function tombstoneOf(agent: StoredAgent, at: number, intent: HandoverIntent | undefined): StoredAgent {
+  const { lead: _lead, remoteLead: _remote, remoteMembers: _members, pendingJoin: _join, roster: _roster, sessionId, ...rest } = agent
+  const conversations = (agent.conversations ?? legacyConversations(agent)).map((entry) =>
+    entry.sessionId === sessionId && entry.endedAt === undefined ? { ...entry, endedAt: at } : entry,
+  )
+  return {
+    ...rest,
+    schema: AGENT_SCHEMA,
+    pastSessions: sessionId === undefined ? agent.pastSessions : [...agent.pastSessions, sessionId],
+    conversations,
+    retiredAt: at,
+    updatedAt: at,
+    ...(intent ? { pending: intent } : {}),
+  }
+}
+
 export function legacyOp(lead: string, member: string): string {
   return `v1:${createHash('sha1').update(`${lead}>${member}`).digest('hex').slice(0, 32)}`
 }

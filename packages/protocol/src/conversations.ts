@@ -46,3 +46,15 @@ export function conversationsOf(agent: Pick<AgentInfo, 'sessionId' | 'pastSessio
     .map((sessionId): AgentConversation => ({ sessionId }))
   return [...legacy, ...known].map((entry) => ({ ...entry, current: entry.sessionId === agent.sessionId })).reverse()
 }
+
+export type RetiredAgentInfo = {
+  id: string
+  name: string
+  owner?: string
+  avatar?: string
+  retiredAt: number
+  pastSessions: string[]
+  conversations: AgentConversation[]
+}
+
+export type RetiredAgentsResponse = { retired: RetiredAgentInfo[] }

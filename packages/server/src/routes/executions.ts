@@ -4,6 +4,7 @@ import type { SubmitExecutionResultRequest } from '@workerdeck/protocol'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
+import { ROTATING } from '../services/handovers.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
 export async function handleExecutionResult(
@@ -49,6 +50,10 @@ export async function handleExecutionResult(
     if (refused) {
       fail(404, 'execution not found')
     }
+  }
+  const holder = parking.sessionFor(executionId)
+  if (holder !== undefined && ctx.handovers.gated(holder)) {
+    fail(409, ROTATING)
   }
   const applied = await parking.submitResult(executionId, result)
   if (!applied) {
