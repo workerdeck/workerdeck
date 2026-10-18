@@ -169,6 +169,8 @@ describe('archived conversations', () => {
     await vi.waitFor(() => expect(seqs(newer)).toEqual([2]))
     expect((newer.frames[0]!.session as SessionInfo).epoch).toBe(epoch)
     newer.ws.close()
+    const got = (await (await fetch(`${base}/sessions/${session.id}`)).json()) as { session: SessionInfo }
+    expect(got.session.epoch).toBe(epoch)
 
     const current = await attach(base, session.id, 2, epoch)
     const otherLog = await attach(base, session.id, 2, Number(epoch) + 1)
