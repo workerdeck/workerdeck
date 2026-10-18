@@ -8,6 +8,10 @@ import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.session.BookmarkStore
 import bi.atomic.workerdeck.core.ffi.ConversationFollow
+import bi.atomic.workerdeck.core.ffi.ConversationItem
+import bi.atomic.workerdeck.core.ffi.ConversationSelection
+import bi.atomic.workerdeck.core.ffi.ListRow
+import bi.atomic.workerdeck.core.ffi.PastAgent
 import bi.atomic.workerdeck.core.ffi.CreateForm
 import bi.atomic.workerdeck.core.ffi.ListStep
 import bi.atomic.workerdeck.core.ffi.metaCall
@@ -38,7 +42,13 @@ data class SessionsUi(
     val refreshing: Boolean = false,
     // A one-shot message for an action that failed; the screen shows it once and calls `noticeShown`.
     val notice: String? = null,
+    val pastAgents: List<PastAgentEntry> = emptyList(),
 )
+
+// A deleted agent under Past agents; its conversations open the same sheet a live agent's do.
+data class PastAgentEntry(val hostId: String, val agent: PastAgent)
+
+data class ConversationsTarget(val hostId: String, val agentId: String, val name: String, val retired: Boolean)
 
 fun describe(error: Throwable): String = when (error) {
     is ListException.NotASessionList -> "Not a WorkerDeck gateway, or the auth key is wrong"
@@ -101,7 +111,9 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
             )
         }
         errors = next
-        readMetas(answers.filter { it.second.isSuccess }.map { it.first })
+        val reached = answers.filter { it.second.isSuccess }.map { it.first }
+        readMetas(reached)
+        for (client in reached) if (client.gateway.id !in pastRead) readPastAgents(client.gateway.id)
         follow?.let { (hostId, follow) ->
             val from = follow.current()
             follow.listed(list)?.let { retargetState.value = Retarget(hostId, from, it) }
@@ -119,6 +131,44 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
             if (id in metaRead) continue
             val body = runCatching { client.perform(metaCall()) }.getOrNull() ?: continue
             if (list.setMeta(id, body)) metaRead += id
+        }
+    }
+
+    private val pastRead = mutableSetOf<String>()
+
+    private suspend fun readPastAgents(hostId: String) {
+        val client = clients[hostId] ?: return
+        val read = AgentCalls(client).pastAgents()
+        pastRead += hostId
+        if (clients[hostId] !== client) return
+        val kept = state.value.pastAgents.filter { it.hostId != hostId }
+        state.value = state.value.copy(pastAgents = kept + read.orEmpty().map { PastAgentEntry(hostId, it) })
+    }
+
+    fun pastAgentsChanged(hostId: String) {
+        viewModelScope.launch { readPastAgents(hostId) }
+    }
+
+    suspend fun conversations(hostId: String, agentId: String): List<ConversationItem>? =
+        clients[hostId]?.let { AgentCalls(it).conversations(agentId) }
+
+    fun restart(row: ListRow) {
+        val agentId = row.agentId ?: return
+        if (row.newConversationBlocked != null) return
+        agentAct(row, "Could not start a new conversation") { it.restart(agentId, row.sessionId).map {} }
+    }
+
+    fun deleteAgent(row: ListRow) {
+        val agentId = row.agentId ?: return
+        agentAct(row, "Could not delete the agent") { it.delete(agentId, row.sessionId) }
+    }
+
+    private fun agentAct(row: ListRow, failure: String, call: suspend (AgentCalls) -> Result<Unit>) {
+        val client = clients[row.hostId] ?: return
+        viewModelScope.launch {
+            call(AgentCalls(client)).onFailure { state.value = state.value.copy(notice = "$failure: ${describe(it)}") }
+            refresh()
+            readPastAgents(row.hostId)
         }
     }
 
@@ -200,6 +250,14 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         retargetState.value = null
     }
 
+    // A past conversation opened from an agent's history: read-only, and it never follows the agent.
+    fun pin(hostId: String, sessionId: String) {
+        recaps.clear()
+        follow?.second?.close()
+        follow = hostId to ConversationFollow(ConversationSelection.Session(hostId, sessionId), sessionId)
+        retargetState.value = null
+    }
+
     fun unfollow() {
         follow?.second?.close()
         follow = null
@@ -246,6 +304,8 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     // Unpairing drops the gateway from the list along with its read marks; a new pairing gets a new id.
     fun forget(gateway: Gateway) {
         metaRead -= gateway.id
+        pastRead -= gateway.id
+        state.value = state.value.copy(pastAgents = state.value.pastAgents.filter { it.hostId != gateway.id })
         if (list.removeHost(gateway.id)) prefs.edit().putString("marks", list.marksJson()).apply()
         BookmarkStore.of(getApplication()).removeHost(gateway.id)
         attach(clients.values.map { it.gateway }.filter { it.id != gateway.id })

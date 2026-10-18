@@ -69,6 +69,9 @@ import bi.atomic.workerdeck.core.ffi.Outgoing
 import bi.atomic.workerdeck.core.ffi.ReadMark
 import bi.atomic.workerdeck.core.ffi.SeenCounts
 import bi.atomic.workerdeck.core.ffi.composerInsert
+import bi.atomic.workerdeck.core.ffi.deleteAgentMessage
+import bi.atomic.workerdeck.core.ffi.deleteAgentTitle
+import bi.atomic.workerdeck.core.ffi.newConversationHint
 
 private val FONT_SIZE = 13.sp
 private val LINE_HEIGHT = 18.sp
@@ -85,6 +88,9 @@ fun SessionScreen(
     onSeen: (SeenCounts) -> Unit = {},
     onLeave: (SeenCounts?) -> Unit = {},
     onSuperseded: (String) -> Unit = {},
+    handover: Boolean = false,
+    onGoToCurrent: ((String) -> Unit)? = null,
+    onAgentDeleted: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -137,19 +143,28 @@ fun SessionScreen(
             val extras by model.extras.collectAsStateWithLifecycle()
             val chrome = ui.chrome
             LaunchedEffect(model, chrome?.supersededBy) { chrome?.supersededBy?.let(onSuperseded) }
+            val successor by model.successor.collectAsStateWithLifecycle()
+            LaunchedEffect(model, successor) { successor?.let(onSuperseded) }
+            val agent by model.agent.collectAsStateWithLifecycle()
+            val actionError by model.actionError.collectAsStateWithLifecycle()
+            var deleting by rememberSaveable { mutableStateOf(false) }
+            val readOnly = chrome?.archived == true
             Column(Modifier.fillMaxSize().imePadding()) {
                 SessionTopBar(
                     ui.title ?: fallbackTitle,
                     onBack,
                     model::reconnect,
                     onClearContext = if (chrome?.canClearContext == true) ({ clearing = true }) else null,
+                    agentActions = chrome?.takeIf { it.agentId != null }?.let {
+                        AgentMenu(it.newConversationBlocked, onNewConversation = model::newConversation, onDelete = { deleting = true })
+                    },
                     onMeter = if (ui.usage != null) ({ meter = it }) else null,
                     contextMeter = ui.usage?.contextUsage == true,
                     sheets = listOfNotNull(
                         ExtrasSheet.INFO,
-                        ExtrasSheet.FILES.takeIf { extras.files && extras.cwd != null },
-                        ExtrasSheet.MCP.takeIf { extras.mcp },
-                        ExtrasSheet.SKILLS.takeIf { extras.skills },
+                        ExtrasSheet.FILES.takeIf { extras.files && extras.cwd != null && !readOnly },
+                        ExtrasSheet.MCP.takeIf { extras.mcp && !readOnly },
+                        ExtrasSheet.SKILLS.takeIf { extras.skills && !readOnly },
                     ),
                     onSheet = { extrasSheet = it },
                 )
@@ -164,9 +179,21 @@ fun SessionScreen(
                         drawStopIndicator = {},
                     )
                 }
+                ConversationBars(
+                    archived = agent.archived.takeIf { readOnly },
+                    notice = agent.notice.takeIf { !readOnly },
+                    starting = handover && chrome?.status.isNullOrEmpty(),
+                    onGoToCurrent = onGoToCurrent,
+                    onSettle = model::settleUndelivered,
+                    onRetryStart = model::retryStart,
+                )
                 if (ui.rows.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        if (ui.progress == null && ui.connection == ConnectionState.LIVE) EmptyState(extras.cwd ?: chrome?.cwd, ui.canRunShell)
+                        if (ui.progress == null && agent.archived?.unavailable == true) {
+                            Text("Transcript unavailable", style = MaterialTheme.typography.bodyMedium, color = Wd.colors.secondary)
+                        } else if (ui.progress == null && ui.connection == ConnectionState.LIVE && !readOnly) {
+                            EmptyState(extras.cwd ?: chrome?.cwd, ui.canRunShell)
+                        }
                     }
                 } else {
                     TranscriptList(
@@ -189,7 +216,7 @@ fun SessionScreen(
                     ui.catchUp?.takeIf { ui.progress == null }?.let { catchUp ->
                         CatchUpBar(catchUp.text, onJump = { model.jumpToTop(catchUp.row.toInt()) }, onDismiss = model::clearRecap)
                     }
-                    ui.prompt?.let { prompt ->
+                    ui.prompt?.takeIf { !readOnly }?.let { prompt ->
                         PendingPrompt(
                             prompt = prompt,
                             planLines = ui.planLines,
@@ -201,8 +228,8 @@ fun SessionScreen(
                             actions = model,
                         )
                     }
-                    StatusStrip(chrome, ui.connection, ui.usage, model::reconnect, onPicker = { picker = it }, onMeter = { meter = it })
-                    Composer(
+                    StatusStrip(chrome, ui.connection, ui.usage, model::reconnect, onPicker = { if (!readOnly) picker = it }, onMeter = { meter = it })
+                    if (!readOnly) Composer(
                         composer = model.composer,
                         draft = draft,
                         onDraft = { draft = it },
@@ -236,6 +263,29 @@ fun SessionScreen(
                         }) { Text("Clear context") }
                     },
                     dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } },
+                )
+            }
+            if (deleting) {
+                val name = chrome?.agentName
+                AlertDialog(
+                    onDismissRequest = { deleting = false },
+                    title = { Text(deleteAgentTitle(name ?: "this agent")) },
+                    text = { Text(deleteAgentMessage(name ?: "This agent")) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            deleting = false
+                            model.deleteAgent(onAgentDeleted)
+                        }) { Text("Delete agent", color = Wd.colors.red) }
+                    },
+                    dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } },
+                )
+            }
+            actionError?.let { message ->
+                AlertDialog(
+                    onDismissRequest = model::actionErrorShown,
+                    title = { Text("Something went wrong") },
+                    text = { Text(message) },
+                    confirmButton = { TextButton(onClick = model::actionErrorShown) { Text("OK") } },
                 )
             }
             meter?.let { MeterSheet(it, ui.usage, model::refreshUsage) { meter = null } }
@@ -280,6 +330,7 @@ private fun SessionTopBar(
     onBack: () -> Unit,
     onReconnect: () -> Unit,
     onClearContext: (() -> Unit)?,
+    agentActions: AgentMenu?,
     onMeter: ((Meter) -> Unit)?,
     contextMeter: Boolean,
     sheets: List<ExtrasSheet>,
@@ -342,12 +393,36 @@ private fun SessionTopBar(
                                 },
                             )
                         }
+                        agentActions?.let { actions ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("New conversation")
+                                        Text(actions.blocked ?: newConversationHint(), style = MaterialTheme.typography.bodySmall, color = colors.secondary)
+                                    }
+                                },
+                                enabled = actions.blocked == null,
+                                onClick = {
+                                    menu = false
+                                    actions.onNewConversation()
+                                },
+                            )
+                        }
                         onClearContext?.let { clear ->
                             DropdownMenuItem(
                                 text = { Text("Clear context") },
                                 onClick = {
                                     menu = false
                                     clear()
+                                },
+                            )
+                        }
+                        agentActions?.let { actions ->
+                            DropdownMenuItem(
+                                text = { Text("Delete agent…", color = colors.red) },
+                                onClick = {
+                                    menu = false
+                                    actions.onDelete()
                                 },
                             )
                         }
@@ -420,3 +495,6 @@ private fun CatchUpBar(text: String, onJump: () -> Unit, onDismiss: () -> Unit) 
         TextButton(onClick = onDismiss, contentPadding = pad, modifier = Modifier.height(36.dp)) { Text("dismiss", style = small, color = colors.secondary) }
     }
 }
+
+// A live agent conversation's own actions; `blocked` is why New conversation is off right now.
+private class AgentMenu(val blocked: String?, val onNewConversation: () -> Unit, val onDelete: () -> Unit)

@@ -1,11 +1,16 @@
 package bi.atomic.workerdeck.app.session
 
 import bi.atomic.workerdeck.app.gateway.Transport
+import bi.atomic.workerdeck.app.sessions.AgentCalls
+import bi.atomic.workerdeck.app.sessions.describe
+import bi.atomic.workerdeck.app.sessions.offsetMinutes
 import bi.atomic.workerdeck.core.LayoutRow
 import bi.atomic.workerdeck.core.ShellGrid
 import bi.atomic.workerdeck.core.SessionWorker
 import bi.atomic.workerdeck.core.Snapshots
 import bi.atomic.workerdeck.core.TranscriptLine
+import bi.atomic.workerdeck.core.ffi.AgentNotice
+import bi.atomic.workerdeck.core.ffi.ArchivedView
 import bi.atomic.workerdeck.core.ffi.CatchUp
 import bi.atomic.workerdeck.core.ffi.Changed
 import bi.atomic.workerdeck.core.ffi.ConnectionState
@@ -31,6 +36,7 @@ import bi.atomic.workerdeck.core.ffi.McpServers
 import bi.atomic.workerdeck.core.ffi.SessionExtras
 import bi.atomic.workerdeck.core.ffi.SessionUsageView
 import bi.atomic.workerdeck.core.ffi.SkillSection
+import bi.atomic.workerdeck.core.ffi.agentNotice
 import bi.atomic.workerdeck.core.ffi.getSessionCall
 import bi.atomic.workerdeck.core.ffi.listProfilesCall
 import bi.atomic.workerdeck.core.ffi.sessionExtras
@@ -87,6 +93,9 @@ sealed interface Entry {
     data class Reveal(val toolUseId: String) : Entry
 }
 
+// What `GET /agents` says about this conversation: the archived banner, or what its live agent asks of the user.
+data class AgentView(val archived: ArchivedView? = null, val notice: AgentNotice? = null)
+
 data class Jump(val row: Int, val nonce: Long, val top: Boolean = false)
 
 // The open sub-agent takeover: one agent's own rows, read through the core's frame window.
@@ -139,6 +148,14 @@ class SessionModel(
     private val seenState = MutableStateFlow<SeenCounts?>(null)
     val seen: StateFlow<SeenCounts?> = seenState
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val agentCalls = AgentCalls(client)
+    private val agentState = MutableStateFlow(AgentView())
+    val agent: StateFlow<AgentView> = agentState
+    private var agentReadKey: Pair<Boolean, String?>? = null
+    private val actionErrorState = MutableStateFlow<String?>(null)
+    val actionError: StateFlow<String?> = actionErrorState
+    private val successorState = MutableStateFlow<String?>(null)
+    val successor: StateFlow<String?> = successorState
     val composer = carried?.also { it.retarget(sessionId, scope) } ?: ComposerModel(sessionId, client, scope)
     @Volatile private var composerReleased = false
 
@@ -206,6 +223,71 @@ class SessionModel(
     fun interrupt() = worker.act { it.interrupt() }
 
     fun clearContext() = worker.act { it.clearContext() }
+
+    // The answer names the new conversation; following it at once beats waiting for the old socket's superseded frame.
+    fun newConversation() {
+        val chrome = state.value.chrome ?: return
+        val agentId = chrome.agentId ?: return
+        if (chrome.newConversationBlocked != null) return
+        agentAction("Could not start a new conversation") {
+            agentCalls.restart(agentId, sessionId).map { next -> if (next != null && next != sessionId) successorState.value = next }
+        }
+    }
+
+    // The conversation is archived under the screen, which reattaches to show it read-only with the deleted banner.
+    fun deleteAgent(onDeleted: () -> Unit) {
+        val agentId = state.value.chrome?.agentId ?: return
+        agentAction("Could not delete the agent") {
+            agentCalls.delete(agentId, sessionId).map {
+                reconnect()
+                onDeleted()
+            }
+        }
+    }
+
+    fun settleUndelivered(send: Boolean) {
+        val agentId = agentState.value.notice?.agentId ?: return
+        agentAction(if (send) "Could not send it again" else "Could not dismiss it") {
+            agentCalls.settleUndelivered(agentId, send).map { readAgents() }
+        }
+    }
+
+    fun retryStart() {
+        val agentId = state.value.chrome?.agentId ?: return
+        agentAction("Could not start the conversation") {
+            agentCalls.retryStart(agentId).map {
+                reconnect()
+                readAgents()
+            }
+        }
+    }
+
+    fun actionErrorShown() {
+        actionErrorState.value = null
+    }
+
+    private fun agentAction(failure: String, call: suspend () -> Result<Unit>) {
+        scope.launch { call().onFailure { actionErrorState.value = "$failure: ${describe(it)}" } }
+    }
+
+    // One `GET /agents` serves both reads, keyed on archived and agent id; a refused read never reads as deleted.
+    private fun readAgents() {
+        val chrome = state.value.chrome
+        val agentId = chrome?.agentId
+        if (chrome == null || (!chrome.archived && agentId == null)) {
+            agentState.value = AgentView()
+            return
+        }
+        scope.launch {
+            val body = agentCalls.agents()
+            worker.act { session ->
+                val now = System.currentTimeMillis()
+                val archived = session.archivedView(body, now.toDouble(), offsetMinutes(now))
+                agentState.value = AgentView(archived, body?.let { agentId?.let { id -> agentNotice(it, id) } })
+                emptyList()
+            }
+        }
+    }
 
     fun openShell(id: String, cols: Int, rows: Int) = worker.act {
         shellState.value = (shellState.value ?: ShellView(id)).copy(sized = true)
@@ -410,6 +492,13 @@ class SessionModel(
         if (changed.shells) readShell()
         if (changed.transcript) ui = ui.copy(catchUp = session.catchUp())
         state.value = ui
+        ui.chrome?.let { chrome ->
+            val key = chrome.archived to chrome.agentId
+            if (key != agentReadKey) {
+                agentReadKey = key
+                readAgents()
+            }
+        }
         if (ui.connection == ConnectionState.LIVE && ui.progress == null && (changed.transcript || changed.chrome || seenState.value == null)) {
             seenState.value = session.seen()
         }

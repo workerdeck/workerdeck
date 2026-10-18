@@ -1464,6 +1464,13 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   metadata) and `libwdffi.so` for arm64-v8a and x86_64 (`cargoNdk`). The JVM unit tests load the
   host build of `libwdffi` through JNA, so they drive the real core without an emulator.
 
+- **Agent conversations.** Mirrors iOS on the same FFI (`sessions/AgentCalls.kt`, `ConversationsSheet.kt`,
+  `session/ConversationBars.kt`): archived banner + Go to current, read-only archive, a past conversation opens
+  a pinned route (extra `"pinned"` part, `SessionsModel.pin`) that never follows, "Starting a new conversation"
+  while the saved `handover` flag is set. Row and session menus: Conversations, New conversation (gated),
+  Delete agent... (Android never had Retire/Close). Past agents sit in the gateway menu. Send again / Dismiss and
+  Retry start on the session screen.
+
 ## `apps/demo`
 
 **The interactive tour**: a VS Code window drawn in React (from the WorkerDeck Figma file,

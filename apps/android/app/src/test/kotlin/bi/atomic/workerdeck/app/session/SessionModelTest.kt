@@ -1,6 +1,7 @@
 package bi.atomic.workerdeck.app.session
 
 import bi.atomic.workerdeck.app.gateway.Transport
+import bi.atomic.workerdeck.core.ffi.ArchivedKind
 import bi.atomic.workerdeck.core.ffi.AttachmentStatus
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Gutter
@@ -197,6 +198,99 @@ class SessionModelTest {
         val outgoing = successor.composer.send("look", false) as Outgoing.Message
         assertEquals(listOf("att_2"), outgoing.attachmentIds)
         successor.close()
+    }
+
+    @Test
+    fun anArchivedConversationReadsAsDeletedOnceTheAgentsAreKnownAndOffersNoAgentActions() {
+        val transport = FakeTransport()
+        transport.answers = { call ->
+            if (call.path == "/agents") HttpAnswer(200u, "application/json", """{"agents":[]}""") else HttpAnswer(404u, null, "")
+        }
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ARCHIVED_AGENT)
+        eventually("the archived view") { model.agent.value.archived != null }
+        val view = model.agent.value.archived!!
+        assertEquals(ArchivedKind.DELETED, view.kind)
+        assertEquals(null, view.current)
+        assertTrue(model.ui.value.chrome!!.archived)
+        assertEquals(null, model.ui.value.chrome!!.agentId)
+        assertEquals(null, model.agent.value.notice)
+        model.close()
+    }
+
+    @Test
+    fun anArchivedConversationWhoseAgentLivesOnOffersGoToCurrent() {
+        val transport = FakeTransport()
+        transport.answers = { call ->
+            if (call.path == "/agents") HttpAnswer(200u, "application/json", agents("\"sessionId\":\"s2\"")) else HttpAnswer(404u, null, "")
+        }
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ARCHIVED_AGENT)
+        eventually("the archived view") { model.agent.value.archived != null }
+        assertEquals(ArchivedKind.PAST, model.agent.value.archived!!.kind)
+        assertEquals("s2", model.agent.value.archived!!.current)
+        model.close()
+    }
+
+    @Test
+    fun aLiveAgentShowsItsNoticeAndItsActionsNameTheShownConversation() {
+        val transport = FakeTransport()
+        transport.answers = { call ->
+            when {
+                call.path == "/agents" -> HttpAnswer(200u, "application/json", agents("\"sessionId\":\"s1\",\"undelivered\":\"go on\""))
+                call.path.endsWith("/restart") -> HttpAnswer(200u, "application/json", """{"agent":{"id":"ag","name":"WD-Test","createdAt":0,"updatedAt":0,"pastSessions":[],"config":{}},"session":{"id":"s2","status":"starting","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}""")
+                call.path.endsWith("/undelivered") || call.path.startsWith("/agents/ag") -> HttpAnswer(200u, "application/json", "{}")
+                else -> HttpAnswer(404u, null, "")
+            }
+        }
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, LIVE_AGENT)
+        eventually("the notice") { model.agent.value.notice?.undelivered == "go on" }
+        val chrome = model.ui.value.chrome!!
+        assertEquals("ag", chrome.agentId)
+        assertEquals(false, chrome.canClearContext)
+        assertEquals(null, chrome.newConversationBlocked)
+
+        model.newConversation()
+        eventually("the successor") { model.successor.value == "s2" }
+        val restart = transport.calls.single { it.path.endsWith("/restart") }
+        assertTrue(restart.body!!.contains("\"expectedSessionId\":\"s1\""))
+
+        model.settleUndelivered(true)
+        eventually("the settle") { transport.calls.any { it.path.endsWith("/undelivered") } }
+        assertTrue(transport.calls.single { it.path.endsWith("/undelivered") }.body!!.contains("\"send\":true"))
+
+        var deleted = false
+        model.deleteAgent { deleted = true }
+        eventually("the delete") { deleted }
+        val retire = transport.calls.single { it.method == "DELETE" && it.path == "/agents/ag" }
+        assertTrue(retire.body!!.contains("\"members\":\"release\""))
+        assertTrue(retire.body!!.contains("\"expectedSessionId\":\"s1\""))
+        model.close()
+    }
+
+    @Test
+    fun aRefusedActionSaysWhatFailed() {
+        val transport = FakeTransport()
+        transport.answers = { call ->
+            if (call.path.endsWith("/restart")) HttpAnswer(409u, "application/json", """{"error":"conflict","message":"Moved on"}""") else HttpAnswer(404u, null, "")
+        }
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, LIVE_AGENT)
+        eventually("the chrome") { model.ui.value.chrome?.agentId == "ag" }
+        model.newConversation()
+        eventually("the error") { model.actionError.value != null }
+        assertTrue(model.actionError.value!!.startsWith("Could not start a new conversation: "))
+        assertEquals(null, model.successor.value)
+        model.close()
     }
 
     @Test
@@ -459,6 +553,15 @@ class SessionModelTest {
 
         const val PROFILES =
             """{"profiles":[{"name":"p1","usage":{"seven_day":{"info":{"status":"allowed","utilization":71},"updatedAt":1760000003000}},"spend":{"weekUsd":41.2,"monthUsd":160,"weekByModel":{},"unpricedShare":0}}]}"""
+
+        const val ARCHIVED_AGENT =
+            """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Old work","status":"closed","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"archived":true,"agent":{"id":"ag","name":"WD-Test"}}}"""
+
+        const val LIVE_AGENT =
+            """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Work","status":"idle","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"capabilities":{"clearContext":true},"agent":{"id":"ag","name":"WD-Test"}}}"""
+
+        fun agents(extra: String) =
+            """{"agents":[{"id":"ag","name":"WD-Test","createdAt":0,"updatedAt":0,"pastSessions":[],"config":{},$extra}]}"""
 
         const val ATTACHED =
             """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Deck work","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"""

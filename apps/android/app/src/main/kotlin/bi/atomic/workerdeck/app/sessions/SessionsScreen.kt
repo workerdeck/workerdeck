@@ -86,6 +86,9 @@ import bi.atomic.workerdeck.core.ffi.ListRow
 import bi.atomic.workerdeck.core.ffi.TrayMember
 import bi.atomic.workerdeck.core.ffi.RowState
 import bi.atomic.workerdeck.core.ffi.ago
+import bi.atomic.workerdeck.core.ffi.deleteAgentMessage
+import bi.atomic.workerdeck.core.ffi.deleteAgentTitle
+import bi.atomic.workerdeck.core.ffi.newConversationHint
 import kotlinx.coroutines.launch
 
 private val GUTTER = 16.dp
@@ -101,6 +104,7 @@ fun SessionsScreen(
     model: SessionsModel,
     gateways: List<Gateway>,
     onOpen: (hostId: String, sessionId: String, title: String, entry: Entry?) -> Unit,
+    onOpenPast: (hostId: String, sessionId: String, title: String) -> Unit,
     onAdd: () -> Unit,
     onForget: (Gateway) -> Unit,
     onNew: (hostId: String, agent: Boolean) -> Unit,
@@ -109,6 +113,9 @@ fun SessionsScreen(
     val colors = Wd.colors
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var deleting by remember { mutableStateOf<ListRow?>(null) }
+    var history by remember { mutableStateOf<ConversationsTarget?>(null) }
+    var pastOpen by remember { mutableStateOf(false) }
     LaunchedEffect(ui.notice) {
         ui.notice?.let {
             scope.launch { snackbar.showSnackbar(it) }
@@ -123,7 +130,7 @@ fun SessionsScreen(
                 title = { Text("Sessions", style = MaterialTheme.typography.titleMedium) },
                 actions = {
                     NewMenu(gateways, model::canCreateAgent, onNew)
-                    GatewayMenu(gateways, onAdd, onForget)
+                    GatewayMenu(gateways, onAdd, onForget, onPastAgents = if (ui.pastAgents.isNotEmpty()) ({ pastOpen = true }) else null)
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
             )
@@ -161,6 +168,11 @@ fun SessionsScreen(
                                     onStopStep = { model.stopStep(row.hostId, row.sessionId, it) },
                                     onToggleTeam = { model.toggleTeam(row.hostId, row.sessionId) },
                                     onSleep = { model.sleep(row.hostId, row.sessionId) },
+                                    onNewConversation = { model.restart(row) },
+                                    onConversations = {
+                                        history = row.agentId?.let { ConversationsTarget(row.hostId, it, row.agent ?: row.title, retired = false) }
+                                    },
+                                    onDelete = { deleting = row },
                                 )
                             }
                         }
@@ -168,6 +180,47 @@ fun SessionsScreen(
                 }
             }
         }
+    }
+    deleting?.let { row ->
+        val name = row.agent
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text(deleteAgentTitle(name ?: "this agent")) },
+            text = { Text(deleteAgentMessage(name ?: "This agent")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    model.deleteAgent(row)
+                }) { Text("Delete agent", color = Wd.colors.red) }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
+    }
+    if (pastOpen) {
+        PastAgentsSheet(
+            ui.pastAgents,
+            showGateway = { id -> gateways.takeIf { it.size > 1 }?.firstOrNull { it.id == id }?.name },
+            onPick = { entry ->
+                pastOpen = false
+                history = ConversationsTarget(entry.hostId, entry.agent.id, entry.agent.name, retired = true)
+            },
+            onDismiss = { pastOpen = false },
+        )
+    }
+    history?.let { target ->
+        ConversationsSheet(
+            target,
+            load = { model.conversations(target.hostId, target.agentId) },
+            onOpen = { sessionId, title ->
+                history = null
+                onOpen(target.hostId, sessionId, title, null)
+            },
+            onOpenPast = { sessionId, title ->
+                history = null
+                onOpenPast(target.hostId, sessionId, title)
+            },
+            onDismiss = { history = null },
+        )
     }
 }
 
@@ -203,7 +256,7 @@ private fun NewMenu(gateways: List<Gateway>, canCreateAgent: (String) -> Boolean
 
 // Each paired gateway with its own Forget, then Add. Forgetting asks first: the key is gone once confirmed.
 @Composable
-private fun GatewayMenu(gateways: List<Gateway>, onAdd: () -> Unit, onForget: (Gateway) -> Unit) {
+private fun GatewayMenu(gateways: List<Gateway>, onAdd: () -> Unit, onForget: (Gateway) -> Unit, onPastAgents: (() -> Unit)?) {
     var open by remember { mutableStateOf(false) }
     var forgetting by remember { mutableStateOf<Gateway?>(null) }
     Box {
@@ -223,6 +276,15 @@ private fun GatewayMenu(gateways: List<Gateway>, onAdd: () -> Unit, onForget: (G
                     },
                 )
                 HorizontalDivider()
+            }
+            onPastAgents?.let { show ->
+                DropdownMenuItem(
+                    text = { Text("Past agents") },
+                    onClick = {
+                        open = false
+                        show()
+                    },
+                )
             }
             DropdownMenuItem(
                 text = { Text("Add a gateway") },
@@ -312,6 +374,9 @@ private fun SessionRow(
     onStopStep: (ListStep) -> Unit,
     onToggleTeam: () -> Unit,
     onSleep: () -> Unit,
+    onNewConversation: () -> Unit,
+    onConversations: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val colors = Wd.colors
     var menu by remember { mutableStateOf(false) }
@@ -325,7 +390,7 @@ private fun SessionRow(
             Modifier
                 .fillMaxWidth()
                 .testTag("session-row")
-                .combinedClickable(onClick = { onOpen(null) }, onLongClick = if (row.canSleep) ({ menu = true }) else null)
+                .combinedClickable(onClick = { onOpen(null) }, onLongClick = if (row.canSleep || agent) ({ menu = true }) else null)
                 .alpha(if (!row.asleep) 1f else if (agent) 0.6f else 0.55f),
         ) {
             if (member) {
@@ -380,13 +445,47 @@ private fun SessionRow(
             HorizontalDivider(Modifier.padding(start = GUTTER + indent + column + 10.dp), thickness = 0.5.dp, color = colors.separator)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, offset = DpOffset(GUTTER + indent, 0.dp)) {
-            DropdownMenuItem(
-                text = { Text("Sleep") },
-                onClick = {
-                    menu = false
-                    onSleep()
-                },
-            )
+            if (agent) {
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("New conversation")
+                            Text(row.newConversationBlocked ?: newConversationHint(), style = MaterialTheme.typography.bodySmall, color = colors.secondary)
+                        }
+                    },
+                    enabled = row.newConversationBlocked == null,
+                    onClick = {
+                        menu = false
+                        onNewConversation()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Conversations…") },
+                    onClick = {
+                        menu = false
+                        onConversations()
+                    },
+                )
+            }
+            if (row.canSleep) {
+                DropdownMenuItem(
+                    text = { Text("Sleep") },
+                    onClick = {
+                        menu = false
+                        onSleep()
+                    },
+                )
+            }
+            if (agent) {
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Delete agent…", color = colors.red) },
+                    onClick = {
+                        menu = false
+                        onDelete()
+                    },
+                )
+            }
         }
     }
 }
