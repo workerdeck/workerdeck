@@ -9,6 +9,7 @@ import {
   type WorkerServerOptions,
 } from '../src/index.ts'
 import type { AgentStore, StoredAgent } from '../src/services/agent-store.ts'
+import type { SessionStore } from '../src/services/session-store.ts'
 import { EngineRunner } from './engine-runner.ts'
 import { gatewayFixture } from './helpers.ts'
 
@@ -153,6 +154,77 @@ describe('handover: the successor is durable before the intent goes', () => {
     expect(stored(dir, agent.id).pending).toBeUndefined()
     expect((await agentOf(second.base, agent.id)).undelivered).toBe('continue')
     expect((await second.server.parking.get(fresh))?.kind).toBe('dormant')
+  })
+})
+
+describe('handover: the successor record is read back, not assumed', () => {
+  it('keeps the intent with a start error when the new record cannot be saved, and Retry start saves it', async () => {
+    const dir = await fixture.stateDir()
+    const inner = createFileSessionStore({ dir: join(dir, 'sessions') })
+    let broken = false
+    const store: SessionStore = {
+      ...inner,
+      get: (id) => inner.get(id),
+      list: () => inner.list(),
+      delete: (id) => inner.delete(id),
+      save: async (record) => {
+        if (broken && record.kind !== 'archived') {
+          throw new Error('disk full')
+        }
+        await inner.save(record)
+      },
+    }
+    const { server, base } = await gateway(dir, { options: { parking: { store, parkDelayMs: 10 } } })
+    const { agent, session } = await createAgent(base, 'Wren')
+    await idle(server, session!.id)
+    broken = true
+
+    const res = await call(base, `/agents/${agent.id}/restart`, 'POST', { prompt: 'continue' })
+    expect(res.status).toBe(502)
+    const pending = stored(dir, agent.id).pending!
+    expect(pending.startError).toBe('the new conversation could not be saved')
+    expect(await server.parking.get(pending.to!)).toBeNull()
+
+    broken = false
+    expect((await call(base, `/agents/${agent.id}/retry-start`, 'POST', {})).status).toBe(200)
+    expect(stored(dir, agent.id).pending).toBeUndefined()
+    expect((await server.parking.get(pending.to!))?.kind).toBe('dormant')
+  })
+
+  it('keeps an idle successor that has no engine conversation yet recoverable until its first message saves one', async () => {
+    const dir = await fixture.stateDir()
+    const nameless = (runner: EngineRunner) => void (runner.nameless = true)
+    const first = await gateway(dir, { building: nameless })
+    const { agent, session } = await createAgent(first.base, 'Wren')
+    await idle(first.server, session!.id)
+
+    const res = await call(first.base, `/agents/${agent.id}/restart`, 'POST', {})
+    expect(res.status).toBe(200)
+    const fresh = ((await res.json()) as AgentResponse).session!.id
+    expect(stored(dir, agent.id).pending).toMatchObject({ to: fresh, awaiting: true })
+    expect(await first.server.parking.get(fresh)).toBeNull()
+    await stop(first.server)
+
+    const second = await gateway(dir, { building: nameless })
+    const revived = second.built.find((runner) => runner.id === fresh)
+    expect(revived).toBeDefined()
+    expect(stored(dir, agent.id).pending).toMatchObject({ to: fresh, awaiting: true })
+    await idle(second.server, fresh)
+    revived!.sendMessage('hello')
+    await vi.waitFor(() => expect(stored(dir, agent.id).pending).toBeUndefined())
+    expect((await second.server.parking.get(fresh))?.kind).toBe('dormant')
+    expect((await agentOf(second.base, agent.id)).sessionId).toBe(fresh)
+  })
+
+  it('lets a new conversation replace one that is still waiting for its first message', async () => {
+    const { server, base } = await gateway(await fixture.stateDir(), { building: (runner) => void (runner.nameless = true) })
+    const { agent, session } = await createAgent(base, 'Wren')
+    await idle(server, session!.id)
+    const once = (await (await call(base, `/agents/${agent.id}/restart`, 'POST', {})).json()) as AgentResponse
+    await idle(server, once.session!.id)
+    const twice = await call(base, `/agents/${agent.id}/restart`, 'POST', {})
+    expect(twice.status).toBe(200)
+    expect((await agentOf(base, agent.id)).sessionId).toBe(((await twice.json()) as AgentResponse).session!.id)
   })
 })
 

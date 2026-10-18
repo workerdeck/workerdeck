@@ -22,6 +22,8 @@ export class EngineRunner implements Runner {
 
   hold: Promise<void> | undefined
   failStart: string | undefined
+  // Names no engine conversation until its first message, like an engine started without a prompt.
+  nameless = false
 
   async start(): Promise<void> {
     await this.hold
@@ -31,10 +33,21 @@ export class EngineRunner implements Runner {
       this.#emit({ type: 'status_changed', status: 'failed' })
       return
     }
-    this.#sdkSessionId = this.config.resume ?? `engine-${this.id}`
+    if (this.nameless && !this.config.resume && !this.config.prompt) {
+      this.#status = 'idle'
+      this.#emit({ type: 'status_changed', status: 'idle' })
+      return
+    }
+    this.#name()
     if (this.config.prompt) {
       this.sendMessage(this.config.prompt)
     }
+    this.#status = 'idle'
+    this.#emit({ type: 'status_changed', status: 'idle' })
+  }
+
+  #name(): void {
+    this.#sdkSessionId = this.config.resume ?? `engine-${this.id}`
     this.#emit({
       type: 'system_init',
       sdkSessionId: this.#sdkSessionId,
@@ -48,8 +61,6 @@ export class EngineRunner implements Runner {
       claudeCodeVersion: 'test',
       mcpServers: [],
     })
-    this.#status = 'idle'
-    this.#emit({ type: 'status_changed', status: 'idle' })
   }
 
   info(): SessionInfo {
@@ -80,6 +91,9 @@ export class EngineRunner implements Runner {
 
   sendMessage(text: string): void {
     this.sent.push(text)
+    if (this.#sdkSessionId === undefined && this.#status !== 'starting') {
+      this.#name()
+    }
   }
   setTitle(): void {}
   resolvePermission(): boolean {

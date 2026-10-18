@@ -31,7 +31,7 @@ export function rotateAgent(ctx: ServerContext, agentId: string, auth: AuthConte
     if (options.expected !== from) {
       fail(409, `${agent.name} has moved to another conversation`)
     }
-    if (agent.pending) {
+    if (agent.pending && !agent.pending.awaiting) {
       fail(409, unfinished(agent))
     }
     const status = from === undefined ? undefined : ctx.registry.get(from)?.info().status
@@ -68,7 +68,10 @@ export function retryStart(ctx: ServerContext, agentId: string, auth: AuthContex
     const stuck = ctx.registry.get(intent.to)
     const status = stuck?.info().status
     if (stuck && status !== 'failed' && status !== 'closed') {
-      fail(409, `${agent.name}'s new conversation is still starting`)
+      if (intent.startError === undefined) {
+        fail(409, `${agent.name}'s new conversation is still starting`)
+      }
+      return (await settle(ctx, agentId, intent.to, undefined, stuck, { kind: 'ready' }, true))!
     }
     if (stuck) {
       ctx.parking.release(stuck.id)
@@ -97,7 +100,7 @@ export function settleUndelivered(ctx: ServerContext, agentId: string, send: boo
     }
     const sessionId = agent.sessionId
     if (send) {
-      if (sessionId === undefined || agent.pending || ctx.handovers.gated(sessionId)) {
+      if (sessionId === undefined || (agent.pending && !agent.pending.awaiting) || ctx.handovers.gated(sessionId)) {
         fail(409, `${agent.name} has no conversation to send it to`)
       }
       const runner = await ctx.parking.ensureLive(sessionId)
@@ -288,38 +291,112 @@ async function finishRotation(ctx: ServerContext, agent: StoredAgent, auth: Auth
   const startup = startupOf(ctx, runner, prompt !== undefined)
   const early = await within(startup, ctx.handovers.startupTimeoutMs)
   if (early) {
-    return await settleStartup(ctx, agent.id, to, lost, early)
+    return (await settle(ctx, agent.id, to, lost, runner, early, true))!
   }
+  const started = runner
   void startup
-    .then((late) => ctx.handovers.run([agent.id], () => settleLate(ctx, agent.id, to, lost, late)))
+    .then((late) => ctx.handovers.run([agent.id], () => settle(ctx, agent.id, to, lost, started, late, false)))
     .catch((error: unknown) => ctx.handovers.onError(error))
   return { agent: ctx.agents.get(agent.id) ?? agent, session: runner.info() }
 }
 
-async function settleStartup(
+// `strict` answers the caller (a failure throws); otherwise it settles in the background for nobody.
+async function settle(
   ctx: ServerContext,
   agentId: string,
   to: string,
   lost: string | undefined,
+  runner: Runner,
   startup: Startup,
-): Promise<Rotation> {
-  if (startup.kind === 'failed') {
-    settled(await ctx.agents.updatePending(agentId, { startError: startup.error }))
-    fail(502, `the new conversation did not start: ${startup.error}`)
+  strict: boolean,
+): Promise<Rotation | undefined> {
+  const agent = ctx.agents.get(agentId)
+  if (agent?.pending?.to !== to || (!strict && agent.pending.startError !== undefined)) {
+    return undefined
   }
-  return await confirm(ctx, agentId, to, lost)
+  const saved = startup.kind === 'failed' ? startup : await durability(ctx, runner, to)
+  if (saved === 'saved') {
+    return await confirm(ctx, agentId, to, lost)
+  }
+  if (saved === 'later') {
+    const current = settled(
+      await ctx.agents.updatePending(agentId, { awaiting: true }, (next) => (lost === undefined ? next : { ...next, undelivered: lost })),
+    )
+    awaitRecord(ctx, agentId, to, runner)
+    return { agent: current, session: runner.info() }
+  }
+  settled(await ctx.agents.updatePending(agentId, { startError: saved.error, awaiting: undefined }))
+  if (strict) {
+    fail(502, `the new conversation did not start: ${saved.error}`)
+  }
+  return undefined
 }
 
-async function settleLate(ctx: ServerContext, agentId: string, to: string, lost: string | undefined, startup: Startup): Promise<void> {
-  const agent = ctx.agents.get(agentId)
-  if (agent?.pending?.to !== to || agent.pending.startError !== undefined) {
-    return
+// Saved means a record the gateway can resume from is in the store, read back rather than assumed from a flush.
+// An engine with nothing to resume needs none; one that has named no conversation yet has nothing to save so far.
+async function durability(ctx: ServerContext, runner: Runner, to: string): Promise<'saved' | 'later' | { kind: 'failed'; error: string }> {
+  const info = runner.info()
+  if (!(info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume) {
+    return 'saved'
   }
-  if (startup.kind === 'failed') {
-    settled(await ctx.agents.updatePending(agentId, { startError: startup.error }))
-    return
+  if (await recorded(ctx, to)) {
+    return 'saved'
   }
-  await confirm(ctx, agentId, to, lost)
+  if (info.sdkSessionId === undefined) {
+    return 'later'
+  }
+  ctx.parking.touch(runner)
+  await ctx.parking.flush(to)
+  return (await recorded(ctx, to)) ? 'saved' : { kind: 'failed', error: 'the new conversation could not be saved' }
+}
+
+async function recorded(ctx: ServerContext, id: string): Promise<boolean> {
+  const record = await ctx.parking.get(id).catch(() => null)
+  return record !== null && !isArchived(record)
+}
+
+// Keeps the intent of an idle successor until its first conversation is saved, then clears it under the lock.
+function awaitRecord(ctx: ServerContext, agentId: string, to: string, runner: Runner): void {
+  let done = false
+  let checking = false
+  const unsubscribe = runner.subscribe((event) => {
+    if (done || checking) {
+      return
+    }
+    if (event.type === 'session_closed') {
+      done = true
+      queueMicrotask(unsubscribe)
+      return
+    }
+    if (runner.info().sdkSessionId === undefined) {
+      return
+    }
+    checking = true
+    void ctx.handovers
+      .run([agentId], async () => {
+        const agent = ctx.agents.get(agentId)
+        if (agent?.pending?.to !== to || !agent.pending.awaiting) {
+          done = true
+          return
+        }
+        await ctx.parking.flush(to)
+        const saved = await durability(ctx, runner, to)
+        if (saved === 'saved') {
+          done = true
+          await confirm(ctx, agentId, to, undefined)
+        } else if (saved !== 'later') {
+          done = true
+          settled(await ctx.agents.updatePending(agentId, { startError: saved.error, awaiting: undefined }))
+        }
+      })
+      .catch((error: unknown) => ctx.handovers.onError(error))
+      .finally(() => {
+        checking = false
+        if (done) {
+          unsubscribe()
+        }
+      })
+  }, runner.info().lastSeq)
 }
 
 async function confirm(ctx: ServerContext, agentId: string, to: string, lost: string | undefined): Promise<Rotation> {

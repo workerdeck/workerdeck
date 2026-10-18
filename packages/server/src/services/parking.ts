@@ -389,7 +389,7 @@ export class SessionParkManager {
     }
     const { engineAsleep: _asleep, ...info } = source
     const snapshot = runner?.snapshot?.() ?? (stored && !isDormant(stored) ? stored.snapshot : undefined)
-    const home = this.#options.engineHome?.(info.profile, engineOf(info))
+    const home = config.engineHome ?? this.#options.engineHome?.(info.profile, engineOf(info))
     return {
       kind: 'archived',
       id: sessionId,

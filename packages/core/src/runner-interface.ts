@@ -42,6 +42,8 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   createdByOperator?: boolean
   // Stamped by the gateway at create time and persisted with the record; an agent's owner overrides it in `decorate`.
   owner?: string
+  // Stamped by the gateway at create time and persisted with the record: where the engine keeps this conversation.
+  engineHome?: { claudeConfigDir?: string; codexHome?: string }
   // The title a woken session last showed, ranked below the host's and the engine's, so it never freezes as a rename.
   fallbackTitle?: string
   // Set by the gateway on a dormant wake: the runner backfills, then waits for the first message to start its engine.

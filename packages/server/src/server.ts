@@ -665,6 +665,7 @@ function rebuildRunner(factory: SessionFactory, record: StoredSessionRecord): Pr
       // Applied after the host's hook, which is free to rebuild the config from the
       // request and would drop a field it has never heard of.
       epoch: (record.info.epoch ?? 0) + 1,
+      ...(record.config.engineHome ? { engineHome: record.config.engineHome } : {}),
       fallbackTitle: record.info.title,
       startAsleep: true,
     },

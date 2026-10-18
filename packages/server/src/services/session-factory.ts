@@ -21,7 +21,7 @@ import type {
 import type { Refusal } from '../lib/http.ts'
 import { bypassDisabled, refusePermissionMode, type BypassOption } from '../lib/permissions.ts'
 import { checkScope, sameScope } from '../lib/scope.ts'
-import { cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
+import { cliConfigDir, codexHomeDir, cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
 import { accountSessionEnv } from '../accounts/session-env.ts'
 import type { EngineRunnerContext, ShellAgentWriteOption } from '../options.ts'
 import type { BridgeHub } from './bridge.ts'
@@ -232,12 +232,12 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     )
     const sessionEnv = profile ? adapterFor(profile.engine).sessionEnv : undefined
     if (!profile || !sessionEnv) {
-      return config
+      return withEngineHome(config, profile, config.env ?? process.env)
     }
     const base = config.env ?? process.env
     const env = sessionEnv(profile, base)
     // A skipped pin returns `base` itself - leaving the config alone keeps an unset `env` unset, so the SDK spawns on process.env.
-    return env === base ? config : { ...config, env }
+    return withEngineHome(env === base ? config : { ...config, env }, profile, env)
   }
 
   const baseSessionEnvFor = (profile: ProfileInfo): Record<string, string | undefined> => {
@@ -410,5 +410,25 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     createRunner,
     resolveProfile,
     watchAuthSource,
+  }
+}
+
+// The engine store the session's conversation lives in, fixed at create: an archive reads it there whatever the
+// profile says later. Provider sessions keep no engine store.
+function withEngineHome(
+  config: SessionRunnerConfig,
+  profile: ProfileInfo | undefined,
+  env: Record<string, string | undefined>,
+): SessionRunnerConfig {
+  switch (profile?.engine ?? 'claude') {
+    case 'claude': {
+      return { ...config, engineHome: { claudeConfigDir: profile?.configDir ?? cliConfigDir(env) } }
+    }
+    case 'codex': {
+      return { ...config, engineHome: { codexHome: profile?.codexHome ?? codexHomeDir(env) } }
+    }
+    default: {
+      return config
+    }
   }
 }

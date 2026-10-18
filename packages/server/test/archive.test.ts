@@ -251,6 +251,33 @@ describe('the archived record', () => {
     await server.parking.fence('c-2')
     expect((await server.parking.archiveOf('c-2', {}))?.home).toBeUndefined()
   })
+
+  it('pins the home the session was created with, not where its profile points by the time it is archived', async () => {
+    const dir = await fixture.stateDir()
+    const created = await fixture.stateDir()
+    const moved = await fixture.stateDir()
+    const { server } = await gateway(dir, reader({ kind: 'missing' }), [{ name: 'codex', engine: 'codex', codexHome: moved }])
+    await createFileSessionStore({ dir }).save({
+      kind: 'dormant',
+      id: 'c-3',
+      info: {
+        id: 'c-3',
+        status: 'idle',
+        cwd: '/tmp/project',
+        createdAt: 1,
+        lastSeq: 0,
+        pendingPermissionCount: 0,
+        engine: 'codex',
+        profile: 'codex',
+      },
+      profile: 'codex',
+      config: { cwd: '/tmp/project', profile: 'codex', engineHome: { codexHome: created } },
+      sdkSessionId: 'thread-c-3',
+      savedAt: 1,
+    })
+    await server.parking.fence('c-3')
+    expect((await server.parking.archiveOf('c-3', {}))?.home).toEqual({ codexHome: created })
+  })
 })
 
 describe('the archive view', () => {

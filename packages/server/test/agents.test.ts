@@ -1,3 +1,4 @@
+import type { SessionRunnerConfig } from '@workerdeck/core'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -272,6 +273,8 @@ describe('agents', () => {
       pastSessions: [member.session!.id],
     })
     expect(restarted.body.session!.id).not.toBe(member.session!.id)
+    const fresh = server.registry.get(restarted.body.session!.id) as unknown as { config: SessionRunnerConfig }
+    expect(fresh.config.engineHome).toEqual({ claudeConfigDir: expect.any(String) })
     expect(restarted.body.session!.agent).toMatchObject({ name: 'Pip', team: 'Atlas', conversation: 2 })
     expect(server.registry.get(member.session!.id)).toBeUndefined()
     expect((await server.parking.get(member.session!.id))?.info).toMatchObject({ archived: true, supersededBy: expect.any(String) })

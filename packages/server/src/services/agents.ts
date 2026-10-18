@@ -238,7 +238,7 @@ export class AgentService {
       if (agent.sessionId !== expected) {
         return { status: 409, error: `${agent.name} has moved to another conversation` }
       }
-      if (agent.pending) {
+      if (agent.pending && !agent.pending.awaiting) {
         return { status: 409, error: `${agent.name} is still finishing its last change` }
       }
       return { ...rotated(agent, intent.to!, this.#now()), pending: intent }
