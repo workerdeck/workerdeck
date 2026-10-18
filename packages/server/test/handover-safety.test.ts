@@ -8,6 +8,7 @@ import {
   type WorkerServer,
   type WorkerServerOptions,
 } from '../src/index.ts'
+import type { RunnerSnapshot } from '@workerdeck/core'
 import type { AgentStore, StoredAgent } from '../src/services/agent-store.ts'
 import type { SessionStore } from '../src/services/session-store.ts'
 import { EngineRunner } from './engine-runner.ts'
@@ -80,6 +81,17 @@ async function stop(server: WorkerServer): Promise<void> {
   await server.parking.flush()
   await server.close()
   fixture.servers.splice(fixture.servers.indexOf(server), 1)
+}
+
+class SnapshotRunner extends EngineRunner {
+  override info(): SessionInfo {
+    const info = super.info()
+    return { ...info, capabilities: { ...info.capabilities!, resume: false, resumeBackfill: false } }
+  }
+
+  snapshot(): RunnerSnapshot {
+    return { engine: 'provider', id: this.id, createdAt: this.createdAt, seq: this.info().lastSeq, events: [], parked: [], state: null }
+  }
 }
 
 function held(): { gate: Promise<void>; open: () => void } {
@@ -189,6 +201,51 @@ describe('handover: the successor record is read back, not assumed', () => {
     expect((await call(base, `/agents/${agent.id}/retry-start`, 'POST', {})).status).toBe(200)
     expect(stored(dir, agent.id).pending).toBeUndefined()
     expect((await server.parking.get(pending.to!))?.kind).toBe('dormant')
+  })
+
+  it('reads back the live snapshot of an engine without resume before the intent goes', async () => {
+    const dir = await fixture.stateDir()
+    const inner = createFileSessionStore({ dir: join(dir, 'sessions') })
+    let broken = false
+    const store: SessionStore = {
+      ...inner,
+      get: (id) => inner.get(id),
+      list: () => inner.list(),
+      delete: (id) => inner.delete(id),
+      save: async (record) => {
+        if (broken && record.kind !== 'archived') {
+          throw new Error('disk full')
+        }
+        await inner.save(record)
+      },
+    }
+    const built: SnapshotRunner[] = []
+    const server = createWorkerServer({
+      allowUnauthenticated: true,
+      allowedCwdRoots: ['/tmp'],
+      profiles: [profile],
+      parking: { store, parkDelayMs: 10, persistLive: true },
+      agentStore: createFileAgentStore(join(dir, 'agents.json')),
+      historyReader: { read: async () => ({ kind: 'missing' }) },
+      createEngineRunner: ({ config, id }) => {
+        const runner = new SnapshotRunner(id ?? `session-${built.length + 1}`, config)
+        built.push(runner)
+        return runner
+      },
+    })
+    fixture.servers.push(server)
+    const base = `http://127.0.0.1:${(await server.listen(0, '127.0.0.1')).port}/v1`
+    const { agent, session } = await createAgent(base, 'Wren')
+    await idle(server, session!.id)
+
+    broken = true
+    expect((await call(base, `/agents/${agent.id}/restart`, 'POST', {})).status).toBe(502)
+    const pending = stored(dir, agent.id).pending!
+    expect(pending.startError).toBe('the new conversation could not be saved')
+    broken = false
+    expect((await call(base, `/agents/${agent.id}/retry-start`, 'POST', {})).status).toBe(200)
+    expect(stored(dir, agent.id).pending).toBeUndefined()
+    expect((await server.parking.get(pending.to!))?.kind).toBe('live')
   })
 
   it('keeps an idle successor that has no engine conversation yet recoverable until its first message saves one', async () => {

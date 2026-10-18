@@ -364,6 +364,11 @@ export class SessionParkManager {
     await this.#storeOps.get(sessionId)
   }
 
+  // Whether this session can be restored from a live snapshot record: the only durable form an engine without resume has.
+  persistsLive(runner: Runner): boolean {
+    return this.#options.persistLive === true && runner.snapshot !== undefined
+  }
+
   fenced(sessionId: string): boolean {
     return this.#archiving.has(sessionId)
   }

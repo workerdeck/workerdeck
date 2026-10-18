@@ -332,17 +332,19 @@ async function settle(
   return undefined
 }
 
-// Saved means a record the gateway can resume from is in the store, read back rather than assumed from a flush.
-// An engine with nothing to resume needs none; one that has named no conversation yet has nothing to save so far.
+// Saved means a record the gateway can restore from is in the store, read back rather than assumed from a flush: a
+// dormant one for a resumable engine, a live snapshot otherwise. Only an engine with neither form has nothing to keep.
 async function durability(ctx: ServerContext, runner: Runner, to: string): Promise<'saved' | 'later' | { kind: 'failed'; error: string }> {
   const info = runner.info()
-  if (!(info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume) {
+  const resumable = (info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume
+  const snapshots = !resumable && ctx.parking.persistsLive(runner)
+  if (!resumable && !snapshots) {
     return 'saved'
   }
   if (await recorded(ctx, to)) {
     return 'saved'
   }
-  if (info.sdkSessionId === undefined) {
+  if (resumable && info.sdkSessionId === undefined) {
     return 'later'
   }
   ctx.parking.touch(runner)
