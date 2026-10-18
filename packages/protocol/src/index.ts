@@ -336,6 +336,7 @@ export type SessionEventBody =
   | { type: 'tool_output'; toolUseId: string; tail: string }
   | { type: 'sdk_event'; payload: { type: string; [key: string]: unknown } }
   | { type: 'session_error'; message: string }
+  | { type: 'session_superseded'; successor: string }
   | { type: 'session_closed'; reason: 'client' | 'server' | 'error' }
 
 export type SessionEvent = SessionEventBody & {
@@ -931,6 +932,9 @@ export type SessionInfo = {
   // Whom the session answers to: its agent's owner, or the owner stamped at create.
   owner?: string
   statusLabel?: StatusLabel
+  archived?: true
+  supersededBy?: string
+  transcript?: 'unavailable'
 }
 
 export function contextReading(body: SessionEventBody): ContextReading | undefined {
@@ -1340,6 +1344,7 @@ export type QueueStatsResponse = { stats: QueueStats }
 export * from './accounts.ts'
 export * from './agents.ts'
 export * from './checklist.ts'
+export * from './conversations.ts'
 export * from './errors.ts'
 export * from './paths.ts'
 export * from './model-menu.ts'

@@ -1,3 +1,4 @@
+import type { AgentConversation } from './conversations.ts'
 import type { GatewayAgentDefaults, PermissionMode, ProfileInfo, SessionInfo } from './index.ts'
 
 export type AgentRef = {
@@ -66,6 +67,7 @@ export type AgentInfo = {
   avatar?: string
   sessionId?: string
   pastSessions: string[]
+  conversations?: AgentConversation[]
   config: AgentConfig
   lead?: string
   order?: number

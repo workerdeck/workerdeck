@@ -466,6 +466,14 @@ fn ever_connected_flips_on_the_first_open_only() {
 }
 
 #[test]
+fn an_unknown_event_type_decodes_as_unknown_and_keeps_its_seq() {
+    let json = br#"{"type":"event","event":{"type":"session_superseded","successor":"b","seq":7,"ts":1}}"#;
+    let Some(Frame::Event(event)) = decode_frame(json) else { panic!("expected an event") };
+    assert_eq!(event.seq, 7);
+    assert!(matches!(event.body, wd_native::protocol::Body::Unknown));
+}
+
+#[test]
 fn decodes_an_ack_frame() {
     assert!(matches!(decode_frame(br#"{"type":"ack","clientId":"n.1"}"#), Some(Frame::Ack { client_id }) if client_id == "n.1"));
 }

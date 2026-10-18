@@ -549,7 +549,7 @@ An **agent** is a long-lived identity the gateway keeps (`AgentInfo`: name, avat
 brief, the config its sessions start from) that owns one session at a time. The session is the
 run; the agent survives it: `POST /agents/:id/restart` starts a fresh session under the same
 identity and team and moves the old id to `pastSessions`. Clear, compaction, engine sleep and
-dormancy all keep the session id, so a restart is only needed after a failure. `POST /agents`
+dormancy all keep the session id; a restart ("New conversation", or the agent's own `context_reset`) is how an agent starts a clean conversation. `POST /agents`
 creates an agent and its first session in one call through the ordinary create ladder, or adopts
 an existing session (`adopt`). Retiring (`DELETE`) closes the agent's session and releases its
 members (or retires them, `members: 'retire'`); deleting the agent's session does the same,
