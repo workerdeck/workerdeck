@@ -44,7 +44,11 @@ export function conversationsOf(agent: Pick<AgentInfo, 'sessionId' | 'pastSessio
   const legacy = [...agent.pastSessions, ...(agent.sessionId === undefined ? [] : [agent.sessionId])]
     .filter((id) => !listed.has(id))
     .map((sessionId): AgentConversation => ({ sessionId }))
-  return [...legacy, ...known].map((entry) => ({ ...entry, current: entry.sessionId === agent.sessionId })).reverse()
+  const ordered = [...legacy, ...known]
+  return ordered.map((_, index) => {
+    const entry = ordered[ordered.length - 1 - index]!
+    return { ...entry, current: entry.sessionId === agent.sessionId }
+  })
 }
 
 export type RetiredAgentInfo = {

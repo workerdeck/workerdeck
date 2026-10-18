@@ -38,12 +38,11 @@ async function gateway(dir: string) {
   return { server, built, base: `http://127.0.0.1:${port}/v1` }
 }
 
-async function call(base: string, path: string, method = 'GET', body?: unknown): Promise<Response> {
-  return await fetch(`${base}${path}`, {
-    method,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+async function call(base: string, path: string, method?: string, body?: unknown): Promise<Response> {
+  if (body === undefined || method === undefined) {
+    return await fetch(`${base}${path}`, { method: method ?? 'GET' })
+  }
+  return await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
 }
 
 async function createAgent(base: string, name: string, lead?: string): Promise<AgentResponse> {
