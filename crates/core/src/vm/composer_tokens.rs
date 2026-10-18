@@ -218,7 +218,8 @@ fn time(value: &Value) -> f64 {
     value.get("lastActivityAt").and_then(Value::as_f64).or_else(|| value.get("createdAt").and_then(Value::as_f64)).unwrap_or(0.0)
 }
 
-// The body of `GET /v1/sessions` as `#` offers it: this session dropped, newest first. None for another shape.
+// The body of `GET /v1/sessions` as `#` offers it: this session dropped, newest first, an agent's session by its agent's
+// name (the web's `peerSessionOption`). None for another shape.
 pub fn peer_sessions(body: &str, excluding: &str) -> Option<Vec<PeerSession>> {
     let mut rows: Vec<Value> = serde_json::from_str::<SessionsBody>(body)
         .ok()?
@@ -231,7 +232,7 @@ pub fn peer_sessions(body: &str, excluding: &str) -> Option<Vec<PeerSession>> {
         rows.iter()
             .map(|row| {
                 let id = field(row, "id").unwrap_or_default();
-                let title = field(row, "title");
+                let title = row.get("agent").and_then(|agent| field(agent, "name")).or_else(|| field(row, "title"));
                 let project = row.get("project").and_then(|p| field(p, "name"));
                 PeerSession {
                     id: id.to_owned(),
@@ -664,9 +665,11 @@ mod tests {
         let body = r#"{"sessions":[
             {"id":"a","title":"Fix login bug","createdAt":1,"status":"idle","engine":"claude","project":{"name":"wd"}},
             {"id":"me","createdAt":9,"status":"idle"},
-            {"id":"b7c1d9e2-aaaa","createdAt":2,"lastActivityAt":5,"status":"running"}]}"#;
+            {"id":"b7c1d9e2-aaaa","createdAt":2,"lastActivityAt":5,"status":"running"},
+            {"id":"c","title":"Long session title","agent":{"id":"x","name":"WD-Lead"},"createdAt":0,"status":"idle"}]}"#;
         let peers = peer_sessions(body, "me").unwrap();
-        assert_eq!(peers.iter().map(|p| p.slug.as_str()).collect::<Vec<_>>(), vec!["b7c1d9e2", "Fix-login-bug"]);
+        assert_eq!(peers.iter().map(|p| p.slug.as_str()).collect::<Vec<_>>(), vec!["b7c1d9e2", "Fix-login-bug", "WD-Lead"]);
+        assert_eq!(peers[2].label, "WD-Lead");
         assert_eq!(peers[1].detail, "claude \u{00B7} wd \u{00B7} idle");
         assert_eq!(peers[0].label, "b7c1d9e2");
         assert_eq!(peer_sessions("<html>", "me"), None);
