@@ -700,6 +700,14 @@ teardown must also *latch* silence (`WebviewTransportHost` drops posts once disp
 close is asynchronous, so its `close` event lands after `dispose()` returns and would otherwise
 be posted into the new document. Per-view listeners still belong in `wire`, which must not be
 re-run on reload or they double-register.
+
+- **Agent conversations.** `SessionRef.agentId` (persisted) marks a panel or tab that follows its agent: the
+  webview posts `wd-superseded` and the host retargets in place, on that and on every list refresh, without
+  taking focus; `wd-go-to-current` does the same from an archive's banner. Conversations is a QuickPick from
+  the card menu (past rows open a separate tab that never follows); `workerdeck.pastAgents` lists retired
+  agents into the same pick. Delete agent... replaces Retire; the card menu fetches the agent record when it
+  opens, for Send again / Dismiss and Retry start.
+
 ## `apps/embedded`
 
 **the reference embedding**, and the thing to read before designing another

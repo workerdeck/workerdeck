@@ -1327,6 +1327,12 @@ would otherwise re-render the transcript at the shell's output rate. Only `statu
 record and the detach reason are state, and the invariants around the three frames are in
 `docs/GOTCHAS.md` § Shell sessions.
 
+- **Agent conversations.** The reducer records `session_superseded` (pending approvals drop); `successorOf`
+  reads it, also from an archived attach. `useDraft`/`useAttachments` carry an unsent draft and staged files to
+  the successor and never send them. `useArchivedView` re-reads a session whose live view ended (an agent deleted
+  under it comes back archived) and pairs it with the agent list through protocol `archivedView`; a caller that
+  cannot list agents never sees "deleted".
+
 ## `packages/ui`
 
 styled layer (Tailwind v4 + `@base-ui/react` + cva): `src/components/ui`
@@ -2177,6 +2183,13 @@ cursor-addressed screen under the writer - and resets the screen before writing 
 
 `terminal/live-tool.ts` holds the pure rules for running rows (elapsed after 5 s with non-breaking spaces, the last five tail lines, which rows may be backgrounded) and `height.ts` budgets for them, so the estimate counts the widest elapsed label and the tail. The background action needs `TaskControlProvider`, which `SessionPanel` mounts only when `capabilities.backgroundTasks` and not read-only; the composer's `onSendNow` (⌥↵) appears only while such a call runs.
 
+- **Agent conversations in `SessionPanel`.** An archived session is read-only whatever `readOnly` the host
+  passes (`conversationReadOnly`): no composer, approvals, model/mode controls, MCP/Skills/Files entries. It
+  draws `ArchivedBanner` (Past conversation / Agent deleted / Transcript unavailable) with Go to current when the
+  host passes `onGoToCurrent`. `onSuperseded` reports a rotation; `carryFrom` takes the draft over and shows
+  "Starting a new conversation" until the first frame. Conversation row strings live in `lib/conversations.ts`
+  (`@workerdeck/ui/format`), shared with VS Code.
+
 ## `packages/web`
 
 dashboard (TanStack Router, hash history); create forms are engine-aware via
@@ -2327,6 +2340,13 @@ with other owners / Make private. Drag to join and the menu's Join both go throu
 `SessionsSidebar`: a cross-owner join asks first (`CrossOwnerDialog`), the outcome's message is
 drawn under the card, and an open invitation adds a toast with a Withdraw invitation action. `useAgentAvatars` fetches each avatar path once per page (a
 failure retries after 60 s); the session header draws `AgentHeading` for an agent.
+
+- **Agent conversations.** The session route takes `agent=<id>`: agent cards set it and `useAgentFollow`
+  keeps it (navigate with replace), so a reload resolves to the agent's current conversation; a link without it
+  never moves (history). Conversations dialog from the card menu and the tray hover card, Past agents in the New
+  dropdown, Delete agent... (confirmed, `expectedSessionId`), New conversation gated by `newConversationGate`,
+  Clear context only where `clearContextOffered`. `useAgents` polls `listAgents` every 15 s for
+  `undelivered` (Send again / Dismiss) and `startFailed` (Retry start).
 
 ## `packages/cli`
 
