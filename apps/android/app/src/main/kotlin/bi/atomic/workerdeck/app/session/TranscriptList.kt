@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -83,10 +84,20 @@ fun TranscriptList(
         if (row >= count) return@LaunchedEffect
         list.scrollToItem(count - 1 - row)
         // The list grows from the bottom, so a row lands there; the recap seam reads down from the top instead.
-        if (jump.top) list.scrollBy(-(list.layoutInfo.viewportSize.height - rows[row].height.toFloat()).coerceAtLeast(0f))
+        if (jump.top) {
+            val info = list.layoutInfo
+            val inner = info.viewportSize.height - info.beforeContentPadding - info.afterContentPadding
+            list.scrollBy(-(inner - rows[row].height.toFloat()).coerceAtLeast(0f))
+        }
     }
     Box(modifier) {
-    LazyColumn(Modifier.fillMaxSize().testTag("transcript"), state = list, reverseLayout = true) {
+    val linePadding = with(density) { lineHeight.toDp() }
+    LazyColumn(
+        Modifier.fillMaxSize().testTag("transcript"),
+        state = list,
+        reverseLayout = true,
+        contentPadding = PaddingValues(vertical = linePadding),
+    ) {
         items(count, key = { index -> rows[count - 1 - index].key }) { index ->
             val row = count - 1 - index
             val height = with(density) { rows[row].height.toDp() }

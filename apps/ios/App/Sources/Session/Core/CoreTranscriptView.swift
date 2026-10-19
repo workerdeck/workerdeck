@@ -99,7 +99,7 @@ struct CoreTranscriptView: View {
     let inFrame = frame != nil
     return VirtualizedTranscriptView(
       content: content, scroll: scroll, reveal: content.rows.reveal, focus: inFrame ? nil : model.ui.focus,
-      showsScrollIndicator: false,
+      showsScrollIndicator: false, verticalPadding: content.metrics.line,
       configureRow: { [model, imageLoader, typography, actions] cell, index in
         cell.configure(
           lines: content.rows.linesAt(index)?.enumerated().map { $1.termLine(press: $0) } ?? [],
