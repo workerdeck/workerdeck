@@ -1469,7 +1469,8 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   a pinned route (extra `"pinned"` part, `SessionsModel.pin`) that never follows, "Starting a new conversation"
   while the saved `handover` flag is set. Row and session menus: Conversations, New conversation (gated),
   Delete agent... (Android never had Retire/Close). Past agents sit in the gateway menu. Send again / Dismiss and
-  Retry start on the session screen.
+  Retry start on the session screen. The list floats a search field (core `SessionList.setSearch`, cleared at
+  launch and by Back first) and the New `+` menu in a bottom bar, like iOS 26; the gateway menu stays on top.
 
 ## `apps/demo`
 

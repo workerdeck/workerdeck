@@ -1605,12 +1605,13 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   twice, Retry start), the old one archived read-only and served from the engine's own store (no
   gateway transcript copy). Delete agent replaces Retire and leaves a tombstone, so history stays
   under Past agents. Every client follows an agent into its new conversation and has the
-  Conversations list, Past agents, Delete agent..., idle-only New conversation, no Clear context on
-  agent cards. Also in it: `refactor/rust` merged, so iOS runs on the Rust core and Android is new
+  Conversations list, Past agents, Delete agent..., idle-only New conversation (also blocked on a
+  still-new conversation), no Clear context on agent cards; Sleep needs an engine that started a conversation. Also in it: `refactor/rust` merged, so iOS runs on the Rust core and Android is new
   (not on a store); gateway replay keeps only state below the last `/clear`; web `McpDialog`
   refetches after a refused action. **Verified**: `pnpm lint`, typecheck, full `pnpm test`
   (serial), cargo test/clippy, gatekeeper, paid `smoke:agent-rotation` claude 13/13 + codex 13/13
-  (server, 2026-10-18).
+  (server, 2026-10-18); hand checks web + VS Code (Tobias), iPhone (Tobias), Android emulator on a private rig
+  (two passes; the second found Go to current following a stale successor, fixed in `cb59e3b7`, not re-run).
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`

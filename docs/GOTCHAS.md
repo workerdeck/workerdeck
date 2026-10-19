@@ -1430,6 +1430,9 @@ session, the UI says conversation.
   dormant wake. `GET /sessions` omits archives; `GET /agents/:id/conversations` lists them, `canSee`
   per record. The one write is erase (`DELETE /sessions/:id`, operator only): it forgets the
   gateway's content and keeps the history row as unavailable, never touching the engine store.
+- **A live socket whose session is archived closes with 4010** (`SESSION_ARCHIVED_CODE`), on the
+  `session_closed` that follows an archive write. Without it a native screen sat on a silent socket after
+  Delete agent; the reconnect attaches the archive and the client's stale-attach reset draws it read-only.
 - **An archive attach is one complete replay with index cursors.** A refetch resets the client's
   archive transcript instead of appending; there is no live stream. A reconnect sends no `?epoch=`
   yet, so rows resend and the handle dedups.
