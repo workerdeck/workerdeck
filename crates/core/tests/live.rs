@@ -708,7 +708,7 @@ fn sleep_stays_off_from_the_send_until_the_session_answers_and_lists_flag_the_ch
     host.open();
     host.frame(
         json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
-            "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0,
+            "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "sdkSessionId": "sdk",
                 "capabilities": {"engineSleep": true, "attachments": ["image"]}}}),
         0.0,
     );

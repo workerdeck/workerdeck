@@ -62,12 +62,35 @@
           "pendingPermissionCount": 0,
           "archived": true
         }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "sdkSessionId": "sdk"
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "numTurns": 2
+        }
       ]
     ]
   },
   "output": [
     {
-      "enabled": true
+      "enabled": false,
+      "reason": "This conversation is still new"
     },
     {
       "enabled": false,
@@ -84,6 +107,12 @@
     {
       "enabled": false,
       "reason": "Finish or stop the current turn first"
+    },
+    {
+      "enabled": true
+    },
+    {
+      "enabled": true
     },
     {
       "enabled": true

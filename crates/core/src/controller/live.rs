@@ -268,7 +268,11 @@ impl LiveSession {
             chrome.agent_id = info.agent.as_ref().filter(|_| !chrome.archived).map(|agent| agent.id.clone());
             if chrome.agent_id.is_some() {
                 let status = serde_json::from_value(Value::String(chrome.status.clone())).unwrap_or(info.status);
-                let live = SessionInfo { status, ..info.clone() };
+                let live = SessionInfo {
+                    status,
+                    sdk_session_id: self.state.sdk_session_id.clone().or_else(|| info.sdk_session_id.clone()),
+                    ..info.clone()
+                };
                 chrome.new_conversation_blocked = new_conversation_gate(Some(&live)).reason;
             }
         }

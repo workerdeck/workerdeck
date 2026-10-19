@@ -2,6 +2,7 @@ import {
   NEW_CONVERSATION_HINT,
   STATUS_LABEL_EMOJI_MAX,
   STATUS_LABEL_TEXT_MAX,
+  canSleep as canSleepRule,
   clearContextOffered,
   errorMessage,
   newConversationGate,
@@ -60,7 +61,7 @@ export type SidebarDelegate = {
 }
 
 export function canSleep(info: SessionInfo): boolean {
-  return info.capabilities?.engineSleep === true && info.status === 'idle' && !info.engineAsleep
+  return canSleepRule(info)
 }
 
 export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSidebar> implements vscode.Disposable {

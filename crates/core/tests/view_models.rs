@@ -412,6 +412,7 @@ fn conversations_fn(fn_name: &str, a: &Args) -> Value {
         }
         "newConversationGate" => out(conversations::new_conversation_gate(Some(&a.info(0)))),
         "clearContextOffered" => out(conversations::clear_context_offered(&a.info(0))),
+        "canSleep" => out(wd_native::vm::session_list::can_sleep(&a.info(0))),
         _ => panic!("conversations.{fn_name} has no Rust binding"),
     }
 }

@@ -94,7 +94,7 @@ export type ArchivedView = {
 }
 
 export function archivedView(
-  info: Pick<SessionInfo, 'id' | 'archived' | 'agent' | 'transcript' | 'createdAt' | 'lastActivityAt'>,
+  info: Pick<SessionInfo, 'id' | 'archived' | 'agent' | 'transcript' | 'createdAt'>,
   agents?: readonly Pick<AgentInfo, 'id' | 'sessionId'>[],
 ): ArchivedView | undefined {
   if (info.archived !== true) {
@@ -105,7 +105,7 @@ export function archivedView(
   const current = agent && agent.sessionId !== info.id ? agent.sessionId : undefined
   return {
     kind: deleted ? 'deleted' : 'past',
-    at: info.lastActivityAt ?? info.createdAt,
+    at: info.createdAt,
     ...(current === undefined ? {} : { current }),
     unavailable: info.transcript === 'unavailable',
   }
@@ -113,7 +113,9 @@ export function archivedView(
 
 export type NewConversationGate = { enabled: true } | { enabled: false; reason: string }
 
-export function newConversationGate(info: Pick<SessionInfo, 'status' | 'archived'> | undefined): NewConversationGate {
+export function newConversationGate(
+  info: Pick<SessionInfo, 'status' | 'archived' | 'sdkSessionId' | 'numTurns'> | undefined,
+): NewConversationGate {
   if (info === undefined || info.archived === true) {
     return { enabled: true }
   }
@@ -126,6 +128,11 @@ export function newConversationGate(info: Pick<SessionInfo, 'status' | 'archived
     case 'awaiting_approval': {
       return { enabled: false, reason: 'Answer the pending request first' }
     }
+    case 'idle': {
+      return info.sdkSessionId === undefined && (info.numTurns ?? 0) === 0
+        ? { enabled: false, reason: 'This conversation is still new' }
+        : { enabled: true }
+    }
     default: {
       return { enabled: true }
     }
@@ -137,4 +144,9 @@ export const NEW_CONVERSATION_HINT = 'Previous chat context is not carried over'
 // An agent rotates instead (New conversation); a typed `/clear` still clears within the current conversation.
 export function clearContextOffered(info: Pick<SessionInfo, 'agent' | 'archived'>): boolean {
   return info.agent === undefined && info.archived !== true
+}
+
+// Sleep stops an engine that holds a conversation; one that never started has nothing to resume, and the gateway refuses.
+export function canSleep(info: Pick<SessionInfo, 'capabilities' | 'status' | 'engineAsleep' | 'sdkSessionId'>): boolean {
+  return info.capabilities?.engineSleep === true && info.status === 'idle' && info.engineAsleep !== true && info.sdkSessionId !== undefined
 }

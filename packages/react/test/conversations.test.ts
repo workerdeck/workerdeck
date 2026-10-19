@@ -119,9 +119,9 @@ describe('archived view', () => {
 
   it('says agent deleted once the agent list lacks it, and past with a way back while it lives', () => {
     const archived = { id: 'c', agent, archived: true as const, createdAt: 1, lastActivityAt: 9 } as SessionInfo
-    expect(archivedView(archived, [])).toEqual({ kind: 'deleted', at: 9, unavailable: false })
-    expect(archivedView(archived)).toEqual({ kind: 'past', at: 9, unavailable: false })
-    expect(archivedView(archived, [{ id: 'ag', sessionId: 'd' }])).toEqual({ kind: 'past', at: 9, current: 'd', unavailable: false })
+    expect(archivedView(archived, [])).toEqual({ kind: 'deleted', at: 1, unavailable: false })
+    expect(archivedView(archived)).toEqual({ kind: 'past', at: 1, unavailable: false })
+    expect(archivedView(archived, [{ id: 'ag', sessionId: 'd' }])).toEqual({ kind: 'past', at: 1, current: 'd', unavailable: false })
     expect(archivedView({ ...archived, archived: undefined }, [])).toBeUndefined()
   })
 

@@ -6,6 +6,7 @@ pub const NEW_CONVERSATION_HINT: &str = "Previous chat context is not carried ov
 pub const TRANSCRIPT_UNAVAILABLE: &str = "Transcript unavailable";
 pub const AGENT_DELETED: &str = "Agent deleted";
 const TURN_REASON: &str = "Finish or stop the current turn first";
+const NEW_REASON: &str = "This conversation is still new";
 const REQUEST_REASON: &str = "Answer the pending request first";
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -155,7 +156,7 @@ pub fn archived_view(info: &SessionInfo, agents: Option<&[AgentBinding]>) -> Opt
     let current = agent.and_then(|agent| agent.session_id.clone()).filter(|id| *id != info.id);
     Some(ArchivedView {
         kind: if deleted { ArchivedKind::Deleted } else { ArchivedKind::Past },
-        at: info.last_activity_at.unwrap_or(info.created_at),
+        at: info.created_at,
         current,
         unavailable: info.transcript.as_deref() == Some("unavailable"),
     })
@@ -183,6 +184,7 @@ pub fn new_conversation_gate(info: Option<&SessionInfo>) -> NewConversationGate 
     let reason = info.filter(|info| info.archived != Some(true)).and_then(|info| match info.status {
         SessionStatus::Running | SessionStatus::Starting | SessionStatus::Parked => Some(TURN_REASON),
         SessionStatus::AwaitingApproval => Some(REQUEST_REASON),
+        SessionStatus::Idle if info.sdk_session_id.is_none() && info.num_turns.unwrap_or(0) == 0 => Some(NEW_REASON),
         _ => None,
     });
     NewConversationGate { enabled: reason.is_none(), reason: reason.map(str::to_owned) }

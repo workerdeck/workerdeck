@@ -421,6 +421,7 @@ pub fn can_sleep(info: &SessionInfo) -> bool {
     info.capabilities.as_ref().is_some_and(|c| c.engine_sleep == Some(true))
         && info.status == SessionStatus::Idle
         && info.engine_asleep != Some(true)
+        && info.sdk_session_id.is_some()
 }
 
 fn normalize_path(path: &str) -> String {
@@ -1089,7 +1090,7 @@ mod tests {
         let info = |status: &str, sleeps: bool, asleep: bool| -> SessionInfo {
             serde_json::from_value(serde_json::json!({
                 "id": "s", "status": status, "cwd": "/w", "createdAt": 0, "lastSeq": 0, "pendingPermissionCount": 0,
-                "capabilities": { "engineSleep": sleeps }, "engineAsleep": asleep,
+                "capabilities": { "engineSleep": sleeps }, "engineAsleep": asleep, "sdkSessionId": "sdk",
             }))
             .unwrap()
         };
@@ -1097,6 +1098,7 @@ mod tests {
         assert!(!can_sleep(&info("running", true, false)));
         assert!(!can_sleep(&info("idle", false, false)));
         assert!(!can_sleep(&info("idle", true, true)));
+        assert!(!can_sleep(&SessionInfo { sdk_session_id: None, ..info("idle", true, false) }));
     }
 
     #[test]

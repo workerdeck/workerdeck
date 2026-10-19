@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import WebSocket from 'ws'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentInfo, AgentResponse, ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import {
@@ -13,6 +14,7 @@ import type { AgentStore, StoredAgent } from '../src/services/agent-store.ts'
 import type { SessionStore } from '../src/services/session-store.ts'
 import { EngineRunner } from './engine-runner.ts'
 import { gatewayFixture } from './helpers.ts'
+import { SESSION_ARCHIVED_CODE } from '../src/routes/ws.ts'
 
 const profile: ProfileInfo = { name: 'engine', engine: 'provider', provider: { id: 'test', model: 'test-model' } }
 const fixture = gatewayFixture('wd-handover-safety-')
@@ -406,5 +408,33 @@ describe('archive erase', () => {
     expect((await call(base, `/sessions/${session!.id}`, 'GET', undefined, user)).status).toBe(200)
     expect((await call(base, `/sessions/${session!.id}`, 'DELETE', undefined, user)).status).toBe(403)
     expect((await call(base, `/sessions/${session!.id}`, 'GET', undefined, op)).status).toBe(200)
+  })
+})
+
+describe('handover: a socket on the archived conversation', () => {
+  it('closes with the archived code on delete and on rotation, so the client reattaches read-only', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir)
+    const closes = async (id: string, act: () => Promise<Response>) => {
+      const ws = new WebSocket(`${base.replace('http', 'ws')}/sessions/${id}/ws?afterSeq=0`)
+      await new Promise((resolve) => ws.once('message', resolve))
+      const closed = new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)))
+      expect((await act()).status).toBe(200)
+      return await closed
+    }
+
+    const rotating = await createAgent(base, 'Kite')
+    await idle(server, rotating.session!.id)
+    const from = rotating.session!.id
+    const rotate = () => call(base, `/agents/${rotating.agent.id}/restart`, 'POST', { expectedSessionId: from })
+    expect(await closes(from, rotate)).toBe(SESSION_ARCHIVED_CODE)
+    expect((await sessionOf(base, from)).archived).toBe(true)
+
+    const leaving = await createAgent(base, 'Moth')
+    await idle(server, leaving.session!.id)
+    const last = leaving.session!.id
+    const remove = () => call(base, `/agents/${leaving.agent.id}`, 'DELETE', { expectedSessionId: last })
+    expect(await closes(last, remove)).toBe(SESSION_ARCHIVED_CODE)
+    expect((await sessionOf(base, last)).archived).toBe(true)
   })
 })

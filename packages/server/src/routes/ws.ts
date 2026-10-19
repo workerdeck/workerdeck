@@ -14,6 +14,7 @@ import type { ServerContext } from '../context.ts'
 import { bypassDisabled, permissionDecision, refuseJobInput, refusePermissionMode } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import { ROTATING } from '../services/handovers.ts'
+import { isArchived } from '../services/session-store.ts'
 import { mentionsFor } from '../services/peers.ts'
 import { sleepRunner } from './sleep.ts'
 import { takesLocalCommands } from '../services/shell-directory.ts'
@@ -29,6 +30,8 @@ export const SHELL_SOCKET_BUFFERED_MAX = 4 * 1024 * 1024
 export const SHELL_DETACHED_BACKPRESSURE = 'backpressure'
 export const SESSION_SOCKET_BUFFERED_MAX = 16 * 1024 * 1024
 export const SESSION_SOCKET_BACKPRESSURE_CODE = 1013
+// The conversation was archived under a live socket (rotation, Delete agent): a reconnect attaches the archive.
+export const SESSION_ARCHIVED_CODE = 4010
 
 export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage, access: AttachAccess): void {
   const { bridge, parking } = ctx
@@ -62,6 +65,12 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
         return
       }
       send({ type: 'event', event })
+      if (live && event.type === 'session_closed') {
+        void parking
+          .get(runner.id)
+          .then((record) => record && isArchived(record) && ws.close(SESSION_ARCHIVED_CODE, 'conversation archived'))
+          .catch(() => {})
+      }
     },
     afterSeq,
     { coalesceReplay: true, truncateResults, imageRefs },

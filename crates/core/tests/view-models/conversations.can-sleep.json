@@ -1,0 +1,81 @@
+{
+  "input": {
+    "fn": "canSleep",
+    "calls": [
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "capabilities": {
+            "engineSleep": true
+          },
+          "sdkSessionId": "sdk"
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "capabilities": {
+            "engineSleep": true
+          }
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "capabilities": {
+            "engineSleep": true
+          },
+          "sdkSessionId": "sdk",
+          "engineAsleep": true
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "running",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "capabilities": {
+            "engineSleep": true
+          },
+          "sdkSessionId": "sdk"
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "sdkSessionId": "sdk"
+        }
+      ]
+    ]
+  },
+  "output": [
+    true,
+    false,
+    false,
+    false,
+    false
+  ]
+}

@@ -87,7 +87,8 @@ pub fn session_chrome(
         queued,
         can_sleep: state.capabilities.as_ref().is_some_and(|c| c.engine_sleep == Some(true))
             && state.status == Some(SessionStatus::Idle)
-            && !state.engine_asleep,
+            && !state.engine_asleep
+            && state.sdk_session_id.is_some(),
         send_now_at: if state.capabilities.as_ref().is_some_and(|c| c.background_tasks == Some(true)) {
             backgroundable_since(&state.items).map(|since| since + SEND_NOW_AFTER_MS)
         } else {
@@ -200,11 +201,14 @@ mod tests {
             status: Some(SessionStatus::Idle),
             engine_asleep: asleep,
             capabilities,
+            sdk_session_id: Some("sdk".into()),
             ..TranscriptState::default()
         };
         assert!(session_chrome(&idle(capable(true, false), false), None, false, 0, None).can_sleep);
         assert!(!session_chrome(&idle(capable(true, false), true), None, false, 0, None).can_sleep);
         assert!(!session_chrome(&idle(capable(false, false), false), None, false, 0, None).can_sleep);
+        let fresh = TranscriptState { sdk_session_id: None, ..idle(capable(true, false), false) };
+        assert!(!session_chrome(&fresh, None, false, 0, None).can_sleep);
         let running = TranscriptState { status: Some(SessionStatus::Running), ..idle(capable(true, false), false) };
         assert!(!session_chrome(&running, None, false, 0, None).can_sleep);
     }

@@ -1186,6 +1186,20 @@ const CONVERSATIONS: VmCase[] = [
       [info('a', { status: 'awaiting_approval' })],
       [info('a', { status: 'parked' })],
       [info('a', { status: 'running', archived: true })],
+      [info('a', { status: 'idle', sdkSessionId: 'sdk' })],
+      [info('a', { status: 'idle', numTurns: 2 })],
+    ],
+  },
+  {
+    module: 'conversations',
+    name: 'can-sleep',
+    fn: 'canSleep',
+    calls: [
+      [info('a', { capabilities: { engineSleep: true } as SessionInfo['capabilities'], sdkSessionId: 'sdk' })],
+      [info('a', { capabilities: { engineSleep: true } as SessionInfo['capabilities'] })],
+      [info('a', { capabilities: { engineSleep: true } as SessionInfo['capabilities'], sdkSessionId: 'sdk', engineAsleep: true })],
+      [info('a', { capabilities: { engineSleep: true } as SessionInfo['capabilities'], sdkSessionId: 'sdk', status: 'running' })],
+      [info('a', { sdkSessionId: 'sdk' })],
     ],
   },
   {

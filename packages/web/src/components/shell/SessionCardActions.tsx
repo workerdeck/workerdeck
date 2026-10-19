@@ -1,6 +1,7 @@
 import type { ReactNode, SyntheticEvent } from 'react'
 import {
   NEW_CONVERSATION_HINT,
+  canSleep,
   clearContextOffered,
   newConversationGate,
   type AgentInfo,
@@ -82,7 +83,7 @@ export function SessionCardActions({
   const { info } = row
   const agent = info.agent
   const leads = agent?.lead === undefined && !agent?.leads ? teamLeads(rows, row.hostId, row) : []
-  const canSleep = info.capabilities?.engineSleep && info.status === 'idle' && !info.engineAsleep
+  const sleepable = canSleep(info)
   const gate = newConversationGate(info)
   const undelivered = agentInfo?.undelivered
 
@@ -98,7 +99,7 @@ export function SessionCardActions({
           <Eraser className="size-3 text-fg-3" />
         </QuickAction>
       ) : null}
-      {canSleep ? (
+      {sleepable ? (
         <QuickAction
           label="Sleep session"
           title="Stop the engine process to free its memory - the session stays here and wakes on your next message"

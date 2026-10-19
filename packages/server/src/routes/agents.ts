@@ -433,7 +433,8 @@ async function conversationsFor(ctx: ServerContext, agent: StoredAgent, auth: Au
       if (!info) {
         return { ...row, transcript: 'unavailable' as const }
       }
-      return ctx.auth.canSee(auth, info) ? { ...row, session: ctx.projects.withProject(info) } : undefined
+      const title = row.title ?? info.title
+      return ctx.auth.canSee(auth, info) ? { ...row, ...(title === undefined ? {} : { title }), session: ctx.projects.withProject(info) } : undefined
     }),
   )
   return { conversations: rows.filter((row) => row !== undefined) }
