@@ -43,10 +43,13 @@ data class SessionsUi(
     // A one-shot message for an action that failed; the screen shows it once and calls `noticeShown`.
     val notice: String? = null,
     val pastAgents: List<PastAgentEntry> = emptyList(),
+    val search: String = "",
 )
 
 // A deleted agent under Past agents; its conversations open the same sheet a live agent's do.
 data class PastAgentEntry(val hostId: String, val agent: PastAgent)
+
+fun searching(search: String): Boolean = search.trim().isNotEmpty()
 
 data class ConversationsTarget(val hostId: String, val agentId: String, val name: String, val retired: Boolean)
 
@@ -63,6 +66,11 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("sessions", Context.MODE_PRIVATE)
     private val list = SessionList(prefs.getString("config", null), prefs.getString("marks", null))
     private val state = MutableStateFlow(SessionsUi())
+
+    init {
+        list.setSearch("")
+    }
+
     val ui: StateFlow<SessionsUi> = state
     private var clients: Map<String, GatewayClient> = emptyMap()
     private var errors: Map<String, String> = emptyMap()
@@ -227,6 +235,12 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+    }
+
+    // A search never outlives the screen: the stored config may carry one, so it is cleared at start.
+    fun setSearch(text: String) {
+        list.setSearch(text)
+        state.value = state.value.copy(search = text, groups = draw())
     }
 
     fun toggleGroup(key: String) = update { list.toggleGroup(key) }

@@ -558,7 +558,7 @@ class SessionModelTest {
             """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Old work","status":"closed","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"archived":true,"agent":{"id":"ag","name":"WD-Test"}}}"""
 
         const val LIVE_AGENT =
-            """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Work","status":"idle","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"capabilities":{"clearContext":true},"agent":{"id":"ag","name":"WD-Test"}}}"""
+            """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Work","status":"idle","sdkSessionId":"sdk","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"capabilities":{"clearContext":true},"agent":{"id":"ag","name":"WD-Test"}}}"""
 
         fun agents(extra: String) =
             """{"agents":[{"id":"ag","name":"WD-Test","createdAt":0,"updatedAt":0,"pastSessions":[],"config":{},$extra}]}"""

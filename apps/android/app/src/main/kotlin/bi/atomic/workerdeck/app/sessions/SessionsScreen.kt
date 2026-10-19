@@ -1,5 +1,20 @@
 package bi.atomic.workerdeck.app.sessions
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Check
@@ -122,14 +137,18 @@ fun SessionsScreen(
             model.noticeShown()
         }
     }
+    BackHandler(enabled = ui.search.isNotEmpty()) { model.setSearch("") }
     Scaffold(
         containerColor = colors.background,
         snackbarHost = { SnackbarHost(snackbar) },
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
+        bottomBar = {
+            SearchBar(ui.search, model::setSearch) { NewMenu(gateways, model::canCreateAgent, onNew) }
+        },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Sessions", style = MaterialTheme.typography.titleMedium) },
                 actions = {
-                    NewMenu(gateways, model::canCreateAgent, onNew)
                     GatewayMenu(gateways, onAdd, onForget, onPastAgents = if (ui.pastAgents.isNotEmpty()) ({ pastOpen = true }) else null)
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
@@ -144,7 +163,7 @@ fun SessionsScreen(
             when {
                 !ui.loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), strokeWidth = 2.dp)
                 ui.groups.isEmpty() && ui.error == null -> LazyColumn(Modifier.fillMaxSize()) {
-                    item(key = "empty") { EmptyList() }
+                    item(key = "empty") { EmptyList(searching(ui.search)) }
                 }
                 else -> LazyColumn(Modifier.fillMaxSize().testTag("sessions")) {
                     ui.error?.let { error ->
@@ -311,16 +330,58 @@ private fun GatewayMenu(gateways: List<Gateway>, onAdd: () -> Unit, onForget: (G
     }
 }
 
+// The bottom bar: search on the left, New on the right, above the keyboard when it is up.
 @Composable
-private fun LazyItemScope.EmptyList() {
+private fun SearchBar(text: String, onChange: (String) -> Unit, trailing: @Composable () -> Unit) {
+    val colors = Wd.colors
+    val focus = LocalFocusManager.current
+    Row(
+        Modifier.fillMaxWidth().background(colors.background).navigationBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(22.dp)).background(colors.secondary.copy(alpha = 0.14f)).padding(start = 14.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.Search, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.weight(1f)) {
+                if (text.isEmpty()) {
+                    Text("Search sessions", color = colors.secondary, style = MaterialTheme.typography.bodyMedium)
+                }
+                BasicTextField(
+                    value = text,
+                    onValueChange = onChange,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onBackground),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.onBackground),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+                    modifier = Modifier.fillMaxWidth().testTag("search"),
+                )
+            }
+            if (text.isNotEmpty()) {
+                IconButton(onClick = { onChange("") }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Close, contentDescription = "Clear search", tint = colors.secondary, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+        Spacer(Modifier.width(4.dp))
+        trailing()
+    }
+}
+
+@Composable
+private fun LazyItemScope.EmptyList(searching: Boolean) {
     Column(
         Modifier.fillParentMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("No sessions", style = MaterialTheme.typography.titleMedium)
+        Text(if (searching) "No matches" else "No sessions", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
-        Text("Sessions on this gateway show up here.", color = Wd.colors.secondary, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            if (searching) "No session matches the current search." else "Sessions on this gateway show up here.", color = Wd.colors.secondary, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
