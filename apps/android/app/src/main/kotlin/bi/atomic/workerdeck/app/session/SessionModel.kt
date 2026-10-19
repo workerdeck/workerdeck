@@ -448,12 +448,20 @@ class SessionModel(
                 if (mine == generation) worker.received(text)
             }
 
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                webSocket.close(code, null)
+                lost()
+            }
+
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = lost()
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = lost()
 
+            private var gone = false
+
             private fun lost() {
-                if (mine != generation) return
+                if (mine != generation || gone) return
+                gone = true
                 worker.act {
                     if (mine != generation) return@act emptyList()
                     socket = null

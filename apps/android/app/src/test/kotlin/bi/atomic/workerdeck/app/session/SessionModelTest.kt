@@ -84,6 +84,24 @@ class SessionModelTest {
     }
 
     @Test
+    fun aServerCloseIsAnsweredAndReconnectsWithoutWaitingForTheTransportToGiveUp() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        eventually("live") { model.ui.value.connection == ConnectionState.LIVE }
+
+        listener.onClosing(socket, 4010, "conversation archived")
+        assertTrue(socket.closed)
+        eventually("a second socket") { transport.sockets.size == 2 }
+        listener.onClosed(socket, 4010, "conversation archived")
+        Thread.sleep(1_000)
+        assertEquals(2, transport.sockets.size)
+        model.close()
+    }
+
+    @Test
     fun framesFromTheSocketBecomeRowsAndTheCoreServesItsOwnRequests() {
         val transport = FakeTransport()
         val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
