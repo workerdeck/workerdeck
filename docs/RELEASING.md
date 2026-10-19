@@ -1614,7 +1614,8 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   (three passes; the second found Go to current following a stale successor, fixed in `cb59e3b7`, and Delete agent
   while open landing 15-35 s late: OkHttp leaves a server close unanswered until the app echoes it, so the archived
   socket's 4010 close waited for the gateway's 30 s close timeout, fixed in `9a1c83dc`; the third pass: Go to current
-  3/3, delete about 2 s by menu and by REST).
+  3/3, delete about 2 s by menu and by REST). **Published** 2026-10-19: npm 12/12 live about 240 s after the run, `latest`
+  3.14.0, Marketplace 3.14.0 about 2 min later.
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
