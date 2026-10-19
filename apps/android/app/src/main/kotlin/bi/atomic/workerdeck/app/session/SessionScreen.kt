@@ -142,9 +142,10 @@ fun SessionScreen(
             var extrasSheet by rememberSaveable { mutableStateOf<ExtrasSheet?>(null) }
             val extras by model.extras.collectAsStateWithLifecycle()
             val chrome = ui.chrome
-            LaunchedEffect(model, chrome?.supersededBy) { chrome?.supersededBy?.let(onSuperseded) }
+            // From the model itself: the collected state can still hold the previous model's successor for a frame.
+            LaunchedEffect(model, chrome?.supersededBy) { model.ui.value.chrome?.supersededBy?.let(onSuperseded) }
             val successor by model.successor.collectAsStateWithLifecycle()
-            LaunchedEffect(model, successor) { successor?.let(onSuperseded) }
+            LaunchedEffect(model, successor) { model.successor.value?.let(onSuperseded) }
             val agent by model.agent.collectAsStateWithLifecycle()
             val actionError by model.actionError.collectAsStateWithLifecycle()
             var deleting by rememberSaveable { mutableStateOf(false) }
