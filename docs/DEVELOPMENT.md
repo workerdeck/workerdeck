@@ -102,7 +102,8 @@ API 36 arm64) on first use and boots it, `pnpm android stop` shuts it down, `pnp
 `127.0.0.1:8790` (key `androiddevkey`, a config that only turns shells on, an empty state under
 `/tmp/wd-android` with only a copy of `~/.workerdeck/profiles.json`, so no real session shows up), the emulator, and the debug app installed and
 launched. Debug builds pre-fill pairing with `http://10.0.2.2:8790` and that key; release builds
-leave it empty. `pnpm android dev stop` stops both. It never touches the dev gateway. Release builds
+leave it empty. `pnpm android dev stop` stops both. The emulator gets 2 cores (`WD_EMU_CORES`) at background priority
+(`taskpolicy -b`): headless it draws with SwiftShader on the CPU, so stop it when a check is done. It never touches the dev gateway. Release builds
 sign with the upload key when `WD_UPLOAD_STORE_FILE`, `WD_UPLOAD_STORE_PASSWORD`, `WD_UPLOAD_KEY_ALIAS`
 and `WD_UPLOAD_KEY_PASSWORD` are Gradle properties (`~/.gradle/gradle.properties`), else the debug key.
 CI uploads every `android` job's release APK as the artifact `workerdeck-android-<run>` (version code = run

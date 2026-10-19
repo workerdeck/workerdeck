@@ -55,10 +55,10 @@ start_emu() {
     echo "an emulator is already running"
     return
   fi
-  local flags=(-avd "$AVD" -no-boot-anim -no-snapshot-save -netdelay none -netspeed full)
+  local flags=(-avd "$AVD" -cores "${WD_EMU_CORES:-2}" -no-boot-anim -no-snapshot-save -netdelay none -netspeed full)
   [ "${1:-}" = "--headless" ] && flags+=(-no-window -no-audio)
   # setsid: the shell that ran us kills its process group on exit, and nohup only covers SIGHUP.
-  perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' "$SDK/emulator/emulator" "${flags[@]}" </dev/null >"${TMPDIR:-/tmp}/wd-emulator.log" 2>&1 &
+  perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' taskpolicy -b "$SDK/emulator/emulator" "${flags[@]}" </dev/null >"${TMPDIR:-/tmp}/wd-emulator.log" 2>&1 &
   "$ADB" wait-for-device
   until booted; do sleep 1; done
   echo "emulator $AVD is up (log: ${TMPDIR:-/tmp}/wd-emulator.log)"
