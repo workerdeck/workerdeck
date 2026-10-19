@@ -75,9 +75,7 @@ start_gateway() {
   fi
   rm -rf "$DEV_DIR/state"
   mkdir -p "$DEV_DIR/state"
-  for item in parked profiles.json agents.json; do
-    [ -e "$HOME/.workerdeck/$item" ] && cp -R "$HOME/.workerdeck/$item" "$DEV_DIR/state/"
-  done
+  [ -e "$HOME/.workerdeck/profiles.json" ] && cp "$HOME/.workerdeck/profiles.json" "$DEV_DIR/state/"
   echo 'export default { shell: { enabled: true } }' >"$DEV_DIR/config.mjs"
   pushd "$REPO" >/dev/null
   perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' node --conditions=@workerdeck/source \
