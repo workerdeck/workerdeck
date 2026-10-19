@@ -1611,7 +1611,10 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   refetches after a refused action. **Verified**: `pnpm lint`, typecheck, full `pnpm test`
   (serial), cargo test/clippy, gatekeeper, paid `smoke:agent-rotation` claude 13/13 + codex 13/13
   (server, 2026-10-18); hand checks web + VS Code (Tobias), iPhone (Tobias), Android emulator on a private rig
-  (two passes; the second found Go to current following a stale successor, fixed in `cb59e3b7`, not re-run).
+  (three passes; the second found Go to current following a stale successor, fixed in `cb59e3b7`, and Delete agent
+  while open landing 15-35 s late: OkHttp leaves a server close unanswered until the app echoes it, so the archived
+  socket's 4010 close waited for the gateway's 30 s close timeout, fixed in `9a1c83dc`; the third pass: Go to current
+  3/3, delete about 2 s by menu and by REST).
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
