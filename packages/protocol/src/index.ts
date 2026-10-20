@@ -1220,6 +1220,14 @@ export type WriteHostFileResponse = {
   modifiedAt: number
 }
 
+export type MakeHostDirRequest = { path: string }
+
+export type DeleteHostEntryRequest = { path: string; recursive?: boolean }
+
+export type RenameHostEntryRequest = { from: string; to: string }
+
+export type HostEntryResponse = { path: string }
+
 export type SaveProfileResponse = { profile: ProfileInfo }
 export type RenameOwnerRequest = { from: string; to: string }
 export type RenameOwnerResponse = { agents: number; sessions: number }

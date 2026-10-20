@@ -2137,6 +2137,11 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   an agent's writes go through the permission flow, `PUT /fs/write` does not. With neither
   `hostFiles.roots` nor `allowedCwdRoots` set, the routes 404. An explicit `roots: []` disables
   them rather than falling through to the cwd roots, hence `??` and not `||` at the resolution site.
+- **mkdir, delete and rename resolve the parent, never the entry** (`resolveEntry`): the parent
+  is realpath'd and contained, the final component is only `lstat`ed. Following it would make a
+  delete of an in-root link to `~/.ssh` delete the target. A root is never an entry (its parent is
+  outside), so no route can remove or move one, and rename refuses an existing destination
+  (409): there is no unconditional clobber here either.
 - **Writes are conditional, always.** `expectedHash` (sha256 of what was read) or nothing, and
   nothing means "create": a path that already exists then 409s. No unconditional overwrite; a
   client that lost track of its base can only re-read, never force. The response's own hash chains

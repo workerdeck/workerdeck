@@ -32,6 +32,7 @@ import type {
   UploadAttachmentResponse,
   WriteHostFileRequest,
   WriteHostFileResponse,
+  HostEntryResponse,
   ProfileInfo,
   QueueStats,
   ResolvePermissionRequest,
@@ -345,6 +346,18 @@ export class WorkerDeckClient {
 
   async writeHostFile(request: WriteHostFileRequest): Promise<WriteHostFileResponse> {
     return await this.#call('PUT', '/fs/write', request)
+  }
+
+  async makeHostDir(path: string): Promise<HostEntryResponse> {
+    return await this.#call('POST', '/fs/mkdir', { path })
+  }
+
+  async deleteHostEntry(path: string, recursive = false): Promise<HostEntryResponse> {
+    return await this.#call('POST', '/fs/delete', { path, recursive })
+  }
+
+  async renameHostEntry(from: string, to: string): Promise<HostEntryResponse> {
+    return await this.#call('POST', '/fs/rename', { from, to })
   }
 
   async createJob(request: CreateJobRequest): Promise<JobInfo> {

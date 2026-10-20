@@ -1,10 +1,18 @@
-import { lstatSync, readdirSync, type Dirent } from 'node:fs'
+import { lstatSync, mkdirSync, readdirSync, renameSync, rmdirSync, rmSync, unlinkSync, type Dirent } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { WriteHostFileRequest } from '@workerdeck/protocol'
+import type { DeleteHostEntryRequest, MakeHostDirRequest, RenameHostEntryRequest, WriteHostFileRequest } from '@workerdeck/protocol'
 import { asUtf8, fail, hashBytes, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import { searchFiles } from '../services/host-file-search.ts'
-import { entryKind, readContained, resolveExisting, resolveForWrite, writeContained, type HostFileRoots } from '../services/host-files.ts'
+import {
+  entryKind,
+  readContained,
+  resolveEntry,
+  resolveExisting,
+  resolveForWrite,
+  writeContained,
+  type HostFileRoots,
+} from '../services/host-files.ts'
 import type { ServerContext } from '../context.ts'
 
 type FsCall = { ctx: ServerContext; hostFiles: HostFileRoots; req: IncomingMessage; res: ServerResponse; url: URL }
@@ -19,6 +27,9 @@ const FS_ROUTES = new Map<string, (call: FsCall) => Promise<void> | void>([
   ['list', handleList],
   ['read', handleRead],
   ['write', handleWrite],
+  ['mkdir', handleMkdir],
+  ['delete', handleDelete],
+  ['rename', handleRename],
 ])
 
 function kindRank(type: string): number {
@@ -194,4 +205,84 @@ async function handleWrite({ ctx, hostFiles, req, res }: FsCall): Promise<void> 
     hash: hashBytes(next),
     modifiedAt: writtenAt,
   })
+}
+
+async function writableBody<T>(ctx: ServerContext, req: IncomingMessage, method: string): Promise<T> {
+  requireMethod(req, method)
+  if (!ctx.hostFilesWritable) {
+    fail(403, 'host file writes are not enabled on this server')
+  }
+  return (await readJsonBody(req, ctx.maxBodyBytes)) as T
+}
+
+function requiredPath(value: unknown, name: string): string {
+  if (!value || typeof value !== 'string') {
+    fail(400, `${name} is required`)
+  }
+  return value
+}
+
+function existingEntry(hostFiles: HostFileRoots, requested: string): { path: string; kind: string } {
+  const entry = resolveEntry(hostFiles, requested)
+  if (!entry.ok) {
+    fail(entry.status, entry.error)
+  }
+  if (!entry.exists) {
+    fail(404, 'not found')
+  }
+  return entry
+}
+
+function freeEntry(hostFiles: HostFileRoots, requested: string): string {
+  const entry = resolveEntry(hostFiles, requested)
+  if (!entry.ok) {
+    fail(entry.status, entry.error)
+  }
+  if (entry.exists) {
+    fail(409, 'already exists')
+  }
+  return entry.path
+}
+
+async function handleMkdir({ ctx, hostFiles, req, res }: FsCall): Promise<void> {
+  const body = await writableBody<MakeHostDirRequest>(ctx, req, 'POST')
+  const path = freeEntry(hostFiles, requiredPath(body.path, 'path'))
+  try {
+    mkdirSync(path)
+  } catch {
+    fail(403, 'refused')
+  }
+  json(res, 200, { path })
+}
+
+async function handleDelete({ ctx, hostFiles, req, res }: FsCall): Promise<void> {
+  const body = await writableBody<DeleteHostEntryRequest>(ctx, req, 'POST')
+  const { path, kind } = existingEntry(hostFiles, requiredPath(body.path, 'path'))
+  try {
+    if (kind !== 'dir') {
+      unlinkSync(path)
+    } else if (body.recursive === true) {
+      rmSync(path, { recursive: true })
+    } else {
+      rmdirSync(path)
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOTEMPTY') {
+      fail(409, 'directory is not empty')
+    }
+    fail(403, 'refused')
+  }
+  json(res, 200, { path })
+}
+
+async function handleRename({ ctx, hostFiles, req, res }: FsCall): Promise<void> {
+  const body = await writableBody<RenameHostEntryRequest>(ctx, req, 'POST')
+  const from = existingEntry(hostFiles, requiredPath(body.from, 'from')).path
+  const to = freeEntry(hostFiles, requiredPath(body.to, 'to'))
+  try {
+    renameSync(from, to)
+  } catch {
+    fail(403, 'refused')
+  }
+  json(res, 200, { path: to })
 }

@@ -112,6 +112,26 @@ export function resolveForWrite(roots: HostFileRoots, requested: string): Resolv
     }
     return { ok: true, path: canonical, root: root.canonical, kind: 'file' }
   } catch {}
+  const entry = resolveEntry(roots, requested)
+  if (!entry.ok) {
+    return entry
+  }
+  if (entry.exists) {
+    return notFound()
+  }
+  return { ok: true, path: entry.path, root: entry.root, kind: 'file' }
+}
+
+export type EntryOutcome =
+  | { ok: true; path: string; root: string; exists: false }
+  | { ok: true; path: string; root: string; exists: true; kind: HostEntryKind }
+  | Refusal
+
+// The final component is never followed, so a delete or rename acts on a link itself; a root is never an entry, its parent is outside.
+export function resolveEntry(roots: HostFileRoots, requested: string): EntryOutcome {
+  if (invalidRequest(requested)) {
+    return refuse(403, 'invalid path')
+  }
   const base = basename(requested)
   if (base === '' || base === '.' || base === '..') {
     return refuse(403, 'invalid path')
@@ -138,15 +158,17 @@ export function resolveForWrite(roots: HostFileRoots, requested: string): Resolv
   if (!contained(root.canonical, path)) {
     return notFound()
   }
+  let stats
   try {
-    lstatSync(path)
+    stats = lstatSync(path)
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { ok: true, path, root: root.canonical, kind: 'file' }
+      return { ok: true, path, root: root.canonical, exists: false }
     }
     return notFound()
   }
-  return notFound()
+  const kind: HostEntryKind = stats.isSymbolicLink() ? 'symlink' : stats.isFile() ? 'file' : stats.isDirectory() ? 'dir' : 'other'
+  return { ok: true, path, root: root.canonical, exists: true, kind }
 }
 
 export type HostEntryKind = 'file' | 'dir' | 'symlink' | 'other'

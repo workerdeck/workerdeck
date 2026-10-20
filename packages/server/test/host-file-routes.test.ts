@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -279,6 +279,69 @@ describe('host file routes', () => {
       })
       expect(status).toBeGreaterThanOrEqual(400)
       expect(status).not.toBe(200)
+    })
+  })
+
+  describe('mkdir, delete and rename', () => {
+    const post = async (base: string, route: string, body: unknown): Promise<[number, any]> => {
+      const res = await fetch(`${base}/fs/${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      return [res.status, await res.json()]
+    }
+
+    it('refuses all three unless writes are enabled', async () => {
+      const base = await start({ roots: [root] })
+      expect((await post(base, 'mkdir', { path: join(root, 'new') }))[0]).toBe(403)
+      expect((await post(base, 'delete', { path: join(root, 'README.md') }))[0]).toBe(403)
+      expect((await post(base, 'rename', { from: join(root, 'README.md'), to: join(root, 'R.md') }))[0]).toBe(403)
+      expect(existsSync(join(root, 'README.md'))).toBe(true)
+    })
+
+    it('makes a directory once, then 409s', async () => {
+      const base = await start({ roots: [root], write: true })
+      const path = join(root, 'src', 'lib')
+      expect(await post(base, 'mkdir', { path })).toEqual([200, { path }])
+      expect(lstatSync(path).isDirectory()).toBe(true)
+      expect((await post(base, 'mkdir', { path }))[0]).toBe(409)
+      expect((await post(base, 'mkdir', { path: join(root, 'a', 'b') }))[0]).toBe(404)
+    })
+
+    it('deletes a file, and a non-empty directory only when recursive', async () => {
+      const base = await start({ roots: [root], write: true })
+      expect((await post(base, 'delete', { path: join(root, 'README.md') }))[0]).toBe(200)
+      expect(existsSync(join(root, 'README.md'))).toBe(false)
+      expect((await post(base, 'delete', { path: join(root, 'src') }))[0]).toBe(409)
+      expect((await post(base, 'delete', { path: join(root, 'src'), recursive: true }))[0]).toBe(200)
+      expect(existsSync(join(root, 'src'))).toBe(false)
+    })
+
+    it('deletes a link itself, never what it points at', async () => {
+      symlinkSync(join(outside, 'id_rsa'), join(root, 'key'))
+      symlinkSync(outside, join(root, 'out'))
+      const base = await start({ roots: [root], write: true })
+      expect((await post(base, 'delete', { path: join(root, 'key') }))[0]).toBe(200)
+      expect((await post(base, 'delete', { path: join(root, 'out'), recursive: true }))[0]).toBe(200)
+      expect(readFileSync(join(outside, 'id_rsa'), 'utf8')).toBe('PRIVATE KEY\n')
+    })
+
+    it('never touches a root, or anything outside the roots', async () => {
+      const base = await start({ roots: [root], write: true })
+      expect((await post(base, 'delete', { path: root, recursive: true }))[0]).toBe(404)
+      expect((await post(base, 'delete', { path: join(outside, 'id_rsa') }))[0]).toBe(404)
+      expect((await post(base, 'rename', { from: join(root, 'README.md'), to: join(outside, 'x.md') }))[0]).toBe(404)
+      expect((await post(base, 'rename', { from: join(outside, 'id_rsa'), to: join(root, 'k') }))[0]).toBe(404)
+      expect(existsSync(root)).toBe(true)
+    })
+
+    it('renames into a free name only', async () => {
+      const base = await start({ roots: [root], write: true })
+      const to = join(root, 'src', 'README.md')
+      expect(await post(base, 'rename', { from: join(root, 'README.md'), to })).toEqual([200, { path: to }])
+      expect(readFileSync(to, 'utf8')).toBe('# hello\n')
+      expect((await post(base, 'rename', { from: to, to: join(root, 'src', 'index.ts') }))[0]).toBe(409)
     })
   })
 
