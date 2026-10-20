@@ -1,0 +1,367 @@
+/* The workbench's own list, tree and icon-label rules, scoped under .wdf because every webview shares main.css. */
+
+body:has(.wdf) {
+  background: var(--vscode-sideBar-background);
+  padding: 0;
+}
+
+.wdf *,
+.wdf *::before,
+.wdf *::after {
+  box-sizing: content-box;
+}
+
+.wdf {
+  height: 100%;
+  font-family: var(--vscode-font-family);
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+  line-height: 1.4;
+}
+
+.wdf .wdf-message {
+  margin: 0;
+  padding: 4px 20px 4px 20px;
+  color: var(--vscode-descriptionForeground);
+  white-space: normal;
+}
+
+.wdf .explorer-folders-view {
+  height: 100%;
+}
+
+.wdf .monaco-list {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  outline: none;
+}
+
+.wdf .monaco-list.mouse-support {
+  user-select: none;
+}
+
+.wdf .monaco-list:focus::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.wdf .monaco-list:focus:has(.monaco-list-row.focused)::before,
+.wdf .monaco-list:focus:has(.monaco-list-row.selected)::before {
+  outline: none;
+}
+
+.wdf .monaco-scrollable-element {
+  position: relative;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.wdf .monaco-list-rows {
+  position: relative;
+  width: 100%;
+  background: var(--vscode-sideBar-background);
+}
+
+.wdf .monaco-list-row {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  width: 100%;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.wdf .monaco-list:focus .monaco-list-row.focused {
+  background-color: var(--vscode-list-focusBackground);
+  color: var(--vscode-list-focusForeground);
+  outline: 1px solid var(--vscode-list-focusOutline);
+  outline-offset: -1px;
+}
+
+.wdf .monaco-list:focus .monaco-list-row.selected {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.wdf .monaco-list:focus .monaco-list-row.selected .codicon {
+  color: var(--vscode-list-activeSelectionIconForeground);
+}
+
+.wdf .monaco-list:focus .monaco-list-row.focused.selected {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+  outline: 1px solid var(--vscode-list-focusAndSelectionOutline, var(--vscode-contrastActiveBorder, var(--vscode-list-focusOutline)));
+  outline-offset: -1px;
+}
+
+.wdf .monaco-list:not(:focus) .monaco-list-row.focused {
+  background-color: var(--vscode-list-inactiveFocusBackground);
+  outline: 1px dotted var(--vscode-list-inactiveFocusOutline);
+  outline-offset: -1px;
+}
+
+.wdf .monaco-list:not(:focus) .monaco-list-row.focused .codicon {
+  color: var(--vscode-list-inactiveSelectionIconForeground);
+}
+
+.wdf .monaco-list:not(:focus) .monaco-list-row.selected {
+  background-color: var(--vscode-list-inactiveSelectionBackground);
+  color: var(--vscode-list-inactiveSelectionForeground);
+}
+
+.wdf .monaco-list:not(:focus) .monaco-list-row.focused.selected {
+  outline: 1px dotted var(--vscode-contrastActiveBorder, var(--vscode-list-inactiveFocusOutline));
+  outline-offset: -1px;
+}
+
+.wdf .monaco-list:not(.drop-target) .monaco-list-row:hover:not(.selected):not(.focused) {
+  background-color: var(--vscode-list-hoverBackground);
+  color: var(--vscode-list-hoverForeground);
+}
+
+.wdf .monaco-list.drop-target .monaco-list-rows,
+.wdf .monaco-list .monaco-list-row.drop-target {
+  background-color: var(--vscode-list-dropBackground) !important;
+  color: inherit !important;
+}
+
+.wdf .monaco-tl-row {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  position: relative;
+}
+
+.wdf .monaco-tl-indent {
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 16px;
+  pointer-events: none;
+}
+
+.wdf .hide-arrows .monaco-tl-indent {
+  left: 12px;
+}
+
+.wdf .monaco-tl-indent > .indent-guide {
+  display: inline-block;
+  box-sizing: border-box;
+  height: 100%;
+  border-left: 1px solid transparent;
+  opacity: 0;
+  transition: opacity 0.1s linear;
+}
+
+.wdf .monaco-list:hover .monaco-tl-indent > .indent-guide {
+  opacity: 1;
+  border-color: var(--vscode-tree-inactiveIndentGuidesStroke);
+}
+
+.wdf .monaco-tl-indent > .indent-guide.active {
+  opacity: 1;
+  border-color: var(--vscode-tree-indentGuidesStroke);
+}
+
+.wdf .monaco-tl-twistie,
+.wdf .monaco-tl-contents {
+  height: 100%;
+}
+
+.wdf .monaco-tl-twistie {
+  font-size: 10px;
+  text-align: right;
+  padding-right: 6px;
+  flex-shrink: 0;
+  width: 16px;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(3px);
+  display: flex !important;
+  color: var(--vscode-icon-foreground);
+}
+
+.wdf .monaco-tl-twistie::before {
+  border-radius: 20px;
+}
+
+.wdf .monaco-tl-twistie.collapsed::before {
+  transform: rotate(-90deg);
+}
+
+.wdf .codicon[class*='codicon-'] {
+  font: normal normal normal 16px/1 codicon;
+  display: inline-block;
+  text-decoration: none;
+  text-rendering: auto;
+  text-align: center;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.wdf .codicon-tree-item-expanded::before {
+  content: '\eab4';
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.wdf .file-icon-themable-tree.align-icons-and-twisties .monaco-tl-twistie:not(.collapsible),
+.wdf .file-icon-themable-tree.hide-arrows .monaco-tl-twistie {
+  visibility: hidden;
+  width: 0 !important;
+  padding-right: 0 !important;
+}
+
+.wdf .monaco-tl-contents {
+  flex: 1;
+  overflow: hidden;
+}
+
+.wdf .monaco-icon-label {
+  display: flex;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 22px;
+  line-height: 22px;
+}
+
+.wdf .monaco-icon-label::before {
+  background-size: 16px;
+  background-position: left center;
+  background-repeat: no-repeat;
+  padding-right: 6px;
+  width: 16px;
+  height: 22px;
+  line-height: inherit !important;
+  display: inline-block;
+  -webkit-font-smoothing: antialiased;
+  vertical-align: top;
+  flex-shrink: 0;
+}
+
+.wdf .monaco-icon-label > .monaco-icon-label-container {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.wdf .monaco-icon-label > .monaco-icon-label-container > .monaco-icon-name-container > .label-name {
+  color: inherit;
+  white-space: pre;
+  text-decoration: none;
+}
+
+.wdf .monaco-icon-label[data-badge]::after {
+  content: attr(data-badge);
+  opacity: 0.75;
+  font-size: 90%;
+  font-weight: 600;
+  margin: auto 12px 0 5px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.wdf .monaco-list:focus .selected .monaco-icon-label,
+.wdf .monaco-list:focus .selected .monaco-icon-label::after {
+  color: inherit !important;
+}
+
+.wdf .explorer-item {
+  flex: 1;
+  flex-wrap: nowrap;
+}
+
+.wdf .explorer-item.cut,
+.wdf .explorer-item.wdf-faded {
+  opacity: 0.5;
+}
+
+.wdf .explorer-item.explorer-item-edited .label-name {
+  flex: 0;
+}
+
+.wdf .explorer-item .monaco-inputbox {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  height: 22px;
+  line-height: normal;
+  border-radius: 4px;
+  font-size: inherit;
+}
+
+.wdf .monaco-inputbox > .ibwrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.wdf .explorer-item .monaco-inputbox > .ibwrapper > .input {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 20px;
+  padding: 0;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  resize: none;
+  outline-width: 1px;
+  outline-style: solid;
+  outline-offset: -1px;
+  outline-color: var(--vscode-focusBorder);
+  opacity: 1;
+}
+
+.wdf .monaco-inputbox-container {
+  text-align: right;
+}
+
+.wdf .monaco-inputbox-container .monaco-inputbox-message {
+  display: inline-block;
+  overflow: hidden;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4em;
+  font-size: 12px;
+  line-height: 17px;
+  margin-top: -1px;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.wdf a:hover {
+  text-decoration: none;
+}
+
+.wdf.wdf-modern .monaco-list-row {
+  left: 4px;
+  right: 4px;
+  width: auto;
+  border-radius: 4px;
+}
+
+.wdf.wdf-modern .monaco-list:focus:not(:focus-visible) .monaco-list-row.focused {
+  outline: 0 !important;
+}
+
+.wdf.wdf-modern .monaco-icon-label[data-badge]::after {
+  margin-right: 8px;
+  font-size: 11px;
+}

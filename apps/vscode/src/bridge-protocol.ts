@@ -277,5 +277,45 @@ export type HostToSection =
   | { kind: 'wd-sidebar-state'; state: SidebarState }
   | { kind: 'wd-vitals'; vitals?: SessionVitals }
 
-export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost | ProfilesToHost
-export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways | HostToProfiles
+export type FileEntryKind = 'file' | 'folder'
+
+export type WireFileEntry = { name: string; uri: string; kind: FileEntryKind; lang?: string; link?: boolean }
+
+export type WireFilesRoot = { uri: string; name: string; label: string; local: boolean; parentName: string }
+
+export type WireDecoration = { color?: string; badge?: string; tooltip?: string; faded?: boolean }
+
+export type FileOpenMode = 'preview' | 'pinned' | 'side'
+
+export type FilesCommand = 'newFile' | 'newFolder' | 'collapseAll' | 'rename' | 'delete' | 'copy' | 'cut' | 'paste'
+
+export type UploadedFile = { name: string; b64: string }
+
+export type FilesToHost =
+  | { kind: 'wd-ready' }
+  | { kind: 'wd-files-list'; uri: string }
+  | { kind: 'wd-files-open'; uris: string[]; mode: FileOpenMode }
+  | { kind: 'wd-files-create'; parent: string; name: string; entry: FileEntryKind }
+  | { kind: 'wd-files-rename'; uri: string; name: string }
+  | { kind: 'wd-files-delete'; uris: string[] }
+  | { kind: 'wd-files-move'; uris: string[]; target: string; copy: boolean }
+  | { kind: 'wd-files-clipboard'; uris: string[]; cut: boolean }
+  | { kind: 'wd-files-paste'; target: string }
+  | { kind: 'wd-files-upload'; target: string; files: UploadedFile[] }
+  | { kind: 'wd-files-drop-uris'; target: string; uris: string[] }
+  | { kind: 'wd-files-selection'; uris: string[] }
+  | { kind: 'wd-files-copy-path'; uris: string[]; relative: boolean }
+  | { kind: 'wd-files-reveal-os'; uri: string }
+
+export type HostToFiles =
+  | { kind: 'wd-files-root'; root?: WireFilesRoot; message?: string }
+  | { kind: 'wd-files-dir'; uri: string; entries?: WireFileEntry[]; error?: string }
+  | { kind: 'wd-files-refresh' }
+  | { kind: 'wd-files-theme'; css: string; fileIcons: boolean; folderIcons: boolean; hideArrows: boolean; modern: boolean }
+  | { kind: 'wd-files-decorations'; decorations: Record<string, WireDecoration> }
+  | { kind: 'wd-files-command'; command: FilesCommand; uri?: string }
+  | { kind: 'wd-files-reveal'; uri: string; ancestors: string[]; focus: boolean }
+  | { kind: 'wd-files-cut'; uris: string[] }
+
+export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost | ProfilesToHost | FilesToHost
+export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways | HostToProfiles | HostToFiles

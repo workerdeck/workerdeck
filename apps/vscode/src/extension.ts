@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { hostCommands, pickCommand, registerCommands, sessionCommands, viewCommands } from './commands.ts'
 import { startDevReload } from './dev-reload.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
+import { FilesViewProvider } from './files-view.ts'
 import { agentOf, followTargetOf } from './follow.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
 import { AgentAvatarCache } from './agent-avatars.ts'
@@ -46,6 +47,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const store = new HostStore(context)
   const model = new SessionsModel(store)
   const fs = new WorkerdeckFileSystem(store)
+  const files = new FilesViewProvider(context.extensionUri, store, fs)
 
   const statusBar = new SessionStatusBar()
   const unread = new UnreadStatusItem()
@@ -152,7 +154,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return
       }
       if (p === 'files') {
-        await vscode.commands.executeCommand('workerdeck.openProjectFolder')
+        await vscode.commands.executeCommand(`${FilesViewProvider.viewId}.focus`)
         return
       }
       if (p === 'tasks') {
@@ -167,6 +169,9 @@ export function activate(context: vscode.ExtensionContext): void {
       if (status !== lastStatus.get(surface)) {
         lastStatus.set(surface, status)
         model.nudge()
+        if (surface === registry.focused) {
+          files.refresh()
+        }
       }
       markSeen(surface)
       if (surface === registry.focused) {
@@ -401,6 +406,7 @@ export function activate(context: vscode.ExtensionContext): void {
     void vscode.commands.executeCommand('setContext', PANEL_HAS_SESSION_KEY, panel.session !== undefined)
   }
   const syncSurfaces = () => {
+    void files.setSession(registry.focused.session)
     syncSelected()
     syncContextKeys()
     model.setOpen(registry.openMap())
@@ -474,10 +480,21 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   void model.refresh()
+  const devFolder = process.env.WD_FILES_DEV_FOLDER
+  if (context.extensionMode === vscode.ExtensionMode.Development && devFolder) {
+    files.showFolder(vscode.Uri.file(devFolder))
+  }
 
   context.subscriptions.push(
     avatars,
-    startDevReload(context, [{ reloadWebview: () => registry.reloadAll() }, sidebar, gateways, profiles, ...Object.values(sections)]),
+    startDevReload(context, [
+      { reloadWebview: () => registry.reloadAll() },
+      sidebar,
+      gateways,
+      profiles,
+      files,
+      ...Object.values(sections),
+    ]),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (
         e.affectsConfiguration('workerdeck.fontSize') ||
@@ -514,6 +531,7 @@ export function activate(context: vscode.ExtensionContext): void {
     gateways,
     profiles,
     fs,
+    files,
     statusBar,
     unread,
     subagents,
@@ -523,6 +541,9 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.window.registerWebviewViewProvider(GatewaysViewProvider.viewId, gateways),
+    vscode.window.registerWebviewViewProvider(FilesViewProvider.viewId, files, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
     vscode.window.registerWebviewViewProvider(ProfilesViewProvider.viewId, profiles),
     ...Object.entries(sections).map(([kind, provider]) =>
       vscode.window.registerWebviewViewProvider(SECTION_VIEWS[kind as SectionKind], provider),
@@ -573,6 +594,7 @@ export function activate(context: vscode.ExtensionContext): void {
         'workerdeck.pastAgents': () => showPastAgents({ store, selectSession }),
         'workerdeck.refreshSessions': () => model.refresh(),
       },
+      files.commands(),
     ),
   )
 }

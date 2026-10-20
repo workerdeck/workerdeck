@@ -21,6 +21,7 @@ export default defineConfig({
         gateways: fileURLToPath(new URL('./webview/gateways/main.tsx', import.meta.url)),
         profiles: fileURLToPath(new URL('./webview/profiles/main.tsx', import.meta.url)),
         sections: fileURLToPath(new URL('./webview/sections/main.tsx', import.meta.url)),
+        files: fileURLToPath(new URL('./webview/files/main.tsx', import.meta.url)),
       },
       output: {
         // Fixed names so the providers can reference `main.js`/`main.css` without reading a manifest.

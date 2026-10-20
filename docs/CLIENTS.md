@@ -142,9 +142,45 @@ it with `\` builds a path neither side has seen. A click without a line number o
 the `vscode.open` command, not `openTextDocument`, because the latter throws on binary files
 and a `.jpg`/`.pdf` the agent linked would toast "could not open" while sitting on disk; only a
 `path:line` click goes through `openTextDocument`, for the selection. Remote gateways mount as a `workerdeck://`
-FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename -
-no such routes), which is also what makes `extensionKind: ["workspace","ui"]` the whole
-Remote SSH story.
+FileSystemProvider over `/fs/*` (hash-guarded conditional writes, plus mkdir/delete/rename;
+a rename never overwrites, so `overwrite` surfaces as FileExists), which is also what makes
+`extensionKind: ["workspace","ui"]` the whole Remote SSH story.
+
+**Agent Files** (`src/files-view.ts` + `webview/files/`, view `workerdeck.files` in the Explorer
+container) is a webview that redraws the Explorer, not a `TreeDataProvider`: the native tree API has
+no inline rename or inline new-file. It roots at the focused surface's session cwd, as a `file://` URI
+when `machine.ts` judges the gateway local (Reveal in Finder, the terminal, git decorations and the
+trash then work natively) and as `workerdeck://` otherwise; every operation runs host-side through
+`vscode.workspace.fs` / `WorkspaceEdit`, so both schemes share one code path and renames run the
+refactoring participants. Fidelity rests on three rules:
+
+- **The DOM and CSS are the workbench's own.** Rows use the Explorer's markup (`monaco-list-row` >
+  `monaco-tl-row` > twistie / indent / `monaco-icon-label`) and `webview/files/files.css` is its rules
+  with colours as `--vscode-*` variables, which webviews receive. The rules were read from a live
+  workbench over CDP: launch a throwaway VS Code with `--remote-debugging-port` and its own
+  `--user-data-dir` (unset `ELECTRON_RUN_AS_NODE` first, or the binary runs as Node), then
+  `Runtime.evaluate` against the workbench page. Webview frames are not CDP targets in Electron, so
+  the webview side is checked by `Page.captureScreenshot` of the sidebar beside the native Explorer.
+  Every view shares `main.css`, so the rules are scoped under `.wdf`, and Tailwind's preflight forces
+  `border-box` where the tree is `content-box`: `.wdf *` resets it. Modern UI
+  (`workbench.experimental.modernUI`) insets rows 4px with a 4px radius; the host sends the flag.
+- **Icons come from the active icon theme, generated the way VS Code does.** `src/icon-theme.ts` ports
+  the workbench's theme-to-CSS generator (selectors on `name-file-icon` / `ext-file-icon` /
+  `lang-file-icon` classes, fonts and SVGs via `asWebviewUri`), and rows carry the same classes
+  `getIconClasses` would; the language id per entry comes from the contributed `languages` plus
+  `files.associations`. The codicon font is loaded from `vscode.env.appRoot`.
+- **Keys are handled in the webview and stopped there.** A webview forwards every keydown to the
+  workbench, so a handled key calls `stopPropagation` or it would also fire a global keybinding.
+  Cmd/Ctrl+V is let through to the browser so `paste` can carry OS files, with a short fallback to the
+  in-view clipboard when it does not.
+
+Decorations (`src/file-decorations.ts`) are git status from the built-in git extension's API (local
+roots only) plus diagnostics, bubbled to folders as colour only. Another extension's
+`FileDecorationProvider` cannot be read, and OS file drops need Shift held, as in every sidebar
+webview. Remote trees have no watcher: they refresh on the provider's own change events, on becoming
+visible, and when the focused session's status changes. Go to File is a QuickPick over `/fs/find`.
+A development host started with `WD_FILES_DEV_FOLDER=<dir>` pins the view to that folder with no
+gateway, which is how it is exercised in isolation.
 
 **Local-vs-remote is a question about machines, not about URLs** (`src/machine.ts`). A loopback
 URL settles it for free, but the common case does not have one: a gateway bound to a LAN or

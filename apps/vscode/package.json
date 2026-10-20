@@ -77,6 +77,13 @@
           "name": "Sessions",
           "contextualTitle": "Sessions",
           "icon": "media/sidebar.svg"
+        },
+        {
+          "id": "workerdeck.files",
+          "name": "Agent Files",
+          "contextualTitle": "Agent Files",
+          "icon": "media/sidebar.svg",
+          "type": "webview"
         }
       ],
       "workerdeck": [
@@ -355,6 +362,91 @@
         "title": "Show Profiles",
         "category": "WorkerDeck",
         "icon": "$(account)"
+      },
+      {
+        "command": "workerdeck.files.newFile",
+        "title": "New File...",
+        "category": "WorkerDeck",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "workerdeck.files.newFolder",
+        "title": "New Folder...",
+        "category": "WorkerDeck",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "workerdeck.files.refresh",
+        "title": "Refresh Agent Files",
+        "category": "WorkerDeck",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "workerdeck.files.collapseAll",
+        "title": "Collapse Folders in Agent Files",
+        "category": "WorkerDeck",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "workerdeck.files.findFile",
+        "title": "Go to File in Agent Folder...",
+        "category": "WorkerDeck",
+        "icon": "$(search)"
+      },
+      {
+        "command": "workerdeck.files.findInFolder",
+        "title": "Find File in Folder...",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.openToSide",
+        "title": "Open to the Side",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.revealInOS",
+        "title": "Reveal in Finder",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.openInTerminal",
+        "title": "Open in Integrated Terminal",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.cut",
+        "title": "Cut",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.copy",
+        "title": "Copy",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.paste",
+        "title": "Paste",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.copyPath",
+        "title": "Copy Path",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.copyRelativePath",
+        "title": "Copy Relative Path",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.rename",
+        "title": "Rename...",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.delete",
+        "title": "Delete",
+        "category": "WorkerDeck"
       }
     ],
     "menus": {
@@ -430,6 +522,41 @@
           "command": "workerdeck.refreshProfiles",
           "when": "view == workerdeck.profiles",
           "group": "navigation@2"
+        },
+        {
+          "command": "workerdeck.files.newFile",
+          "when": "view == workerdeck.files && workerdeck.filesHasRoot",
+          "group": "navigation@1"
+        },
+        {
+          "command": "workerdeck.files.newFolder",
+          "when": "view == workerdeck.files && workerdeck.filesHasRoot",
+          "group": "navigation@2"
+        },
+        {
+          "command": "workerdeck.files.refresh",
+          "when": "view == workerdeck.files && workerdeck.filesHasRoot",
+          "group": "navigation@3"
+        },
+        {
+          "command": "workerdeck.files.collapseAll",
+          "when": "view == workerdeck.files && workerdeck.filesHasRoot",
+          "group": "navigation@4"
+        },
+        {
+          "command": "workerdeck.files.findFile",
+          "when": "view == workerdeck.files && workerdeck.filesHasRoot",
+          "group": "1_find@1"
+        },
+        {
+          "command": "workerdeck.openProjectFolder",
+          "when": "view == workerdeck.files && workerdeck.filesHasRoot",
+          "group": "2_workspace@1"
+        },
+        {
+          "command": "workerdeck.files.revealInOS",
+          "when": "view == workerdeck.files && workerdeck.filesHasRoot && workerdeck.filesLocal",
+          "group": "2_workspace@2"
         }
       ],
       "commandPalette": [
@@ -460,6 +587,137 @@
         {
           "command": "workerdeck.host.openSettings",
           "when": "false"
+        },
+        {
+          "command": "workerdeck.files.findInFolder",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.openToSide",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.openInTerminal",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.cut",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.copy",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.paste",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.copyRelativePath",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.rename",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.delete",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.newFile",
+          "when": "workerdeck.filesHasRoot"
+        },
+        {
+          "command": "workerdeck.files.newFolder",
+          "when": "workerdeck.filesHasRoot"
+        },
+        {
+          "command": "workerdeck.files.refresh",
+          "when": "workerdeck.filesHasRoot"
+        },
+        {
+          "command": "workerdeck.files.collapseAll",
+          "when": "workerdeck.filesHasRoot"
+        },
+        {
+          "command": "workerdeck.files.findFile",
+          "when": "workerdeck.filesHasRoot"
+        },
+        {
+          "command": "workerdeck.files.revealInOS",
+          "when": "workerdeck.filesLocal"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "workerdeck.files.newFile",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(folder|root)$/",
+          "group": "1_new@1"
+        },
+        {
+          "command": "workerdeck.files.newFolder",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(folder|root)$/",
+          "group": "1_new@2"
+        },
+        {
+          "command": "workerdeck.files.openToSide",
+          "when": "webviewId == 'workerdeck.files' && webviewSection == 'file'",
+          "group": "2_open@1"
+        },
+        {
+          "command": "workerdeck.files.revealInOS",
+          "when": "webviewId == 'workerdeck.files' && workerdeck.filesLocal",
+          "group": "2_open@2"
+        },
+        {
+          "command": "workerdeck.files.openInTerminal",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(folder|root)$/ && workerdeck.filesLocal",
+          "group": "2_open@3"
+        },
+        {
+          "command": "workerdeck.files.findInFolder",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(folder|root)$/",
+          "group": "4_search@1"
+        },
+        {
+          "command": "workerdeck.files.cut",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(file|folder)$/",
+          "group": "5_cutcopypaste@1"
+        },
+        {
+          "command": "workerdeck.files.copy",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(file|folder)$/",
+          "group": "5_cutcopypaste@2"
+        },
+        {
+          "command": "workerdeck.files.paste",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(folder|root)$/",
+          "group": "5_cutcopypaste@3"
+        },
+        {
+          "command": "workerdeck.files.copyPath",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(file|folder)$/",
+          "group": "6_copypath@1"
+        },
+        {
+          "command": "workerdeck.files.copyRelativePath",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(file|folder)$/",
+          "group": "6_copypath@2"
+        },
+        {
+          "command": "workerdeck.files.rename",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(file|folder)$/",
+          "group": "7_modification@1"
+        },
+        {
+          "command": "workerdeck.files.delete",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(file|folder)$/",
+          "group": "7_modification@2"
         }
       ]
     },

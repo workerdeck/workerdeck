@@ -40,6 +40,11 @@ export abstract class WebviewHost<In extends { kind: string }, Out, V extends We
     return {}
   }
 
+  // Directories beyond the bundle the webview may load from (an icon theme's fonts and SVGs).
+  protected resourceRoots(): vscode.Uri[] {
+    return []
+  }
+
   // Wire per-view listeners (transports, visibility) on the fresh view. Runs inside
   // `attach` before the HTML is set.
   protected wire(_view: V): void {}
@@ -89,7 +94,7 @@ export abstract class WebviewHost<In extends { kind: string }, Out, V extends We
     this.#ready = false
     this.wire(view)
     const dist = this.#dist()
-    view.webview.options = { enableScripts: true, localResourceRoots: [dist] }
+    view.webview.options = { enableScripts: true, localResourceRoots: [dist, ...this.resourceRoots()] }
     view.webview.html = webviewHtml(view.webview, dist, this.bundle, this.rootAttrs(), 0, this.htmlOptions())
     view.webview.onDidReceiveMessage((msg: In) => void this.#dispatch(msg))
     view.onDidDispose(() => {

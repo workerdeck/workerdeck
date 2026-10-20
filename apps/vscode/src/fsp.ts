@@ -82,7 +82,7 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
       throw vscode.FileSystemError.NoPermissions('this gateway is read-only (hostFiles.write is a separate server opt-in)')
     }
     const key = uri.toString()
-    const expectedHash = this.#hashes.get(key)
+    const expectedHash = this.#hashes.get(key) ?? (options.overwrite ? await currentHash(client, uri.path) : undefined)
     if (!expectedHash && !options.create) {
       throw vscode.FileSystemError.FileNotFound(uri)
     }
@@ -121,14 +121,35 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
     }
   }
 
-  createDirectory(): never {
-    throw vscode.FileSystemError.NoPermissions('workerdeck gateways do not support mkdir')
+  async createDirectory(uri: vscode.Uri): Promise<void> {
+    await this.#mutate(uri, (client) => client.makeHostDir(uri.path), [{ type: vscode.FileChangeType.Created, uri }])
   }
-  delete(): never {
-    throw vscode.FileSystemError.NoPermissions('workerdeck gateways do not support delete')
+
+  async delete(uri: vscode.Uri, options: { recursive: boolean }): Promise<void> {
+    await this.#mutate(uri, (client) => client.deleteHostEntry(uri.path, options.recursive), [{ type: vscode.FileChangeType.Deleted, uri }])
+    this.#hashes.delete(uri.toString())
   }
-  rename(): never {
-    throw vscode.FileSystemError.NoPermissions('workerdeck gateways do not support rename')
+
+  // The gateway never renames over an existing entry, so `overwrite` surfaces as FileExists rather than a clobber.
+  async rename(oldUri: vscode.Uri, newUri: vscode.Uri): Promise<void> {
+    await this.#mutate(oldUri, (client) => client.renameHostEntry(oldUri.path, newUri.path), [
+      { type: vscode.FileChangeType.Deleted, uri: oldUri },
+      { type: vscode.FileChangeType.Created, uri: newUri },
+    ])
+    this.#hashes.delete(oldUri.toString())
+  }
+
+  async #mutate(uri: vscode.Uri, run: (client: WorkerDeckClient) => Promise<unknown>, events: vscode.FileChangeEvent[]): Promise<void> {
+    const client = await this.#client(uri)
+    if (!(await this.#writable(uri, client))) {
+      throw vscode.FileSystemError.NoPermissions('this gateway is read-only (hostFiles.write is a separate server opt-in)')
+    }
+    try {
+      await run(client)
+    } catch (err) {
+      throw toFsError(err, uri)
+    }
+    this.#emitter.fire(events)
   }
 
   refresh(uri: vscode.Uri): void {
@@ -166,8 +187,19 @@ function statOf(entry: HostDirEntry): vscode.FileStat {
   }
 }
 
+async function currentHash(client: WorkerDeckClient, path: string): Promise<string | undefined> {
+  try {
+    return (await client.readHostFile(path)).hash
+  } catch {
+    return undefined
+  }
+}
+
 function toFsError(err: unknown, uri: vscode.Uri): Error {
   if (err instanceof WorkerDeckError) {
+    if (err.status === 409) {
+      return vscode.FileSystemError.FileExists(uri)
+    }
     if (err.status === 404) {
       return vscode.FileSystemError.FileNotFound(uri)
     }

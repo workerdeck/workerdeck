@@ -1,7 +1,6 @@
 import * as vscode from 'vscode'
-import { WorkerdeckFileSystem } from './fsp.ts'
 import type { HostStore } from './hosts.ts'
-import { isLocalHost } from './machine.ts'
+import { sessionRootUri } from './files-view.ts'
 import type { SessionPanelView } from './panel.ts'
 import type { AnySurface } from './session-surface.ts'
 import type { SessionEditorTab } from './session-tab.ts'
@@ -201,10 +200,11 @@ async function openProjectFolder(store: HostStore, surface: AnySurface): Promise
     void vscode.window.showInformationMessage('WorkerDeck: open a session first.')
     return
   }
-  const uri = (await isLocalHost(store, session.host))
-    ? vscode.Uri.file(session.cwd)
-    : vscode.Uri.from({ scheme: WorkerdeckFileSystem.scheme, authority: session.host.id.toLowerCase(), path: session.cwd })
-  const name =
-    uri.scheme === WorkerdeckFileSystem.scheme ? `${session.host.name}: ${session.cwd.split('/').pop() ?? session.cwd}` : undefined
+  const root = await sessionRootUri(store, session)
+  if (!root) {
+    return
+  }
+  const { uri } = root
+  const name = root.local ? undefined : `${session.host.name}: ${session.cwd.split('/').pop() ?? session.cwd}`
   vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, { uri, name })
 }
