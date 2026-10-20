@@ -151,7 +151,6 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
       return
     }
     const root = this.#root
-    view.description = root ? `${root.session.host.name}: ${root.uri.path}` : undefined
     if (!this.ready) {
       return
     }
