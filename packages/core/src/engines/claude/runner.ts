@@ -60,7 +60,7 @@ import { agentResetFields } from '../../lib/context-reset.ts'
 import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
 import { AddressedThinking, apiMessageId } from './addressed-thinking.ts'
 import { claudeHistoryEvent } from './history.ts'
-import { ancestorInstructionExcludes, withInstructionExcludes } from './instruction-scope.ts'
+import { ancestorInstructionExcludes, foreignHomeExcludes, withInstructionExcludes } from './instruction-scope.ts'
 import { CLAUDE_CATALOG } from './catalog.ts'
 import { SubagentTracker } from './subagents.ts'
 import { tailTaskOutput, taskOutputRoots } from './task-output.ts'
@@ -544,8 +544,10 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
         ? {}
         : { systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: this.#instructions } }),
     }
-    if (c.instructionScope === 'cwd') {
-      options.settings = withInstructionExcludes(options.settings, ancestorInstructionExcludes(this.#cwd))
+    const home = { configDir: options.env?.CLAUDE_CONFIG_DIR }
+    const excludes = c.instructionScope === 'cwd' ? ancestorInstructionExcludes(this.#cwd, home) : foreignHomeExcludes(home)
+    if (excludes.length > 0) {
+      options.settings = withInstructionExcludes(options.settings, excludes)
     }
     return options
   }

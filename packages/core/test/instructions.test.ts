@@ -8,7 +8,7 @@ import { claudeAdapter } from '../src/engines/claude/adapter.ts'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { createEngineSession } from '../src/engines/provider/session.ts'
 import { composeInstructions, resolveInstructions } from '../src/lib/instructions.ts'
-import { ancestorInstructionExcludes, withInstructionExcludes } from '../src/engines/claude/instruction-scope.ts'
+import { ancestorInstructionExcludes, foreignHomeExcludes, withInstructionExcludes } from '../src/engines/claude/instruction-scope.ts'
 import { fakeHarness, tick } from './helpers/claude-harness.ts'
 import { scriptTurn, scriptedPeer, THREAD_RESULT } from './helpers/codex-peer.ts'
 import { streamText } from './helpers/ai-sdk-mocks.ts'
@@ -127,7 +127,7 @@ describe('SessionRunner instructions', () => {
 
 describe('instruction scope', () => {
   it('excludes every ancestor instruction file but keeps the cwd and the user memory', () => {
-    const patterns = ancestorInstructionExcludes('/home/me/repo/packages/db', '/home/me')
+    const patterns = ancestorInstructionExcludes('/home/me/repo/packages/db', { home: '/home/me' })
     expect(patterns).toContain('/home/me/repo/AGENTS.md')
     expect(patterns).toContain('/home/me/repo/.claude/rules/**')
     expect(patterns).toContain('/home/me/CLAUDE.md')
@@ -137,12 +137,23 @@ describe('instruction scope', () => {
     expect(patterns.some((pattern) => pattern.startsWith('/home/me/repo/packages/db/'))).toBe(false)
   })
 
+  it("treats ~/.claude as a foreign project folder when the CLI's config dir is elsewhere", () => {
+    const profile = { home: '/home/me', configDir: '/home/me/.workerdeck/profiles/work' }
+    expect(foreignHomeExcludes({ home: '/home/me', configDir: '/home/me/.claude' })).toEqual([])
+    expect(foreignHomeExcludes({ home: '/home/me' })).toEqual([])
+    expect(foreignHomeExcludes(profile)).toEqual(['/home/me/.claude/CLAUDE.md', '/home/me/.claude/AGENTS.md', '/home/me/.claude/rules/**'])
+    expect(ancestorInstructionExcludes('/home/me/repo/pkg', profile)).toContain('/home/me/.claude/CLAUDE.md')
+  })
+
   it('escapes glob characters in directory names', () => {
-    expect(ancestorInstructionExcludes('/work/app (old)/pkg', '/home/me')).toContain('/work/app [(]old[)]/AGENTS.md')
+    expect(ancestorInstructionExcludes('/work/app (old)/pkg', { home: '/home/me' })).toContain('/work/app [(]old[)]/AGENTS.md')
   })
 
   it('merges into host settings rather than replacing them', () => {
-    expect(withInstructionExcludes({ claudeMdExcludes: ['/a'], model: 'x' }, ['/b'])).toEqual({ claudeMdExcludes: ['/a', '/b'], model: 'x' })
+    expect(withInstructionExcludes({ claudeMdExcludes: ['/a'], model: 'x' }, ['/b'])).toEqual({
+      claudeMdExcludes: ['/a', '/b'],
+      model: 'x',
+    })
     expect(withInstructionExcludes('{"claudeMdExcludes":["/a"]}', ['/b'])).toEqual({ claudeMdExcludes: ['/a', '/b'] })
     expect(() => withInstructionExcludes('/etc/settings.json', ['/b'])).toThrow(/settings file path/)
   })

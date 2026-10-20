@@ -29,7 +29,27 @@ function ancestorsOf(dir: string): string[] {
   return out
 }
 
-export function ancestorInstructionExcludes(cwd: string, home: string = homedir()): string[] {
+export type InstructionHome = { home?: string; configDir?: string }
+
+// `~/.claude` is this session's user memory only when it is the CLI's config dir. On a profile with a config dir of
+// its own the CLI reads `~/.claude/CLAUDE.md` as a project file at `$HOME`, which also stops the AGENTS.md fallback.
+function homeClaudeDirOwned(home: string, configDir: string | undefined): boolean {
+  return configDir === undefined || realOrSelf(resolve(configDir)) === realOrSelf(resolve(home, '.claude'))
+}
+
+function claudeDirPatterns(dir: string): string[] {
+  const escaped = escapeGlob(dir).replace(/\/$/, '')
+  return [...ANCESTOR_CLAUDE_DIR_FILES.map((file) => `${escaped}/${file}`), `${escaped}/.claude/rules/**`]
+}
+
+export function foreignHomeExcludes({ home = homedir(), configDir }: InstructionHome = {}): string[] {
+  if (homeClaudeDirOwned(home, configDir)) {
+    return []
+  }
+  return [...new Set([resolve(home), realOrSelf(resolve(home))])].flatMap(claudeDirPatterns)
+}
+
+export function ancestorInstructionExcludes(cwd: string, { home = homedir(), configDir }: InstructionHome = {}): string[] {
   const start = resolve(cwd)
   const homes = new Set([resolve(home), realOrSelf(resolve(home))])
   const dirs = new Set([...ancestorsOf(start), ...ancestorsOf(realOrSelf(start))])
@@ -37,9 +57,8 @@ export function ancestorInstructionExcludes(cwd: string, home: string = homedir(
   for (const dir of dirs) {
     const escaped = escapeGlob(dir).replace(/\/$/, '')
     patterns.push(...ANCESTOR_FILES.map((file) => `${escaped}/${file}`))
-    // `~/.claude` holds the user's own memory and rules, which a cwd scope keeps.
-    if (!homes.has(dir)) {
-      patterns.push(...ANCESTOR_CLAUDE_DIR_FILES.map((file) => `${escaped}/${file}`), `${escaped}/.claude/rules/**`)
+    if (!homes.has(dir) || !homeClaudeDirOwned(home, configDir)) {
+      patterns.push(...claudeDirPatterns(dir))
     }
   }
   return patterns

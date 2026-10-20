@@ -756,9 +756,17 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `.claude/rules/**` for every strict ancestor of cwd (`engines/claude/instruction-scope.ts`);
   codex gets `project_root_markers = []` in the `thread/start` and `thread/resume` config overlay,
   so cwd is the project root. `settingSources` is untouched and stays operator-only.
-- **`$HOME` is an ancestor, and `~/.claude` is the user's memory.** The `.claude/*` entries are
-  skipped at `$HOME` (and its realpath), so `~/.claude/CLAUDE.md` and `~/.claude/rules` keep
+- **`$HOME` is an ancestor, and `~/.claude` is the user's memory** when it is the CLI's config dir.
+  Then the `.claude/*` entries are skipped at `$HOME` (and its realpath), so `~/.claude/CLAUDE.md` and `~/.claude/rules` keep
   loading; `~/CLAUDE.md` / `~/AGENTS.md` are excluded like any other ancestor file.
+- **On a profile with its own config dir, `~/.claude` is someone else's folder, scope or not.** The
+  CLI only treats `<config dir>/CLAUDE.md` as user memory; `$HOME/.claude/CLAUDE.md` then reads as a
+  project `.claude/CLAUDE.md` at `$HOME`, an ancestor of every project, and the built-in AGENTS.md
+  plugin's default mode ("AGENTS.md only where the project has no CLAUDE.md") skips every AGENTS.md.
+  So every Claude session whose `CLAUDE_CONFIG_DIR` is not `$HOME/.claude` (compared by realpath)
+  excludes `$HOME/.claude/{CLAUDE.md,AGENTS.md,rules/**}` (`foreignHomeExcludes`). Found 2026-10-20 on
+  `silkweave-toby` (its own `CLAUDE.md` is a symlink to the personal one, which still loads: the
+  matcher tests the unresolved path).
 - **The CLI rewrites every backslash in a pattern to `/` before picomatch sees it**, so a glob
   character in a folder name can only be made literal with a class: `(` becomes `[(]`. A
   backslash escape silently stops the pattern matching (found against 0.3.293 with `app (old)`).
