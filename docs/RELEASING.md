@@ -1617,6 +1617,20 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   3/3, delete about 2 s by menu and by REST). **Published** 2026-10-19: npm 12/12 live about 240 s after the run, `latest`
   3.14.0, Marketplace 3.14.0 about 2 min later.
 
+  **3.15.0** - **Agent Files, cut 2026-10-20** (tag `v3.15.0`). A **minor**, protocol stays **1**
+  (`MakeHostDirRequest`, `DeleteHostEntryRequest`, `RenameHostEntryRequest`, `HostEntryResponse` are
+  new types, nothing changed). Server: `POST /v1/fs/mkdir|delete|rename` behind `hostFiles.write`;
+  `resolveEntry` realpaths the parent and only `lstat`s the final component, so a symlink is acted on
+  itself, never its target; rename never overwrites. Client `makeHostDir`/`deleteHostEntry`/
+  `renameHostEntry`. VS Code: the Agent Files view, a webview that redraws the Explorer for the
+  open session's cwd (`file://` local, `workerdeck://` remote): icon theme, git/problem colours,
+  compact folders, sticky scroll, full `files.exclude` globs, inline rename/create, drag and drop,
+  cut/copy/paste, `workerdeck.files.*` keybindings under the `workerdeck.filesFocus` context key
+  (`focusedView` is never set inside a webview view). Native: one blank line above and below the
+  transcript (`711e32b0`). **Verified**: `pnpm lint`, typecheck, full test (serial; one shells
+  flake, 3/3 green alone), gatekeeper, free `smoke:codex --canary` 11/11; Agent Files hand-checked
+  by Tobias locally; the remote path is untested until a remote gateway runs 3.15.0.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
