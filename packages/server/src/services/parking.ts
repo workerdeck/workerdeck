@@ -47,7 +47,6 @@ export class SessionParkManager {
   #resuming = new Map<string, Promise<Runner | undefined>>()
   #detachTimers = new Map<string, ReturnType<typeof setTimeout>>()
   #configs = new Map<string, SessionRunnerConfig>()
-  #remembered = new Set<string>()
   #storeOps = new Map<string, Promise<void>>()
   #watches = new Map<string, () => void>()
   #closed = false
@@ -438,7 +437,6 @@ export class SessionParkManager {
     clearTimeout(this.#detachTimers.get(sessionId))
     this.#detachTimers.delete(sessionId)
     this.#configs.delete(sessionId)
-    this.#remembered.delete(sessionId)
   }
 
   // The config of a runner this manager may still write for: open, remembered, and the registry's current object.
@@ -459,32 +457,16 @@ export class SessionParkManager {
       return
     }
     const sdkSessionId = info.sdkSessionId
-    if (sdkSessionId === undefined) {
-      // Checked last, behind the ownership guard: before the engine has ever named a session there is no record to remove.
-      if (this.#remembered.has(runner.id)) {
-        await this.#forgetDormant(runner.id)
-      }
-      return
+    const record: DormantSessionRecord = {
+      kind: 'dormant',
+      ...idleRecordBase(runner, config),
+      ...(sdkSessionId === undefined ? {} : { sdkSessionId }),
+      savedAt: Date.now(),
     }
-    const record: DormantSessionRecord = { kind: 'dormant', ...idleRecordBase(runner, config), sdkSessionId, savedAt: Date.now() }
     try {
-      // Marked before the write: a queued save already means a record may exist, and a reset arriving mid-write must not skip the forget.
-      this.#remembered.add(runner.id)
       await this.#queue(runner.id, () => this.#options.store.save(record))
     } catch (error) {
       this.#options.onError?.(error, { sessionId: runner.id, phase: 'remember' })
-    }
-  }
-
-  async #forgetDormant(sessionId: string): Promise<void> {
-    if (this.#archiving.has(sessionId)) {
-      return
-    }
-    this.#remembered.delete(sessionId)
-    try {
-      await this.#queue(sessionId, () => this.#options.store.delete(sessionId))
-    } catch (error) {
-      this.#options.onError?.(error, { sessionId, phase: 'remember' })
     }
   }
 

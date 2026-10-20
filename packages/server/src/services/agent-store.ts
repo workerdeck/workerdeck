@@ -14,8 +14,6 @@ export type HandoverIntent = {
   promptState: 'unsent' | 'sending' | 'sent'
   archive?: ArchivedSessionRecord
   startError?: string
-  // Started, but the engine has named no conversation yet, so no record exists; cleared once one does.
-  awaiting?: true
   startedAt: number
 }
 

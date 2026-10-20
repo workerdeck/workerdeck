@@ -7,7 +7,7 @@ import { engineOf } from '../lib/profile-env.ts'
 import type { HandoverIntent, StoredAgent } from '../services/agent-store.ts'
 import { isAgentRefusal, type AgentRefusal, type RetireOutcome } from '../services/agents.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { isArchived, type ArchivedSessionRecord } from '../services/session-store.ts'
+import { isArchived, isDormant, type ArchivedSessionRecord } from '../services/session-store.ts'
 import { startSession } from './agents.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
@@ -31,7 +31,7 @@ export function rotateAgent(ctx: ServerContext, agentId: string, auth: AuthConte
     if (options.expected !== from) {
       fail(409, `${agent.name} has moved to another conversation`)
     }
-    if (agent.pending && !agent.pending.awaiting) {
+    if (agent.pending) {
       fail(409, unfinished(agent))
     }
     const status = from === undefined ? undefined : ctx.registry.get(from)?.info().status
@@ -100,7 +100,7 @@ export function settleUndelivered(ctx: ServerContext, agentId: string, send: boo
     }
     const sessionId = agent.sessionId
     if (send) {
-      if (sessionId === undefined || (agent.pending && !agent.pending.awaiting) || ctx.handovers.gated(sessionId)) {
+      if (sessionId === undefined || agent.pending !== undefined || ctx.handovers.gated(sessionId)) {
         fail(409, `${agent.name} has no conversation to send it to`)
       }
       const runner = await ctx.parking.ensureLive(sessionId)
@@ -265,7 +265,8 @@ async function finishRotation(ctx: ServerContext, agent: StoredAgent, auth: Auth
   }
   const live = ctx.registry.get(to)
   const stored = live ? null : await ctx.parking.get(to)
-  const kept = stored !== null && !isArchived(stored)
+  // A record without an engine conversation proves nothing about the first message, so it is started over, not kept.
+  const kept = stored !== null && !isArchived(stored) && !(isDormant(stored) && stored.sdkSessionId === undefined)
   const uncertain = intent.prompt !== undefined && (intent.promptState === 'sending' || (intent.promptState === 'sent' && !kept))
   if (kept) {
     return await confirm(ctx, agent.id, to, uncertain ? intent.prompt : undefined)
@@ -318,14 +319,7 @@ async function settle(
   if (saved === 'saved') {
     return await confirm(ctx, agentId, to, lost)
   }
-  if (saved === 'later') {
-    const current = settled(
-      await ctx.agents.updatePending(agentId, { awaiting: true }, (next) => (lost === undefined ? next : { ...next, undelivered: lost })),
-    )
-    awaitRecord(ctx, agentId, to, runner)
-    return { agent: current, session: runner.info() }
-  }
-  settled(await ctx.agents.updatePending(agentId, { startError: saved.error, awaiting: undefined }))
+  settled(await ctx.agents.updatePending(agentId, { startError: saved.error }))
   if (strict) {
     fail(502, `the new conversation did not start: ${saved.error}`)
   }
@@ -334,7 +328,7 @@ async function settle(
 
 // Saved means a record the gateway can restore from is in the store, read back rather than assumed from a flush: a
 // dormant one for a resumable engine, a live snapshot otherwise. Only an engine with neither form has nothing to keep.
-async function durability(ctx: ServerContext, runner: Runner, to: string): Promise<'saved' | 'later' | { kind: 'failed'; error: string }> {
+async function durability(ctx: ServerContext, runner: Runner, to: string): Promise<'saved' | { kind: 'failed'; error: string }> {
   const info = runner.info()
   const resumable = (info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume
   const snapshots = !resumable && ctx.parking.persistsLive(runner)
@@ -344,9 +338,6 @@ async function durability(ctx: ServerContext, runner: Runner, to: string): Promi
   if (await recorded(ctx, to)) {
     return 'saved'
   }
-  if (resumable && info.sdkSessionId === undefined) {
-    return 'later'
-  }
   ctx.parking.touch(runner)
   await ctx.parking.flush(to)
   return (await recorded(ctx, to)) ? 'saved' : { kind: 'failed', error: 'the new conversation could not be saved' }
@@ -355,50 +346,6 @@ async function durability(ctx: ServerContext, runner: Runner, to: string): Promi
 async function recorded(ctx: ServerContext, id: string): Promise<boolean> {
   const record = await ctx.parking.get(id).catch(() => null)
   return record !== null && !isArchived(record)
-}
-
-// Keeps the intent of an idle successor until its first conversation is saved, then clears it under the lock.
-function awaitRecord(ctx: ServerContext, agentId: string, to: string, runner: Runner): void {
-  let done = false
-  let checking = false
-  const unsubscribe = runner.subscribe((event) => {
-    if (done || checking) {
-      return
-    }
-    if (event.type === 'session_closed') {
-      done = true
-      queueMicrotask(unsubscribe)
-      return
-    }
-    if (runner.info().sdkSessionId === undefined) {
-      return
-    }
-    checking = true
-    void ctx.handovers
-      .run([agentId], async () => {
-        const agent = ctx.agents.get(agentId)
-        if (agent?.pending?.to !== to || !agent.pending.awaiting) {
-          done = true
-          return
-        }
-        await ctx.parking.flush(to)
-        const saved = await durability(ctx, runner, to)
-        if (saved === 'saved') {
-          done = true
-          await confirm(ctx, agentId, to, undefined)
-        } else if (saved !== 'later') {
-          done = true
-          settled(await ctx.agents.updatePending(agentId, { startError: saved.error, awaiting: undefined }))
-        }
-      })
-      .catch((error: unknown) => ctx.handovers.onError(error))
-      .finally(() => {
-        checking = false
-        if (done) {
-          unsubscribe()
-        }
-      })
-  }, runner.info().lastSeq)
 }
 
 async function confirm(ctx: ServerContext, agentId: string, to: string, lost: string | undefined): Promise<Rotation> {

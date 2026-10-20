@@ -460,9 +460,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   private `#sdkSessionId` still holds the live id for `turn/start`, steering, interrupts and
   `#isRootThread`), which is what keeps the parking service from persisting a ghost
   (`#rememberDormant` reads `info()`), and an in-process reconnect after a dead child does
-  `thread/start` rather than resume. Consequence: a new codex session, or one just cleared, has no
-  dormant record until its first turn has started; a restart in that window loses the row, the
-  existing no-`system_init` posture rather than a new one. Before this rule the record could name a
+  `thread/start` rather than resume. Consequence: a new codex session, or one just cleared, has a
+  dormant record **without** `sdkSessionId` until its first turn has started; a restart in that window
+  keeps the row and wakes it into a fresh thread. Before this rule the record could name a
   ghost, and every turn of the woken session then failed in ~30ms with that error, forever, because
   nothing cleared the dead id. Whether an interrupted or failed first turn leaves a rollout behind is
   unverified; `turn/started` is taken as the earliest point codex can have recorded the input, and
@@ -546,17 +546,15 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   - **The new thread id is adopted before `conversation_reset` is emitted** whenever a child is
     already up (an eager `thread/start`, no tokens/model call), but it is not reported until the
     next turn materializes it: `conversation_reset.sdkSessionId` is undefined and the reset's
-    dormant re-save deletes the record rather than naming a ghost (the Claude engine's
+    dormant re-save drops the engine id from the record rather than naming a ghost (the Claude engine's
     `new_conversation_id` is resumable at once; a codex thread is not until it has run a turn). The
     fallible step goes first and rolls back on failure (restores the old id and its materialized
     flag) - a half-clear is the worst outcome.
   - **With or without a live child, the session sits with no reported `sdkSessionId` until its next
     turn** (no child: nothing to adopt; live child: the fresh thread has no rollout yet). The
-    parking service deletes the stale dormant record (`#forgetDormant` in
-    `packages/server/src/services/parking.ts`, narrower than `discard`) rather than let a restart
-    wake the session into the transcript the user just cleared. Consequence: for codex the dormant
-    record IS the session's way back, so a cleared session does not survive a restart until a turn
-    has run on the new thread - the row is simply gone.
+    parking service re-saves the dormant record without an `sdkSessionId` (`#rememberDormant` in
+    `packages/server/src/services/parking.ts`) rather than let a restart wake the session into the
+    transcript the user just cleared; such a record wakes into a fresh thread.
   - **The context reading is retired and cannot be re-polled** (unlike Claude). Codex's only source,
     `thread/tokenUsage/updated`, arrives during a turn, so there's no reading until the next turn
     runs - render nothing, never 0%.
@@ -1080,11 +1078,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   known yet at assembly time reaches its bridge executor via a dispatch-time delegate on
   `call.sessionId` (see `smoke/sdk-client.ts`). The browser guest engine loads on first bridged
   call, never at import (it is ~2 MB); keep it an optional peer dep.
+- **Every resumable session has a dormant record from its first event, engine id or not.** A record
+  without `sdkSessionId` wakes into a fresh engine conversation (`rebuildRunner` in `server.ts` also
+  drops `forkSession`). Before 2026-10-20 the record waited for the engine to name a conversation,
+  so a session that never ran a turn (an agent created idle, a successor before its first message)
+  vanished on restart and left its agent bound to a dead id, invisible with its name reserved. The
+  handover no longer waits for an engine identity either; it only refuses to treat such a record as
+  proof that a first message arrived.
 - **A `conversation_reset` must re-write the record, and nothing else will.** No `status_changed`
   follows a clear, and `#persistLive` is otherwise driven by `turn_result`, so the reset arm calls
   both `#rememberDormant` and `#persistLive`. The dormant record names the just-cleared conversation
-  (re-saved under a freshly adopted engine session id on claude; deleted on codex, whose fresh
-  thread is not resumable until a turn has run on it, and whenever the engine has no id yet); the
+  (re-saved under a freshly adopted engine session id on claude; re-saved without one on codex,
+  whose fresh thread is not resumable until a turn has run on it, and whenever the engine has no id
+  yet); the
   live record carries the transcript, so skipping the second call leaves the pre-clear messages
   on disk until the next turn ends. Either omission means a restart in that window wakes the session
   straight back into the transcript the user threw away.
@@ -1477,7 +1483,7 @@ session, the UI says conversation.
   archive (a separate record, so dropping the stage never drops the session). Commit is one agent-store
   write: new binding or tombstone, `conversations`, and a `pending` intent. Finish archives and closes
   the old runner without discard, starts the successor and keeps `pending` until the successor is
-  durable (its record read back, or its engine identity known). `recoverHandovers` runs before the
+  durable (its record read back). `recoverHandovers` runs before the
   gateway listens and finishes any committed intent, reusing an existing successor and never starting
   a fresh engine conversation under its id. Any throw before commit lifts the gate untouched.
 - **A first message is never sent twice.** The prompt goes out between persisted `sending` and `sent`

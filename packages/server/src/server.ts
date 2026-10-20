@@ -662,6 +662,8 @@ function rebuildRunner(factory: SessionFactory, record: StoredSessionRecord): Pr
         ...record.config,
         prompt: undefined,
         resume: record.sdkSessionId,
+        // A record without an engine conversation wakes into a fresh one, never a fork of the id it was created from.
+        ...(record.sdkSessionId === undefined ? { forkSession: undefined } : {}),
       }),
       // Applied after the host's hook, which is free to rebuild the config from the
       // request and would drop a field it has never heard of.

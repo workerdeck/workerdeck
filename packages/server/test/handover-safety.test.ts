@@ -253,7 +253,7 @@ describe('handover: the successor record is read back, not assumed', () => {
     expect((await server.parking.get(pending.to!))?.kind).toBe('live')
   })
 
-  it('keeps an idle successor that has no engine conversation yet recoverable until its first message saves one', async () => {
+  it('saves an idle successor that has no engine conversation yet, so a restart keeps it', async () => {
     const dir = await fixture.stateDir()
     const nameless = (runner: EngineRunner) => void (runner.nameless = true)
     const first = await gateway(dir, { building: nameless })
@@ -263,22 +263,17 @@ describe('handover: the successor record is read back, not assumed', () => {
     const res = await call(first.base, `/agents/${agent.id}/restart`, 'POST', {})
     expect(res.status).toBe(200)
     const fresh = ((await res.json()) as AgentResponse).session!.id
-    expect(stored(dir, agent.id).pending).toMatchObject({ to: fresh, awaiting: true })
-    expect(await first.server.parking.get(fresh)).toBeNull()
+    expect(stored(dir, agent.id).pending).toBeUndefined()
+    expect((await first.server.parking.get(fresh))?.kind).toBe('dormant')
     await stop(first.server)
 
     const second = await gateway(dir, { building: nameless })
-    const revived = second.built.find((runner) => runner.id === fresh)
-    expect(revived).toBeDefined()
-    expect(stored(dir, agent.id).pending).toMatchObject({ to: fresh, awaiting: true })
-    await idle(second.server, fresh)
-    revived!.sendMessage('hello')
-    await vi.waitFor(() => expect(stored(dir, agent.id).pending).toBeUndefined())
-    expect((await second.server.parking.get(fresh))?.kind).toBe('dormant')
     expect((await agentOf(second.base, agent.id)).sessionId).toBe(fresh)
+    const revived = await second.server.parking.ensureLive(fresh)
+    expect(revived?.id).toBe(fresh)
   })
 
-  it('lets a new conversation replace one that is still waiting for its first message', async () => {
+  it('lets a new conversation replace one that never got a message', async () => {
     const { server, base } = await gateway(await fixture.stateDir(), { building: (runner) => void (runner.nameless = true) })
     const { agent, session } = await createAgent(base, 'Wren')
     await idle(server, session!.id)

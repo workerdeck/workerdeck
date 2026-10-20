@@ -28,7 +28,8 @@ export type DormantSessionRecord = {
   info: SessionInfo
   profile?: string
   config: SessionRunnerConfig
-  sdkSessionId: string
+  // Absent until the engine has named its conversation: such a record wakes into a fresh one.
+  sdkSessionId?: string
   cost?: CostLedgerState
   savedAt: number
 }
@@ -234,7 +235,7 @@ function parseRecord(value: unknown): StoredSessionRecord | null {
   }
   if (record.kind === 'dormant') {
     const dormant = record as Partial<DormantSessionRecord>
-    if (typeof dormant.sdkSessionId !== 'string' || typeof dormant.savedAt !== 'number') {
+    if ((dormant.sdkSessionId !== undefined && typeof dormant.sdkSessionId !== 'string') || typeof dormant.savedAt !== 'number') {
       return null
     }
     return dormant as DormantSessionRecord

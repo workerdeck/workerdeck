@@ -429,7 +429,7 @@ describe('sessions that survive a restart', () => {
     expect((await list(third.base)).map((row) => row.id)).toEqual([session.id])
   })
 
-  it('forgets the dormant record when a clear leaves nothing to come back to', async () => {
+  it('keeps the session but drops the old engine id when a clear leaves nothing to come back to', async () => {
     const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
@@ -440,7 +440,9 @@ describe('sessions that survive a restart', () => {
     await gateway.built[0]!.clearContext()
 
     await vi.waitFor(async () => {
-      expect(await store.get(session.id)).toBeNull()
+      const record = await store.get(session.id)
+      expect(record?.kind).toBe('dormant')
+      expect(record && record.kind === 'dormant' ? record.sdkSessionId : 'stale').toBeUndefined()
     })
     expect((await list(gateway.base)).map((row) => row.id)).toEqual([session.id])
   })

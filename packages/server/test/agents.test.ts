@@ -187,6 +187,25 @@ describe('agents', () => {
     expect((await call<{ sessions: SessionInfo[] }>(second.base, '/sessions')).body.sessions[0]?.agent?.name).toBe('Wren')
   })
 
+  it('keeps an agent whose session never ran a turn across a restart, waking it fresh', async () => {
+    const dir = await stateDir()
+    const first = await startGateway(dir)
+    const { body } = await call<AgentResponse>(first.base, '/agents', 'POST', { name: 'Wren', config: { cwd: '/tmp/project' } })
+    const sessionId = body.session!.id
+    await vi.waitFor(async () => expect(await createFileSessionStore({ dir }).get(sessionId)).not.toBeNull())
+
+    await first.server.close()
+    servers.splice(servers.indexOf(first.server), 1)
+
+    const second = await startGateway(dir)
+    const listed = (await call<{ sessions: SessionInfo[] }>(second.base, '/sessions')).body.sessions
+    expect(listed.find((session) => session.id === sessionId)?.agent?.name).toBe('Wren')
+    const woken = await second.server.parking.ensureLive(sessionId)
+    woken?.sendMessage('wake')
+    await vi.waitFor(() => expect(second.harness.captured.options).toBeDefined())
+    expect(second.harness.captured.options?.resume).toBeUndefined()
+  })
+
   it('scopes instruction files to the agent cwd and keeps the scope across a restart', async () => {
     const dir = await stateDir()
     const first = await startGateway(dir)
