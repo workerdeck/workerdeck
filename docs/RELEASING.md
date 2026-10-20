@@ -1643,6 +1643,11 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   catalog re-read (`supportedModels()`, no drift); instruction scope live-checked on Claude CLI
   0.3.293 and the codex 0.162.1 app-server, the SWP team on the dev gateway (Tobias); Agent Files
   hand-checked by Tobias locally; the remote path is untested until a remote gateway runs 3.15.0.
+  The second tag's Publish (at `dc6a2e08`) failed in `pnpm test`: a server test still expected
+  `gpt-6-astra` as the first codex model, and the local gate had read it from turbo's cache. Fixed in
+  `22f08666`, tag moved there. Gate a release with `turbo run test --force`. **Published** 2026-10-20:
+  npm 12/12 (the last, `queue`, live about 6 min after the run), Marketplace 3.15.0 about 5 min after;
+  mini deck + relay upgraded.
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
