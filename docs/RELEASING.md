@@ -1627,9 +1627,22 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   compact folders, sticky scroll, full `files.exclude` globs, inline rename/create, drag and drop,
   cut/copy/paste, `workerdeck.files.*` keybindings under the `workerdeck.filesFocus` context key
   (`focusedView` is never set inside a webview view). Native: one blank line above and below the
-  transcript (`711e32b0`). **Verified**: `pnpm lint`, typecheck, full test (serial; one shells
-  flake, 3/3 green alone), gatekeeper, free `smoke:codex --canary` 11/11; Agent Files hand-checked
-  by Tobias locally; the remote path is untested until a remote gateway runs 3.15.0.
+  transcript (`711e32b0`). The first cut's tag was pushed and its Publish cancelled before anything
+  published, then the release was held and grew (re-tagged at the release commit): session-list
+  groups fold and reorder by dragging the heading (`ViewConfig.groupOrder`, protocol
+  `orderGroups`/`moveGroup`/`resetGroupOrder`), project headings keep their case with a gateway badge;
+  `AgentConfig.instructionScope: 'cwd'` loads instruction files only from the agent's folder (Claude
+  `settings.claudeMdExcludes` per ancestor, codex `project_root_markers = []`); a Claude session on a
+  profile whose config dir is not `~/.claude` no longer reads `~/.claude/CLAUDE.md` as a project file
+  (which made the CLI skip every AGENTS.md); sessions that never ran a turn survive a restart (dormant
+  record without `sdkSessionId`, the handover's `awaiting` intent removed: the agent-vanishes bug);
+  `PATCH /agents/:id` clears a config key sent as `null`, client `getAgent`; VS Code Edit settings /
+  Edit brief open an agent's config as `workerdeck-agent:` documents with a JSON schema; codex
+  catalog re-extracted from 0.162.1 (`gpt-6.1-sol` added, $2/$0.10/$10). **Verified**: `pnpm lint`,
+  typecheck, full test (serial), cargo test, gatekeeper, free `smoke:codex --canary` 11/11, Claude
+  catalog re-read (`supportedModels()`, no drift); instruction scope live-checked on Claude CLI
+  0.3.293 and the codex 0.162.1 app-server, the SWP team on the dev gateway (Tobias); Agent Files
+  hand-checked by Tobias locally; the remote path is untested until a remote gateway runs 3.15.0.
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`

@@ -14,6 +14,19 @@ gateway and protocol it talks to.
   folders, sticky scroll, `files.exclude`, inline rename and new file/folder, drag and drop,
   cut/copy/paste, delete (to the Trash when local). Shortcuts are `workerdeck.files.*` keybindings; bind your own
   with the `workerdeck.filesFocus` context key.
+- **Edit settings and Edit brief** in an agent's card menu: its settings (project, profile, model,
+  permission mode, instruction scope, sleep) open as a JSON file with completion, its brief as
+  markdown, and saving sends the change to the gateway. Remove a key to reset it.
+- **Fold and reorder groups** in the Sessions view: click a state, engine or project heading to fold
+  it, drag it to move it; *Reset group order* in the filter menu. Project headings keep their case
+  and show the gateway as a badge.
+- **Instruction scope** for agents: `"instructionScope": "cwd"` loads instruction files only from the
+  agent's own folder, for team members working in a monorepo sub-folder.
+
+### Fixed
+
+- An agent created idle no longer disappears from every list after a gateway restart.
+- Claude sessions on a profile with its own config folder load the project's AGENTS.md again.
 
 ## [3.6.1] - 2026-10-06
 
