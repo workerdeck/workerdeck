@@ -193,6 +193,16 @@ matched by `src/glob.ts`, a port of the workbench's glob semantics (`**` spans s
 folder itself; braces may hold `/`) plus the `{ "when": "$(basename).ts" }` sibling clause, against
 the path relative to the containing workspace folder, or to the view's root outside one.
 
+**Sticky scroll** follows `workbench.tree.enableStickyScroll` and `stickyScrollMaxItemCount`.
+`stickyRows` ports the workbench's `StickyScrollController` over the flat rows (`treeShape` gives each
+row its parent and last descendant): walk up from the row under the stack, pin the ancestor below the
+previous pin, push a pin up once its last descendant scrolls past, and drop pins past the item count or
+40% of the view. So one row of scroll can pin a whole nested chain at once, exactly as in the Explorer.
+The stack sits in a zero-height `position: sticky` anchor at the top of the scroller, so it never shifts
+the rows or covers the scrollbar. A click on a pinned row focuses it and scrolls it to where it is drawn;
+its twistie collapses it. The webview frame is a CDP target of its own (`/json/list`, `purpose=webviewView`),
+so its DOM and scroll offsets can be driven and read directly in the probe.
+
 Decorations (`src/file-decorations.ts`) are git status from the built-in git extension's API (local
 roots only) plus diagnostics, bubbled to folders as colour only. Another extension's
 `FileDecorationProvider` cannot be read, and OS file drops need Shift held, as in every sidebar

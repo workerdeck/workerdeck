@@ -31,6 +31,8 @@ import {
   ROW_HEIGHT,
   INDENT,
   soleFolder,
+  stickyRows,
+  treeShape,
   validateName,
   type DirState,
   type Edit,
@@ -38,7 +40,15 @@ import {
   type Row,
 } from './tree-model.ts'
 
-type Theme = { css: string; fileIcons: boolean; folderIcons: boolean; hideArrows: boolean; modern: boolean; compact: boolean }
+type Theme = {
+  css: string
+  fileIcons: boolean
+  folderIcons: boolean
+  hideArrows: boolean
+  modern: boolean
+  compact: boolean
+  sticky: number
+}
 
 type SavedState = { expanded?: Record<string, string[]> }
 
@@ -63,6 +73,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
     hideArrows: false,
     modern: false,
     compact: true,
+    sticky: 7,
   })
   const [dirs, setDirs] = useState<Map<string, DirState>>(new Map())
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -183,6 +194,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
               hideArrows: msg.hideArrows,
               modern: msg.modern,
               compact: msg.compact,
+              sticky: msg.sticky,
             })
             return
           }
@@ -231,6 +243,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
     })
     return index
   }, [rows])
+  const shape = useMemo(() => treeShape(rows), [rows])
   const indexOf = useCallback((uri: string | undefined) => (uri ? (rowIndex.get(uri) ?? -1) : -1), [rowIndex])
   const activeIndex = useCallback(
     (row: EntryRow) => (segment?.row === rowKey(row) && segment.size === row.chain.length ? segment.index : row.chain.length - 1),
@@ -721,6 +734,24 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
     [edit, post],
   )
 
+  const onStickyClick = useCallback(
+    (event: MouseEvent, row: Row, index: number, top: number) => {
+      if (row.kind !== 'entry' || edit) {
+        return
+      }
+      if (event.target instanceof Element && event.target.closest('.monaco-tl-twistie')) {
+        toggle(rowKey(row))
+        return
+      }
+      const picked = memberAt(event.target, row)
+      focusRow(picked?.uri ?? rowKey(row), 'single', picked !== undefined)
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = index * ROW_HEIGHT - top
+      }
+    },
+    [edit, toggle, focusRow],
+  )
+
   const cancelEdit = useCallback(() => {
     setEdit(undefined)
     listRef.current?.focus()
@@ -758,6 +789,36 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
     .filter(Boolean)
     .join(' ')
   const dropRegion = dropTarget && dropTarget !== root.uri ? dropTarget : undefined
+  const stuck = stickyRows(rows, shape, scrollTop, viewport, theme.sticky)
+  const stuckHeight = stuck.length > 0 ? stuck.at(-1)!.top + ROW_HEIGHT : 0
+  const rowProps = (row: Row, index: number) => {
+    const key = rowKey(row)
+    const inDrop =
+      dropRegion !== undefined && ((row.kind === 'entry' && row.entry.uri === dropRegion) || row.ancestors.includes(dropRegion))
+    return {
+      row,
+      index,
+      count: rows.length,
+      rootName: root.name,
+      selected: row.kind === 'entry' && selected.has(key),
+      focused: key === focused,
+      active: row.kind === 'entry' ? activeIndex(row) : 0,
+      dropTarget: inDrop,
+      dropMember: dropTarget,
+      cut: row.kind === 'entry' && row.chain.some((e) => cut.has(e.uri)),
+      activeGuide,
+      decoration: row.kind === 'entry' ? decorations[row.entry.uri] : undefined,
+      edit,
+      dirs,
+      onMouseDown: onRowMouseDown,
+      onClick: onRowClick,
+      onDoubleClick: onRowDoubleClick,
+      onTwistie: toggle,
+      onDragStart,
+      onCommit: commitEdit,
+      onCancel: cancelEdit,
+    }
+  }
 
   return (
     <div className={theme.modern ? 'wdf wdf-modern' : 'wdf'} onContextMenu={(e) => e.target === e.currentTarget && e.preventDefault()}>
@@ -785,39 +846,31 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         >
           <div ref={scrollRef} className="monaco-scrollable-element" onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
             {rootState?.error ? <p className="wdf-message">{rootState.error}</p> : null}
+            {stuck.length > 0 ? (
+              <div className="wdf-sticky-anchor">
+                <div className="monaco-tree-sticky-container" style={{ height: stuckHeight }}>
+                  <div className="monaco-tree-sticky-container-shadow" />
+                  {[...stuck].reverse().map(({ index, top }) => {
+                    const row = rows[index]!
+                    return (
+                      <TreeRow
+                        key={`sticky:${rowKey(row)}`}
+                        {...rowProps(row, index)}
+                        selected={false}
+                        focused={false}
+                        edit={undefined}
+                        top={top}
+                        onClick={(event) => onStickyClick(event, row, index, top)}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
             <div className="monaco-list-rows" style={{ height: rows.length * ROW_HEIGHT }}>
-              {rows.slice(start, end).map((row, offset) => {
-                const index = start + offset
-                const key = rowKey(row)
-                const inDrop =
-                  dropRegion !== undefined && ((row.kind === 'entry' && row.entry.uri === dropRegion) || row.ancestors.includes(dropRegion))
-                return (
-                  <TreeRow
-                    key={key}
-                    row={row}
-                    index={index}
-                    count={rows.length}
-                    rootName={root.name}
-                    selected={row.kind === 'entry' && selected.has(key)}
-                    focused={key === focused}
-                    active={row.kind === 'entry' ? activeIndex(row) : 0}
-                    dropTarget={inDrop}
-                    dropMember={dropTarget}
-                    cut={row.kind === 'entry' && row.chain.some((e) => cut.has(e.uri))}
-                    activeGuide={activeGuide}
-                    decoration={row.kind === 'entry' ? decorations[row.entry.uri] : undefined}
-                    edit={edit}
-                    dirs={dirs}
-                    onMouseDown={onRowMouseDown}
-                    onClick={onRowClick}
-                    onDoubleClick={onRowDoubleClick}
-                    onTwistie={toggle}
-                    onDragStart={onDragStart}
-                    onCommit={commitEdit}
-                    onCancel={cancelEdit}
-                  />
-                )
-              })}
+              {rows.slice(start, end).map((row, offset) => (
+                <TreeRow key={rowKey(row)} {...rowProps(row, start + offset)} />
+              ))}
             </div>
           </div>
         </div>
@@ -829,6 +882,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
 type TreeRowProps = {
   row: Row
   index: number
+  top?: number
   count: number
   rootName: string
   selected: boolean
@@ -867,7 +921,14 @@ function TreeRow(props: TreeRowProps) {
   const twistie = isFolder
     ? `monaco-tl-twistie codicon codicon-tree-item-expanded collapsible${row.kind === 'entry' && row.expanded ? '' : ' collapsed'}`
     : 'monaco-tl-twistie'
-  const rowClass = ['monaco-list-row', focused ? 'focused' : '', selected ? 'selected' : '', dropTarget ? 'drop-target' : '']
+  const sticky = props.top !== undefined
+  const rowClass = [
+    'monaco-list-row',
+    sticky ? 'monaco-tree-sticky-row' : '',
+    focused ? 'focused' : '',
+    selected ? 'selected' : '',
+    dropTarget ? 'drop-target' : '',
+  ]
     .filter(Boolean)
     .join(' ')
   const labelClass = [
@@ -899,7 +960,7 @@ function TreeRow(props: TreeRowProps) {
       aria-label={chain.map((e) => e.name).join('/') || name}
       title={decoration?.tooltip ? `${name} • ${decoration.tooltip}` : undefined}
       draggable={!editing}
-      style={{ top: index * ROW_HEIGHT, height: ROW_HEIGHT, lineHeight: `${ROW_HEIGHT}px` }}
+      style={{ top: props.top ?? index * ROW_HEIGHT, height: ROW_HEIGHT, lineHeight: `${ROW_HEIGHT}px` }}
       data-vscode-context={context}
       onMouseDown={(e) => props.onMouseDown(e, row)}
       onClick={(e) => props.onClick(e, row)}

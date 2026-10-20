@@ -61,7 +61,8 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
         if (
           e.affectsConfiguration('workbench.iconTheme') ||
           e.affectsConfiguration('workbench.experimental.modernUI') ||
-          e.affectsConfiguration('explorer.compactFolders')
+          e.affectsConfiguration('explorer.compactFolders') ||
+          e.affectsConfiguration('workbench.tree')
         ) {
           void this.#pushTheme()
         }
@@ -192,6 +193,7 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
       hideArrows: theme.hideArrows,
       modern: vscode.workspace.getConfiguration('workbench').get<boolean>('experimental.modernUI') !== false,
       compact: vscode.workspace.getConfiguration('explorer').get<boolean>('compactFolders') !== false,
+      sticky: stickyItems(),
     })
   }
 
@@ -645,4 +647,9 @@ async function guarded(run: () => Promise<void>): Promise<void> {
   } catch (err) {
     void vscode.window.showErrorMessage(`WorkerDeck: ${errorText(err)}`)
   }
+}
+
+function stickyItems(): number {
+  const tree = vscode.workspace.getConfiguration('workbench.tree')
+  return tree.get<boolean>('enableStickyScroll') === false ? 0 : (tree.get<number>('stickyScrollMaxItemCount') ?? 7)
 }

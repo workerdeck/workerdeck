@@ -155,3 +155,68 @@ export function rangeBetween(rows: readonly Row[], from: string, to: string): st
   }
   return keys.slice(Math.min(a, b), Math.max(a, b) + 1)
 }
+
+export type TreeShape = { parent: number[]; end: number[] }
+
+export type StickyRow = { index: number; top: number }
+
+const STICKY_VIEW_RATIO = 0.4
+
+export function treeShape(rows: readonly Row[]): TreeShape {
+  const parent = rows.map(() => -1)
+  const end = rows.map((_, i) => i)
+  const open: number[] = []
+  rows.forEach((row, i) => {
+    while (open.length > 0 && rows[open.at(-1)!]!.level >= row.level) {
+      open.pop()
+    }
+    parent[i] = open.at(-1) ?? -1
+    for (const ancestor of open) {
+      end[ancestor] = i
+    }
+    open.push(i)
+  })
+  return { parent, end }
+}
+
+// The workbench's StickyScrollController: ancestors of the top row pin, each pushed up once its last descendant scrolls past.
+export function stickyRows(rows: readonly Row[], shape: TreeShape, scrollTop: number, viewport: number, max: number): StickyRow[] {
+  const stuck: StickyRow[] = []
+  let height = 0
+  let first = Math.floor(scrollTop / ROW_HEIGHT)
+  let previous: number | undefined
+  while (max > 0 && first < rows.length) {
+    const node = ancestorUnder(shape.parent, first, previous)
+    if (node === undefined) {
+      break
+    }
+    if (node === first) {
+      const row = rows[node]
+      if (row?.kind !== 'entry' || !row.expanded || node * ROW_HEIGHT - scrollTop === height) {
+        break
+      }
+    }
+    const bottom = (shape.end[node]! + 1) * ROW_HEIGHT - scrollTop
+    const top = height + ROW_HEIGHT > bottom && height <= bottom ? bottom - ROW_HEIGHT : height
+    stuck.push({ index: node, top })
+    height += ROW_HEIGHT
+    if (stuck.length > max) {
+      break
+    }
+    first = Math.floor((scrollTop + top + ROW_HEIGHT) / ROW_HEIGHT)
+    previous = node
+  }
+  const kept = stuck.findIndex((row, i) => i >= max || row.top + ROW_HEIGHT > STICKY_VIEW_RATIO * viewport)
+  return kept < 0 ? stuck : stuck.slice(0, kept)
+}
+
+function ancestorUnder(parent: readonly number[], index: number, previous: number | undefined): number | undefined {
+  let current = index
+  while (parent[current]! >= 0) {
+    if (parent[current] === previous) {
+      return current
+    }
+    current = parent[current]!
+  }
+  return previous === undefined ? current : undefined
+}

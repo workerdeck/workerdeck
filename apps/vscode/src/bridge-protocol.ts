@@ -321,6 +321,7 @@ export type HostToFiles =
       hideArrows: boolean
       modern: boolean
       compact: boolean
+      sticky: number
     }
   | { kind: 'wd-files-decorations'; decorations: Record<string, WireDecoration> }
   | { kind: 'wd-files-command'; command: FilesCommand; uri?: string }
