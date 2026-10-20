@@ -17,6 +17,9 @@ import {
   teamView,
   toggleTeamExpanded,
   isGroupCollapsed,
+  moveGroup,
+  orderGroups,
+  orderedGroupBy,
   toggleGroupCollapsed,
   clearContextOffered,
 } from '@workerdeck/protocol'
@@ -40,7 +43,7 @@ import { MemberCard } from './MemberCard.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionFilters } from './SessionFilters.tsx'
 import { SessionItem, type SelectModifiers } from './SessionItem.tsx'
-import { CustomGroupHeader, GroupHeading, HeadingAction, NewGroupButton, useGroupDrag, type DropCue } from './SessionGroups.tsx'
+import { CustomGroupHeader, FacetGroupHeader, HeadingAction, NewGroupButton, useGroupDrag, type DropCue } from './SessionGroups.tsx'
 import type { TeamMove } from '../../lib/team-drop.ts'
 import { cn } from '../../lib/utils.ts'
 
@@ -142,7 +145,7 @@ export function SessionBrowser({
   const visible = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
   const relayHosts = useMemo(() => relayHostsOf(relays ?? {}), [relays])
   const groups = useMemo(
-    () => groupRows(visible, config, { gatewayCount: gateways, all: rows, relayHosts }),
+    () => orderGroups(groupRows(visible, config, { gatewayCount: gateways, all: rows, relayHosts }), config),
     [visible, config, gateways, rows, relayHosts],
   )
   const subset = subsetSummary(config, scope, visible.length, rows.length)
@@ -193,11 +196,14 @@ export function SessionBrowser({
 
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
   const byKey = useMemo(() => new Map(rows.map((row) => [sessionKey(row), row])), [rows])
+  const ordered = orderedGroupBy(config.groupBy)
   const drag = useGroupDrag(config.customGroups ?? [], (customGroups) => set({ customGroups }), {
     custom,
     team: onTeamMove ? { rowOf: (key) => byKey.get(key), onMove: onTeamMove, relays } : undefined,
+    order: ordered ? (key, onto) => onConfigChange(moveGroup(config, groups, key, onto)) : undefined,
   })
-  const draggable = custom || onTeamMove !== undefined
+  const draggable = custom || ordered || onTeamMove !== undefined
+  const folded = (group: SessionGroup) => !group.earlier && config.groupBy !== 'none' && isGroupCollapsed(config, group)
 
   const heading = (group: SessionGroup) => {
     if (custom) {
@@ -234,33 +240,29 @@ export function SessionBrowser({
     }
     const project = config.groupBy === 'project'
     const target = project && group.hostId ? { hostId: group.hostId, cwd: group.cwd } : undefined
+    const label = project ? (group.project ?? group.label) : group.label
     return (
-      <GroupHeading
-        label={
-          group.gateway && group.project ? (
-            <>
-              {group.gateway}
-              <span aria-hidden> · </span>
-              <span className="text-fg-1">{group.project}</span>
-            </>
-          ) : (
-            group.label
-          )
-        }
-        count={group.rows.length}
+      <FacetGroupHeader
+        group={group}
+        label={label}
+        caps={!project}
+        badge={project ? group.gateway : undefined}
         title={project && group.cwd ? group.cwd : undefined}
-        leading={
+        icon={
           project ? (
-            <ProjectIcon icon={group.rows[0]?.info.project?.icon} src={iconSrcOf(group.rows[0], projectIcons)} name={group.label} />
+            <ProjectIcon icon={group.rows[0]?.info.project?.icon} src={iconSrcOf(group.rows[0], projectIcons)} name={label} />
           ) : undefined
         }
         actions={
           target && onCreateInGroup ? (
-            <HeadingAction label={`New session in ${group.label}`} onClick={() => onCreateInGroup(target)}>
+            <HeadingAction label={`New session in ${label}`} onClick={() => onCreateInGroup(target)}>
               <Plus className="size-3" />
             </HeadingAction>
           ) : undefined
         }
+        dragProps={drag.header(group)}
+        collapsed={isGroupCollapsed(config, group)}
+        onToggleCollapsed={() => onConfigChange(toggleGroupCollapsed(config, group))}
       />
     )
   }
@@ -319,12 +321,12 @@ export function SessionBrowser({
               className={cn('flex flex-col gap-1 rounded-md', draggable && drag.isOver(`group:${group.key}`) && 'bg-row-hover/50')}
             >
               {heading(group)}
-              {custom && isGroupCollapsed(config, group) ? null : custom && group.custom !== undefined && group.rows.length === 0 ? (
+              {folded(group) ? null : custom && group.custom !== undefined && group.rows.length === 0 ? (
                 <div className="mx-1 rounded-md border border-dashed border-border px-2 py-2 text-center text-label text-fg-4">
                   Drag sessions here
                 </div>
               ) : null}
-              {(group.earlier && !config.earlierOpen) || (custom && isGroupCollapsed(config, group))
+              {(group.earlier && !config.earlierOpen) || folded(group)
                 ? null
                 : group.rows.map((row) => {
                     const item = (member: SessionRow, variant: 'card' | 'member', extra: Partial<SessionRowItemProps> = {}) => (

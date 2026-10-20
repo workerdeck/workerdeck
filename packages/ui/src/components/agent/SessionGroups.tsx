@@ -46,12 +46,13 @@ const ERROR_MS = 5000
 // The payload lives in state rather than `dataTransfer`, which is unreadable during `dragover`; `setData` is still
 // written because some engines refuse to start a drag without it. A card is split in three: the middle joins its
 // team, the edges reorder (custom groups) or leave a team.
+// `order` moves a facet group (state, engine, project) onto another one; custom groups reorder through `onChange`.
 export function useGroupDrag(
   groups: readonly CustomGroup[],
   onChange: (groups: CustomGroup[]) => void,
-  options: { custom: boolean; team?: TeamDrag },
+  options: { custom: boolean; team?: TeamDrag; order?: (key: string, onto: string) => void },
 ) {
-  const { custom, team } = options
+  const { custom, team, order } = options
   const [item, setItem] = useState<DragItem>()
   const [over, setOver] = useState<Over>()
   const [failure, setFailure] = useState<{ key: string; message: string }>()
@@ -155,14 +156,20 @@ export function useGroupDrag(
       const dragged = item?.kind === 'session' ? team?.rowOf(item.key) : undefined
       return dragged?.info.agent?.lead !== undefined ? dragged : undefined
     }
+    const facetGroup = () => !custom && order !== undefined && item?.kind === 'group' && !group.earlier
     return {
       onDragOver: (e) => {
-        if (item && (custom || leaving())) {
+        if (item && (custom || leaving() || facetGroup())) {
           accept(e, { spot: `group:${group.key}` })
         }
       },
       onDrop: (e) => {
         e.preventDefault()
+        if (facetGroup() && item?.kind === 'group') {
+          order!(item.id, group.key)
+          end()
+          return
+        }
         const member = leaving()
         if (member) {
           move(sessionKey(member), { row: member, lead: null })()
@@ -178,7 +185,7 @@ export function useGroupDrag(
   }
 
   function header(group: SessionGroup): HTMLAttributes<HTMLDivElement> {
-    const id = group.custom
+    const id = custom ? group.custom : order && !group.earlier ? group.key : undefined
     if (id === undefined) {
       return {}
     }
@@ -268,21 +275,7 @@ export function CustomGroupHeader({
       onDoubleClick={custom ? () => onEditingChange(true) : undefined}
       leading={
         <>
-          {onToggleCollapsed ? (
-            <button
-              type="button"
-              aria-expanded={!collapsed}
-              aria-label={collapsed ? `Expand ${group.label ?? 'group'}` : `Collapse ${group.label ?? 'group'}`}
-              className="-mr-1 -ml-1 grid size-4 place-items-center rounded-sm text-fg-4 hover:text-fg-1"
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleCollapsed()
-              }}
-              onDoubleClick={(e) => e.stopPropagation()}
-            >
-              {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-            </button>
-          ) : null}
+          {onToggleCollapsed ? <FoldButton name={group.label ?? 'group'} collapsed={collapsed} onToggle={onToggleCollapsed} /> : null}
           {custom ? (
             <>
               <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" />
@@ -303,6 +296,71 @@ export function CustomGroupHeader({
           </>
         ) : undefined
       }
+    />
+  )
+}
+
+function FoldButton({ name, collapsed, onToggle }: { name: string; collapsed: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? `Expand ${name}` : `Collapse ${name}`}
+      className="-mr-1 -ml-1 grid size-4 place-items-center rounded-sm text-fg-4 hover:text-fg-1"
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+    </button>
+  )
+}
+
+// A state, engine or project heading: folds, drags to reorder, and names a project's gateway as a badge after it.
+export function FacetGroupHeader({
+  group,
+  label,
+  caps,
+  icon,
+  badge,
+  title,
+  actions,
+  dragProps,
+  collapsed,
+  onToggleCollapsed,
+}: {
+  group: SessionGroup
+  label: string
+  caps: boolean
+  icon?: ReactNode
+  badge?: string
+  title?: string
+  actions?: ReactNode
+  dragProps: HTMLAttributes<HTMLDivElement>
+  collapsed: boolean
+  onToggleCollapsed: () => void
+}) {
+  const summary = collapsed ? foldedSummary(group) : undefined
+  return (
+    <GroupHeading
+      {...dragProps}
+      label={label}
+      count={group.rows.length}
+      title={title}
+      caps={caps}
+      className={cn(dragProps.draggable && 'cursor-grab')}
+      leading={
+        <>
+          <FoldButton name={label} collapsed={collapsed} onToggle={onToggleCollapsed} />
+          {dragProps.draggable ? <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" /> : null}
+          {icon}
+        </>
+      }
+      badge={badge}
+      after={summary ? <span className={cn('truncate', summary.attention ? 'text-warning' : 'text-fg-4/70')}>{summary.text}</span> : undefined}
+      actions={actions}
     />
   )
 }
@@ -352,6 +410,7 @@ function foldedSummary(group: SessionGroup): { text: string; attention: number }
 export function GroupHeading({
   label,
   count,
+  badge,
   after,
   leading,
   actions,
@@ -361,6 +420,7 @@ export function GroupHeading({
 }: {
   label: ReactNode
   count: number
+  badge?: string
   after?: ReactNode
   leading?: ReactNode
   actions?: ReactNode
@@ -371,6 +431,9 @@ export function GroupHeading({
     <div {...rest} className={cn('group/heading flex min-h-5 items-center gap-2 px-2 text-label font-medium text-fg-4', className)}>
       {leading}
       <span className={cn('min-w-0 truncate', caps ? 'uppercase tracking-wide' : 'text-fg-3')}>{label}</span>
+      {badge ? (
+        <span className="shrink-0 rounded-sm border border-border px-1 leading-4 font-normal text-fg-4">{badge}</span>
+      ) : null}
       <span className="text-fg-4/70">{count}</span>
       {after}
       {actions ? (

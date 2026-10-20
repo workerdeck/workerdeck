@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { Filter, X } from 'lucide-react'
-import { STATE_LABELS, STATE_ORDER, adaptersOf, displayCustomized, facetFilterCount, projectsOf } from '@workerdeck/protocol'
+import { STATE_LABELS, STATE_ORDER, adaptersOf, displayCustomized, facetFilterCount, orderedGroupBy, projectsOf, resetGroupOrder } from '@workerdeck/protocol'
 import type { GroupBy, SessionRow, SessionState, SortBy, StepDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover.tsx'
@@ -112,6 +112,15 @@ export function SessionFilters({ config, onConfigChange, rows, scope, gateways: 
             onChange={(groupBy) => set({ groupBy: groupBy as GroupBy })}
           />
         </FilterRow>
+        {orderedGroupBy(config.groupBy) && config.groupOrder?.[config.groupBy]?.length ? (
+          <button
+            type="button"
+            className="self-end text-label text-fg-3 underline underline-offset-2 hover:text-fg-1"
+            onClick={() => onConfigChange(resetGroupOrder(config))}
+          >
+            Reset group order
+          </button>
+        ) : null}
         <FilterRow label="Sort">
           <OptionSelect
             className="w-full min-w-0"

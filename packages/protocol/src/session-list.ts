@@ -90,7 +90,17 @@ export type ViewConfig = {
   expandedTeams?: string[]
   // `SessionGroup.key` values: the custom groups this client draws folded. A viewing preference too.
   collapsedGroups?: string[]
+  groupOrder?: GroupOrder
   earlierOpen?: boolean
+}
+
+export type OrderedGroupBy = 'state' | 'adapter' | 'project'
+
+// `SessionGroup.key` values per grouping, in the order the operator dragged them into. A viewing preference.
+export type GroupOrder = Partial<Record<OrderedGroupBy, string[]>>
+
+export function orderedGroupBy(groupBy: GroupBy): groupBy is OrderedGroupBy {
+  return groupBy === 'state' || groupBy === 'adapter' || groupBy === 'project'
 }
 
 export const DEFAULT_VIEW_CONFIG: ViewConfig = {
@@ -532,6 +542,61 @@ export function isGroupCollapsed(config: ViewConfig, group: Pick<SessionGroup, '
 export function toggleGroupCollapsed(config: ViewConfig, group: Pick<SessionGroup, 'key'>): ViewConfig {
   const held = config.collapsedGroups ?? []
   return { ...config, collapsedGroups: held.includes(group.key) ? held.filter((k) => k !== group.key) : [...held, group.key] }
+}
+
+// A group the stored order does not name lands after its nearest ranked predecessor, so a new project or state
+// appears where `groupRows` would have put it rather than at the end. The Earlier fold stays last.
+export function orderGroups(groups: readonly SessionGroup[], config: ViewConfig): SessionGroup[] {
+  const stored = orderedGroupBy(config.groupBy) ? config.groupOrder?.[config.groupBy] : undefined
+  if (!stored?.length) {
+    return [...groups]
+  }
+  const ranked = groups.filter((group) => !group.earlier)
+  const byKey = new Map(ranked.map((group) => [group.key, group]))
+  const out = stored.flatMap((key) => byKey.get(key) ?? [])
+  ranked.forEach((group, i) => {
+    if (out.includes(group)) {
+      return
+    }
+    let at = 0
+    for (let j = i - 1; j >= 0; j--) {
+      const placed = out.indexOf(ranked[j]!)
+      if (placed >= 0) {
+        at = placed + 1
+        break
+      }
+    }
+    out.splice(at, 0, group)
+  })
+  return [...out, ...groups.filter((group) => group.earlier)]
+}
+
+// `drawn` is the list as `orderGroups` returned it. Dropping on a group further down lands after it, further up
+// before it, so every slot is reachable. Keys of groups a filter hides keep their place at the end.
+export function moveGroup(config: ViewConfig, drawn: readonly SessionGroup[], key: string, onto: string): ViewConfig {
+  const by = config.groupBy
+  if (!orderedGroupBy(by) || key === onto) {
+    return config
+  }
+  const keys = drawn.filter((group) => !group.earlier).map((group) => group.key)
+  const from = keys.indexOf(key)
+  const to = keys.indexOf(onto)
+  if (from < 0 || to < 0) {
+    return config
+  }
+  const rest = keys.filter((k) => k !== key)
+  const at = rest.indexOf(onto) + (from < to ? 1 : 0)
+  const order = [...rest.slice(0, at), key, ...rest.slice(at)]
+  const hidden = (config.groupOrder?.[by] ?? []).filter((k) => !keys.includes(k))
+  return { ...config, groupOrder: { ...config.groupOrder, [by]: [...order, ...hidden] } }
+}
+
+export function resetGroupOrder(config: ViewConfig): ViewConfig {
+  if (!orderedGroupBy(config.groupBy) || !config.groupOrder?.[config.groupBy]) {
+    return config
+  }
+  const { [config.groupBy]: _dropped, ...rest } = config.groupOrder
+  return { ...config, groupOrder: rest }
 }
 
 export type GroupSummary = { sessions: number; working: number; attention: number; unseen: number }

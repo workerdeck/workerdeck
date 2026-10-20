@@ -38,6 +38,9 @@ import {
   groupSummary,
   isGroupCollapsed,
   toggleGroupCollapsed,
+  moveGroup,
+  orderGroups,
+  resetGroupOrder,
   visibleShells,
 } from '@workerdeck/protocol'
 import type { SessionInfo, SessionRow, ShellInfo, SubagentInfo, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
@@ -688,5 +691,35 @@ describe('custom group collapse', () => {
     expect(isGroupCollapsed(folded, { key: 'custom:ungrouped' })).toBe(false)
     expect(isGroupCollapsed(toggleGroupCollapsed(folded, group), group)).toBe(false)
     expect(groupSummary(group)).toEqual({ sessions: 4, working: 2, attention: 1, unseen: 3 })
+  })
+})
+
+describe('facet group order', () => {
+  const g = (key: string, earlier = false) => ({ key, rows: [], ...(earlier ? { earlier: true as const } : {}) })
+  const byState: ViewConfig = { ...DEFAULT_VIEW_CONFIG, groupBy: 'state' }
+  const keys = (groups: { key: string }[]) => groups.map((group) => group.key)
+
+  it('keeps the ranked order until the operator moves a group, and keeps Earlier last', () => {
+    const ranked = [g('attention'), g('working'), g('idle'), g('earlier', true)]
+    expect(keys(orderGroups(ranked, byState))).toEqual(['attention', 'working', 'idle', 'earlier'])
+    const down = moveGroup(byState, ranked, 'attention', 'idle')
+    expect(down.groupOrder?.state).toEqual(['working', 'idle', 'attention'])
+    expect(keys(orderGroups(ranked, down))).toEqual(['working', 'idle', 'attention', 'earlier'])
+    const up = moveGroup(down, orderGroups(ranked, down), 'attention', 'working')
+    expect(up.groupOrder?.state).toEqual(['attention', 'working', 'idle'])
+  })
+
+  it('slots a group the stored order never named after its ranked predecessor', () => {
+    const config = { ...byState, groupOrder: { state: ['idle', 'attention'] } }
+    expect(keys(orderGroups([g('attention'), g('working'), g('idle')], config))).toEqual(['idle', 'attention', 'working'])
+    expect(keys(orderGroups([g('ended'), g('idle')], config))).toEqual(['ended', 'idle'])
+  })
+
+  it('stores one order per grouping, keeps hidden keys, and resets only the current one', () => {
+    const config: ViewConfig = { ...byState, groupOrder: { state: ['idle', 'ended', 'working'], adapter: ['codex', 'claude'] } }
+    const moved = moveGroup(config, [g('idle'), g('working')], 'working', 'idle')
+    expect(moved.groupOrder).toEqual({ state: ['working', 'idle', 'ended'], adapter: ['codex', 'claude'] })
+    expect(resetGroupOrder(moved).groupOrder).toEqual({ adapter: ['codex', 'claude'] })
+    expect(moveGroup({ ...moved, groupBy: 'custom' }, [g('a'), g('b')], 'a', 'b')).toEqual({ ...moved, groupBy: 'custom' })
   })
 })
