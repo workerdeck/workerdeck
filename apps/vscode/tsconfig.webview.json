@@ -5,7 +5,7 @@
     "moduleResolution": "bundler",
     "customConditions": ["@workerdeck/source"],
     "allowImportingTsExtensions": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "ES2023.Array", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,

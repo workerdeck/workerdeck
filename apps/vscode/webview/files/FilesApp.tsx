@@ -850,7 +850,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
               <div className="wdf-sticky-anchor">
                 <div className="monaco-tree-sticky-container" style={{ height: stuckHeight }}>
                   <div className="monaco-tree-sticky-container-shadow" />
-                  {[...stuck].reverse().map(({ index, top }) => {
+                  {stuck.toReversed().map(({ index, top }) => {
                     const row = rows[index]!
                     return (
                       <TreeRow

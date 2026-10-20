@@ -48,15 +48,13 @@ export function flatten(
 }
 
 function compressed(head: WireFileEntry, dirs: ReadonlyMap<string, DirState>, edit: Edit | undefined): WireFileEntry[] {
+  const soleChild = (entry: WireFileEntry) =>
+    entry.kind === 'folder' && !(edit?.mode === 'create' && edit.parent === entry.uri)
+      ? soleFolder(dirs.get(entry.uri)?.entries)
+      : undefined
   const chain = [head]
-  let last = head
-  while (!(edit?.mode === 'create' && edit.parent === last.uri)) {
-    const only = soleFolder(dirs.get(last.uri)?.entries)
-    if (!only || last.kind !== 'folder') {
-      break
-    }
-    chain.push(only)
-    last = only
+  for (let next = soleChild(head); next; next = soleChild(next)) {
+    chain.push(next)
   }
   return chain
 }
@@ -181,11 +179,14 @@ export function treeShape(rows: readonly Row[]): TreeShape {
 
 // The workbench's StickyScrollController: ancestors of the top row pin, each pushed up once its last descendant scrolls past.
 export function stickyRows(rows: readonly Row[], shape: TreeShape, scrollTop: number, viewport: number, max: number): StickyRow[] {
+  if (max <= 0) {
+    return []
+  }
   const stuck: StickyRow[] = []
   let height = 0
   let first = Math.floor(scrollTop / ROW_HEIGHT)
   let previous: number | undefined
-  while (max > 0 && first < rows.length) {
+  while (first < rows.length) {
     const node = ancestorUnder(shape.parent, first, previous)
     if (node === undefined) {
       break
