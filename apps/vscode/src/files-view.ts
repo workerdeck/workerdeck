@@ -57,7 +57,11 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
         void this.#pushTheme()
       }),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('workbench.iconTheme') || e.affectsConfiguration('workbench.experimental.modernUI')) {
+        if (
+          e.affectsConfiguration('workbench.iconTheme') ||
+          e.affectsConfiguration('workbench.experimental.modernUI') ||
+          e.affectsConfiguration('explorer.compactFolders')
+        ) {
           void this.#pushTheme()
         }
         if (e.affectsConfiguration('files.associations')) {
@@ -186,6 +190,7 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
       folderIcons: theme.folderIcons,
       hideArrows: theme.hideArrows,
       modern: vscode.workspace.getConfiguration('workbench').get<boolean>('experimental.modernUI') !== false,
+      compact: vscode.workspace.getConfiguration('explorer').get<boolean>('compactFolders') !== false,
     })
   }
 
@@ -343,6 +348,7 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
     const edit = new vscode.WorkspaceEdit()
     edit.renameFile(uri, target)
     if (await vscode.workspace.applyEdit(edit)) {
+      this.post({ kind: 'wd-files-moved', moves: [{ from: uri.toString(), to: target.toString() }] })
       this.#reveal(target, true)
     } else {
       void vscode.window.showErrorMessage(`WorkerDeck: could not rename '${basename(uri)}'.`)
@@ -386,10 +392,13 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
       }
     }
     const edit = new vscode.WorkspaceEdit()
-    for (const uri of moves) {
-      edit.renameFile(uri, vscode.Uri.joinPath(target, basename(uri)))
+    const pairs = moves.map((from) => ({ from, to: vscode.Uri.joinPath(target, basename(from)) }))
+    for (const { from, to } of pairs) {
+      edit.renameFile(from, to)
     }
-    if (!(await vscode.workspace.applyEdit(edit))) {
+    if (await vscode.workspace.applyEdit(edit)) {
+      this.post({ kind: 'wd-files-moved', moves: pairs.map(({ from, to }) => ({ from: from.toString(), to: to.toString() })) })
+    } else {
       void vscode.window.showErrorMessage('WorkerDeck: could not move the selection.')
     }
     this.refresh()

@@ -180,6 +180,16 @@ refactoring participants. Fidelity rests on three rules:
   inline input is open so no shortcut lands inside it. Cmd/Ctrl+V stays in the webview because only the
   browser `paste` event carries OS files, with a short fallback to the in-view clipboard.
 
+**Compact folders** follow `explorer.compactFolders`: `flatten` folds a folder whose only child is a
+folder into one row while the listings are known (`EntryRow.chain`, head first). A row is keyed by its
+chain head, which stays put as the chain grows; `entry` is the last member, whose children it walks.
+Each member is its own `a.label-name` with `data-icon-label-index`, as in the workbench, so a click,
+right-click, drag or drop lands on the member under the pointer, and Left/Right/Home/End move between
+members before they move in the tree. The active member resets to the last one when the chain changes
+length, which is what the Explorer's re-render does. Expanding also opens every lone subfolder below
+as its listing arrives (the Explorer's `autoExpandSingleChildren`), and the host's `wd-files-moved`
+after a rename or move rewrites expanded uris so the tree under it stays open.
+
 Decorations (`src/file-decorations.ts`) are git status from the built-in git extension's API (local
 roots only) plus diagnostics, bubbled to folders as colour only. Another extension's
 `FileDecorationProvider` cannot be read, and OS file drops need Shift held, as in every sidebar

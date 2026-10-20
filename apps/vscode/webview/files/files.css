@@ -263,6 +263,30 @@ body:has(.wdf) {
   text-decoration: none;
 }
 
+.wdf .monaco-icon-label > .monaco-icon-label-container > .monaco-icon-name-container > .label-name > .label-separator {
+  margin: 0 2px;
+  opacity: 0.5;
+}
+
+.wdf .explorer-item .monaco-icon-name-container.multiple > .label-name > .monaco-highlighted-label {
+  border-radius: 3px;
+}
+
+.wdf .explorer-item .monaco-icon-name-container.multiple > .label-name:hover > .monaco-highlighted-label,
+.wdf
+  .monaco-list
+  .monaco-list-row.focused
+  .explorer-item
+  .monaco-icon-name-container.multiple
+  > .label-name.active
+  > .monaco-highlighted-label {
+  text-decoration: underline;
+}
+
+.wdf .explorer-item .monaco-icon-name-container.multiple > .label-name.drop-target > .monaco-highlighted-label {
+  background-color: var(--vscode-list-dropBackground);
+}
+
 .wdf .monaco-icon-label[data-badge]::after {
   content: attr(data-badge);
   opacity: 0.75;

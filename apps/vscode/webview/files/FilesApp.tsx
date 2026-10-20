@@ -9,10 +9,19 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react'
-import type { FileEntryKind, FilesToHost, HostToFiles, UploadedFile, WireDecoration, WireFilesRoot } from '../../src/bridge-protocol.ts'
+import type {
+  FileEntryKind,
+  FilesToHost,
+  HostToFiles,
+  UploadedFile,
+  WireDecoration,
+  WireFileEntry,
+  WireFilesRoot,
+} from '../../src/bridge-protocol.ts'
 import type { Bridge } from '../bridge.ts'
 import { InlineInput } from './InlineInput.tsx'
 import {
+  chainParent,
   flatten,
   folderFor,
   iconClasses,
@@ -21,6 +30,7 @@ import {
   rowKey,
   ROW_HEIGHT,
   INDENT,
+  soleFolder,
   validateName,
   type DirState,
   type Edit,
@@ -28,11 +38,13 @@ import {
   type Row,
 } from './tree-model.ts'
 
-type Theme = { css: string; fileIcons: boolean; folderIcons: boolean; hideArrows: boolean; modern: boolean }
+type Theme = { css: string; fileIcons: boolean; folderIcons: boolean; hideArrows: boolean; modern: boolean; compact: boolean }
 
 type SavedState = { expanded?: Record<string, string[]> }
 
 type Reveal = { uri: string; focus: boolean }
+
+type Segment = { row: string; index: number; size: number }
 
 const TREE_MIME = 'application/vnd.workerdeck.files'
 const OVERSCAN = 10
@@ -44,7 +56,14 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
   const post = useCallback((msg: FilesToHost) => bridge.post(msg), [bridge])
   const [root, setRoot] = useState<WireFilesRoot | undefined>()
   const [message, setMessage] = useState<string | undefined>()
-  const [theme, setTheme] = useState<Theme>({ css: '', fileIcons: false, folderIcons: false, hideArrows: false, modern: false })
+  const [theme, setTheme] = useState<Theme>({
+    css: '',
+    fileIcons: false,
+    folderIcons: false,
+    hideArrows: false,
+    modern: false,
+    compact: true,
+  })
   const [dirs, setDirs] = useState<Map<string, DirState>>(new Map())
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -58,10 +77,12 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
   const [scrollTop, setScrollTop] = useState(0)
   const [viewport, setViewport] = useState(0)
   const [reveal, setReveal] = useState<Reveal | undefined>()
+  const [segment, setSegment] = useState<Segment | undefined>()
 
   const listRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const requested = useRef(new Set<string>())
+  const autoExpand = useRef(new Set<string>())
   const dragExpand = useRef<{ uri: string; timer: ReturnType<typeof setTimeout> } | undefined>(undefined)
   const pendingPaste = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const state = useRef({ root, dirs, expanded, focused, selected })
@@ -119,7 +140,9 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
             setFocused(undefined)
             setEdit(undefined)
             setCut(new Set())
+            setSegment(undefined)
             requested.current = new Set()
+            autoExpand.current = new Set()
             if (msg.root) {
               const restored = new Set(bridge.getState<SavedState>()?.expanded?.[msg.root.uri] ?? [])
               setExpanded(restored)
@@ -132,6 +155,13 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
           }
           case 'wd-files-dir': {
             setDirs((current) => new Map(current).set(msg.uri, { entries: msg.entries, error: msg.error }))
+            if (autoExpand.current.delete(msg.uri)) {
+              const only = soleFolder(msg.entries)
+              if (only) {
+                autoExpand.current.add(only.uri)
+                updateExpanded((current) => new Set([...current, only.uri]))
+              }
+            }
             return
           }
           case 'wd-files-refresh': {
@@ -152,6 +182,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
               folderIcons: msg.folderIcons,
               hideArrows: msg.hideArrows,
               modern: msg.modern,
+              compact: msg.compact,
             })
             return
           }
@@ -168,6 +199,10 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
             setReveal({ uri: msg.uri, focus: msg.focus })
             return
           }
+          case 'wd-files-moved': {
+            updateExpanded((current) => new Set([...current].map((uri) => movedUri(uri, msg.moves))))
+            return
+          }
           case 'wd-files-command': {
             runCommand.current(msg.command, msg.uri)
             return
@@ -180,9 +215,27 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
     [bridge, request, updateExpanded],
   )
 
-  const rows = useMemo(() => (root ? flatten(root.uri, dirs, expanded, edit) : []), [root, dirs, expanded, edit])
-  const indexOf = useCallback((uri: string | undefined) => (uri ? rows.findIndex((r) => rowKey(r) === uri) : -1), [rows])
-
+  const rows = useMemo(
+    () => (root ? flatten(root.uri, dirs, expanded, edit, theme.compact) : []),
+    [root, dirs, expanded, edit, theme.compact],
+  )
+  const rowIndex = useMemo(() => {
+    const index = new Map<string, number>()
+    rows.forEach((row, i) => {
+      index.set(rowKey(row), i)
+      if (row.kind === 'entry') {
+        for (const member of row.chain) {
+          index.set(member.uri, i)
+        }
+      }
+    })
+    return index
+  }, [rows])
+  const indexOf = useCallback((uri: string | undefined) => (uri ? (rowIndex.get(uri) ?? -1) : -1), [rowIndex])
+  const activeIndex = useCallback(
+    (row: EntryRow) => (segment?.row === rowKey(row) && segment.size === row.chain.length ? segment.index : row.chain.length - 1),
+    [segment],
+  )
 
   const scrollIntoView = useCallback((index: number) => {
     const el = scrollRef.current
@@ -197,24 +250,6 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
     }
   }, [])
 
-  useEffect(() => {
-    if (!reveal) {
-      return
-    }
-    const index = indexOf(reveal.uri)
-    if (index < 0) {
-      return
-    }
-    setSelected(new Set([reveal.uri]))
-    setFocused(reveal.uri)
-    setAnchor(reveal.uri)
-    scrollIntoView(index)
-    if (reveal.focus) {
-      listRef.current?.focus()
-    }
-    setReveal(undefined)
-  }, [reveal, indexOf, scrollIntoView])
-
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) {
@@ -227,42 +262,77 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
   }, [root])
 
   const focusRow = useCallback(
-    (uri: string, extend: 'single' | 'range' | 'none' = 'single') => {
-      setFocused(uri)
+    (uri: string, extend: 'single' | 'range' | 'none' = 'single', pick = false) => {
+      const index = indexOf(uri)
+      const row = rows[index]
+      const key = row ? rowKey(row) : uri
+      const member = pick && row?.kind === 'entry' ? row.chain.findIndex((e) => e.uri === uri) : -1
+      setSegment(row?.kind === 'entry' && member >= 0 ? { row: key, index: member, size: row.chain.length } : undefined)
+      setFocused(key)
       if (extend === 'single') {
-        setSelected(new Set([uri]))
-        setAnchor(uri)
+        setSelected(new Set([key]))
+        setAnchor(key)
       } else if (extend === 'range') {
-        setSelected(new Set(rangeBetween(rows, anchor ?? uri, uri)))
+        setSelected(new Set(rangeBetween(rows, anchor ?? key, key)))
       }
-      scrollIntoView(indexOf(uri))
+      scrollIntoView(index)
     },
     [rows, anchor, indexOf, scrollIntoView],
   )
 
+  useEffect(() => {
+    if (!reveal || indexOf(reveal.uri) < 0) {
+      return
+    }
+    focusRow(reveal.uri, 'single', true)
+    if (reveal.focus) {
+      listRef.current?.focus()
+    }
+    setReveal(undefined)
+  }, [reveal, indexOf, focusRow])
+
+  // Opening also opens every lone subfolder below, as listings arrive: the Explorer's autoExpandSingleChildren.
   const toggle = useCallback(
     (uri: string) => {
+      const row = rows[indexOf(uri)]
+      const chain = row?.kind === 'entry' ? row.chain.map((e) => e.uri) : [uri]
+      const last = chain.at(-1)!
       updateExpanded((current) => {
         const next = new Set(current)
-        if (next.has(uri)) {
-          next.delete(uri)
-        } else {
-          next.add(uri)
+        if (chain.every((member) => next.has(member))) {
+          next.delete(last)
+          return next
+        }
+        let tail = last
+        for (const member of chain) {
+          next.add(member)
+        }
+        let only = soleFolder(state.current.dirs.get(tail)?.entries)
+        while (only) {
+          tail = only.uri
+          next.add(tail)
+          only = soleFolder(state.current.dirs.get(tail)?.entries)
+        }
+        if (!state.current.dirs.has(tail)) {
+          autoExpand.current.add(tail)
         }
         return next
       })
     },
-    [updateExpanded],
+    [rows, indexOf, updateExpanded],
   )
+
+  const focusedRow = rows[indexOf(focused)]
+  const focusedEntry = focusedRow?.kind === 'entry' ? focusedRow.chain[activeIndex(focusedRow)] : undefined
 
   const selection = useCallback((): string[] => {
     if (selected.size > 0) {
-      return rows.filter((r): r is EntryRow => r.kind === 'entry' && selected.has(r.entry.uri)).map((r) => r.entry.uri)
+      return rows
+        .filter((r): r is EntryRow => r.kind === 'entry' && selected.has(rowKey(r)))
+        .map((r) => (rowKey(r) === focused && focusedEntry ? focusedEntry.uri : r.entry.uri))
     }
-    return focused ? [focused] : []
-  }, [rows, selected, focused])
-
-  const focusedRow = rows[indexOf(focused)]
+    return focusedEntry ? [focusedEntry.uri] : focused ? [focused] : []
+  }, [rows, selected, focused, focusedEntry])
 
   useEffect(() => {
     post({ kind: 'wd-files-selection', uris: selection() })
@@ -290,24 +360,27 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         return
       }
       const anchorRow = uri ? rows[indexOf(uri)] : focusedRow
-      const parent = folderFor(anchorRow, current.uri)
+      const active = anchorRow?.kind === 'entry' ? (uri ? anchorRow.chain.find((e) => e.uri === uri) : focusedEntry) : undefined
+      const parent = folderFor(anchorRow, current.uri, active)
       if (parent !== current.uri) {
-        updateExpanded((open) => new Set([...open, parent]))
+        const chain = anchorRow?.kind === 'entry' ? anchorRow.chain.map((e) => e.uri) : []
+        const through = chain.slice(0, chain.indexOf(parent) + 1)
+        updateExpanded((open) => new Set([...open, ...through, parent]))
       }
       setEdit({ mode: 'create', parent, entry })
     },
-    [rows, indexOf, focusedRow, updateExpanded],
+    [rows, indexOf, focusedRow, focusedEntry, updateExpanded],
   )
 
   const startRename = useCallback(
     (uri?: string) => {
-      const target = uri ?? focused
+      const target = uri ?? focusedEntry?.uri ?? focused
       if (target && indexOf(target) >= 0) {
-        focusRow(target)
+        focusRow(target, 'single', true)
         setEdit({ mode: 'rename', uri: target })
       }
     },
-    [focused, indexOf, focusRow],
+    [focused, focusedEntry, indexOf, focusRow],
   )
 
   const runCommand = useRef<(command: string, uri?: string) => void>(() => {})
@@ -345,7 +418,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
     [rows, post],
   )
 
-  const pasteTarget = useCallback(() => folderFor(focusedRow, state.current.root?.uri ?? ''), [focusedRow])
+  const pasteTarget = useCallback(() => folderFor(focusedRow, state.current.root?.uri ?? '', focusedEntry), [focusedRow, focusedEntry])
 
   const onKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -368,6 +441,26 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
       }
       const page = Math.max(1, Math.floor(viewport / ROW_HEIGHT) - 1)
       const key = event.key
+      const member = entryRow ? activeIndex(entryRow) : 0
+      const lastMember = entryRow ? entryRow.chain.length - 1 : 0
+      const toMember = (to: number) => {
+        setSegment({ row: rowKey(entryRow!), index: to, size: lastMember + 1 })
+        return handled()
+      }
+      if (lastMember > 0 && !event.shiftKey && !mod) {
+        if (key === 'ArrowLeft' && member > 0) {
+          return toMember(member - 1)
+        }
+        if (key === 'ArrowRight' && member < lastMember) {
+          return toMember(member + 1)
+        }
+        if (key === 'Home' && member > 0) {
+          return toMember(0)
+        }
+        if (key === 'End' && member < lastMember) {
+          return toMember(lastMember)
+        }
+      }
       if (key === 'ArrowDown' && mod && entryRow) {
         open([entryRow.entry.uri], 'pinned')
         return handled()
@@ -421,7 +514,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         return handled()
       }
       if (mod && !event.altKey && key.toLowerCase() === 'a') {
-        setSelected(new Set(rows.filter((r): r is EntryRow => r.kind === 'entry').map((r) => r.entry.uri)))
+        setSelected(new Set(rows.filter((r): r is EntryRow => r.kind === 'entry').map(rowKey)))
         return handled()
       }
       if (mod && !event.altKey && key.toLowerCase() === 'v') {
@@ -440,7 +533,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         return handled()
       }
     },
-    [edit, rows, indexOf, focused, viewport, focusRow, open, toggle, root, selection, post, pasteTarget, cut],
+    [edit, rows, indexOf, focused, viewport, activeIndex, focusRow, open, toggle, root, selection, post, pasteTarget, cut],
   )
 
   useEffect(() => {
@@ -462,8 +555,12 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
       if (row.kind !== 'entry' || edit) {
         return
       }
-      if (event.button === 2 && !selected.has(row.entry.uri)) {
-        focusRow(row.entry.uri)
+      const key = rowKey(row)
+      const member = memberAt(event.target, row)
+      if (event.button === 2 && !selected.has(key)) {
+        focusRow(member?.uri ?? key, 'single', member !== undefined)
+      } else if (member) {
+        setSegment({ row: key, index: row.chain.indexOf(member), size: row.chain.length })
       }
     },
     [edit, selected, focusRow],
@@ -474,10 +571,11 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
       if (row.kind !== 'entry' || edit) {
         return
       }
-      const uri = row.entry.uri
+      const uri = rowKey(row)
+      const picked = memberAt(event.target, row)?.uri ?? (uri === focused ? focusedEntry?.uri : undefined)
       const mod = isMac ? event.metaKey : event.ctrlKey
       if (event.shiftKey) {
-        focusRow(uri, 'range')
+        focusRow(picked ?? uri, 'range', picked !== undefined)
         return
       }
       if (mod) {
@@ -494,14 +592,14 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         })
         return
       }
-      focusRow(uri)
+      focusRow(picked ?? uri, 'single', picked !== undefined)
       if (row.entry.kind === 'folder') {
         toggle(uri)
       } else {
         open([uri], 'preview')
       }
     },
-    [edit, focusRow, toggle, open],
+    [edit, focused, focusedEntry, focusRow, toggle, open],
   )
 
   const onRowDoubleClick = useCallback(
@@ -527,9 +625,10 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         event.preventDefault()
         return
       }
-      const uris = selected.has(row.entry.uri) ? selection() : [row.entry.uri]
-      if (!selected.has(row.entry.uri)) {
-        focusRow(row.entry.uri)
+      const grabbed = memberAt(document.elementFromPoint(event.clientX, event.clientY), row)?.uri ?? row.entry.uri
+      const uris = selected.has(rowKey(row)) && selected.size > 1 ? selection() : [grabbed]
+      if (!selected.has(rowKey(row))) {
+        focusRow(grabbed, 'single', true)
       }
       event.dataTransfer.effectAllowed = 'copyMove'
       event.dataTransfer.setData(TREE_MIME, JSON.stringify(uris))
@@ -547,6 +646,14 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
     dragExpand.current = undefined
   }
 
+  const dropFolderAt = useCallback(
+    (target: EventTarget | null): { row: Row | undefined; folder: string } => {
+      const row = rowAt(target)
+      return { row, folder: folderFor(row, root?.uri ?? '', row ? memberAt(target, row) : undefined) }
+    },
+    [rowAt, root],
+  )
+
   const onDragOver = useCallback(
     (event: DragEvent) => {
       if (!root) {
@@ -555,9 +662,8 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
       event.preventDefault()
       const internal = event.dataTransfer.types.includes(TREE_MIME)
       event.dataTransfer.dropEffect = internal && !event.altKey ? 'move' : 'copy'
-      const row = rowAt(event.target)
-      const target = folderFor(row, root.uri)
-      setDropTarget(target)
+      const { row, folder } = dropFolderAt(event.target)
+      setDropTarget(folder)
       if (row?.kind === 'entry' && row.entry.kind === 'folder' && !row.expanded) {
         if (dragExpand.current?.uri !== row.entry.uri) {
           clearDragExpand()
@@ -568,7 +674,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         clearDragExpand()
       }
     },
-    [root, rowAt, toggle],
+    [root, dropFolderAt, toggle],
   )
 
   const onDrop = useCallback(
@@ -579,7 +685,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
       if (!root) {
         return
       }
-      const target = folderFor(rowAt(event.target), root.uri)
+      const target = dropFolderAt(event.target).folder
       const internal = event.dataTransfer.getData(TREE_MIME)
       if (internal) {
         post({ kind: 'wd-files-move', uris: JSON.parse(internal) as string[], target, copy: event.altKey })
@@ -595,7 +701,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         post({ kind: 'wd-files-drop-uris', target, uris })
       }
     },
-    [root, rowAt, post],
+    [root, dropFolderAt, post],
   )
 
   const commitEdit = useCallback(
@@ -683,7 +789,8 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
               {rows.slice(start, end).map((row, offset) => {
                 const index = start + offset
                 const key = rowKey(row)
-                const inDrop = dropRegion !== undefined && (key === dropRegion || row.ancestors.includes(dropRegion))
+                const inDrop =
+                  dropRegion !== undefined && ((row.kind === 'entry' && row.entry.uri === dropRegion) || row.ancestors.includes(dropRegion))
                 return (
                   <TreeRow
                     key={key}
@@ -691,14 +798,16 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
                     index={index}
                     count={rows.length}
                     rootName={root.name}
-                    selected={row.kind === 'entry' && selected.has(row.entry.uri)}
+                    selected={row.kind === 'entry' && selected.has(key)}
                     focused={key === focused}
+                    active={row.kind === 'entry' ? activeIndex(row) : 0}
                     dropTarget={inDrop}
-                    cut={row.kind === 'entry' && cut.has(row.entry.uri)}
+                    dropMember={dropTarget}
+                    cut={row.kind === 'entry' && row.chain.some((e) => cut.has(e.uri))}
                     activeGuide={activeGuide}
                     decoration={row.kind === 'entry' ? decorations[row.entry.uri] : undefined}
                     edit={edit}
-                    siblings={(dirs.get(row.parent)?.entries ?? []).map((e) => e.name)}
+                    dirs={dirs}
                     onMouseDown={onRowMouseDown}
                     onClick={onRowClick}
                     onDoubleClick={onRowDoubleClick}
@@ -724,12 +833,14 @@ type TreeRowProps = {
   rootName: string
   selected: boolean
   focused: boolean
+  active: number
   dropTarget: boolean
+  dropMember: string | undefined
   cut: boolean
   activeGuide: string | undefined
   decoration: WireDecoration | undefined
   edit: Edit | undefined
-  siblings: string[]
+  dirs: ReadonlyMap<string, DirState>
   onMouseDown: (event: MouseEvent, row: Row) => void
   onClick: (event: MouseEvent, row: Row) => void
   onDoubleClick: (row: Row) => void
@@ -740,11 +851,15 @@ type TreeRowProps = {
 }
 
 function TreeRow(props: TreeRowProps) {
-  const { row, index, rootName, selected, focused, dropTarget, cut, activeGuide, decoration, edit } = props
+  const { row, index, rootName, selected, focused, active, dropTarget, dropMember, cut, activeGuide, decoration, edit } = props
   const isFolder = row.kind === 'entry' ? row.entry.kind === 'folder' : row.entry === 'folder'
-  const editing = row.kind === 'create' || (edit?.mode === 'rename' && edit.uri === row.entry.uri)
+  const chain = row.kind === 'entry' ? row.chain : []
+  const renaming = edit?.mode === 'rename' ? chain.findIndex((e) => e.uri === edit.uri) : -1
+  const editing = row.kind === 'create' || renaming >= 0
   const name = row.kind === 'entry' ? row.entry.name : ''
-  const parentName = row.ancestors.length > 0 ? nameOf(row.ancestors.at(-1)!) : rootName
+  const parentName = chain.length > 1 ? chain.at(-2)!.name : row.ancestors.length > 0 ? nameOf(row.ancestors.at(-1)!) : rootName
+  const editParent = row.kind === 'entry' && renaming >= 0 ? chainParent(row, renaming) : row.parent
+  const siblings = (props.dirs.get(editParent)?.entries ?? []).map((e) => e.name)
   const icon = iconClasses(
     { name, kind: isFolder ? 'folder' : 'file', lang: row.kind === 'entry' ? row.entry.lang : undefined },
     parentName,
@@ -769,7 +884,8 @@ function TreeRow(props: TreeRowProps) {
     row.kind === 'entry'
       ? JSON.stringify({ webviewSection: row.entry.kind, uri: row.entry.uri, preventDefaultContextMenuItems: true })
       : undefined
-  const original = row.kind === 'entry' ? row.entry.name : undefined
+  const original = renaming >= 0 ? chain[renaming]!.name : undefined
+  const multiple = chain.length > 1
   return (
     <div
       className={rowClass}
@@ -780,7 +896,7 @@ function TreeRow(props: TreeRowProps) {
       aria-expanded={isFolder && row.kind === 'entry' ? row.expanded : undefined}
       aria-setsize={props.count}
       aria-posinset={index + 1}
-      aria-label={name}
+      aria-label={chain.map((e) => e.name).join('/') || name}
       title={decoration?.tooltip ? `${name} • ${decoration.tooltip}` : undefined}
       draggable={!editing}
       style={{ top: index * ROW_HEIGHT, height: ROW_HEIGHT, lineHeight: `${ROW_HEIGHT}px` }}
@@ -816,16 +932,41 @@ function TreeRow(props: TreeRowProps) {
               <InlineInput
                 initial={original ?? ''}
                 selectExtension={!isFolder}
-                validate={(value) => validateName(value, props.siblings, original)}
+                validate={(value) => validateName(value, siblings, original)}
                 onCommit={props.onCommit}
                 onCancel={props.onCancel}
               />
             ) : (
               <div className="monaco-icon-label-container">
-                <span className="monaco-icon-name-container">
-                  <a className="label-name">
-                    <span className="monaco-highlighted-label">{name}</span>
-                  </a>
+                <span className={multiple ? 'monaco-icon-name-container multiple' : 'monaco-icon-name-container'}>
+                  {multiple ? (
+                    chain.map((member, i) => (
+                      <a
+                        key={member.uri}
+                        className={[
+                          'label-name',
+                          i === (focused ? active : chain.length - 1) ? 'active' : '',
+                          member.uri === dropMember && i < chain.length - 1 ? 'drop-target' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        data-icon-label-count={chain.length}
+                        data-icon-label-index={i}
+                        data-vscode-context={JSON.stringify({
+                          webviewSection: 'folder',
+                          uri: member.uri,
+                          preventDefaultContextMenuItems: true,
+                        })}
+                      >
+                        <span className="monaco-highlighted-label">{member.name}</span>
+                        {i < chain.length - 1 ? <span className="label-separator">/</span> : null}
+                      </a>
+                    ))
+                  ) : (
+                    <a className="label-name">
+                      <span className="monaco-highlighted-label">{name}</span>
+                    </a>
+                  )}
                 </span>
               </div>
             )}
@@ -850,4 +991,14 @@ function toBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
   }
   return btoa(binary)
+}
+
+function memberAt(target: EventTarget | null, row: Row): WireFileEntry | undefined {
+  const label = target instanceof Element ? target.closest<HTMLElement>('[data-icon-label-index]') : null
+  return label && row.kind === 'entry' ? row.chain[Number(label.dataset.iconLabelIndex)] : undefined
+}
+
+function movedUri(uri: string, moves: readonly { from: string; to: string }[]): string {
+  const move = moves.find(({ from }) => uri === from || uri.startsWith(`${from}/`))
+  return move ? move.to + uri.slice(move.from.length) : uri
 }

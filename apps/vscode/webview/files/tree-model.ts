@@ -4,7 +4,15 @@ export type DirState = { entries?: WireFileEntry[]; error?: string }
 
 export type Edit = { mode: 'rename'; uri: string } | { mode: 'create'; parent: string; entry: FileEntryKind }
 
-export type EntryRow = { kind: 'entry'; entry: WireFileEntry; level: number; expanded: boolean; parent: string; ancestors: string[] }
+export type EntryRow = {
+  kind: 'entry'
+  entry: WireFileEntry
+  chain: WireFileEntry[]
+  level: number
+  expanded: boolean
+  parent: string
+  ancestors: string[]
+}
 
 export type CreateRow = { kind: 'create'; entry: FileEntryKind; level: number; parent: string; ancestors: string[] }
 
@@ -13,15 +21,23 @@ export type Row = EntryRow | CreateRow
 export const ROW_HEIGHT = 22
 export const INDENT = 8
 
-export function flatten(root: string, dirs: ReadonlyMap<string, DirState>, expanded: ReadonlySet<string>, edit: Edit | undefined): Row[] {
+export function flatten(
+  root: string,
+  dirs: ReadonlyMap<string, DirState>,
+  expanded: ReadonlySet<string>,
+  edit: Edit | undefined,
+  compact: boolean,
+): Row[] {
   const rows: Row[] = []
   const walk = (dir: string, level: number, ancestors: string[]) => {
     if (edit?.mode === 'create' && edit.parent === dir) {
       rows.push({ kind: 'create', entry: edit.entry, level, parent: dir, ancestors })
     }
-    for (const entry of dirs.get(dir)?.entries ?? []) {
-      const open = entry.kind === 'folder' && expanded.has(entry.uri)
-      rows.push({ kind: 'entry', entry, level, expanded: open, parent: dir, ancestors })
+    for (const head of dirs.get(dir)?.entries ?? []) {
+      const chain = compact ? compressed(head, dirs, edit) : [head]
+      const entry = chain.at(-1)!
+      const open = entry.kind === 'folder' && chain.every((e) => expanded.has(e.uri))
+      rows.push({ kind: 'entry', entry, chain, level, expanded: open, parent: dir, ancestors })
       if (open) {
         walk(entry.uri, level + 1, [...ancestors, entry.uri])
       }
@@ -31,8 +47,30 @@ export function flatten(root: string, dirs: ReadonlyMap<string, DirState>, expan
   return rows
 }
 
+function compressed(head: WireFileEntry, dirs: ReadonlyMap<string, DirState>, edit: Edit | undefined): WireFileEntry[] {
+  const chain = [head]
+  let last = head
+  while (!(edit?.mode === 'create' && edit.parent === last.uri)) {
+    const only = soleFolder(dirs.get(last.uri)?.entries)
+    if (!only || last.kind !== 'folder') {
+      break
+    }
+    chain.push(only)
+    last = only
+  }
+  return chain
+}
+
+export function soleFolder(entries: readonly WireFileEntry[] | undefined): WireFileEntry | undefined {
+  return entries?.length === 1 && entries[0]!.kind === 'folder' ? entries[0] : undefined
+}
+
+export function chainParent(row: EntryRow, index: number): string {
+  return index > 0 ? row.chain[index - 1]!.uri : row.parent
+}
+
 export function rowKey(row: Row): string {
-  return row.kind === 'entry' ? row.entry.uri : `create:${row.parent}`
+  return row.kind === 'entry' ? row.chain[0]!.uri : `create:${row.parent}`
 }
 
 export function parentOf(uri: string): string {
@@ -44,14 +82,15 @@ export function nameOf(uri: string): string {
 }
 
 // The folder a drop, paste or "new file" lands in: a folder row itself, a file row's parent.
-export function folderFor(row: Row | undefined, root: string): string {
+export function folderFor(row: Row | undefined, root: string, active?: WireFileEntry): string {
   if (!row) {
     return root
   }
   if (row.kind === 'create') {
     return row.parent
   }
-  return row.entry.kind === 'folder' ? row.entry.uri : row.parent
+  const entry = active ?? row.entry
+  return entry.kind === 'folder' ? entry.uri : row.parent
 }
 
 function clean(value: string): string {
@@ -108,7 +147,7 @@ export function validateName(
 }
 
 export function rangeBetween(rows: readonly Row[], from: string, to: string): string[] {
-  const keys = rows.filter((r): r is EntryRow => r.kind === 'entry').map((r) => r.entry.uri)
+  const keys = rows.filter((r): r is EntryRow => r.kind === 'entry').map(rowKey)
   const a = keys.indexOf(from)
   const b = keys.indexOf(to)
   if (a < 0 || b < 0) {

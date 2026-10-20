@@ -313,11 +313,20 @@ export type HostToFiles =
   | { kind: 'wd-files-root'; root?: WireFilesRoot; message?: string }
   | { kind: 'wd-files-dir'; uri: string; entries?: WireFileEntry[]; error?: string }
   | { kind: 'wd-files-refresh' }
-  | { kind: 'wd-files-theme'; css: string; fileIcons: boolean; folderIcons: boolean; hideArrows: boolean; modern: boolean }
+  | {
+      kind: 'wd-files-theme'
+      css: string
+      fileIcons: boolean
+      folderIcons: boolean
+      hideArrows: boolean
+      modern: boolean
+      compact: boolean
+    }
   | { kind: 'wd-files-decorations'; decorations: Record<string, WireDecoration> }
   | { kind: 'wd-files-command'; command: FilesCommand; uri?: string }
   | { kind: 'wd-files-reveal'; uri: string; ancestors: string[]; focus: boolean }
   | { kind: 'wd-files-cut'; uris: string[] }
+  | { kind: 'wd-files-moved'; moves: { from: string; to: string }[] }
 
 export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost | ProfilesToHost | FilesToHost
 export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways | HostToProfiles | HostToFiles
