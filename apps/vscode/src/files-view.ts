@@ -84,6 +84,8 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
     view.onDidChangeVisibility(() => {
       if (view.visible) {
         this.refresh()
+      } else {
+        void vscode.commands.executeCommand('setContext', 'workerdeck.filesFocus', false)
       }
     })
   }
@@ -263,6 +265,10 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
       }
       case 'wd-files-editing': {
         void vscode.commands.executeCommand('setContext', 'workerdeck.filesEditing', msg.editing)
+        return
+      }
+      case 'wd-files-focus': {
+        void vscode.commands.executeCommand('setContext', 'workerdeck.filesFocus', msg.focused)
         return
       }
       case 'wd-files-copy-path': {

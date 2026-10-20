@@ -272,6 +272,17 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
     post({ kind: 'wd-files-editing', editing: edit !== undefined })
   }, [post, edit])
 
+  useEffect(() => {
+    const report = () => post({ kind: 'wd-files-focus', focused: document.hasFocus() })
+    report()
+    window.addEventListener('focus', report)
+    window.addEventListener('blur', report)
+    return () => {
+      window.removeEventListener('focus', report)
+      window.removeEventListener('blur', report)
+    }
+  }, [post])
+
   const startCreate = useCallback(
     (entry: FileEntryKind, uri?: string) => {
       const { root: current } = state.current

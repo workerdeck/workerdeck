@@ -171,8 +171,9 @@ refactoring participants. Fidelity rests on three rules:
   `files.associations`. The codicon font is loaded from `vscode.env.appRoot`.
 - **Actions are commands with keybindings; only navigation lives in the webview.** Rename, delete,
   open to the side, cut/copy, copy path and reveal are `workerdeck.files.*` commands bound in
-  `package.json` under `focusedView == workerdeck.files && !workerdeck.filesEditing` (a webview
-  forwards every keydown to the workbench, which is what makes this work), so they show in Keyboard
+  `package.json` under `workerdeck.filesFocus && !workerdeck.filesEditing` (a webview forwards every
+  keydown to the workbench, which is what makes this work; `focusedView` is never set while focus is
+  inside a webview view, so the webview reports its own focus as `wd-files-focus`), so they show in Keyboard
   Shortcuts and rebind like the Explorer's; New File/Folder ship no default, as in the Explorer. The
   webview keeps arrows/Home/End/Page, Space, Enter-to-open off mac, Cmd/Ctrl+A and Escape, and calls
   `stopPropagation` on each so no global keybinding fires twice; it reports `wd-files-editing` while an
