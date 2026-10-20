@@ -3,6 +3,7 @@ import type { FileEntryKind, FileOpenMode, FilesCommand, FilesToHost, HostToFile
 import { FileDecorations, within } from './file-decorations.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import { clientFor } from './gateway.ts'
+import { excludeRules, isExcluded, type ExcludeValue } from './glob.ts'
 import type { HostStore } from './hosts.ts'
 import { codiconCss, iconThemeRoot, languageIndex, languageOf, loadIconTheme, type LanguageIndex } from './icon-theme.ts'
 import { isLocalHost } from './machine.ts'
@@ -299,9 +300,9 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
       return
     }
     const languages = (this.#languages ??= languageIndex())
-    const excluded = excludedNames(dir)
+    const excluded = this.#excluded(dir, raw)
     const entries: WireFileEntry[] = raw
-      .filter(([name]) => !excluded.has(name))
+      .filter(([name]) => !excluded(name))
       .map(([name, type]) => {
         const kind: FileEntryKind = (type & vscode.FileType.Directory) !== 0 ? 'folder' : 'file'
         const link = (type & vscode.FileType.SymbolicLink) !== 0
@@ -310,6 +311,15 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
       })
       .sort((a, b) => Number(b.kind === 'folder') - Number(a.kind === 'folder') || compareNames(a.name, b.name))
     this.post({ kind: 'wd-files-dir', uri: dir.toString(), entries })
+  }
+
+  // Patterns are relative to the workspace folder, as in the Explorer, or to the view's root outside any.
+  #excluded(dir: vscode.Uri, raw: readonly [string, vscode.FileType][]): (name: string) => boolean {
+    const rules = excludeRules(vscode.workspace.getConfiguration('files', dir).get<Record<string, ExcludeValue>>('exclude') ?? {})
+    const base = (vscode.workspace.getWorkspaceFolder(dir)?.uri.path ?? this.#root?.uri.path ?? dir.path).replace(/\/$/, '')
+    const prefix = dir.path === base ? '' : `${dir.path.slice(base.length + 1)}/`
+    const siblings = new Set(raw.map(([name]) => name))
+    return (name) => rules.length > 0 && isExcluded(rules, prefix + name, name, siblings)
   }
 
   async #open(targets: vscode.Uri[], mode: FileOpenMode): Promise<void> {
@@ -597,19 +607,6 @@ function errorText(err: unknown): string {
 // The Explorer's default sort: numeric-aware, case-insensitive, ties broken by the raw name.
 function compareNames(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }) || (a < b ? -1 : a > b ? 1 : 0)
-}
-
-// The Explorer honours `files.exclude`; only the plain-name and `**/name` keys, which cover the defaults, are matched here.
-function excludedNames(dir: vscode.Uri): Set<string> {
-  const config = vscode.workspace.getConfiguration('files', dir).get<Record<string, boolean>>('exclude') ?? {}
-  const names = new Set<string>()
-  for (const [glob, on] of Object.entries(config)) {
-    const name = glob.replace(/^\*\*\//, '')
-    if (on === true && !/[*?[\]{}/]/.test(name)) {
-      names.add(name)
-    }
-  }
-  return names
 }
 
 // `explorer.incrementalNaming: simple`: "name copy.ext", then "name copy 2.ext".

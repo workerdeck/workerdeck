@@ -188,7 +188,10 @@ right-click, drag or drop lands on the member under the pointer, and Left/Right/
 members before they move in the tree. The active member resets to the last one when the chain changes
 length, which is what the Explorer's re-render does. Expanding also opens every lone subfolder below
 as its listing arrives (the Explorer's `autoExpandSingleChildren`), and the host's `wd-files-moved`
-after a rename or move rewrites expanded uris so the tree under it stays open.
+after a rename or move rewrites expanded uris so the tree under it stays open. `files.exclude` is
+matched by `src/glob.ts`, a port of the workbench's glob semantics (`**` spans segments and, last, the
+folder itself; braces may hold `/`) plus the `{ "when": "$(basename).ts" }` sibling clause, against
+the path relative to the containing workspace folder, or to the view's root outside one.
 
 Decorations (`src/file-decorations.ts`) are git status from the built-in git extension's API (local
 roots only) plus diagnostics, bubbled to folders as colour only. Another extension's
