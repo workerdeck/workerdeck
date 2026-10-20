@@ -5,6 +5,16 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [3.15.0] - 2026-10-20
+
+### Added
+
+- **Agent Files.** A view in the Explorer that shows the open session's folder, local or on a
+  remote gateway, drawn like the Explorer itself: file icon theme, git and problem colours, compact
+  folders, sticky scroll, `files.exclude`, inline rename and new file/folder, drag and drop,
+  cut/copy/paste, delete (to the Trash when local). Shortcuts are `workerdeck.files.*` keybindings; bind your own
+  with the `workerdeck.filesFocus` context key.
+
 ## [3.6.1] - 2026-10-06
 
 ### Added

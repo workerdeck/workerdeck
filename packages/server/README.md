@@ -62,6 +62,7 @@ Routes (default `basePath: '/v1'`):
 | `GET /v1/fs/roots`, `/fs/list?path=`, `/fs/read?path=` | Browse and read the **host's** real tree (the `allowedCwdRoots` trees, unless `hostFiles.roots` narrows them; 404 when neither is set) |
 | `GET /v1/fs/find?path=&q=` | Recursive fuzzy file search under one directory - what backs `@file` completion |
 | `PUT /v1/fs/write` | Save a host file - needs `hostFiles.write`, and always carries the hash it replaces |
+| `POST /v1/fs/mkdir`, `/fs/delete`, `/fs/rename` | Create a folder, delete an entry, rename or move one - needs `hostFiles.write`; acts on a symlink itself, never its target |
 | `POST /v1/executions/:executionId/result` | Deliver a deferred execution's result, waking a parked session |
 | `GET /v1/profiles`, `GET /v1/profiles/:name` | What sessions may run as (+ a view-only config snapshot) |
 | `GET/POST /v1/jobs`, `GET/DELETE /v1/jobs/:id` | Job queue (when `queue` is configured) |

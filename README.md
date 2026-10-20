@@ -296,6 +296,9 @@ pooling or rate-limit circumvention. The OAuth itself stays 100% provider-owned 
   supervises a `workerdeck` process on your machine - via `npx` if you have not installed it - with
   start/stop/restart in the palette and the dashboard on the same port. One server per machine, not
   per window.
+- **The VS Code extension has an Agent Files view.** It shows the open session's folder in the
+  Explorer, drawn like the Explorer (icons, git colours, inline rename, drag and drop), whether the
+  folder is local or behind a remote gateway's `/v1/fs` routes.
 - **VS Code is on the Marketplace; iOS is not in a store.** Install the extension from the
   [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode) or with
   `code --install-extension silkweave.workerdeck-vscode`. The iOS app is still built and

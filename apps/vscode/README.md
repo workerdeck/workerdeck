@@ -102,6 +102,15 @@ Session cards carry the engine mark, the model, the folder, turn count and cost,
 badge, and the state at a glance. Double-click a name to rename it, and the dashboard and your
 phone see the new name too.
 
+**Agent Files** sits in the Explorer too, and shows the folder of the session you have open, even
+when that folder is not in your workspace or lives on another machine. It looks and behaves like
+the Explorer: your file icon theme, git and problem colours, compact folders, sticky scroll,
+`files.exclude`, inline rename and new file/folder, drag and drop, cut/copy/paste (Finder files
+too), delete (to the Trash when the folder is local). Its shortcuts are the Explorer's and are ordinary keybindings named
+`workerdeck.files.*`; New File and New Folder ship unbound, as in the Explorer. To bind your own, use
+`"when": "workerdeck.filesFocus && !workerdeck.filesEditing"`: VS Code never sets `focusedView`
+inside a webview view.
+
 Five more views live in the secondary sidebar and describe the session you have open: **Usage**,
 **Context**, **MCP Servers**, **Tasks** and **Session Info**. They appear only when a session is
 open. Drag any of them to whichever sidebar or panel you prefer.
