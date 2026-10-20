@@ -465,6 +465,7 @@ export async function startSession(
   const principal = { operator: ctx.auth.isOperator(auth), ...(agent.owner === undefined ? {} : { owner: agent.owner }) }
   const runner = await ctx.factory.createRunner(ctx.factory.buildRunnerConfig(vetted.request, principal), {
     brief: config.brief?.trim() || undefined,
+    instructionScope: config.instructionScope,
     agent: true,
     ...(id === undefined ? {} : { id }),
   })

@@ -54,6 +54,22 @@ span gateways, and agents of different owners meet only in a team or as two shar
 [Owners](/workerdeck/docs/guides/cross-gateway-peers/#owners-sharing-a-relay-with-colleagues)).
 In the composer, `#` finds an agent by its name.
 
+### One repository, one persona per folder
+
+Claude Code and Codex both read instruction files from the session's folder **and every folder
+above it**, so a member working in `packages/db` also loads the root `AGENTS.md`, often the lead's
+persona. Set `config.instructionScope: "cwd"` on a member (or *Loads instruction files from its
+project folder only* in New agent, or `PATCH /v1/agents/:id` with `{ "config": { "instructionScope": "cwd" } }`)
+and its sessions load only the files in its own folder and below: no `AGENTS.md`, `CLAUDE.md`,
+`CLAUDE.local.md`, `.claude/CLAUDE.md`, `.claude/AGENTS.md` or `.claude/rules/` from the folders
+above. Your own `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` still load. The default,
+`"ancestors"`, is the engines' own behaviour. A recommended layout: the lead persona in the root
+`AGENTS.md`, one persona per member folder, and anything every member needs in each member's
+file or brief. The change applies from the agent's next session start or wake. Claude Code does
+not follow an `@`-import that points outside the session's folder (for example
+`@../../docs/CONVENTIONS.md`) unless you approve it, with or without this setting, and Codex
+does not follow imports at all, so keep shared text inside each member's folder.
+
 ## Private and shared
 
 An agent is Private unless you choose Shared in *New agent* or its `⋯` menu. Sharing only matters

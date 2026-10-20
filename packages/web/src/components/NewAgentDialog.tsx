@@ -111,6 +111,7 @@ function NewAgentForm({
   const [brief, setBrief] = useState('')
   const [contextReset, setContextReset] = useState(true)
   const [sleeps, setSleeps] = useState(true)
+  const [cwdOnly, setCwdOnly] = useState(false)
   const [lead, setLead] = useState(NO_TEAM)
   const [sharingChoice, setSharingChoice] = useState<Sharing>()
   const [acrossOwners, setAcrossOwners] = useState(false)
@@ -148,6 +149,7 @@ function NewAgentForm({
           reasoningEffort: fields.reasoningEffort,
           permissionMode: fields.permissionMode,
           brief: brief.trim() || undefined,
+          instructionScope: cwdOnly ? 'cwd' : undefined,
           agentContextReset: contextReset ? undefined : false,
           sleepAfterMs: sleeps ? undefined : 0,
         },
@@ -205,6 +207,9 @@ function NewAgentForm({
         </Toggle>
         <Toggle checked={sleeps} onChange={setSleeps}>
           Sleeps when idle after {SLEEP_MINUTES} min
+        </Toggle>
+        <Toggle checked={cwdOnly} onChange={setCwdOnly}>
+          Loads instruction files from its project folder only <span className="text-fg-4">(not the folders above)</span>
         </Toggle>
         {leads.length ? (
           <label className="flex items-center gap-2 text-body-sm text-fg-2">

@@ -14,6 +14,7 @@ const HOST_ONLY_KEY_TABLE: Record<HostOnlyKey, 'durable' | 'transient'> = {
   pathToClaudeCodeExecutable: 'durable',
   extraOptions: 'transient',
   instructions: 'transient',
+  instructionScope: 'transient',
   defaultApprovalTimeoutMs: 'durable',
   backfillHistory: 'durable',
   historyFn: 'transient',

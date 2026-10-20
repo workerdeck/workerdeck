@@ -382,6 +382,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     parking,
     bridge,
     agentBrief: (sessionId) => agents.briefFor(sessionId),
+    agentInstructionScope: (sessionId) => agents.instructionScopeFor(sessionId),
     avatar: avatarChanges
       ? {
           directory: avatarDirectoryHandle(() => ownAvatarChanges),

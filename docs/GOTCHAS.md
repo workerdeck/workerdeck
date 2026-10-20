@@ -750,6 +750,35 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the refusal is what proves the field is in the schema. The peer range still
   admits 0.149.0 (`>=0.149.0 <0.159.0`), and a binary predating the field would drop it silently.
 
+## Instruction scope (`AgentConfig.instructionScope`)
+
+- **`'cwd'` stops the ancestor walk through each engine's own setting, nothing else.** Claude gets
+  `settings.claudeMdExcludes` (the SDK `settings` option, the CLI's flag tier) listing
+  `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/CLAUDE.md`, `.claude/AGENTS.md` and
+  `.claude/rules/**` for every strict ancestor of cwd (`engines/claude/instruction-scope.ts`);
+  codex gets `project_root_markers = []` in the `thread/start` and `thread/resume` config overlay,
+  so cwd is the project root. `settingSources` is untouched and stays operator-only.
+- **`$HOME` is an ancestor, and `~/.claude` is the user's memory.** The `.claude/*` entries are
+  skipped at `$HOME` (and its realpath), so `~/.claude/CLAUDE.md` and `~/.claude/rules` keep
+  loading; `~/CLAUDE.md` / `~/AGENTS.md` are excluded like any other ancestor file.
+- **The CLI rewrites every backslash in a pattern to `/` before picomatch sees it**, so a glob
+  character in a folder name can only be made literal with a class: `(` becomes `[(]`. A
+  backslash escape silently stops the pattern matching (found against 0.3.293 with `app (old)`).
+- **The excludes name files, not folders, so `@`-imports are untouched, but the CLI blocks imports
+  outside cwd on its own.** A member's `@../../docs/CONVENTIONS.md` is dropped with or without the
+  scope: headless sessions skip "external includes" until the project's
+  `hasClaudeMdExternalIncludesApproved` (Claude Code project state, not a setting) is set; passing
+  it through `--settings` does nothing. Imports inside cwd load. With a `CLAUDE.md` in cwd, the
+  built-in AGENTS.md plugin's default mode skips AGENTS.md files entirely (verified 0.3.293).
+  Codex has no `@`-imports at all.
+- **It merges, never replaces.** Host `extraOptions.settings` keeps its own `claudeMdExcludes`;
+  a settings *file path* there cannot be merged and the runner throws rather than drop one side.
+- **Host-only and transient, like `brief`.** It is on `AgentConfig` (durable in `agents.json`) and
+  `EngineRunnerConfig`, never on `CreateSessionRequest`; the factory re-reads it from the agent on
+  every build (`agentInstructionScope`), so a wake or restart carries it and a PATCH lands on the
+  next build. Verified live 2026-10-20: Claude CLI 0.3.293 and codex 0.162.1 app-server, root
+  file dropped, cwd file kept.
+
 ## Tool trust & the sandbox
 
 - Tool trust is a boundary, not decoration: only `sandboxed` tools may leave the server, declared

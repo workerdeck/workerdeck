@@ -730,8 +730,12 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       options.dynamicTools = dynamic.map((spec) => ({ type: 'function', ...spec }))
     }
     const mcpServers = codexMcpServers(this.config, await this.#configuredMcpServers(connection))
-    if (mcpServers) {
-      options.config = { mcp_servers: mcpServers }
+    const threadConfig: Record<string, unknown> = {
+      ...(mcpServers ? { mcp_servers: mcpServers } : {}),
+      ...(this.config.instructionScope === 'cwd' ? { project_root_markers: [] } : {}),
+    }
+    if (Object.keys(threadConfig).length > 0) {
+      options.config = threadConfig
     }
     const resuming = this.#resumableThreadId()
     const { result, lostThread } = await this.#resumeOrStart(connection, resuming, options)

@@ -1,5 +1,6 @@
 import type {
   CreateSessionRequest,
+  InstructionScope,
   MessageOrigin,
   McpServerStatusInfo,
   PermissionMode,
@@ -29,6 +30,7 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   pricing?: PricingTable
   env?: Record<string, string | undefined>
   instructions?: SessionInstructions
+  instructionScope?: InstructionScope
   defaultApprovalTimeoutMs?: number | null
   peers?: PeerDirectory
   // Set by the gateway only on an agent's session where it draws avatars; its presence is what offers `change_avatar`.

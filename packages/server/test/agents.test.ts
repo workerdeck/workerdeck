@@ -113,6 +113,11 @@ function appended(harness: ReturnType<typeof fakeHarness>): string | undefined {
   return typeof prompt === 'object' && !Array.isArray(prompt) && prompt.type === 'preset' ? prompt.append : undefined
 }
 
+function excludes(harness: ReturnType<typeof fakeHarness>): string[] | undefined {
+  const settings = harness.captured.options?.settings
+  return typeof settings === 'object' ? settings.claudeMdExcludes : undefined
+}
+
 describe('agents', () => {
   it('creates an agent with its first session and decorates that session everywhere it is listed', async () => {
     const { base } = await startGateway()
@@ -180,6 +185,37 @@ describe('agents', () => {
     woken?.sendMessage('wake')
     await vi.waitFor(() => expect(appended(second.harness)).toBe('You own the iOS client.'))
     expect((await call<{ sessions: SessionInfo[] }>(second.base, '/sessions')).body.sessions[0]?.agent?.name).toBe('Wren')
+  })
+
+  it('scopes instruction files to the agent cwd and keeps the scope across a restart', async () => {
+    const dir = await stateDir()
+    const first = await startGateway(dir)
+    const { body } = await call<AgentResponse>(first.base, '/agents', 'POST', {
+      name: 'Wren',
+      config: { cwd: '/tmp/project', instructionScope: 'cwd' },
+    })
+    const sessionId = body.session!.id
+    first.harness.emit(initMessage)
+    await vi.waitFor(() => expect(excludes(first.harness)).toContain('/tmp/AGENTS.md'))
+    await vi.waitFor(async () => expect(await createFileSessionStore({ dir }).get(sessionId)).not.toBeNull())
+
+    await first.server.close()
+    servers.splice(servers.indexOf(first.server), 1)
+
+    const second = await startGateway(dir)
+    const woken = await second.server.parking.ensureLive(sessionId)
+    woken?.sendMessage('wake')
+    await vi.waitFor(() => expect(excludes(second.harness)).toContain('/tmp/AGENTS.md'))
+  })
+
+  it('leaves instruction loading alone by default and refuses an unknown scope', async () => {
+    const { base, harness } = await startGateway()
+    await call<AgentResponse>(base, '/agents', 'POST', { name: 'Wren', config: { cwd: '/tmp/project' } })
+    harness.emit(initMessage)
+    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    expect(excludes(harness)).toBeUndefined()
+    const refused = await call<{ error: string }>(base, '/agents', 'POST', { config: { cwd: '/tmp/project', instructionScope: 'repo' } })
+    expect(refused).toEqual({ status: 400, body: { error: 'config.instructionScope must be one of ancestors, cwd' } })
   })
 
   it('forms one-level teams and says why a move is refused', async () => {

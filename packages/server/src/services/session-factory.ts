@@ -2,6 +2,7 @@ import {
   supportsPermissionMode,
   type CreateSessionRequest,
   type EngineCapabilities,
+  type InstructionScope,
   type PermissionMode,
   type PricingTable,
   type ProfileEngine,
@@ -50,11 +51,12 @@ export type SessionFactoryDeps = {
   parking: SessionParkManager
   bridge: BridgeHub
   agentBrief?: (sessionId: string | undefined) => string | undefined
+  agentInstructionScope?: (sessionId: string | undefined) => InstructionScope | undefined
   avatar?: { directory: AvatarDirectory; isAgent: (sessionId: string | undefined) => boolean }
 }
 
 // `agent` marks a create the agent is bound to only after the runner exists, as `brief` does for its brief.
-export type BuildOptions = { brief?: string; agent?: boolean; id?: string }
+export type BuildOptions = { brief?: string; instructionScope?: InstructionScope; agent?: boolean; id?: string }
 
 // A dormant rebuild spreads the stored config back in, so the principal's flag can arrive on the request; a create
 // door passes it beside the request instead, because the host's hook and a job record see only the wire type.
@@ -305,6 +307,10 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     const brief = options?.brief ?? deps.agentBrief?.(id ?? restore?.id)
     if (brief) {
       config.instructions = composeInstructions(config.instructions, brief)
+    }
+    const instructionScope = options?.instructionScope ?? deps.agentInstructionScope?.(id ?? restore?.id)
+    if (instructionScope === 'cwd') {
+      config.instructionScope = instructionScope
     }
     if (config.instructions !== undefined && capabilities.systemInstructions === false) {
       throw new Error(`the ${engineOf(profile)} engine cannot deliver system instructions`)

@@ -2,10 +2,13 @@ import { createHash, randomUUID } from 'node:crypto'
 import {
   AGENT_SLEEP_AFTER_MS_DEFAULT,
   agentRef,
+  INSTRUCTION_SCOPES,
+  isInstructionScope,
   isSharing,
   type AgentConfig,
   type AgentConversation,
   type AgentInfo,
+  type InstructionScope,
   type RetiredAgentInfo,
   type SessionInfo,
   type Sharing,
@@ -103,6 +106,7 @@ const CONFIG_KEYS: readonly (keyof AgentConfig)[] = [
   'reasoningEffort',
   'permissionMode',
   'brief',
+  'instructionScope',
   'agentContextReset',
   'sleepAfterMs',
 ]
@@ -363,6 +367,10 @@ export class AgentService {
   briefFor(sessionId: string | undefined): string | undefined {
     const brief = sessionId === undefined ? undefined : this.bySession(sessionId)?.config.brief?.trim()
     return brief || undefined
+  }
+
+  instructionScopeFor(sessionId: string | undefined): InstructionScope | undefined {
+    return sessionId === undefined ? undefined : this.bySession(sessionId)?.config.instructionScope
   }
 
   sleepAfterFor(sessionId: string): number | undefined {
@@ -1044,6 +1052,9 @@ function readConfig(value: unknown): AgentConfig | AgentRefusal {
     if (config[key] !== undefined && typeof config[key] !== 'string') {
       return { status: 400, error: `config.${key} must be a string` }
     }
+  }
+  if (config.instructionScope !== undefined && !isInstructionScope(config.instructionScope)) {
+    return { status: 400, error: `config.instructionScope must be one of ${INSTRUCTION_SCOPES.join(', ')}` }
   }
   if (config.agentContextReset !== undefined && typeof config.agentContextReset !== 'boolean') {
     return { status: 400, error: 'config.agentContextReset must be a boolean' }

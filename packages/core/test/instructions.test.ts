@@ -8,6 +8,7 @@ import { claudeAdapter } from '../src/engines/claude/adapter.ts'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { createEngineSession } from '../src/engines/provider/session.ts'
 import { composeInstructions, resolveInstructions } from '../src/lib/instructions.ts'
+import { ancestorInstructionExcludes, withInstructionExcludes } from '../src/engines/claude/instruction-scope.ts'
 import { fakeHarness, tick } from './helpers/claude-harness.ts'
 import { scriptTurn, scriptedPeer, THREAD_RESULT } from './helpers/codex-peer.ts'
 import { streamText } from './helpers/ai-sdk-mocks.ts'
@@ -121,6 +122,50 @@ describe('SessionRunner instructions', () => {
     void runner.start()
     await tick()
     expect(presetAppend(harness.captured.options)).toBe('profile text\n\nsession text')
+  })
+})
+
+describe('instruction scope', () => {
+  it('excludes every ancestor instruction file but keeps the cwd and the user memory', () => {
+    const patterns = ancestorInstructionExcludes('/home/me/repo/packages/db', '/home/me')
+    expect(patterns).toContain('/home/me/repo/AGENTS.md')
+    expect(patterns).toContain('/home/me/repo/.claude/rules/**')
+    expect(patterns).toContain('/home/me/CLAUDE.md')
+    expect(patterns).toContain('/CLAUDE.md')
+    expect(patterns).not.toContain('/home/me/.claude/CLAUDE.md')
+    expect(patterns).not.toContain('/home/me/.claude/rules/**')
+    expect(patterns.some((pattern) => pattern.startsWith('/home/me/repo/packages/db/'))).toBe(false)
+  })
+
+  it('escapes glob characters in directory names', () => {
+    expect(ancestorInstructionExcludes('/work/app (old)/pkg', '/home/me')).toContain('/work/app [(]old[)]/AGENTS.md')
+  })
+
+  it('merges into host settings rather than replacing them', () => {
+    expect(withInstructionExcludes({ claudeMdExcludes: ['/a'], model: 'x' }, ['/b'])).toEqual({ claudeMdExcludes: ['/a', '/b'], model: 'x' })
+    expect(withInstructionExcludes('{"claudeMdExcludes":["/a"]}', ['/b'])).toEqual({ claudeMdExcludes: ['/a', '/b'] })
+    expect(() => withInstructionExcludes('/etc/settings.json', ['/b'])).toThrow(/settings file path/)
+  })
+
+  it('passes the excludes to the Claude engine only when the scope is cwd', async () => {
+    const scoped = fakeHarness()
+    void new SessionRunner({ cwd: '/tmp/project/pkg', queryFn: scoped.queryFn, instructionScope: 'cwd' }).start()
+    const plain = fakeHarness()
+    void new SessionRunner({ cwd: '/tmp/project/pkg', queryFn: plain.queryFn }).start()
+    await tick()
+    const settings = scoped.captured.options?.settings
+    expect(typeof settings === 'object' ? settings.claudeMdExcludes : undefined).toContain('/tmp/project/AGENTS.md')
+    expect(plain.captured.options?.settings).toBeUndefined()
+  })
+
+  it('makes the cwd the codex project root when the scope is cwd', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } }))
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn, instructionScope: 'cwd' })
+    await runner.start()
+    const starts = () => peer.requests.filter((request) => request.method === 'thread/start')
+    await vi.waitFor(() => expect(starts()).toHaveLength(1))
+    expect((starts()[0]!.params as { config?: Record<string, unknown> }).config).toMatchObject({ project_root_markers: [] })
   })
 })
 

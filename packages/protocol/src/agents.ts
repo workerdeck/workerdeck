@@ -16,6 +16,13 @@ export type AgentRef = {
   conversation?: number
 }
 
+export const INSTRUCTION_SCOPES = ['ancestors', 'cwd'] as const
+export type InstructionScope = (typeof INSTRUCTION_SCOPES)[number]
+
+export function isInstructionScope(value: unknown): value is InstructionScope {
+  return value === 'ancestors' || value === 'cwd'
+}
+
 export type AgentConfig = {
   cwd?: string
   profile?: string
@@ -23,6 +30,7 @@ export type AgentConfig = {
   reasoningEffort?: string
   permissionMode?: PermissionMode
   brief?: string
+  instructionScope?: InstructionScope
   agentContextReset?: boolean
   sleepAfterMs?: number
 }
