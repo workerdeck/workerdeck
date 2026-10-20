@@ -304,6 +304,7 @@ export type FilesToHost =
   | { kind: 'wd-files-upload'; target: string; files: UploadedFile[] }
   | { kind: 'wd-files-drop-uris'; target: string; uris: string[] }
   | { kind: 'wd-files-selection'; uris: string[] }
+  | { kind: 'wd-files-editing'; editing: boolean }
   | { kind: 'wd-files-copy-path'; uris: string[]; relative: boolean }
   | { kind: 'wd-files-reveal-os'; uri: string }
 

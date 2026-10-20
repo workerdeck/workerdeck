@@ -449,6 +449,61 @@
         "category": "WorkerDeck"
       }
     ],
+    "keybindings": [
+      {
+        "command": "workerdeck.files.rename",
+        "key": "f2",
+        "mac": "enter",
+        "when": "focusedView == workerdeck.files && workerdeck.filesHasRoot && !workerdeck.filesEditing"
+      },
+      {
+        "command": "workerdeck.files.rename",
+        "key": "f2",
+        "when": "focusedView == workerdeck.files && workerdeck.filesHasRoot && !workerdeck.filesEditing"
+      },
+      {
+        "command": "workerdeck.files.delete",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "focusedView == workerdeck.files && workerdeck.filesHasRoot && !workerdeck.filesEditing"
+      },
+      {
+        "command": "workerdeck.files.openToSide",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "focusedView == workerdeck.files && workerdeck.filesHasRoot && !workerdeck.filesEditing"
+      },
+      {
+        "command": "workerdeck.files.cut",
+        "key": "ctrl+x",
+        "mac": "cmd+x",
+        "when": "focusedView == workerdeck.files && workerdeck.filesHasRoot && !workerdeck.filesEditing"
+      },
+      {
+        "command": "workerdeck.files.copy",
+        "key": "ctrl+c",
+        "mac": "cmd+c",
+        "when": "focusedView == workerdeck.files && workerdeck.filesHasRoot && !workerdeck.filesEditing"
+      },
+      {
+        "command": "workerdeck.files.copyPath",
+        "key": "ctrl+alt+c",
+        "mac": "alt+cmd+c",
+        "when": "focusedView == workerdeck.files && workerdeck.filesHasRoot && !workerdeck.filesEditing"
+      },
+      {
+        "command": "workerdeck.files.copyRelativePath",
+        "key": "ctrl+shift+alt+c",
+        "mac": "shift+alt+cmd+c",
+        "when": "focusedView == workerdeck.files && workerdeck.filesHasRoot && !workerdeck.filesEditing"
+      },
+      {
+        "command": "workerdeck.files.revealInOS",
+        "key": "ctrl+alt+r",
+        "mac": "alt+cmd+r",
+        "when": "focusedView == workerdeck.files && workerdeck.filesHasRoot && !workerdeck.filesEditing && workerdeck.filesLocal"
+      }
+    ],
     "menus": {
       "editor/title": [
         {

@@ -108,6 +108,7 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
     }
     this.#root = resolved && { ...resolved, session: session! }
     this.#selection = []
+    void vscode.commands.executeCommand('setContext', 'workerdeck.filesEditing', false)
     this.#watcher?.dispose()
     this.#watcher = undefined
     if (this.#root?.local) {
@@ -258,6 +259,10 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
       }
       case 'wd-files-selection': {
         this.#selection = uris(msg.uris)
+        return
+      }
+      case 'wd-files-editing': {
+        void vscode.commands.executeCommand('setContext', 'workerdeck.filesEditing', msg.editing)
         return
       }
       case 'wd-files-copy-path': {

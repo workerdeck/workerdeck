@@ -183,9 +183,6 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
   const rows = useMemo(() => (root ? flatten(root.uri, dirs, expanded, edit) : []), [root, dirs, expanded, edit])
   const indexOf = useCallback((uri: string | undefined) => (uri ? rows.findIndex((r) => rowKey(r) === uri) : -1), [rows])
 
-  useEffect(() => {
-    post({ kind: 'wd-files-selection', uris: [...selected] })
-  }, [post, selected])
 
   const scrollIntoView = useCallback((index: number) => {
     const el = scrollRef.current
@@ -266,6 +263,14 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
   }, [rows, selected, focused])
 
   const focusedRow = rows[indexOf(focused)]
+
+  useEffect(() => {
+    post({ kind: 'wd-files-selection', uris: selection() })
+  }, [post, selection])
+
+  useEffect(() => {
+    post({ kind: 'wd-files-editing', editing: edit !== undefined })
+  }, [post, edit])
 
   const startCreate = useCallback(
     (entry: FileEntryKind, uri?: string) => {
@@ -396,15 +401,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         }
         return handled()
       }
-      if (key === 'F2' || (isMac && key === 'Enter' && !mod)) {
-        startRename()
-        return handled()
-      }
-      if (key === 'Enter' && mod) {
-        open(selection(), 'side')
-        return handled()
-      }
-      if (key === 'Enter' || key === ' ') {
+      if (key === ' ' || (key === 'Enter' && !isMac && !mod)) {
         if (entryRow?.entry.kind === 'folder') {
           toggle(entryRow.entry.uri)
         } else {
@@ -412,24 +409,8 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         }
         return handled()
       }
-      if ((isMac && key === 'Backspace' && mod) || (!isMac && key === 'Delete')) {
-        post({ kind: 'wd-files-delete', uris: selection() })
-        return handled()
-      }
       if (mod && !event.altKey && key.toLowerCase() === 'a') {
         setSelected(new Set(rows.filter((r): r is EntryRow => r.kind === 'entry').map((r) => r.entry.uri)))
-        return handled()
-      }
-      if (mod && event.altKey && key.toLowerCase() === 'c') {
-        post({ kind: 'wd-files-copy-path', uris: selection(), relative: event.shiftKey })
-        return handled()
-      }
-      if (mod && event.altKey && key.toLowerCase() === 'r' && root?.local && focused) {
-        post({ kind: 'wd-files-reveal-os', uri: focused })
-        return handled()
-      }
-      if (mod && !event.altKey && (key.toLowerCase() === 'c' || key.toLowerCase() === 'x')) {
-        post({ kind: 'wd-files-clipboard', uris: selection(), cut: key.toLowerCase() === 'x' })
         return handled()
       }
       if (mod && !event.altKey && key.toLowerCase() === 'v') {
@@ -448,7 +429,7 @@ export function FilesApp({ bridge }: { bridge: Bridge }) {
         return handled()
       }
     },
-    [edit, rows, indexOf, focused, viewport, focusRow, open, toggle, root, startRename, selection, post, pasteTarget, cut],
+    [edit, rows, indexOf, focused, viewport, focusRow, open, toggle, root, selection, post, pasteTarget, cut],
   )
 
   useEffect(() => {

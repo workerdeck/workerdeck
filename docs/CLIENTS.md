@@ -169,10 +169,15 @@ refactoring participants. Fidelity rests on three rules:
   `lang-file-icon` classes, fonts and SVGs via `asWebviewUri`), and rows carry the same classes
   `getIconClasses` would; the language id per entry comes from the contributed `languages` plus
   `files.associations`. The codicon font is loaded from `vscode.env.appRoot`.
-- **Keys are handled in the webview and stopped there.** A webview forwards every keydown to the
-  workbench, so a handled key calls `stopPropagation` or it would also fire a global keybinding.
-  Cmd/Ctrl+V is let through to the browser so `paste` can carry OS files, with a short fallback to the
-  in-view clipboard when it does not.
+- **Actions are commands with keybindings; only navigation lives in the webview.** Rename, delete,
+  open to the side, cut/copy, copy path and reveal are `workerdeck.files.*` commands bound in
+  `package.json` under `focusedView == workerdeck.files && !workerdeck.filesEditing` (a webview
+  forwards every keydown to the workbench, which is what makes this work), so they show in Keyboard
+  Shortcuts and rebind like the Explorer's; New File/Folder ship no default, as in the Explorer. The
+  webview keeps arrows/Home/End/Page, Space, Enter-to-open off mac, Cmd/Ctrl+A and Escape, and calls
+  `stopPropagation` on each so no global keybinding fires twice; it reports `wd-files-editing` while an
+  inline input is open so no shortcut lands inside it. Cmd/Ctrl+V stays in the webview because only the
+  browser `paste` event carries OS files, with a short fallback to the in-view clipboard.
 
 Decorations (`src/file-decorations.ts`) are git status from the built-in git extension's API (local
 roots only) plus diagnostics, bubbled to folders as colour only. Another extension's
