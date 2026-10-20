@@ -30,7 +30,7 @@ export type CostBreakdown = {
   unpricedShare: number
 }
 
-export const PRICING_AS_OF = '2026-10-08'
+export const PRICING_AS_OF = '2026-10-20'
 
 export const PRICING_SOURCES = 'platform.claude.com and developers.openai.com list prices, bundled'
 
@@ -75,6 +75,7 @@ export const DEFAULT_PRICING: Record<string, ModelRate> = {
   'claude-sonnet-4-5': anthropicRate(3, 15),
   'claude-haiku-5-5': anthropicRate(0.1, 0.5),
   'claude-haiku-4-5': anthropicRate(1, 5),
+  'gpt-6.1-sol': openaiRate(2, 10, 0.1),
   'gpt-6-astra': openaiRate(10, 50, 1),
   'gpt-6-sol': openaiRate(2, 10, 0.2),
   'gpt-6-luna': openaiRate(0.1, 0.5, 0.01),
