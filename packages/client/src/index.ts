@@ -167,6 +167,10 @@ export class WorkerDeckClient {
     return await this.#call('POST', '/agents', request)
   }
 
+  async getAgent(id: string): Promise<AgentResponse> {
+    return await this.#call('GET', this.#agent(id))
+  }
+
   async updateAgent(id: string, patch: UpdateAgentRequest): Promise<AgentResponse> {
     return await this.#call('PATCH', this.#agent(id), patch)
   }

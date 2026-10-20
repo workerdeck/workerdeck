@@ -11,6 +11,7 @@ import {
   type StatusLabelInput,
 } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
+import { agentFileUri, type AgentFile } from './agent-settings.ts'
 import type { HostStore } from './hosts.ts'
 import {
   runTeamMove,
@@ -62,6 +63,13 @@ export type SidebarDelegate = {
 
 export function canSleep(info: SessionInfo): boolean {
   return canSleepRule(info)
+}
+
+const NEW_CONVERSATION_NOW = 'New conversation now'
+
+async function openAgentFile(hostId: string, agentId: string, name: string, file: AgentFile): Promise<void> {
+  const document = await vscode.workspace.openTextDocument(agentFileUri(hostId, agentId, name, file))
+  await vscode.window.showTextDocument(document, { preview: false })
 }
 
 export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSidebar> implements vscode.Disposable {
@@ -397,6 +405,18 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           run: () => this.#changeAvatar(hostId, info.id),
         })
       }
+      items.push(
+        {
+          label: '$(settings-gear) Edit settings',
+          detail: 'Project, profile, model, permission mode, instruction scope, sleep; saved on save',
+          run: () => openAgentFile(hostId, agent.id, agent.name, 'settings'),
+        },
+        {
+          label: '$(note) Edit brief',
+          detail: 'The standing brief, as markdown; saved on save',
+          run: () => openAgentFile(hostId, agent.id, agent.name, 'brief'),
+        },
+      )
       items.push({
         label: '$(history) Conversations…',
         detail: "This agent's conversations; past ones open read-only",
@@ -421,6 +441,20 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       })
     }
     return items
+  }
+
+  async agentSaved(saved: { hostId: string; agentId: string; name: string; file: AgentFile }): Promise<void> {
+    const what = saved.file === 'settings' ? 'settings' : 'brief'
+    const message = `WorkerDeck: saved ${saved.name}'s ${what}. They apply when it next starts or wakes.`
+    const info = this.#model.sessionsOf(saved.hostId).find((s) => s.agent?.id === saved.agentId)
+    if (!info || !newConversationGate(info).enabled) {
+      void vscode.window.showInformationMessage(message)
+      return
+    }
+    const choice = await vscode.window.showInformationMessage(message, NEW_CONVERSATION_NOW)
+    if (choice === NEW_CONVERSATION_NOW) {
+      await this.#newConversation(saved.hostId, info.id, saved.agentId)
+    }
   }
 
   async #agentRecord(hostId: string, agentId: string): Promise<AgentInfo | undefined> {

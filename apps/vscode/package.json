@@ -53,6 +53,12 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "jsonValidation": [
+      {
+        "fileMatch": "*.agent.json",
+        "url": "./media/agent-settings.schema.json"
+      }
+    ],
     "viewsContainers": {
       "secondarySidebar": [
         {

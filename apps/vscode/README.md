@@ -100,7 +100,9 @@ you do not want.
 with a search box and a funnel holding the facets (gateway, engine, state, plus group and sort).
 Session cards carry the engine mark, the model, the folder, turn count and cost, an unread
 badge, and the state at a glance. Double-click a name to rename it, and the dashboard and your
-phone see the new name too.
+phone see the new name too. On an agent's card, **Edit settings** opens its settings (project, profile,
+model, permission mode, instruction scope, sleep) as a JSON file with completion, and **Edit
+brief** opens its brief as markdown; saving sends the change to the gateway.
 
 **Agent Files** sits in the Explorer too, and shows the folder of the session you have open, even
 when that folder is not in your workspace or lives on another machine. It looks and behaves like

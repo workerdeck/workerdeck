@@ -101,9 +101,12 @@ export type CreateAgentRequest = {
   crossOwner?: boolean
 }
 
+// `null` clears a key back to its default; an absent key keeps the stored value.
+export type AgentConfigPatch = { [K in keyof AgentConfig]?: AgentConfig[K] | null }
+
 export type UpdateAgentRequest = {
   name?: string
-  config?: AgentConfig
+  config?: AgentConfigPatch
   lead?: string | null
   order?: number
   owner?: string

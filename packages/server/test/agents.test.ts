@@ -237,6 +237,20 @@ describe('agents', () => {
     expect(refused).toEqual({ status: 400, body: { error: 'config.instructionScope must be one of ancestors, cwd' } })
   })
 
+  it('clears a config key patched to null and keeps the keys left out', async () => {
+    const { base } = await startGateway()
+    const { body } = await call<AgentResponse>(base, '/agents', 'POST', {
+      name: 'Wren',
+      config: { cwd: '/tmp/project', model: 'claude-test-1', instructionScope: 'cwd' },
+    })
+    const patched = await call<AgentResponse>(base, `/agents/${body.agent.id}`, 'PATCH', {
+      config: { instructionScope: null, sleepAfterMs: 0 },
+    })
+    expect(patched.status).toBe(200)
+    expect(patched.body.agent.config).toEqual({ cwd: '/tmp/project', model: 'claude-test-1', sleepAfterMs: 0 })
+    expect((await call<AgentResponse>(base, `/agents/${body.agent.id}`)).body.agent.config).toEqual(patched.body.agent.config)
+  })
+
   it('forms one-level teams and says why a move is refused', async () => {
     const { base } = await startGateway()
     const make = async (name: string) =>

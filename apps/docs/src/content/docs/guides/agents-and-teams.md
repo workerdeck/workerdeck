@@ -16,6 +16,9 @@ same identity and team (see [Conversations](#conversations)).
   `⋯` menu to keep an existing session as an agent.
 - **Dashboard:** the `+` split button opens the New agent dialog (name, project, model, brief, an
   optional first prompt). Leave the name blank and the gateway picks one.
+- **Change one later:** in VS Code, *Edit settings* and *Edit brief* in the card's `⋯` menu open
+  the agent's settings as JSON (with completion) and its brief as markdown; saving applies them.
+  Over REST, `PATCH /v1/agents/:id` with `{ "config": { ... } }` merges keys, and `null` clears one.
 - **REST:** `POST /v1/agents` with `{ name, brief, config: { cwd, model, ... }, prompt }`, or
   `{ adopt: "<session id>" }`. The `/agents` routes are operator-only.
 

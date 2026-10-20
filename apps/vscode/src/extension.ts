@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { hostCommands, pickCommand, registerCommands, sessionCommands, viewCommands } from './commands.ts'
 import { startDevReload } from './dev-reload.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
+import { AgentSettingsFileSystem } from './agent-settings.ts'
 import { FilesViewProvider } from './files-view.ts'
 import { agentOf, followTargetOf } from './follow.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
@@ -569,6 +570,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.registerFileSystemProvider(WorkerdeckFileSystem.scheme, fs, {
       isCaseSensitive: true,
     }),
+    vscode.workspace.registerFileSystemProvider(
+      AgentSettingsFileSystem.scheme,
+      new AgentSettingsFileSystem(store, (saved) => void sidebar.agentSaved(saved)),
+      { isCaseSensitive: true },
+    ),
 
     ...registerCommands(
       hostCommands({ extensionId: context.extension.id, supervisor: hostSupervisor, require: requireHost }),

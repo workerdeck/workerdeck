@@ -567,7 +567,15 @@ does not stay native: a QuickPick cannot show the candidates, so it posts `wd-av
 sidebar webview opens `packages/ui`'s `AvatarDialog` (the dashboard's picker) over a
 `WorkerDeckClient` on the bridge transports; a request before the view has booted waits for its
 `wd-ready`. Each session surface also gets `wd-peer-avatars` (session id to image, for its own
-gateway, posted only when the map changes) for the composer's `#` rows. Drag to join posts `wd-team-move` (session ids;
+gateway, posted only when the map changes) for the composer's `#` rows. **Edit settings / Edit
+brief** open the agent's config as documents on a second file system provider,
+`workerdeck-agent://<host>/<agent id>/<name>.agent.json` and `.brief.md` (`agent-settings.ts`): read is
+`GET /agents/:id`, save is `PATCH /agents/:id` with the config minus the brief (a key the edit
+removed is sent as `null`, which the gateway clears to its default), so the file in the state dir is
+never touched and a remote gateway works the same. `jsonValidation` binds
+`media/agent-settings.schema.json` to `*.agent.json` for completion and hovers; unknown keys and a
+`brief` key are refused on save with the reason. After a save, an idle agent is offered *New
+conversation now*, since the config applies at the next build. Drag to join posts `wd-team-move` (session ids;
 the host maps them to agents, adopts a plain session, then patches `order` for it and its siblings).
 Drag and Add to team share `#moveIntoTeam`: a join between two owners asks in a modal first, and
 the `TeamMoveOutcome` (`packages/client`) comes back as one message, with a Withdraw invitation

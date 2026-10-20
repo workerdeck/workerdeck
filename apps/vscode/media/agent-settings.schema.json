@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkerDeck agent settings",
+  "description": "Saved to the gateway on save. A removed key goes back to its default. Changes apply when the agent next starts or wakes.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "cwd": { "type": "string", "description": "The project directory the agent's sessions run in." },
+    "profile": { "type": "string", "description": "The gateway profile (engine and account) the agent runs on." },
+    "model": { "type": "string", "description": "The model id; absent means the profile's default." },
+    "reasoningEffort": {
+      "type": "string",
+      "description": "Reasoning effort for the model; absent means the profile's default.",
+      "examples": ["low", "medium", "high", "xhigh", "max"]
+    },
+    "permissionMode": {
+      "enum": ["default", "acceptEdits", "bypassPermissions", "plan", "dontAsk", "auto"],
+      "description": "The permission mode a new session starts in."
+    },
+    "instructionScope": {
+      "enum": ["ancestors", "cwd"],
+      "default": "ancestors",
+      "markdownEnumDescriptions": [
+        "Load instruction files (`AGENTS.md`, `CLAUDE.md`, `.claude/rules`) from the project folder and every folder above it, as the engine does on its own.",
+        "Load instruction files only from the project folder and below. Your own `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` still load. For team members in a monorepo sub-folder."
+      ],
+      "description": "Which instruction files the agent's sessions load."
+    },
+    "agentContextReset": {
+      "type": "boolean",
+      "description": "Whether the agent may start a fresh conversation itself with the context_reset tool."
+    },
+    "sleepAfterMs": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Idle time in milliseconds before the agent's engine sleeps; 0 never sleeps. Absent means the gateway default."
+    }
+  }
+}
