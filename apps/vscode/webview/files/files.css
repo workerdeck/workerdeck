@@ -339,7 +339,7 @@ body:has(.wdf) {
   box-sizing: border-box;
   width: 100%;
   height: 20px;
-  padding: 0;
+  padding: 0 1px;
   border: none;
   font-family: inherit;
   font-size: inherit;

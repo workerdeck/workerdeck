@@ -51,7 +51,10 @@ export function InlineInput({ initial, selectExtension, validate, onCommit, onCa
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    event.stopPropagation()
+    // Cmd/Ctrl chords must reach the webview's own forwarder, which runs Select All, Undo, Copy and Paste back in here.
+    if (!event.metaKey && !event.ctrlKey) {
+      event.stopPropagation()
+    }
     if (event.key === 'Enter') {
       event.preventDefault()
       const verdict = validate(value)
