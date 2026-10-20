@@ -272,7 +272,10 @@ facets, so "clear filters" never silently re-draws the list a different shape -
 name when the list is already grouped by project, i.e. where in the project the session sits, and
 nothing at all at the root, and
 the scope-containment rule where a gateway-tagged root scopes only that gateway and an
-untagged one only loopback), and `watermarks.ts` is the **unread model** (monotonic marks
+untagged one only loopback; `orderGroups`/`moveGroup`/`resetGroupOrder` apply the operator's dragged
+order per grouping from `ViewConfig.groupOrder` *after* `groupRows`, so the Rust core's `group_rows`
+goldens never see it, and a group the order never named lands after its ranked predecessor;
+`collapsedGroups` folds any grouping, its keys being disjoint across groupings), and `watermarks.ts` is the **unread model** (monotonic marks
 behind a `WatermarkStore` seam, and `unseenCount`'s prose arithmetic). They are
 rules, not preferences: the extension's unread status-bar item counts the *same* rows its
 list shows, so a client that filtered differently would announce work it is hiding. Tests live
