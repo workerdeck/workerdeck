@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest'
-import { archivedBannerText, conversationRowText, conversationSpan } from '../src/lib/conversations.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { WorkerDeckError } from '@workerdeck/client'
+import type { UnconfirmedInputRefusal } from '@workerdeck/protocol'
+import {
+  archivedBannerText,
+  conversationRowText,
+  conversationSpan,
+  discardConfirmText,
+  startNewConversation,
+  type CutClient,
+} from '../src/lib/conversations.ts'
 
 const at = Date.UTC(2026, 9, 18, 12, 0)
 
@@ -28,7 +37,88 @@ describe('archived banner', () => {
       /^Past conversation · Oct 18, 2026/,
     )
     expect(archivedBannerText({ kind: 'past', at, unavailable: false }).note).toBeUndefined()
-    expect(archivedBannerText({ kind: 'deleted', at, unavailable: false }).note).toBe('Agent deleted')
-    expect(archivedBannerText({ kind: 'deleted', at, unavailable: true }).note).toBe('Agent deleted · Transcript unavailable')
+    expect(archivedBannerText({ kind: 'deleted', at, unavailable: false }).note).toBe('Closed')
+    expect(archivedBannerText({ kind: 'deleted', at, unavailable: true }).note).toBe('Closed · Transcript unavailable')
+  })
+})
+
+function refusal(code: string, inputRevision: string, pendingInput: number, mayIncludePeer = false): WorkerDeckError {
+  return new WorkerDeckError('unread input', 409, {
+    error: 'unread input',
+    code,
+    conversation: 4,
+    inputRevision,
+    pendingInput,
+    mayIncludePeer,
+  })
+}
+
+const done = { session: { id: 's1' }, conversation: 5 } as Awaited<ReturnType<CutClient['newConversation']>>
+
+describe('discard and cut', () => {
+  it('states the count and warns about peers only when they may be in it', () => {
+    const one: UnconfirmedInputRefusal = {
+      error: 'x',
+      code: 'unconfirmed_input',
+      conversation: 4,
+      inputRevision: 'r1',
+      pendingInput: 1,
+      mayIncludePeer: false,
+    }
+    expect(discardConfirmText(one).title).toBe('Discard 1 message and start a new conversation?')
+    expect(discardConfirmText(one).detail).not.toContain('peer')
+    const many = { ...one, pendingInput: 3, mayIncludePeer: true }
+    expect(discardConfirmText(many).title).toContain('3 messages')
+    expect(discardConfirmText(many).detail).toContain('peer agents')
+    expect(discardConfirmText({ ...one, code: 'input_changed' }).detail).toMatch(/^More input arrived/)
+  })
+
+  it('cuts straight away when nothing is unread, without asking', async () => {
+    const client: CutClient = { newConversation: vi.fn(async () => done), discardAndCut: vi.fn() }
+    const confirm = vi.fn(async () => true)
+    await expect(startNewConversation(client, 's1', { expectedGeneration: 4 }, confirm)).resolves.toBe(done)
+    expect(confirm).not.toHaveBeenCalled()
+  })
+
+  it('binds the refusal it showed, and asks again with the new set when input arrived meanwhile', async () => {
+    const discardAndCut = vi
+      .fn<CutClient['discardAndCut']>()
+      .mockRejectedValueOnce(refusal('input_changed', 'r2', 2, true))
+      .mockResolvedValueOnce(done)
+    const client: CutClient = {
+      newConversation: vi.fn(async () => {
+        throw refusal('unconfirmed_input', 'r1', 1)
+      }),
+      discardAndCut,
+    }
+    const asked: number[] = []
+    const result = await startNewConversation(client, 's1', { expectedGeneration: 4, prompt: 'go' }, async (_text, shown) => {
+      asked.push(shown.pendingInput)
+      return true
+    })
+    expect(result).toBe(done)
+    expect(asked).toEqual([1, 2])
+    expect(discardAndCut.mock.calls).toEqual([
+      ['s1', { expectedGeneration: 4, inputRevision: 'r1', prompt: 'go' }],
+      ['s1', { expectedGeneration: 4, inputRevision: 'r2', prompt: 'go' }],
+    ])
+  })
+
+  it('does nothing when the person declines, and rethrows any other refusal', async () => {
+    const declined: CutClient = {
+      newConversation: vi.fn(async () => {
+        throw refusal('unconfirmed_input', 'r1', 1)
+      }),
+      discardAndCut: vi.fn(),
+    }
+    await expect(startNewConversation(declined, 's1', { expectedGeneration: 4 }, async () => false)).resolves.toBeUndefined()
+    expect(declined.discardAndCut).not.toHaveBeenCalled()
+    const busy: CutClient = {
+      newConversation: vi.fn(async () => {
+        throw new WorkerDeckError('session is busy', 409, { error: 'session is busy' })
+      }),
+      discardAndCut: vi.fn(),
+    }
+    await expect(startNewConversation(busy, 's1', { expectedGeneration: 4 }, async () => true)).rejects.toThrow('session is busy')
   })
 })

@@ -75,6 +75,8 @@ import type { FileLinkOpener } from '../terminal/file-link.tsx'
 import { backgroundableSince, SEND_NOW_AFTER_MS } from '../terminal/live-tool.ts'
 import { useTicker } from '../terminal/items.tsx'
 import { ArchivedBanner } from './ArchivedBanner.tsx'
+import { useDiscardConfirmation } from './DiscardInputDialog.tsx'
+import { startNewConversation } from '../../lib/conversations.ts'
 import { ApprovalPrompts, type ApprovalPromptProps } from './ApprovalPrompts.tsx'
 import { SessionPanelProviders } from './session-panel-providers.tsx'
 import { useCatchUp } from './use-catch-up.ts'
@@ -153,6 +155,8 @@ export type SessionControls = {
   focusComposer: () => void
   insertComposerText: (text: string) => void
 }
+
+const CLEAR_REFUSAL_WINDOW_MS = 10_000
 
 const INTERACTIVE = [
   'button',
@@ -269,6 +273,17 @@ export function SessionPanel({
   const controlsExternal = controlsSurface === 'external' || controlsInStatus
   const [protocolError, setProtocolError] = useState<string | undefined>(undefined)
   const [panel, setPanel] = useState<Panel | undefined>()
+  const discard = useDiscardConfirmation()
+  const clearAskedAt = useRef(0)
+  const clearRefused = useRef<(message: string) => void>(setProtocolError)
+  const onProtocolError = useCallback((message: string) => {
+    if (Date.now() - clearAskedAt.current < CLEAR_REFUSAL_WINDOW_MS) {
+      clearAskedAt.current = 0
+      clearRefused.current(message)
+      return
+    }
+    setProtocolError(message)
+  }, [])
   const {
     state,
     connection,
@@ -285,7 +300,7 @@ export function SessionPanel({
     deny,
     interrupt,
     backgroundTask,
-    clearContext,
+    clearContext: clearOverSocket,
     setModel,
     setEffort,
     setPermissionMode,
@@ -295,7 +310,7 @@ export function SessionPanel({
     verifyShell,
     killShell,
     setShellAgentWrite,
-  } = useClaudeSession(client, address, { onProtocolError: setProtocolError, cacheTranscript })
+  } = useClaudeSession(client, address, { onProtocolError, cacheTranscript })
   const {
     shellId: framedShellId,
     enterShell,
@@ -310,6 +325,21 @@ export function SessionPanel({
     [loadShellOutput, verifyShell, killShell, enterShell, agentWrite],
   )
   useEffect(() => setProtocolError(undefined), [sessionId])
+  const clearContext = useCallback(() => {
+    clearAskedAt.current = Date.now()
+    clearOverSocket()
+  }, [clearOverSocket])
+  const conversationNow = state.session?.conversation ?? 1
+  // A socket refusal carries only a message, so the cut is asked again over REST, whose 409 names the unread input.
+  clearRefused.current = (message) => {
+    if (sessionId === undefined || conversation !== undefined) {
+      setProtocolError(message)
+      return
+    }
+    startNewConversation(client, sessionId, { expectedGeneration: conversationNow }, discard.confirm).catch((err: unknown) =>
+      setProtocolError(err instanceof Error ? err.message : message),
+    )
+  }
   const {
     subagentId,
     enterSubagent,
@@ -510,6 +540,9 @@ export function SessionPanel({
     }
     dismissCatchUp()
     repinTranscript.current?.()
+    if (attachmentIds.length === 0 && text.trim() === '/clear') {
+      clearAskedAt.current = Date.now()
+    }
     send(text, attachmentIds)
   }
 
@@ -800,6 +833,7 @@ export function SessionPanel({
             </>
           ) : null}
         </ImageViewerProvider>
+        {discard.dialog}
       </div>
     </SessionPanelProviders>
   )

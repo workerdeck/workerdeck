@@ -62,6 +62,7 @@ export {
   type SessionVitals,
   type TerminalMetrics,
 } from './components/agent/SessionPanel.tsx'
+export { DiscardInputDialog, useDiscardConfirmation, type DiscardConfirmation } from './components/agent/DiscardInputDialog.tsx'
 export { ArchivedBanner, type ArchivedBannerProps } from './components/agent/ArchivedBanner.tsx'
 export { TerminalTranscript, Transcript, type TerminalTranscriptProps, type TranscriptProps } from './components/agent/Transcript.tsx'
 export { TerminalSurface, type TerminalSurfaceProps } from './components/terminal/surface.tsx'
@@ -249,6 +250,11 @@ export {
   conversationDate,
   conversationRowText,
   conversationSpan,
+  discardConfirmText,
+  startNewConversation,
   type ArchivedBannerText,
+  type ConfirmDiscard,
   type ConversationRowText,
+  type CutClient,
+  type DiscardConfirmText,
 } from './lib/conversations.ts'

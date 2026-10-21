@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { BedDouble, ChevronDown, ChevronRight, Eraser, FolderOpen, Layers, Pencil, Plus, Search, SearchX, Trash2, X } from 'lucide-react'
+import { BedDouble, ChevronDown, ChevronRight, FolderOpen, Layers, Pencil, Plus, RotateCcw, Search, SearchX, Trash2, X } from 'lucide-react'
 import {
   clearFilters,
   filterRows,
@@ -22,6 +22,8 @@ import {
   orderedGroupBy,
   toggleGroupCollapsed,
   clearContextOffered,
+  newConversationGate,
+  NEW_CONVERSATION_HINT,
 } from '@workerdeck/protocol'
 import type {
   HostRelays,
@@ -70,7 +72,7 @@ export interface SessionBrowserProps {
   onRename?: (row: SessionRow, title: string) => void
   // An agent card's name is the agent's, not the session title; without this, agent cards are not renamable.
   onRenameAgent?: (row: SessionRow, name: string) => void
-  onClearContext?: (row: SessionRow) => void
+  onNewConversation?: (row: SessionRow) => void
   onSleep?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
   onSelectTask?: (row: SessionRow, task: SessionTask) => void
@@ -120,7 +122,7 @@ export function SessionBrowser({
   onDelete,
   onRename,
   onRenameAgent,
-  onClearContext,
+  onNewConversation,
   onSleep,
   onSelectSubagent,
   onSelectTask,
@@ -356,7 +358,7 @@ export function SessionBrowser({
                         onSelect={onSelect}
                         onDelete={onDelete}
                         onRename={member.info.agent ? onRenameAgent : onRename}
-                        onClearContext={onClearContext}
+                        onNewConversation={onNewConversation}
                         onSleep={onSleep}
                         onSelectSubagent={onSelectSubagent}
                         onSelectTask={onSelectTask}
@@ -424,7 +426,7 @@ interface SessionRowItemProps {
   onSelect?: (row: SessionRow, modifiers: SelectModifiers) => void
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
-  onClearContext?: (row: SessionRow) => void
+  onNewConversation?: (row: SessionRow) => void
   onSleep?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
   onSelectTask?: (row: SessionRow, task: SessionTask) => void
@@ -457,7 +459,7 @@ function SessionRowItem({
   onSelect,
   onDelete,
   onRename,
-  onClearContext,
+  onNewConversation,
   onSleep,
   onSelectSubagent,
   onSelectTask,
@@ -505,13 +507,13 @@ function SessionRowItem({
                 <Pencil className="size-3 text-fg-3" />
               </RowAction>
             ) : null}
-            {onClearContext && info.capabilities?.clearContext && clearContextOffered(info) ? (
+            {onNewConversation && clearContextOffered(info) && newConversationGate(info).enabled ? (
               <RowAction
-                label="Clear context"
-                title="Clear the conversation - the session keeps running and the old conversation stays resumable"
-                onClick={() => onClearContext(row)}
+                label="New conversation"
+                title={`New conversation: ${NEW_CONVERSATION_HINT.toLowerCase()}`}
+                onClick={() => onNewConversation(row)}
               >
-                <Eraser className="size-3 text-fg-3" />
+                <RotateCcw className="size-3 text-fg-3" />
               </RowAction>
             ) : null}
             {onSleep && info.capabilities?.engineSleep && info.status === 'idle' && !info.engineAsleep ? (

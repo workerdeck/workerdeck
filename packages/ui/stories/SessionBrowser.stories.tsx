@@ -71,7 +71,7 @@ function Browser({ initial, ...props }: Partial<React.ComponentProps<typeof Sess
       onSelect={() => {}}
       onSelectSubagent={() => {}}
       onRename={() => {}}
-      onClearContext={() => {}}
+      onNewConversation={() => {}}
       onDelete={() => {}}
       {...props}
     />
