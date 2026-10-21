@@ -37,17 +37,19 @@ export type Refusal = { status: number; error: string }
 export class HttpError extends Error {
   readonly status: number
   readonly code: string | undefined
+  readonly details: Record<string, unknown> | undefined
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(status: number, message: string, code?: string, details?: Record<string, unknown>) {
     super(message)
     this.status = status
     this.code = code
+    this.details = details
   }
 }
 
-// `code` names a refusal a client acts on differently from others with the same status.
-export function fail(status: number, message: string, code?: string): never {
-  throw new HttpError(status, message, code)
+// `code` names a refusal a client acts on differently from others with the same status; `details` is what it acts with.
+export function fail(status: number, message: string, code?: string, details?: Record<string, unknown>): never {
+  throw new HttpError(status, message, code, details)
 }
 
 export function requireMethod(req: IncomingMessage, ...methods: string[]): void {

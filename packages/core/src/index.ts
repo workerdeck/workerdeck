@@ -17,6 +17,7 @@ export type {
   SessionEventListener,
   SleepResult,
   ClearContextOptions,
+  InputSnapshot,
 } from './runner-interface.ts'
 export { CostLedger, type CostFigures, type CostLedgerState } from './lib/cost-ledger.ts'
 export type { ToolExecutionCall, ToolExecutionDispatch, ToolExecutionResult, ToolExecutor } from './executors/tool-executor.ts'

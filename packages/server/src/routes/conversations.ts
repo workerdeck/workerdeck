@@ -14,7 +14,7 @@ import type { CutGuard } from '../services/conversation-cuts.ts'
 import type { ConversationEntry, SessionRecord } from '../services/session-records.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
-type CutBody = Partial<NewConversationRequest> & Partial<SettlePendingPromptRequest>
+type CutBody = Partial<NewConversationRequest> & Partial<SettlePendingPromptRequest> & { inputRevision?: unknown }
 
 // The info a history entry is authorized and shown as: its frozen projection, never the current record.
 export function entryInfo(id: string, entry: ConversationEntry): SessionInfo {
@@ -110,6 +110,21 @@ export async function handleConversations(
   if (conversation === 'pending') {
     await cuts.settlePendingPrompt(id, body.send === true, guard)
     json(res, 200, { ok: true })
+    return
+  }
+  if (conversation === 'discard') {
+    if (typeof body.inputRevision !== 'string' || body.inputRevision === '') {
+      fail(400, 'inputRevision is required')
+    }
+    if (body.prompt !== undefined && typeof body.prompt !== 'string') {
+      fail(400, 'prompt must be a string')
+    }
+    const discard = { revision: body.inputRevision }
+    json(
+      res,
+      200,
+      await cuts.cut(id, { expectedGeneration: expected, reason: 'user', discard, ...(body.prompt ? { prompt: body.prompt } : {}) }, guard),
+    )
     return
   }
   if (conversation !== undefined) {

@@ -10,6 +10,7 @@ import type {
   ConversationHistoryResponse,
   ConversationsResponse,
   CreateAgentRequest,
+  DiscardAndCutRequest,
   NewConversationRequest,
   NewConversationResponse,
   RetireAgentRequest,
@@ -51,8 +52,9 @@ import type {
   SessionInfo,
   UpdateProfileRequest,
   ToolResultBlock,
+  UnconfirmedInputRefusal,
 } from '@workerdeck/protocol'
-import { GENERATION_HEADER } from '@workerdeck/protocol'
+import { GENERATION_HEADER, INPUT_CHANGED_CODE, UNCONFIRMED_INPUT_CODE } from '@workerdeck/protocol'
 import { SessionHandle, type AttachOptions } from './session-handle.ts'
 import { QueueHandle } from './queue-handle.ts'
 import { sessionWsUrl } from './ws-url.ts'
@@ -72,10 +74,39 @@ export type ClientOptions = {
 
 export class WorkerDeckError extends Error {
   readonly status: number
-  constructor(message: string, status: number) {
+  readonly code: string | undefined
+  // The refusal's whole JSON body, for one a client acts on (`unconfirmedInputOf`).
+  readonly body: Record<string, unknown> | undefined
+  constructor(message: string, status: number, body?: Record<string, unknown>) {
     super(message)
     this.name = 'WorkerDeckError'
     this.status = status
+    this.code = typeof body?.code === 'string' ? body.code : undefined
+    this.body = body
+  }
+}
+
+// A cut refused because the engine cannot confirm its queued input was consumed (or, on a discard, because input
+// arrived since): what the confirmation shows and binds. Undefined for any other error.
+export function unconfirmedInputOf(error: unknown): UnconfirmedInputRefusal | undefined {
+  if (!(error instanceof WorkerDeckError) || error.status !== 409 || !error.body) {
+    return undefined
+  }
+  const body = error.body
+  if (
+    (body.code !== UNCONFIRMED_INPUT_CODE && body.code !== INPUT_CHANGED_CODE) ||
+    typeof body.conversation !== 'number' ||
+    typeof body.inputRevision !== 'string'
+  ) {
+    return undefined
+  }
+  return {
+    error: error.message,
+    code: body.code,
+    conversation: body.conversation,
+    inputRevision: body.inputRevision,
+    pendingInput: typeof body.pendingInput === 'number' ? body.pendingInput : 0,
+    mayIncludePeer: body.mayIncludePeer !== false,
   }
 }
 
@@ -134,6 +165,11 @@ export class WorkerDeckClient {
   // The cut: conversation n+1 under the same id. `expectedGeneration` is the conversation the caller is looking at.
   async newConversation(id: string, request: NewConversationRequest): Promise<NewConversationResponse> {
     return await this.#call('POST', this.#sess(id, '/conversations'), request)
+  }
+
+  // After a person confirmed losing the pending input `unconfirmedInputOf` reported: refused (409) if any arrived since.
+  async discardAndCut(id: string, request: DiscardAndCutRequest): Promise<NewConversationResponse> {
+    return await this.#call('POST', this.#sess(id, '/conversations/discard'), request)
   }
 
   async retryConversationStart(id: string, expectedGeneration: number): Promise<NewConversationResponse> {
@@ -566,7 +602,7 @@ export class WorkerDeckClient {
     })
     const payload = (await res.json().catch(() => ({}))) as { error?: string }
     if (!res.ok) {
-      throw new WorkerDeckError(payload.error ?? `${method} ${path} failed with ${res.status}`, res.status)
+      throw new WorkerDeckError(payload.error ?? `${method} ${path} failed with ${res.status}`, res.status, payload)
     }
     this.#noteSessions(payload)
     return payload as T

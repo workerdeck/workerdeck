@@ -1,5 +1,14 @@
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, errorMessage, isJobRun, type ConversationTarget, type SessionInfo } from '@workerdeck/protocol'
+import {
+  ENGINE_CAPABILITIES,
+  INPUT_CHANGED_CODE,
+  UNCONFIRMED_INPUT_CODE,
+  errorMessage,
+  isJobRun,
+  type ConversationTarget,
+  type SessionInfo,
+  type UnconfirmedInputRefusal,
+} from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { fail } from '../lib/http.ts'
 import { engineOf } from '../lib/profile-env.ts'
@@ -8,7 +17,14 @@ import { durableConfig, isDormant, type DormantSessionRecord, type StoredSession
 
 export type CutReason = 'user' | 'clear' | 'context_reset'
 
-export type CutRequest = { expectedGeneration: number; prompt?: string; reason: CutReason; target?: ConversationTarget }
+// `discard`: a person confirmed losing the input pending at `revision`; only a user cut carries it, never an automatic one.
+export type CutRequest = {
+  expectedGeneration: number
+  prompt?: string
+  reason: CutReason
+  target?: ConversationTarget
+  discard?: { revision: string }
+}
 
 export type CutResult = { session: SessionInfo; conversation: number }
 
@@ -24,7 +40,9 @@ export type CutFault = 'commit' | 'start' | 'after-stop' | 'after-commit'
 export const CONVERSATION_ENDED = 'this conversation has ended; reattach to the current one'
 export const UNANSWERED_REFUSAL = 'the session has a message it has not answered yet; start a new conversation once it has'
 export const UNCONFIRMED_INPUT = 'the engine cannot confirm queued input was consumed; send a message and wait for its reply, then try again'
-export const UNCONFIRMED_INPUT_CODE = 'unconfirmed_input'
+export { UNCONFIRMED_INPUT_CODE }
+export const INPUT_CHANGED = 'new input arrived since the discard was confirmed; review it and confirm again'
+export const NOTHING_TO_DISCARD = 'this engine has no pending input a discard can bind'
 export const STILL_STARTING = 'the session is still starting; try again once it has started'
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
 
@@ -117,7 +135,7 @@ export class ConversationCuts {
     if (isJobRun(runner.info())) {
       fail(409, JOB_CUT_REFUSAL)
     }
-    refuseUnconfirmed(runner)
+    refuseUnconfirmed(runner, ctx.records.conversationOf(runner.id) ?? 1)
     if (runner.info().status === 'idle' && !unanswered(runner)) {
       return this.cut(runner.id, { expectedGeneration: ctx.records.conversationOf(runner.id) ?? 1, reason, ...(prompt ? { prompt } : {}) })
     }
@@ -182,11 +200,13 @@ export class ConversationCuts {
     if (live && info.status !== 'idle') {
       fail(409, 'the session is busy; start a new conversation once it is idle')
     }
-    if (live) {
-      refuseUnconfirmed(live)
-    }
-    if (live && unanswered(live)) {
-      fail(409, UNANSWERED_REFUSAL)
+    if (live && request.discard) {
+      refuseChangedInput(live, conversation, request.discard.revision)
+    } else if (live) {
+      refuseUnconfirmed(live, conversation)
+      if (unanswered(live)) {
+        fail(409, UNANSWERED_REFUSAL)
+      }
     }
     if (stored && !isDormant(stored)) {
       fail(409, 'the session is parked mid-turn')
@@ -655,11 +675,30 @@ function unanswered(runner: Runner): boolean {
   return (runner.pendingInput?.() ?? 0) > 0
 }
 
-// An engine that cannot confirm consumption never has its queued input guessed away: the cut is refused, distinctly.
-export function refuseUnconfirmed(runner: Runner): void {
+// An engine that cannot confirm consumption never has its queued input guessed away: the cut is refused, distinctly,
+// with what a person needs to confirm a discard of exactly this set.
+export function refuseUnconfirmed(runner: Runner, conversation: number): void {
   if (unanswered(runner) && runner.inputConfirmable?.() === false) {
-    fail(409, UNCONFIRMED_INPUT, UNCONFIRMED_INPUT_CODE)
+    fail(409, UNCONFIRMED_INPUT, UNCONFIRMED_INPUT_CODE, unconfirmedDetails(runner, conversation))
   }
+}
+
+// Synchronous up to the gate the caller raises next, so no send lands between this check and the gate.
+function refuseChangedInput(runner: Runner, conversation: number, revision: string): void {
+  const now = runner.inputSnapshot?.()
+  if (!now) {
+    fail(409, NOTHING_TO_DISCARD)
+  }
+  if (now.revision !== revision) {
+    fail(409, INPUT_CHANGED, INPUT_CHANGED_CODE, unconfirmedDetails(runner, conversation))
+  }
+}
+
+function unconfirmedDetails(runner: Runner, conversation: number): Omit<UnconfirmedInputRefusal, 'error' | 'code'> | undefined {
+  const snapshot = runner.inputSnapshot?.()
+  return snapshot
+    ? { conversation, inputRevision: snapshot.revision, pendingInput: snapshot.pending, mayIncludePeer: snapshot.peer }
+    : undefined
 }
 
 // A runtime for n+1 that the engine has named (or a live snapshot): the successor exists and is resumed, not replaced.

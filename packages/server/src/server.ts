@@ -525,7 +525,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       const message = error instanceof Error ? error.message : 'internal error'
       if (!res.headersSent) {
         const code = error instanceof HttpError ? error.code : undefined
-        json(res, httpErrorStatus(error), { error: message, ...(code ? { code } : {}) })
+        const details = error instanceof HttpError ? error.details : undefined
+        json(res, httpErrorStatus(error), { ...details, error: message, ...(code ? { code } : {}) })
       } else {
         res.end()
       }

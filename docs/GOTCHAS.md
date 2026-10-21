@@ -1325,6 +1325,8 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
   id, the prompt its first message, the agent identity untouched (the index row is keyed by the
   same id and the cut never writes it). Limits key on the session id. It waits for an idle with no
   unanswered input (§ Agent conversations). A failed cut leaves n as it was and goes to `onError`.
+  It never discards: input the engine cannot confirm refuses it (or drops it when queued), and only a
+  person's `POST .../conversations/discard`, bound to the refusal's `inputRevision`, abandons input.
   Without a gateway cut wired, the clear-then-prompt path below runs.
 
 - **The tool schedules; the gateway runs it.** `context_reset` can only ever be called mid-turn, so

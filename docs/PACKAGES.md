@@ -1020,7 +1020,14 @@ engine saw it (ended or missing conversation, a cut in flight, a refusal) is ack
 that may have run never is. A stale resend is refused and never runs, and its ack reports the prompt's retained
 outcome in the conversation it named (`PromptAcks`, keyed by session, n and clientId): ran = a plain ack, refused there
 = `notDelivered`, forgotten (evicted, restarted) = `uncertain`, which react keeps as an `UnsentPrompt` marked uncertain. `packages/client` stamps the token a command was created with and never rewrites it on a
-resend; `useClaudeSession` keeps an undelivered prompt as `unsentPrompts`. Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`), typed exact
+resend; `useClaudeSession` keeps an undelivered prompt as `unsentPrompts`. An engine that cannot confirm its queued input was consumed (claude before its first stamped reply, an early
+interrupt included) gets 409 `unconfirmed_input` carrying `conversation`, `inputRevision`, `pendingInput` and
+`mayIncludePeer` (`Runner.inputSnapshot`); an interrupt never counts as consumption. Only a person's explicit
+confirmation, `POST .../conversations/discard { expectedGeneration, inputRevision, prompt? }`, cuts past it: under
+the lock it re-checks the conversation, then compares the revision synchronously right before the gate, so any
+input since is 409 `input_changed` (with the new set to confirm) and a match abandons exactly that set. There is
+no force flag, and `context_reset`, typed `/clear` and `clear_context` never discard.
+Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`, `/discard`), typed exact
 `/clear` and WS `clear_context` (queued until idle), `context_reset`, and `POST /agents/:id/restart`, named or not.
 Named sessions (create record then index row then start, naming by `PATCH /sessions/:id { agent }`, retire as
 tombstone then close under the members' multi-lock, startup reconciliation, the session list from records) are in
@@ -1213,7 +1220,9 @@ of `buildWsUrl` changes and callers do not. Its `buildWsUrl` builds the query th
 `sessionWsUrl` (`src/ws-url.ts`) that `openSocket` uses and only appends the key: it once dropped
 `truncateResults` and `imageRefs`, so every keyed gateway the dashboard added replayed in full.
 Protocol 2 calls: `nameSession(id, agent)` / `unnameSession(id)` (PATCH naming), `newConversation(id,
-{ expectedGeneration, prompt?, target? })` (the cut), `retryConversationStart`, `settlePendingPrompt`,
+{ expectedGeneration, prompt?, target? })` (the cut), `discardAndCut(id, { expectedGeneration, inputRevision,
+prompt? })` after `unconfirmedInputOf(error)` read a refusal (`WorkerDeckError` keeps `code` and the JSON `body`),
+`retryConversationStart`, `settlePendingPrompt`,
 `conversations(id)` and `conversationHistory(id, n)`; `attach(id, { conversation: n })` opens a past
 conversation's read-only socket and never moves the client's conversation token (`buildWsUrl` gets it as a 5th
 argument, which `hostAuth` forwards).

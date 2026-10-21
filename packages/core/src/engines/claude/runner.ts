@@ -43,6 +43,7 @@ import {
 import type {
   ClearContextOptions,
   EngineRunnerConfig,
+  InputSnapshot,
   PermissionDecision,
   Runner,
   SendMessageOptions,
@@ -109,6 +110,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #unanswered: string[] = []
   // Whether this CLI names the sends it answers: one that never does cannot confirm queued input was consumed.
   #stamps = false
+  readonly #inputNonce = randomUUID().slice(0, 8)
+  #inputCount = 0
+  #peerSends = new Set<string>()
   // The row a compaction is drawing on, from the first 'compacting' status to the boundary that
   // settles it. The boundary has a uuid of its own, but it is the *end* of the compaction, so
   // correlating here is what lets one row settle rather than two rows appear.
@@ -208,6 +212,10 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       ? ([...blocks, ...(modelText ? [{ type: 'text', text: modelText }] : [])] as unknown as SDKUserMessage['message']['content'])
       : modelText
     const uuid = randomUUID()
+    this.#inputCount++
+    if (options?.origin) {
+      this.#peerSends.add(uuid)
+    }
     if (!isSlashCommand(text)) {
       this.#unanswered.push(uuid)
     }
@@ -597,6 +605,11 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     return this.#stamps
   }
 
+  inputSnapshot(): InputSnapshot {
+    const peer = this.#unanswered.some((uuid) => this.#peerSends.has(uuid)) || (this.#input.pending > 0 && this.#peerSends.size > 0)
+    return { revision: `${this.#inputNonce}.${this.#inputCount}`, pending: this.pendingInput(), peer }
+  }
+
   // The only clearing: a top-level reply that names its sends. Nothing is inferred from turn timing or results.
   #trackAnswers(msg: SDKMessage): void {
     if ((msg.type !== 'assistant' && msg.type !== 'stream_event') || msg.parent_tool_use_id !== null) {
@@ -610,7 +623,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     this.#stamps = true
     const at = Math.max(-1, ...answered.map((uuid) => this.#unanswered.indexOf(uuid)))
     if (at >= 0) {
-      this.#unanswered.splice(0, at + 1)
+      for (const uuid of this.#unanswered.splice(0, at + 1)) {
+        this.#peerSends.delete(uuid)
+      }
     }
   }
 

@@ -24,6 +24,8 @@ afterEach(fixture.cleanup)
 // Echoes what it is sent and answers nothing until told, so a test can hold a message unanswered.
 class Engine extends EngineRunner {
   #pending = 0
+  #inputs = 0
+  #peer = false
 
   override info(): SessionInfo {
     return { ...super.info(), engine: 'claude', capabilities: { ...ENGINE_CAPABILITIES.claude, resume: true } }
@@ -32,6 +34,8 @@ class Engine extends EngineRunner {
   override sendMessage(text: string, _attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void {
     super.sendMessage(text)
     this.#pending++
+    this.#inputs++
+    this.#peer ||= options?.origin !== undefined
     this.emit({
       type: 'user_message',
       message: { role: 'user', content: text },
@@ -42,6 +46,7 @@ class Engine extends EngineRunner {
 
   answer(): void {
     this.#pending = 0
+    this.#peer = false
     this.emit({ type: 'turn_result', subtype: 'success', isError: false, numTurns: 1, durationMs: 1, totalCostUsd: 0 } as never)
   }
 
@@ -53,6 +58,10 @@ class Engine extends EngineRunner {
 
   inputConfirmable(): boolean {
     return this.confirmable
+  }
+
+  inputSnapshot(): { revision: string; pending: number; peer: boolean } {
+    return { revision: `${this.id}.${this.#inputs}`, pending: this.#pending, peer: this.#peer }
   }
 }
 
@@ -573,6 +582,100 @@ describe('recheck probes', () => {
     const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
     expect(refused).toMatchObject({ status: 409, body: { code: 'unconfirmed_input', error: expect.stringContaining('cannot confirm') } })
     expect(built).toHaveLength(1)
+  })
+
+  it('answers the unconfirmed refusal with what a discard binds, and cuts once a person confirms that revision', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
+    await idle(server, id)
+    built[0]!.confirmable = false
+    const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    expect(refused).toMatchObject({
+      status: 409,
+      body: { code: 'unconfirmed_input', conversation: 1, inputRevision: expect.any(String), pendingInput: 1, mayIncludePeer: false },
+    })
+    const discarded = await call(base, `/sessions/${id}/conversations/discard`, 'POST', {
+      expectedGeneration: 1,
+      inputRevision: refused.body.inputRevision,
+      prompt: 'fresh start',
+    })
+    expect(discarded).toMatchObject({ status: 200, body: { conversation: 2 } })
+    expect(built).toHaveLength(2)
+    expect((await server.records.get(id))?.conversation).toBe(2)
+    expect(built[0]!.info().status).toBe('closed')
+  })
+
+  it('refuses a discard once input arrived since the refusal, and answers with the new set to confirm', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
+    await idle(server, id)
+    built[0]!.confirmable = false
+    const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    built[0]!.sendMessage('a second thought')
+    const stale = await call(base, `/sessions/${id}/conversations/discard`, 'POST', {
+      expectedGeneration: 1,
+      inputRevision: refused.body.inputRevision,
+    })
+    expect(stale).toMatchObject({ status: 409, body: { code: 'input_changed', conversation: 1, pendingInput: 2 } })
+    expect(stale.body.inputRevision).not.toBe(refused.body.inputRevision)
+    expect(built).toHaveLength(1)
+    expect(server.registry.get(id)).toBe(built[0])
+    const again = await call(base, `/sessions/${id}/conversations/discard`, 'POST', {
+      expectedGeneration: 1,
+      inputRevision: stale.body.inputRevision,
+    })
+    expect(again.status).toBe(200)
+  })
+
+  it('refuses a discard bound to another conversation, and one with no revision', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
+    await idle(server, id)
+    built[0]!.confirmable = false
+    const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    const wrong = await call(base, `/sessions/${id}/conversations/discard`, 'POST', {
+      expectedGeneration: 2,
+      inputRevision: refused.body.inputRevision,
+    })
+    expect(wrong.status).toBe(409)
+    expect(wrong.body.error).toContain('conversation 1')
+    expect((await call(base, `/sessions/${id}/conversations/discard`, 'POST', { expectedGeneration: 1 })).status).toBe(400)
+    expect(built).toHaveLength(1)
+    expect((await server.records.get(id))?.conversation).toBe(1)
+  })
+
+  it('says a pending peer message may be among what a discard would lose', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a' })).body.session.id as string
+    await idle(server, id)
+    built[0]!.confirmable = false
+    built[0]!.sendMessage('from a peer', undefined, { origin: { kind: 'peer', sessionId: 'p', name: 'P', engine: 'claude', hops: [] } })
+    const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    expect(refused).toMatchObject({ status: 409, body: { code: 'unconfirmed_input', pendingInput: 1, mayIncludePeer: true } })
+  })
+
+  it('never discards for an automatic context_reset: refused now, dropped when queued behind a turn', async () => {
+    const dir = await fixture.stateDir()
+    const diagnostics: unknown[] = []
+    const { server, base, built } = await gateway(dir, { diagnostics })
+    const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
+    await idle(server, id)
+    const runner = built[0]!
+    runner.confirmable = false
+    expect(() => server.cuts.clearOnIdle(runner, 'context_reset', 'next')).toThrow(/cannot confirm/)
+    runner.emit({ type: 'status_changed', status: 'running' })
+    runner.confirmable = true
+    expect(server.cuts.clearOnIdle(runner, 'context_reset', 'next')).toBeUndefined()
+    runner.confirmable = false
+    runner.emit({ type: 'status_changed', status: 'idle' })
+    await vi.waitFor(() => expect(diagnostics.map(String).join()).toContain('dropped'))
+    expect(built).toHaveLength(1)
+    expect(server.registry.get(id)).toBe(runner)
+    expect((await server.records.get(id))?.conversation).toBe(1)
   })
 
   it('answers a cut behind a first start that does not settle with 409 instead of hanging', async () => {

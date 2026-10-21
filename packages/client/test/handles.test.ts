@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chunkShellInput, SHELL_INPUT_MAX } from '@workerdeck/protocol'
-import { WorkerDeckClient, WorkerDeckError } from '../src/index.ts'
+import { WorkerDeckClient, WorkerDeckError, unconfirmedInputOf } from '../src/index.ts'
 
 // A socket the test drives by hand. The handles only ever touch onopen/onmessage/onclose/onerror,
 // readyState and send/close, so this stands in for the whole WebSocket surface they depend on.
@@ -567,5 +567,41 @@ describe('stable session address', () => {
     expect(handle.conversation).toBe(1)
     expect(client.conversationOf('s1')).toBe(3)
     handle.detach()
+  })
+
+  it('reads an unconfirmed-input refusal into what a discard binds, then confirms it bound to that revision', async () => {
+    const refusal = {
+      error: 'the engine cannot confirm queued input was consumed',
+      code: 'unconfirmed_input',
+      conversation: 2,
+      inputRevision: 'r.3',
+      pendingInput: 1,
+      mayIncludePeer: true,
+    }
+    const calls: { method?: string; url: string; body?: unknown }[] = []
+    let refuse = true
+    const client = makeClient((url, init) => {
+      calls.push({ method: init?.method, url: String(url), ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}) })
+      const status = refuse ? 409 : 200
+      refuse = false
+      return Promise.resolve({
+        ok: status < 400,
+        status,
+        json: () => Promise.resolve(status === 409 ? refusal : { session: { id: 's1', conversation: 3 }, conversation: 3 }),
+      } as unknown as Response)
+    })
+    const error = await client.newConversation('s1', { expectedGeneration: 2 }).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(WorkerDeckError)
+    expect((error as WorkerDeckError).code).toBe('unconfirmed_input')
+    const found = unconfirmedInputOf(error)
+    expect(found).toEqual(refusal)
+    await client.discardAndCut('s1', { expectedGeneration: found!.conversation, inputRevision: found!.inputRevision })
+    expect(calls.at(-1)).toEqual({
+      method: 'POST',
+      url: 'http://host/v1/sessions/s1/conversations/discard',
+      body: { expectedGeneration: 2, inputRevision: 'r.3' },
+    })
+    expect(unconfirmedInputOf(new WorkerDeckError('busy', 409, { error: 'busy' }))).toBeUndefined()
+    expect(unconfirmedInputOf(new Error('x'))).toBeUndefined()
   })
 })

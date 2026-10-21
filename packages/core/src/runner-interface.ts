@@ -81,6 +81,8 @@ export type SendMessageOptions = {
 
 export type ClearContextOptions = { agentReason?: string }
 
+export type InputSnapshot = { revision: string; pending: number; peer: boolean }
+
 export type SleepResult = { ok: true } | { ok: false; reason: string }
 
 export type PermissionDecision =
@@ -129,6 +131,9 @@ export interface Runner {
   pendingInput?(): number
   // False when the engine cannot tell consumed input from queued input; a cut then refuses rather than guess.
   inputConfirmable?(): boolean
+  // What a confirmed discard-and-cut binds: `revision` moves on every input this runner takes and is never reused
+  // by another runner; `peer` when a peer's message may be among the pending.
+  inputSnapshot?(): InputSnapshot
   settleExecution?(executionId: string, result: ToolExecutionResult): boolean
   park?(): RunnerSnapshot | undefined
   snapshot?(): RunnerSnapshot | undefined
