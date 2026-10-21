@@ -74,6 +74,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
   live = true
   const detachBridge = bridge.attach(runner.id, send)
   const leaveCut = ctx.cuts.socket(runner.id, {
+    conversation,
     detach: () => {
       unsubscribe()
       detachBridge()

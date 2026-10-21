@@ -54,7 +54,7 @@ export async function handleExecutionResult(
     fail(409, `execution belongs to conversation ${ended.entry.n}, which has ended`)
   }
   if (auth.allowedProfiles || auth.scope || ctx.options.authorizeSession) {
-    const owner = parking.sessionFor(executionId)
+    const owner = parking.sessionFor(executionId) ?? ctx.cuts.leavingExecution(executionId)
     const info = owner === undefined ? undefined : await sessionInfoOf(ctx, owner)
     const profile = info?.profile
     // Indistinguishable from an unknown id on purpose: whether an execution exists elsewhere is not this caller's business.
@@ -68,7 +68,7 @@ export async function handleExecutionResult(
       fail(404, 'execution not found')
     }
   }
-  const holder = parking.sessionFor(executionId)
+  const holder = parking.sessionFor(executionId) ?? ctx.cuts.leavingExecution(executionId)
   if (holder !== undefined && ctx.locks.gated(holder)) {
     fail(409, CUT_IN_PROGRESS)
   }

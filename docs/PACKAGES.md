@@ -1035,7 +1035,7 @@ tombstone then close under the members' multi-lock, startup reconciliation, the 
 (`GET .../conversations[/n]`, WS `?conversation=n`) bypass `resolveSession` and authorize on the entry's frozen
 `auth`; an execution of an ended conversation answers 409, authorized on that entry too. A socket is bound to its
 runner and conversation: a command from a replaced runner or with a stale `generation` is refused, and the old
-socket gets `conversation_started` then close 4011 once the commit is durable. An unnamed `DELETE` appends the
+socket gets `conversation_started` then close 4011 once the commit is durable (a socket that attached while n+1 started is already on it and stays open). A wake that registers a runner while the cut validates refuses the cut (409, try again), so an unvetted runner of n never becomes n+1; an execution result between the stop and the commit answers 409 `a new conversation is starting`, as one during the rest of the cut does. An unnamed `DELETE` appends the
 current conversation to the history and sets `closedAt`. **Parking** is deferred execution's other half and needs `Runner.park()` - which only
 the provider engine has, because claude and codex run behind a binary that owns its process
 state. **Dormancy** is the restart story for those two: a `DormantSessionRecord` holds no

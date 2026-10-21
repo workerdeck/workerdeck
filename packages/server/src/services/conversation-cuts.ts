@@ -29,7 +29,7 @@ export type CutRequest = {
 export type CutResult = { session: SessionInfo; conversation: number }
 
 // A socket attached to one conversation: detached quietly at the stop, told and closed once the commit is durable.
-export type CutSocket = { detach: () => void; announce: (conversation: number, epoch: number) => void; drop: () => void }
+export type CutSocket = { conversation: number; detach: () => void; announce: (conversation: number, epoch: number) => void; drop: () => void }
 
 export type EndedExecution = { id: string; entry: ConversationEntry }
 
@@ -47,11 +47,13 @@ export const NOTHING_TO_DISCARD = 'this engine has no pending input a discard ca
 export const STILL_STARTING = 'the session is still starting; try again once it has started'
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
 export const GENERATION_ENDED = 'the gateway is reloading; the next one finishes this new conversation'
+export const WOKE_DURING_CUT = 'the session woke while the new conversation was being prepared; try again'
 
 export class ConversationCuts {
   #context: ServerContext | undefined
   #sockets = new Map<string, Set<CutSocket>>()
   #ended = new Map<string, EndedExecution>()
+  #leaving = new Map<string, string>()
   #queued = new Map<string, () => void>()
   #failedStarts = new Set<string>()
   #firstStarts = new Map<string, Promise<void>>()
@@ -84,6 +86,11 @@ export class ConversationCuts {
 
   endedExecution(executionId: string): EndedExecution | undefined {
     return this.#ended.get(executionId)
+  }
+
+  // The session of an execution whose conversation is being cut: parking forgot it at the stop, the history has not got it yet.
+  leavingExecution(executionId: string): string | undefined {
+    return this.#leaving.get(executionId)
   }
 
   // `guard` runs inside the lifecycle lock on the record as it is then: the caller's own check of the current
@@ -219,7 +226,14 @@ export class ConversationCuts {
     ctx.locks.gate(id)
     try {
       await ctx.parking.fence(id)
+      // A wake already under way when the checks ran registers before the fence settles: that runner was never vetted.
+      if (ctx.registry.get(id) !== live) {
+        fail(409, WOKE_DURING_CUT)
+      }
       const entry = await this.#capture(id, record, conversation)
+      for (const executionId of entry.executions) {
+        this.#leaving.set(executionId, id)
+      }
       const cut: SessionCut = { from: conversation, to: conversation + 1, phase: 'prepared', epoch: (info.epoch ?? 0) + 1, target }
       await ctx.records.transactDurable(id, (current) => ({ ...(current ?? freshRecord(id)), cut }))
       // A hot reload carried the runner away while the intent was being written: it is the next generation's now.
@@ -244,6 +258,11 @@ export class ConversationCuts {
       this.#fault('after-commit')
       return await this.#startCommitted(committed)
     } finally {
+      for (const [executionId, owner] of this.#leaving) {
+        if (owner === id) {
+          this.#leaving.delete(executionId)
+        }
+      }
       ctx.locks.ungate(id)
       if (!this.#failedStarts.has(id)) {
         ctx.parking.unfence(id)
@@ -597,11 +616,18 @@ export class ConversationCuts {
     this.#sockets.delete(id)
   }
 
+  // A socket that attached while n+1 started is already on it: it stays, and the next cut finds it.
   #announce(id: string, conversation: number, epoch: number): void {
-    for (const socket of this.#sockets.get(id) ?? []) {
-      socket.announce(conversation, epoch)
+    const sockets = this.#sockets.get(id)
+    for (const socket of sockets ?? []) {
+      if (socket.conversation < conversation) {
+        sockets!.delete(socket)
+        socket.announce(conversation, epoch)
+      }
     }
-    this.#sockets.delete(id)
+    if (sockets?.size === 0) {
+      this.#sockets.delete(id)
+    }
   }
 
   // An explicit fresh constructor: no resume, no fork, no restore, the target's own engine home, the committed epoch.
