@@ -497,3 +497,150 @@ describe('the write token across a cut and a restart', () => {
     expect(record.closedAt).toBeUndefined()
   })
 })
+
+// Holds the first store save that matches until released, standing in for a write still in flight.
+function blockedSave(matches: (record: SessionRecord) => boolean) {
+  let release: (() => void) | undefined
+  let hit: (() => void) | undefined
+  const reached = new Promise<void>((resolve) => {
+    hit = resolve
+  })
+  let armed = true
+  const wrap = (inner: SessionRecordStore): SessionRecordStore => ({
+    ...inner,
+    save: async (record) => {
+      if (armed && matches(record)) {
+        armed = false
+        hit!()
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+      }
+      await inner.save(record)
+    },
+  })
+  return { wrap, reached, release: () => release!() }
+}
+
+async function closeOld(server: WorkerServer, beforeDone?: () => void): Promise<void> {
+  fixture.servers.splice(fixture.servers.indexOf(server), 1)
+  const closing = server.close()
+  beforeDone?.()
+  await closing
+}
+
+describe('a hot reload with a cut in flight', () => {
+  it('prepared: the carried runner keeps conversation n, the intent rolls back, and the next cut works', async () => {
+    const dir = await fixture.stateDir()
+    const gate = blockedSave((record) => record.cut?.phase === 'prepared' && record.cut.from > 0)
+    const first = await gateway(dir, { store: gate.wrap })
+    const id = await create(first.base)
+    await idle(first.server, id)
+    const old = first.built[0]!
+    const pending = cut(first.base, id, 1, 'next').catch(() => undefined)
+    await gate.reached
+
+    const carried = first.server.releaseSession(id)!
+    expect(carried).toMatchObject({ runner: old, conversation: 1 })
+    await closeOld(first.server, gate.release)
+    await pending
+
+    const second = build(dir)
+    expect(second.server.adoptSession(carried)).toBe(true)
+    expect(second.server.records.conversationOf(id)).toBe(1)
+    const { base } = await listenOn(second.server)
+    expect(old.info().status).toBe('idle')
+    expect(second.server.registry.get(id)).toBe(old)
+    expect(second.built).toHaveLength(0)
+    const record = await onDisk(dir, id)
+    expect(record).toMatchObject({ conversation: 1, conversations: [] })
+    expect(record.cut).toBeUndefined()
+    expect(record.pendingPrompt).toBeUndefined()
+
+    expect((await cut(base, id, 1, 'again')).status).toBe(200)
+    await idle(second.server, id)
+    expect(old.info().status).toBe('closed')
+    expect(second.built).toHaveLength(1)
+    expect(second.built[0]!.sent).toEqual(['again'])
+    expect(old.sent).toEqual(['work'])
+  })
+
+  it('committed with the successor still starting: it is carried and settled once, never started twice or failed', async () => {
+    const dir = await fixture.stateDir()
+    let release: (() => void) | undefined
+    let builds = 0
+    const first = await gateway(dir, {
+      options: { agentStartupTimeoutMs: 5000 },
+      building: (runner) => {
+        if (++builds === 2) {
+          runner.hold = new Promise((resolve) => {
+            release = resolve
+          })
+        }
+      },
+    })
+    const id = await create(first.base)
+    await idle(first.server, id)
+    const pending = cut(first.base, id, 1, 'next').catch(() => undefined)
+    await vi.waitFor(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
+    const fresh = first.built[1]!
+    expect(fresh.info().status).toBe('starting')
+
+    const carried = first.server.releaseSession(id)!
+    expect(carried).toMatchObject({ runner: fresh, conversation: 2 })
+    await closeOld(first.server)
+
+    const second = build(dir, { options: { agentStartupTimeoutMs: 5000 } })
+    expect(second.server.adoptSession(carried)).toBe(true)
+    expect(second.server.records.conversationOf(id)).toBe(2)
+    const listening = listenOn(second.server)
+    release!()
+    await listening
+    await pending
+    await idle(second.server, id)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(second.built).toHaveLength(0)
+    expect(first.built).toHaveLength(2)
+    expect(fresh.sent).toEqual(['next'])
+    const record = await onDisk(dir, id)
+    expect(record).toMatchObject({ conversation: 2, runtime: { sdkSessionId: fresh.engineName, info: { conversation: 2 } } })
+    expect(record.conversations).toHaveLength(1)
+    expect(record.cut).toBeUndefined()
+    expect(record.startFailed).toBeUndefined()
+    expect(record.pendingPrompt).toBeUndefined()
+
+    const stale = record.runtime as DormantSessionRecord
+    await expect(second.server.records.runtimeStore().save({ ...stale, info: { ...stale.info, conversation: 1 } })).rejects.toBeInstanceOf(
+      StaleConversationError,
+    )
+  })
+
+  it('committed before the successor was built: the closed generation starts nothing, the next starts n+1 once', async () => {
+    const dir = await fixture.stateDir()
+    const gate = blockedSave((record) => record.pendingPrompt?.state === 'sending' && record.pendingPrompt.n === 2)
+    const first = await gateway(dir, { store: gate.wrap })
+    const id = await create(first.base)
+    await idle(first.server, id)
+    const pending = cut(first.base, id, 1, 'next').catch(() => undefined)
+    await gate.reached
+    expect(first.server.releaseSession(id)).toBeUndefined()
+    await closeOld(first.server, gate.release)
+    await pending
+
+    const second = await gateway(dir)
+    await idle(second.server, id)
+    expect(first.built).toHaveLength(1)
+    expect(second.built).toHaveLength(1)
+    expect(second.built[0]!.config.resume).toBeUndefined()
+    expect(second.built[0]!.sent).toEqual([])
+    const record = await onDisk(dir, id)
+    expect(record).toMatchObject({
+      conversation: 2,
+      pendingPrompt: { text: 'next', n: 2, state: 'uncertain' },
+      runtime: { sdkSessionId: second.built[0]!.engineName },
+    })
+    expect(record.cut).toBeUndefined()
+    expect(record.startFailed).toBeUndefined()
+  })
+})

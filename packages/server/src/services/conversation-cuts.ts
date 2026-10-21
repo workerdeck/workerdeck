@@ -46,6 +46,7 @@ export const NO_LONGER_CONFIRMABLE = 'the session stopped since the discard was 
 export const NOTHING_TO_DISCARD = 'this engine has no pending input a discard can bind'
 export const STILL_STARTING = 'the session is still starting; try again once it has started'
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
+export const GENERATION_ENDED = 'the gateway is reloading; the next one finishes this new conversation'
 
 export class ConversationCuts {
   #context: ServerContext | undefined
@@ -221,6 +222,11 @@ export class ConversationCuts {
       const entry = await this.#capture(id, record, conversation)
       const cut: SessionCut = { from: conversation, to: conversation + 1, phase: 'prepared', epoch: (info.epoch ?? 0) + 1, target }
       await ctx.records.transactDurable(id, (current) => ({ ...(current ?? freshRecord(id)), cut }))
+      // A hot reload carried the runner away while the intent was being written: it is the next generation's now.
+      if (this.#closed || (live && ctx.registry.get(id) !== live)) {
+        await this.#rollback(id)
+        fail(503, GENERATION_ENDED)
+      }
 
       this.#stop(id, live)
       this.#fault('after-stop')
@@ -461,12 +467,16 @@ export class ConversationCuts {
       return { session: ctx.projects.withProject(record.runtime.info), conversation: cut.to }
     }
     const prompt = !live && intent?.state === 'pending' ? intent.text : undefined
-    const uncertain = intent !== undefined && prompt === undefined
+    // A successor carried across a hot reload was started with the prompt: as delivered as a start this process made.
+    const carried = live !== undefined && intent?.state === 'sending' && ctx.parking.configOf(id)?.prompt === intent.text
+    const uncertain = intent !== undefined && prompt === undefined && !carried
     let runner = live
     if (!runner) {
+      this.#refuseClosed()
       if (prompt !== undefined) {
         await ctx.records.transactDurable(id, (current) => ({ ...current!, pendingPrompt: { ...intent!, state: 'sending' } }))
       }
+      this.#refuseClosed()
       try {
         this.#fault('start')
         runner = await this.#startFresh(id, cut, prompt)
@@ -496,6 +506,9 @@ export class ConversationCuts {
 
   // `strict` answers the caller, so a failure throws; otherwise it settles in the background for nobody.
   async #settle(id: string, to: number, uncertain: boolean, runner: Runner, startup: Startup, strict: boolean): Promise<void> {
+    if (this.#closed) {
+      return
+    }
     const record = await this.#ctx.records.get(id)
     if (record?.cut?.phase !== 'committed' || record.cut.to !== to || (!strict && record.startFailed !== undefined)) {
       return
@@ -649,6 +662,13 @@ export class ConversationCuts {
   #remember(id: string, entry: ConversationEntry): void {
     for (const executionId of entry.executions) {
       this.#ended.set(executionId, { id, entry: withoutSnapshot(entry) })
+    }
+  }
+
+  // A closed generation never starts an engine: its intent stays for the next generation's recovery.
+  #refuseClosed(): void {
+    if (this.#closed) {
+      fail(503, GENERATION_ENDED)
     }
   }
 
