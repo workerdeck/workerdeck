@@ -33,27 +33,20 @@ export type DormantSessionRecord = {
 
 export type EngineHome = { claudeConfigDir?: string; codexHome?: string }
 
-export type ArchivedSessionRecord = {
-  kind: 'archived'
+// What a conversation leaves for its history entry, taken from the live runner or the stored runtime.
+export type SessionCapture = {
   id: string
   info: SessionInfo
   config: SessionRunnerConfig
-  agentId?: string
   engineSessionId?: string
   profile?: string
   home?: EngineHome
   snapshot?: RunnerSnapshot
-  staged?: true
-  archivedAt: number
 }
 
 export type RunnableSessionRecord = ParkedSessionRecord | DormantSessionRecord
 
-export type StoredSessionRecord = RunnableSessionRecord | ArchivedSessionRecord
-
-export function isArchived(record: StoredSessionRecord): record is ArchivedSessionRecord {
-  return record.kind === 'archived'
-}
+export type StoredSessionRecord = RunnableSessionRecord
 
 export function isDormant(record: StoredSessionRecord): record is DormantSessionRecord {
   return record.kind === 'dormant'
@@ -94,11 +87,10 @@ export function parseStoredRecord(value: unknown): StoredSessionRecord | null {
   if (!record.info || !record.config) {
     return null
   }
-  record.info = withCurrentCapabilities(record.info)
-  if (record.kind === 'archived') {
-    const archived = record as Partial<ArchivedSessionRecord>
-    return typeof archived.archivedAt === 'number' ? (archived as ArchivedSessionRecord) : null
+  if ((record as { kind?: string }).kind === 'archived') {
+    return null
   }
+  record.info = withCurrentCapabilities(record.info)
   if (record.kind === 'dormant') {
     const dormant = record as Partial<DormantSessionRecord>
     if ((dormant.sdkSessionId !== undefined && typeof dormant.sdkSessionId !== 'string') || typeof dormant.savedAt !== 'number') {

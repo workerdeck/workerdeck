@@ -295,7 +295,7 @@ describe('agents', () => {
     const retired = await call<{ retired: string[]; released: string[] }>(base, `/agents/${lead.agent.id}`, 'DELETE')
     expect(retired.body).toEqual({ retired: [lead.agent.id], released: [member.agent.id] })
     expect(server.registry.get(lead.session!.id)).toBeUndefined()
-    expect((await server.parking.get(lead.session!.id))?.info).toMatchObject({ archived: true, status: 'closed' })
+    expect(await server.records.get(lead.session!.id)).toMatchObject({ closedAt: expect.any(Number), conversations: [{ n: 1 }] })
     const left = (await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents
     expect(left).toHaveLength(1)
     expect(left[0]).not.toHaveProperty('lead')
@@ -342,27 +342,23 @@ describe('agents', () => {
     ).body
     const restarted = await call<AgentResponse>(base, `/agents/${member.agent.id}/restart`, 'POST', {})
     expect(restarted.status).toBe(200)
-    expect(restarted.body.agent).toMatchObject({
-      id: member.agent.id,
-      name: 'Pip',
-      lead: lead.agent.id,
-      pastSessions: [member.session!.id],
-    })
-    expect(restarted.body.session!.id).not.toBe(member.session!.id)
-    const fresh = server.registry.get(restarted.body.session!.id) as unknown as { config: SessionRunnerConfig }
+    expect(restarted.body.agent).toMatchObject({ id: member.agent.id, name: 'Pip', lead: lead.agent.id, sessionId: member.agent.id })
+    expect(restarted.body.session!.id).toBe(member.session!.id)
+    const fresh = server.registry.get(member.agent.id) as unknown as { config: SessionRunnerConfig }
     expect(fresh.config.engineHome).toEqual({ claudeConfigDir: expect.any(String) })
     expect(restarted.body.session!.agent).toMatchObject({ name: 'Pip', team: 'Atlas', conversation: 2 })
-    expect(server.registry.get(member.session!.id)).toBeUndefined()
-    expect((await server.parking.get(member.session!.id))?.info).toMatchObject({ archived: true, supersededBy: expect.any(String) })
+    expect(await server.records.get(member.agent.id)).toMatchObject({ conversation: 2, conversations: [{ n: 1 }] })
   })
 
-  it('adopts an existing session as an agent', async () => {
+  it('names an existing session through PATCH, under its own id, and refuses the old adopt', async () => {
     const { base } = await startGateway()
     const session = (await call<{ session: SessionInfo }>(base, '/sessions', 'POST', { cwd: '/tmp/project' })).body.session
-    const adopted = await call<AgentResponse>(base, '/agents', 'POST', { adopt: session.id, name: 'Quill' })
-    expect(adopted.status).toBe(201)
-    expect(adopted.body.agent).toMatchObject({ name: 'Quill', sessionId: session.id, config: { cwd: '/tmp/project' } })
-    expect((await call(base, '/agents', 'POST', { adopt: session.id })).status).toBe(409)
+    expect((await call(base, '/agents', 'POST', { adopt: session.id, name: 'Quill' })).status).toBe(400)
+    const named = await call<{ session: SessionInfo }>(base, `/sessions/${session.id}`, 'PATCH', { agent: { name: 'Quill' } })
+    expect(named.status).toBe(200)
+    expect(named.body.session.agent).toMatchObject({ id: session.id, name: 'Quill' })
+    const agent = (await call<AgentResponse>(base, `/agents/${session.id}`)).body.agent
+    expect(agent).toMatchObject({ id: session.id, name: 'Quill', sessionId: session.id, config: { cwd: '/tmp/project' } })
   })
 
   it('serves a stable avatar rolled once and persisted, with a cache validator', async () => {
@@ -472,11 +468,11 @@ describe('agents', () => {
 describe('agent sleep default', () => {
   async function sleepAfter(gateway: number | undefined, own?: number): Promise<{ agent?: number; plain?: number }> {
     const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', sleepAfterMs: gateway })
-    const draft = agents.draft({ name: 'Atlas', config: own === undefined ? {} : { sleepAfterMs: own } })
+    const draft = agents.draft({ id: 'session-1', name: 'Atlas', config: own === undefined ? {} : { sleepAfterMs: own } })
     if ('error' in draft) {
       throw new Error(draft.error)
     }
-    await agents.create({ ...draft, sessionId: 'session-1' })
+    await agents.create(draft)
     return { agent: agents.sleepAfterFor('session-1'), plain: agents.sleepAfterFor('session-2') }
   }
 

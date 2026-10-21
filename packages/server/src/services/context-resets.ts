@@ -9,10 +9,7 @@ export type AgentContextResetOptions = {
 }
 
 export type ContextResetServiceOptions = AgentContextResetOptions & {
-  // An agent's reset starts it a new session instead of clearing this one; limits count per agent, across its sessions.
-  agentOf?: (sessionId: string) => string | undefined
-  restartAgent?: (agentId: string, sessionId: string, prompt: string) => Promise<void>
-  // Any other session's reset is a conversation cut under the same id, its prompt the first message of the next one.
+  // A reset is a conversation cut under the same id (named or not), its prompt the first message of the next one.
   cut?: (sessionId: string, prompt: string) => Promise<void>
   onError?: (error: unknown, sessionId: string) => void
   now?: () => number
@@ -24,17 +21,12 @@ export const CONTEXT_RESET_MAX_PER_HOUR = 3
 const HOUR_MS = 60 * 60_000
 const RESET_TIMEOUT_MS = 60_000
 
-export const CONTEXT_RESET_RESTART_SCHEDULED =
-  'Reset scheduled. It runs when this turn ends: this session is closed and kept for the human, and a new session of yours ' +
-  'starts with your prompt as its first message. End your turn now and start no new work. If the turn is interrupted or ' +
-  'ends in an error, the reset is cancelled.'
-
 export const CONTEXT_RESET_SCHEDULED =
   'Reset scheduled. It runs when this turn ends: your conversation is cleared and your prompt becomes the first message of a ' +
   'fresh one. End your turn now and start no new work. If the turn is interrupted or ends in an error, the reset is cancelled.'
 
-// One gateway generation's agent-requested resets: held until the requesting session's turn ends, then run as a new session for
-// an agent, clear-then-prompt for any other session.
+// One gateway generation's agent-requested resets: held until the requesting session's turn ends, then run as a cut (or, with
+// no gateway cut wired, clear-then-prompt).
 export class ContextResetService implements ContextResetDirectory {
   #options: ContextResetServiceOptions
   #runners = new Map<string, Runner>()
@@ -75,24 +67,19 @@ export class ContextResetService implements ContextResetDirectory {
     if (isJobRun(runner.info())) {
       throw new Error('a job run cannot reset its conversation')
     }
-    const agent = this.#agentOf(sessionId)
-    if (agent === undefined && !runner.clearContext && !this.#options.cut) {
+    if (!runner.clearContext && !this.#options.cut) {
       throw new Error('this engine cannot clear its conversation')
     }
     if (this.#pending.has(sessionId) || this.#running.has(sessionId)) {
       throw new Error('a reset is already scheduled for this session')
     }
-    const refused = this.#rateRefusal(agent === undefined ? sessionId : `agent:${agent}`)
+    const refused = this.#rateRefusal(sessionId)
     if (refused) {
       throw new Error(refused)
     }
     this.#pending.set(sessionId, { prompt: request.prompt, reason: request.reason })
     this.#turnFailed.delete(sessionId)
-    return agent === undefined ? CONTEXT_RESET_SCHEDULED : CONTEXT_RESET_RESTART_SCHEDULED
-  }
-
-  #agentOf(sessionId: string): string | undefined {
-    return this.#options.restartAgent ? this.#options.agentOf?.(sessionId) : undefined
+    return CONTEXT_RESET_SCHEDULED
   }
 
   close(): void {
@@ -142,12 +129,6 @@ export class ContextResetService implements ContextResetDirectory {
   async #run(runner: Runner, request: ContextResetRequest): Promise<void> {
     this.#running.add(runner.id)
     try {
-      const agent = this.#agentOf(runner.id)
-      if (agent !== undefined) {
-        await this.#options.restartAgent!(agent, runner.id, request.prompt)
-        this.#record(`agent:${agent}`)
-        return
-      }
       if (this.#options.cut) {
         await this.#options.cut(runner.id, request.prompt)
         this.#record(runner.id)

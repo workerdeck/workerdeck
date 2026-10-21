@@ -20,7 +20,10 @@ same identity and team (see [Conversations](#conversations)).
   the agent's settings as JSON (with completion) and its brief as markdown; saving applies them.
   Over REST, `PATCH /v1/agents/:id` with `{ "config": { ... } }` merges keys, and `null` clears one.
 - **REST:** `POST /v1/agents` with `{ name, brief, config: { cwd, model, ... }, prompt }`, or
-  `{ adopt: "<session id>" }`. The `/agents` routes are operator-only.
+  `POST /v1/sessions` with an `agent: { name, brief }` block. An existing session is named with
+  `PATCH /v1/sessions/:id { "agent": { "name": "..." } }` and un-named with `{ "agent": null }`
+  (refused while it is in a team). An agent's id is its session's id. The `/agents` routes and
+  naming are operator-only.
 
 The brief reaches the model as host instructions on every session the agent runs; it is not part
 of the session data clients receive.
@@ -32,16 +35,16 @@ card, same place in the list, an empty transcript. Previous chat context is not 
 agent can do the same itself with the `context_reset` tool, which runs once its turn ends. A typed
 `/clear` still clears within the current conversation; agent cards offer no *Clear context*.
 
-The old conversation is archived: it leaves the list and stays readable, read-only, under
-*Conversations* on the agent (card menu on the dashboard and in VS Code, a long-press on the
+The old conversation becomes a history entry of the same session: it stays readable, read-only,
+under *Conversations* on the agent (card menu on the dashboard and in VS Code, a long-press on the
 phones). Its history comes from the engine's own session store, so it follows that engine's
-retention: a transcript Claude Code or Codex has since pruned shows as unavailable. A view that
-shows an agent follows it into each new conversation and keeps an unsent draft as a draft.
+retention: a transcript Claude Code or Codex has since pruned shows as unavailable. The session
+keeps its id, so a view that shows an agent stays on it.
 
 *Delete agent...* removes the agent from your agents and releases its team members. Its
 conversations stay readable under *Past agents*. Over REST: `POST /v1/agents/:id/restart` (New
 conversation), `GET /v1/agents/:id/conversations`, `GET /v1/agents?retired=1`, `DELETE
-/v1/agents/:id`; each change names the conversation it acts on with `expectedSessionId`.
+/v1/agents/:id`; the session routes under `/v1/sessions/:id/conversations` serve the same history.
 
 ## Teams
 

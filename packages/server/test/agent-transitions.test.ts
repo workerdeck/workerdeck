@@ -108,7 +108,6 @@ describe('agent mutation transitions', () => {
     expect(agents.get(mover.id)).toBeUndefined()
     expect(transport.frames.at(-1)).toEqual({ kind: 'team.leave', from: mover.id, to: 'mac:L1', op: transport.frames[0]!.op })
     expect(await agents.create(mover)).toEqual({ status: 409, error: `agent ${mover.id} already exists` })
-    expect(await agents.bind(mover.id, 'session-1')).toEqual({ status: 404, error: `no such agent: ${mover.id}` })
   })
 
   it('answers known for an unsaved draft while its join is outstanding', async () => {
@@ -138,15 +137,13 @@ describe('agent mutation transitions', () => {
     await joining
   })
 
-  it('binds one session to one agent under concurrent adoption', async () => {
+  it('names one session once under concurrent creates of its id', async () => {
     const agents = await service()
     const results = await Promise.all([
-      agents.create({ ...(agents.draft({ name: 'One' }) as StoredAgent), sessionId: 's-1' }),
-      agents.create({ ...(agents.draft({ name: 'Two' }) as StoredAgent), sessionId: 's-1' }),
+      agents.create(agents.draft({ id: 's-1', name: 'One' }) as StoredAgent),
+      agents.create(agents.draft({ id: 's-1', name: 'Two' }) as StoredAgent),
     ])
-    expect(results.filter(isAgentRefusal)).toEqual([{ status: 409, error: 'that session already belongs to an agent' }])
-    const other = await stored(agents, 'Three')
-    expect(await agents.bind(other.id, 's-1')).toEqual({ status: 409, error: 'that session already belongs to an agent' })
+    expect(results.filter(isAgentRefusal)).toEqual([{ status: 409, error: 'agent s-1 already exists' }])
   })
 
   it('patches the current record, so a write prepared before a move keeps the move', async () => {
@@ -160,7 +157,6 @@ describe('agent mutation transitions', () => {
     await agents.update(member.id, { lead: lead.id })
     recipe.resolve({ seed: 'otter' })
     expect(await avatar).toMatchObject({ lead: lead.id, avatarSeed: 'otter' })
-    expect(await agents.bind(member.id, 's-9', { seed: 'late' })).toMatchObject({ lead: lead.id, avatarRecipe: { seed: 'otter' } })
   })
 
   it('leaves the graph untouched when the store fails, and keeps serving later writes', async () => {
@@ -172,7 +168,7 @@ describe('agent mutation transitions', () => {
         if (failing) {
           throw new Error('disk full')
         }
-        await store.apply!(changes)
+        await store.apply(changes)
       },
     }
     const agents = await service(flaky)
@@ -241,27 +237,6 @@ describe('agent mutation transitions', () => {
     expect((await backing.list()).map((a) => a.name)).toEqual(['New generation'])
   })
 
-  it('fails a retire closed on a store without apply: a member left behind keeps its lead', async () => {
-    const backing = createMemoryAgentStore()
-    const legacy: AgentStore = {
-      list: backing.list,
-      save: (agent) => {
-        if (agent.retiredAt !== undefined) {
-          throw new Error('disk full')
-        }
-        return backing.save(agent)
-      },
-      delete: backing.delete,
-    }
-    const agents = await service(legacy)
-    const lead = await stored(agents, 'Lead')
-    const member = await stored(agents, 'Member')
-    await agents.update(member.id, { lead: lead.id })
-    await expect(agents.retire(lead.id, 'release')).rejects.toThrow('disk full')
-    expect((await backing.list()).find((a) => a.id === member.id)?.lead).toBe(lead.id)
-    expect(agents.get(member.id)?.lead).toBe(lead.id)
-  })
-
   it('ends a reconcile quietly when the generation stops while a status answer is outstanding', async () => {
     const agents = await service()
     const transport = heldTransport()
@@ -300,7 +275,7 @@ describe('agent mutation transitions', () => {
       apply: async (changes) => {
         writing++
         await gate.promise
-        await store.apply!(changes)
+        await store.apply(changes)
       },
     }
     const agents = await service(slow)

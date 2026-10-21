@@ -1,10 +1,11 @@
 import type { Runner } from '@workerdeck/core'
-import type { SessionInfo } from '@workerdeck/protocol'
+import type { SessionInfo, SessionStatus } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { fail } from '../lib/http.ts'
-import { archiveEpoch } from '../services/archives.ts'
+import { engineOf } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { isArchived, type StoredSessionRecord } from '../services/session-store.ts'
+import { disposable, type SessionRecord } from '../services/session-records.ts'
+import type { StoredSessionRecord } from '../services/session-store.ts'
 
 export type ResolvedSession = { runner: Runner | undefined; parked: StoredSessionRecord | null; info: SessionInfo }
 
@@ -14,23 +15,70 @@ export async function sessionInfoOf(ctx: ServerContext, id: string): Promise<Ses
     return live
   }
   const stored = await ctx.parking.get(id)
-  return stored ? storedInfo(stored) : undefined
-}
-
-// An archive is a log of its own, so its info names the epoch an archive attach numbers its rows in.
-function storedInfo(record: StoredSessionRecord): SessionInfo {
-  return isArchived(record) ? { ...record.info, epoch: archiveEpoch(record) } : record.info
+  return stored ? stored.info : await endedInfo(ctx, id)
 }
 
 // Missing and not-visible answer the same 404: whether a session exists outside the caller's scope is not its business.
 export async function resolveSession(ctx: ServerContext, id: string, auth: AuthContext): Promise<ResolvedSession> {
   const runner = ctx.registry.get(id)
   const parked = runner ? null : await ctx.parking.get(id)
-  const info = runner?.info() ?? (parked ? storedInfo(parked) : undefined)
+  const info = runner?.info() ?? parked?.info ?? (await endedInfo(ctx, id))
   if (!info || !ctx.auth.canSee(auth, info)) {
     fail(404, 'session not found')
   }
   return { runner, parked, info }
+}
+
+// Runtime absent is not a status: a record with neither runner nor runtime ran and left nothing to wake, so it is
+// listed as failed, unless it never held anything at all. Closed records only on request.
+export async function listSessions(ctx: ServerContext, closed: boolean): Promise<SessionInfo[]> {
+  const sessions = [...ctx.registry.list(), ...(await ctx.parking.listInfo())]
+  const shown = new Set(sessions.map((info) => info.id))
+  for (const record of await ctx.records.list()) {
+    if (shown.has(record.id) || ctx.registry.get(record.id)) {
+      continue
+    }
+    if (record.closedAt !== undefined) {
+      if (closed) {
+        sessions.push(recordInfo(ctx, record, 'closed'))
+      }
+      continue
+    }
+    if (record.runtime === undefined && !disposable(record)) {
+      sessions.push(recordInfo(ctx, record, 'failed'))
+    }
+  }
+  return sessions
+}
+
+async function endedInfo(ctx: ServerContext, id: string): Promise<SessionInfo | undefined> {
+  const record = await ctx.records.get(id)
+  if (!record || record.closedAt !== undefined || record.runtime !== undefined || disposable(record) || ctx.registry.get(id)) {
+    return undefined
+  }
+  return recordInfo(ctx, record, 'failed')
+}
+
+function recordInfo(ctx: ServerContext, record: SessionRecord, status: SessionStatus): SessionInfo {
+  const config = record.running ?? record.requested
+  const last = record.conversations.at(-1)
+  const profile = config?.profile ?? last?.profile
+  const known = profile === undefined ? undefined : ctx.profiles.get(profile)
+  return {
+    id: record.id,
+    status,
+    cwd: config?.cwd ?? last?.cwd ?? '',
+    ...(profile ? { profile } : {}),
+    engine: known ? engineOf(known) : (last?.engine ?? 'claude'),
+    ...(config?.model ? { model: config.model } : {}),
+    createdAt: record.createdAt,
+    lastSeq: 0,
+    conversation: record.conversation,
+    pendingPermissionCount: 0,
+    ...(record.owner ? { owner: record.owner } : {}),
+    ...(record.scope ? { scope: record.scope } : {}),
+    ...(last?.title ? { title: last.title } : {}),
+  }
 }
 
 export function requireLive(runner: Runner | undefined, why: string): Runner {
@@ -38,11 +86,4 @@ export function requireLive(runner: Runner | undefined, why: string): Runner {
     fail(409, `session is parked (${why})`)
   }
   return runner
-}
-
-// Reads stay open on a past conversation; everything else would change or wake it. Erasing it is the one exception.
-export function requireWritable(resolved: ResolvedSession, method: string | undefined, erase: boolean): void {
-  if (resolved.parked && isArchived(resolved.parked) && method !== 'GET' && method !== 'HEAD' && !erase) {
-    fail(409, 'conversation is archived')
-  }
 }

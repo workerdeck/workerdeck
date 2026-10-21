@@ -2,36 +2,34 @@ import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AVATAR_SEED_MAX } from '@workerdeck/core'
 import {
-  conversationsOf,
   isOwnerName,
-  isSharing,
-  type AgentConfig,
-  type AgentConversationsResponse,
   type AgentResponse,
   type CreateAgentRequest,
   type InviteRemoteMemberRequest,
   type RetireAgentRequest,
   type RetiredAgentsResponse,
   type SessionInfo,
-  type Sharing,
   type UpdateAgentRequest,
 } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
-import {
-  SHARING_OFF,
-  isAgentRefusal,
-  type AgentRefusal,
-  type AgentService,
-  type RemoteJoin,
-  type RetireOutcome,
-} from '../services/agents.ts'
+import { isAgentRefusal, type AgentRefusal } from '../services/agents.ts'
 import type { StoredAgent } from '../services/agent-store.ts'
 import type { AvatarImage } from '../services/avatars.ts'
-import { retireAgentSafely, retryStart, rotateAgent, settleUndelivered } from './agent-handover.ts'
-import { vetCreateRequest } from './create-vet.ts'
+import {
+  agentInfoOf,
+  conversationRows,
+  createNamedSession,
+  requestFromConfig,
+  retireAgent,
+  rollAvatar,
+  settled,
+  updateAgent,
+} from './named-sessions.ts'
 import { sessionInfoOf } from './session-lookup.ts'
+
+export const ADOPT_GONE = 'adopt is gone: name the session with PATCH /sessions/:id { agent }'
 
 export async function handleAgents(
   ctx: ServerContext,
@@ -46,20 +44,30 @@ export async function handleAgents(
     requireMethod(req, 'GET', 'POST')
     if (req.method === 'GET') {
       if (new URL(req.url ?? '', 'http://x').searchParams.get('retired') === '1') {
-        json(res, 200, { retired: agents.retiredList() } satisfies RetiredAgentsResponse)
+        const retired = await Promise.all(
+          agents.tombstones().map(async (tombstone) => {
+            const rows = await conversationRows(ctx, tombstone.id, auth, false)
+            return agents.retiredInfo(
+              tombstone,
+              rows.conversations.map(({ current: _current, session: _session, ...row }) => row),
+            )
+          }),
+        )
+        json(res, 200, { retired } satisfies RetiredAgentsResponse)
         return
       }
-      json(res, 200, { agents: agents.list() })
+      const listed = agents.list().map((info) => agents.get(info.id)!)
+      json(res, 200, { agents: await Promise.all(listed.map(async (agent) => agentInfoOf(ctx, agent, await ctx.records.get(agent.id)))) })
       return
     }
-    await createAgent(ctx, agents, req, res, auth)
+    await createAgent(ctx, req, res, auth)
     return
   }
   const [id, action, ...extra] = rest.split('/').map(decodeURIComponent)
   const tombstone = id === undefined ? undefined : agents.tombstone(id)
   if (tombstone && action === 'conversations' && extra.length === 0) {
     requireMethod(req, 'GET')
-    json(res, 200, await conversationsFor(ctx, tombstone, auth))
+    json(res, 200, await conversationRows(ctx, tombstone.id, auth, false))
     return
   }
   const agent = id === undefined ? undefined : agents.get(id)
@@ -72,31 +80,34 @@ export async function handleAgents(
   }
   if (action === 'restart') {
     requireMethod(req, 'POST')
-    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { prompt?: unknown; expectedSessionId?: unknown }
-    // Captured before the lock: an older client that names no session still never turns two requests into two rotations.
-    const restarted = await rotateAgent(ctx, agent.id, auth, {
-      prompt: typeof body.prompt === 'string' && body.prompt !== '' ? body.prompt : undefined,
-      expected: 'expectedSessionId' in body ? stringOr(body.expectedSessionId) : agent.sessionId,
-      requireIdle: true,
-    })
-    await respond(ctx, res, 200, restarted.agent, restarted.session)
+    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as {
+      prompt?: unknown
+      expectedSessionId?: unknown
+      expectedGeneration?: unknown
+    }
+    // Captured before the lock: a client that names no conversation still never turns two requests into two cuts.
+    const expectedGeneration = expectedOf(ctx, agent, body)
+    const prompt = typeof body.prompt === 'string' && body.prompt !== '' ? body.prompt : undefined
+    const cut = await ctx.cuts.cut(agent.id, { expectedGeneration, reason: 'user', ...(prompt ? { prompt } : {}) })
+    await respond(ctx, res, 200, agent, cut.session)
     return
   }
   if (action === 'retry-start') {
     requireMethod(req, 'POST')
-    const retried = await retryStart(ctx, agent.id, auth)
-    await respond(ctx, res, 200, retried.agent, retried.session)
+    const retried = await ctx.cuts.retryStart(agent.id, () => {})
+    await respond(ctx, res, 200, agent, retried.session)
     return
   }
   if (action === 'undelivered') {
     requireMethod(req, 'POST')
     const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { send?: unknown }
-    await respond(ctx, res, 200, await settleUndelivered(ctx, agent.id, body.send === true))
+    await ctx.cuts.settlePendingPrompt(agent.id, body.send === true, () => {})
+    await respond(ctx, res, 200, agent)
     return
   }
   if (action === 'conversations') {
     requireMethod(req, 'GET')
-    json(res, 200, await conversationsFor(ctx, agent, auth))
+    json(res, 200, await conversationRows(ctx, agent.id, auth, true))
     return
   }
   if (action === 'avatar') {
@@ -134,7 +145,7 @@ export async function handleAgents(
   }
   if (req.method === 'PATCH') {
     const patch = (await readJsonBody(req, ctx.maxBodyBytes)) as UpdateAgentRequest
-    const updated = await updateAgent(ctx, agent, isRecord(patch) ? patch : {})
+    const updated = await updateAgent(ctx, agent, isRecord(patch) ? patch : {}, auth)
     if (isAgentRefusal(updated)) {
       fail(updated.status, updated.error)
     }
@@ -142,145 +153,32 @@ export async function handleAgents(
     return
   }
   const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as RetireAgentRequest
-  const expected = 'expectedSessionId' in body ? stringOr(body.expectedSessionId) : agent.sessionId
-  const outcome = await retireAgent(ctx, agent, body.members === 'retire' ? 'retire' : 'release', expected)
+  if (body.expectedSessionId !== undefined && body.expectedSessionId !== agent.id) {
+    fail(409, `${agent.name} is session ${agent.id}`)
+  }
+  const outcome = await retireAgent(ctx, agent.id, body.members === 'retire' ? 'retire' : 'release')
   json(res, 200, { retired: outcome.retired.map((a) => a.id), released: outcome.released.map((a) => a.id) })
 }
 
-export async function retireAgent(
-  ctx: ServerContext,
-  agent: StoredAgent,
-  members: 'release' | 'retire',
-  expected: string | undefined,
-): Promise<RetireOutcome> {
-  return await retireAgentSafely(ctx, agent.id, members, expected)
+function expectedOf(ctx: ServerContext, agent: StoredAgent, body: { expectedSessionId?: unknown; expectedGeneration?: unknown }): number {
+  if (body.expectedSessionId !== undefined && body.expectedSessionId !== agent.id) {
+    fail(409, `${agent.name} is session ${agent.id}`)
+  }
+  return typeof body.expectedGeneration === 'number' ? body.expectedGeneration : (ctx.records.conversationOf(agent.id) ?? 1)
 }
 
-async function createAgent(ctx: ServerContext, agents: AgentService, req: IncomingMessage, res: ServerResponse, auth: AuthContext) {
+async function createAgent(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, auth: AuthContext) {
   const body = (await readJsonBody(req, ctx.maxBodyBytes)) as CreateAgentRequest
   if (!isRecord(body)) {
     fail(400, 'request body must be a JSON object')
   }
   if (body.adopt !== undefined) {
-    await adoptSession(ctx, agents, res, body)
-    return
+    fail(400, ADOPT_GONE)
   }
-  const profile = isRecord(body.config) ? stringOr(body.config.profile) : undefined
-  const owner = settledOwner(ctx.owners.resolve(profile, body.owner))
-  const crossOwner = body.crossOwner === true
-  const draft = agents.draft({ ...body, owner, sharing: sharingFor(ctx, profile, body.sharing), crossOwner })
-  if (isAgentRefusal(draft)) {
-    fail(draft.status, draft.error)
-  }
-  const remoteLead = remoteLeadOf(ctx, body.lead)
-  // Stored before the session starts so the lead's reconcile finds the member half; undone if the start fails.
-  const agent = settled(
-    remoteLead
-      ? await joinRemote(ctx, draft, remoteLead, (joined) => agents.create(draft, joined))
-      : await agents.create(draft, undefined, crossOwner),
-  )
-  let created: SessionInfo
-  try {
-    created = await startSession(ctx, agent, typeof body.prompt === 'string' ? body.prompt : undefined, auth)
-  } catch (error) {
-    const undone = await agents.retire(agent.id, 'release')
-    if (!isAgentRefusal(undone)) {
-      undone.retired.forEach((gone) => ctx.teams?.retiring(gone))
-    }
-    throw error
-  }
-  const bound = await bindWithAvatar(ctx, agent, created)
-  if (isAgentRefusal(bound)) {
-    ctx.registry.get(created.id)?.close('server')
-    fail(bound.status, bound.error)
-  }
-  await respond(ctx, res, 201, bound, created)
-}
-
-function remoteLeadOf(ctx: ServerContext, lead: unknown): string | undefined {
-  if (typeof lead !== 'string') {
-    return undefined
-  }
-  const id = ctx.agents.localId(lead)
-  return ctx.agents.remoteGateway(id) ? id : undefined
-}
-
-async function joinRemote(
-  ctx: ServerContext,
-  mover: StoredAgent,
-  lead: string,
-  commit: (joined: RemoteJoin) => Promise<StoredAgent | AgentRefusal>,
-): Promise<StoredAgent | AgentRefusal> {
-  if (!ctx.teams) {
-    return { status: 409, error: 'this gateway is not connected to a relay' }
-  }
-  return ctx.teams.join(mover, lead, commit)
-}
-
-function settledOwner(outcome: { owner: string | undefined } | AgentRefusal): string | undefined {
-  if (isAgentRefusal(outcome)) {
-    fail(outcome.status, outcome.error)
-  }
-  return outcome.owner
-}
-
-// Materialized at create: the request, then the profile's default, then the gateway's. Later default changes never
-// move an agent. A default of shared on a gateway that shares nothing lands as private; a request for it is refused.
-function sharingFor(ctx: ServerContext, profile: string | undefined, requested: unknown): Sharing {
-  const allowed = ctx.options.agentSharing?.allowShared !== false
-  if (requested !== undefined) {
-    if (!isSharing(requested)) {
-      fail(400, "sharing must be 'private' or 'shared'")
-    }
-    if (requested === 'shared' && !allowed) {
-      fail(409, SHARING_OFF)
-    }
-    return requested
-  }
-  const fallback = (profile === undefined ? undefined : ctx.profiles.get(profile)?.defaults?.sharing) ?? ctx.options.agentSharing?.default
-  return fallback === 'shared' && allowed ? 'shared' : 'private'
-}
-
-function stringOr(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined
-}
-
-function settled(outcome: StoredAgent | AgentRefusal): StoredAgent {
-  if (isAgentRefusal(outcome)) {
-    fail(outcome.status, outcome.error)
-  }
-  return outcome
-}
-
-// The rest of the patch lands first, so a bad name or config never leaves a join the lead accepted and this side dropped.
-async function updateAgent(ctx: ServerContext, agent: StoredAgent, patch: UpdateAgentRequest): Promise<StoredAgent | AgentRefusal> {
-  if (patch.owner !== undefined) {
-    const owner = ctx.owners.resolve(undefined, patch.owner)
-    if (isAgentRefusal(owner)) {
-      return owner
-    }
-  }
-  const outcome = await patchAgent(ctx, agent, patch)
-  if (patch.sharing !== undefined && !isAgentRefusal(outcome)) {
-    ctx.teams?.republish()
-  }
-  return outcome
-}
-
-async function patchAgent(ctx: ServerContext, agent: StoredAgent, patch: UpdateAgentRequest): Promise<StoredAgent | AgentRefusal> {
-  const remoteLead = remoteLeadOf(ctx, patch.lead)
-  if (remoteLead === undefined) {
-    return ctx.agents.update(agent.id, patch, {
-      onLeadChanged: (previous) => ctx.teams?.left(agent.id, previous.lead, previous.remoteLead?.op),
-      onJoinCancelled: (lead, op) => ctx.teams?.left(agent.id, lead, op),
-    })
-  }
-  const { lead: _lead, ...rest } = patch
-  const updated = await ctx.agents.update(agent.id, rest)
-  if (isAgentRefusal(updated) || updated.lead === remoteLead) {
-    return updated
-  }
-  return joinRemote(ctx, updated, remoteLead, (joined) => ctx.agents.update(agent.id, { lead: remoteLead }, { joined }))
+  const config = isRecord(body.config) ? body.config : {}
+  const prompt = typeof body.prompt === 'string' ? body.prompt : undefined
+  const created = await createNamedSession(ctx, { ...body, config }, requestFromConfig(config, prompt), auth)
+  await respond(ctx, res, 201, created.agent, created.session)
 }
 
 async function remoteMembers(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, lead: StoredAgent, member?: string) {
@@ -310,38 +208,6 @@ async function remoteMembers(ctx: ServerContext, req: IncomingMessage, res: Serv
   await respond(ctx, res, 200, outcome)
 }
 
-async function adoptSession(ctx: ServerContext, agents: AgentService, res: ServerResponse, body: CreateAgentRequest) {
-  if (typeof body.adopt !== 'string') {
-    fail(400, 'adopt must be a session id')
-  }
-  const info = await sessionInfoOf(ctx, body.adopt)
-  if (!info) {
-    fail(404, 'session not found')
-  }
-  if (agents.bySession(info.id)) {
-    fail(409, 'that session already belongs to an agent')
-  }
-  const config = { ...configOf(info), ...body.config }
-  const owner =
-    body.owner === undefined && info.owner !== undefined ? info.owner : settledOwner(ctx.owners.resolve(config.profile, body.owner))
-  const crossOwner = body.crossOwner === true
-  const sharing = sharingFor(ctx, config.profile, body.sharing)
-  const name = body.name ?? (typeof info.title === 'string' && info.title.trim() !== '' ? agents.freeName(info.title.trim()) : undefined)
-  const draft = agents.draft({ name, config, lead: body.lead, owner, sharing, crossOwner })
-  if (isAgentRefusal(draft)) {
-    fail(draft.status, draft.error)
-  }
-  const recipe = await rollAvatar(ctx, draft, info)
-  const bound: StoredAgent = { ...draft, sessionId: info.id, ...(recipe === undefined ? {} : { avatarRecipe: recipe }) }
-  const remoteLead = remoteLeadOf(ctx, body.lead)
-  const adopted = settled(
-    remoteLead
-      ? await joinRemote(ctx, bound, remoteLead, (joined) => agents.create(bound, joined))
-      : await agents.create(bound, undefined, crossOwner),
-  )
-  await respond(ctx, res, 201, adopted)
-}
-
 function readSeed(seed: unknown): string | undefined {
   if (seed === undefined || seed === null || seed === '') {
     return undefined
@@ -356,8 +222,7 @@ async function rollFor(ctx: ServerContext, agent: StoredAgent, seed: string): Pr
   if (!ctx.avatars) {
     fail(404, 'this gateway draws no avatars')
   }
-  const session = agent.sessionId === undefined ? undefined : await sessionInfoOf(ctx, agent.sessionId)
-  const recipe = await rollAvatar(ctx, { ...agent, avatarSeed: seed }, session)
+  const recipe = await rollAvatar(ctx, { ...agent, avatarSeed: seed }, await sessionInfoOf(ctx, agent.id))
   if (recipe === undefined) {
     fail(503, 'the avatar pack could not be loaded')
   }
@@ -371,23 +236,6 @@ export async function rerollAvatar(ctx: ServerContext, agent: StoredAgent, seed?
   return ctx.agents.patch(agent.id, (current) => ({ ...current, avatarSeed: next, avatarRecipe: recipe }))
 }
 
-async function bindWithAvatar(ctx: ServerContext, agent: StoredAgent, session: SessionInfo): Promise<StoredAgent | AgentRefusal> {
-  const recipe = (ctx.agents.get(agent.id) ?? agent).avatarRecipe ?? (await rollAvatar(ctx, agent, session))
-  return ctx.agents.bind(agent.id, session.id, recipe)
-}
-
-async function rollAvatar(ctx: ServerContext, agent: StoredAgent, session: SessionInfo | undefined): Promise<unknown> {
-  if (!ctx.avatars) {
-    return undefined
-  }
-  const project = session ? (ctx.projects.withProject(session).project?.root ?? session.cwd) : undefined
-  try {
-    return await ctx.avatars.roll(agent.avatarSeed, session?.engine, project || undefined)
-  } catch {
-    return undefined
-  }
-}
-
 async function sendAvatar(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, agent: StoredAgent, busy: boolean): Promise<void> {
   const avatars = ctx.avatars
   if (!avatars) {
@@ -395,8 +243,7 @@ async function sendAvatar(ctx: ServerContext, req: IncomingMessage, res: ServerR
   }
   let recipe = agent.avatarRecipe
   if (recipe === undefined) {
-    const session = agent.sessionId === undefined ? undefined : await sessionInfoOf(ctx, agent.sessionId)
-    const rolled = await rollAvatar(ctx, agent, session)
+    const rolled = await rollAvatar(ctx, agent, await sessionInfoOf(ctx, agent.id))
     if (rolled === undefined) {
       fail(503, 'the avatar pack could not be loaded')
     }
@@ -425,74 +272,14 @@ async function sendImage(req: IncomingMessage, res: ServerResponse, image: Avata
   res.writeHead(200, headers).end(Buffer.from(image.png))
 }
 
-// Each row is checked on its own: seeing the agent today says nothing about who could see a past conversation.
-async function conversationsFor(ctx: ServerContext, agent: StoredAgent, auth: AuthContext): Promise<AgentConversationsResponse> {
-  const rows = await Promise.all(
-    conversationsOf(ctx.agents.public(agent)).map(async (row) => {
-      const info = await sessionInfoOf(ctx, row.sessionId)
-      if (!info) {
-        return { ...row, transcript: 'unavailable' as const }
-      }
-      const title = row.title ?? info.title
-      return ctx.auth.canSee(auth, info) ? { ...row, ...(title === undefined ? {} : { title }), session: ctx.projects.withProject(info) } : undefined
-    }),
-  )
-  return { conversations: rows.filter((row) => row !== undefined) }
-}
-
-export async function startSession(
-  ctx: ServerContext,
-  agent: StoredAgent,
-  prompt: string | undefined,
-  auth: AuthContext,
-  id?: string,
-): Promise<SessionInfo> {
-  const { config } = agent
-  const request = {
-    cwd: config.cwd,
-    profile: config.profile,
-    model: config.model,
-    reasoningEffort: config.reasoningEffort,
-    permissionMode: config.permissionMode,
-    allowDangerouslySkipPermissions: config.permissionMode === 'bypassPermissions' ? true : undefined,
-    agentContextReset: config.agentContextReset ?? true,
-    prompt,
-  }
-  const vetted = vetCreateRequest(ctx, stripUndefined(request), auth, agent.owner)
-  if (!vetted.ok) {
-    fail(vetted.status, vetted.error)
-  }
-  const principal = { operator: ctx.auth.isOperator(auth), ...(agent.owner === undefined ? {} : { owner: agent.owner }) }
-  const runner = await ctx.factory.createRunner(ctx.factory.buildRunnerConfig(vetted.request, principal), {
-    brief: config.brief?.trim() || undefined,
-    instructionScope: config.instructionScope,
-    agent: true,
-    ...(id === undefined ? {} : { id }),
-  })
-  return runner.info()
-}
-
 async function respond(ctx: ServerContext, res: ServerResponse, status: number, agent: StoredAgent, session?: SessionInfo): Promise<void> {
-  const info = session ?? (agent.sessionId === undefined ? undefined : await sessionInfoOf(ctx, agent.sessionId))
-  const body: AgentResponse = { agent: ctx.agents.public(agent) }
+  const info = session ?? (await sessionInfoOf(ctx, agent.id))
+  const current = ctx.agents.get(agent.id) ?? agent
+  const body: AgentResponse = { agent: agentInfoOf(ctx, current, await ctx.records.get(agent.id)) }
   if (info) {
     body.session = ctx.projects.withProject(info)
   }
   json(res, status, body)
-}
-
-function configOf(info: SessionInfo): AgentConfig {
-  return stripUndefined({
-    cwd: info.cwd || undefined,
-    profile: info.profile,
-    model: info.model,
-    reasoningEffort: info.effort ?? undefined,
-    permissionMode: info.permissionMode,
-  })
-}
-
-function stripUndefined<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

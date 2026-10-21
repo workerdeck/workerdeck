@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ClearContextOptions, Runner } from '@workerdeck/core'
 import type { AgentInfo, AgentResponse, SessionEvent, SessionEventBody, SessionInfo, SessionStatus } from '@workerdeck/protocol'
-import { CONTEXT_RESET_RESTART_SCHEDULED, CONTEXT_RESET_SCHEDULED, ContextResetService } from '../src/services/context-resets.ts'
+import { CONTEXT_RESET_SCHEDULED, ContextResetService } from '../src/services/context-resets.ts'
 import { fakeHarness } from './helpers.ts'
 import { createSession, get, shellFixture } from './shell-helpers.ts'
 
@@ -116,41 +116,31 @@ describe('ContextResetService', () => {
     await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
   })
 
-  it('starts an agent a new session at the turn end instead of clearing, and counts limits per agent', async () => {
+  it('runs the reset as a cut at the turn end, never a clear, and counts limits per session', async () => {
     let now = 1_000_000
-    const restarts: Array<[string, string, string]> = []
-    const owners = new Map([
-      ['s1', 'a1'],
-      ['s2', 'a1'],
-    ])
+    const cuts: Array<[string, string]> = []
     const service = new ContextResetService({
       minIntervalMs: 5 * 60_000,
       now: () => now,
-      agentOf: (sessionId) => owners.get(sessionId),
-      restartAgent: async (agentId, sessionId, prompt) => {
-        restarts.push([agentId, sessionId, prompt])
+      cut: async (sessionId, prompt) => {
+        cuts.push([sessionId, prompt])
       },
     })
-    const first = scriptedRunner('s1')
-    service.watch(first)
-
-    await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_RESTART_SCHEDULED)
-    first.emit({ type: 'status_changed', status: 'idle' })
-    await vi.waitFor(() => expect(restarts).toEqual([['a1', 's1', REQUEST.prompt]]))
-    expect(first.cleared).toEqual([])
-    expect(first.sent).toEqual([])
-
-    const second = scriptedRunner('s2')
-    service.watch(second)
+    const runner = scriptedRunner('s1')
+    service.watch(runner)
+    await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
+    runner.emit({ type: 'status_changed', status: 'idle' })
+    await vi.waitFor(() => expect(cuts).toEqual([['s1', REQUEST.prompt]]))
+    expect(runner.cleared).toEqual([])
+    expect(runner.sent).toEqual([])
     now += 60_000
-    await expect(service.request('s2', REQUEST)).rejects.toThrow(/last reset was 1 minute ago/)
+    await expect(service.request('s1', REQUEST)).rejects.toThrow(/last reset was 1 minute ago/)
   })
 
-  it('reports a failed agent restart and leaves the session as it was', async () => {
+  it('reports a failed cut and leaves the session as it was', async () => {
     const errors: unknown[] = []
     const service = new ContextResetService({
-      agentOf: () => 'a1',
-      restartAgent: async () => {
+      cut: async () => {
         throw new Error('profile unavailable')
       },
       onError: (error) => errors.push(error),
@@ -161,7 +151,7 @@ describe('ContextResetService', () => {
     runner.emit({ type: 'status_changed', status: 'idle' })
     await vi.waitFor(() => expect(errors).toHaveLength(1))
     expect(runner.cleared).toEqual([])
-    await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_RESTART_SCHEDULED)
+    await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
   })
 
   it('rate-limits by the minimum interval and by the hourly cap', async () => {
@@ -317,29 +307,40 @@ describe('context_reset through the gateway', () => {
     expect(session).toMatchObject({ id, conversation: 2 })
   })
 
-  it("closes an agent's session after the turn and binds the agent to a new one that starts with the prompt", async () => {
-    const harness = fakeHarness()
-    const { base } = await fx.startServer(harness)
+  it("cuts an agent's conversation under its one id: the agent, its name and its id stay, the prompt opens n+1", async () => {
+    const harnesses: Array<ReturnType<typeof fakeHarness>> = []
+    const queryFn = (params: Parameters<ReturnType<typeof fakeHarness>['queryFn']>[0]) => {
+      const next = fakeHarness()
+      harnesses.push(next)
+      return next.queryFn(params)
+    }
+    const { base } = await fx.startServer({ queryFn } as ReturnType<typeof fakeHarness>)
     const created = await fetch(`${base}/agents`, {
       method: 'POST',
       headers: { authorization: 'Bearer operator', 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'Wren', config: { cwd: fx.tempDir() }, prompt: 'work' }),
     })
     const { agent, session } = (await created.json()) as AgentResponse
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
-    harness.emit(INIT)
+    expect(session!.id).toBe(agent.id)
+    await vi.waitFor(() => expect(harnesses).toHaveLength(1))
+    const [first] = harnesses
+    first!.emit(INIT)
 
-    const result = await gatewayTools(harness).context_reset!.handler(REQUEST, {})
-    expect(result.content[0]!.text).toBe(CONTEXT_RESET_RESTART_SCHEDULED)
-    harness.emit(RESULT)
+    const result = await gatewayTools(first!).context_reset!.handler(REQUEST, {})
+    expect(result.content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
+    first!.emit(RESULT)
 
-    const moved = async (): Promise<AgentInfo> => ((await (await get(base, `/agents/${agent.id}`)).json()) as AgentResponse).agent
-    await vi.waitFor(async () => expect((await moved()).sessionId).not.toBe(session!.id))
-    const fresh = (await moved()).sessionId!
-    await vi.waitFor(async () =>
-      expect(await info(base, session!.id)).toMatchObject({ status: 'closed', archived: true, supersededBy: fresh }),
-    )
-    expect(await info(base, fresh)).toMatchObject({ agentContextReset: true, agent: { name: 'Wren', conversation: 2 } })
-    await vi.waitFor(() => expect(inputTexts(harness)).toEqual(['work', REQUEST.prompt]))
+    await vi.waitFor(() => expect(harnesses).toHaveLength(2))
+    expect(harnesses[1]!.captured.options?.resume).toBeUndefined()
+    await vi.waitFor(() => expect(inputTexts(harnesses[1]!)).toEqual([REQUEST.prompt]))
+    const after = ((await (await get(base, `/agents/${agent.id}`)).json()) as AgentResponse).agent as AgentInfo
+    expect(after).toMatchObject({ id: agent.id, name: 'Wren', sessionId: agent.id })
+    expect(await info(base, agent.id)).toMatchObject({
+      id: agent.id,
+      conversation: 2,
+      agentContextReset: true,
+      agent: { id: agent.id, name: 'Wren', conversation: 2 },
+    })
+    expect(inputTexts(first!)).toEqual(['work'])
   })
 })

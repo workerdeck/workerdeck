@@ -13,7 +13,7 @@ import type { AuthService } from './services/auth.ts'
 import type { AvailabilityTracker } from './services/availability.ts'
 import type { BridgeHub } from './services/bridge.ts'
 import type { EngineSleepTimers } from './services/engine-sleep.ts'
-import type { AgentHandovers } from './services/handovers.ts'
+import type { LifecycleLocks } from './services/lifecycle-locks.ts'
 import type { ConversationCuts } from './services/conversation-cuts.ts'
 import type { HistoryReader } from './services/history-reader.ts'
 import type { HostFileRoots } from './services/host-files.ts'
@@ -49,7 +49,7 @@ export type ServerContext = {
   registry: SessionRegistry
   parking: SessionParkManager
   history: HistoryReader
-  handovers: AgentHandovers
+  locks: LifecycleLocks
   records: SessionRecords
   cuts: ConversationCuts
   engineSleep: EngineSleepTimers

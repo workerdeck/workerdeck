@@ -295,7 +295,7 @@ describe('agent records', () => {
     return agents
   }
   function record(id: string, extra: Partial<StoredAgent> = {}): StoredAgent {
-    return { id, name: id, createdAt: 1, updatedAt: 1, avatarSeed: id, pastSessions: [], config: {}, schema: 2, ...extra }
+    return { id, name: id, createdAt: 1, updatedAt: 1, avatarSeed: id, config: {}, schema: 2, ...extra }
   }
 
   it('stamps an owner once, only on records without one, from the resolver', async () => {

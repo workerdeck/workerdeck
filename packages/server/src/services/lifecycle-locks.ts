@@ -1,5 +1,5 @@
-// One agent lifecycle change at a time per agent, and a gate that keeps new work off a conversation being handed over.
-export class AgentHandovers {
+// One lifecycle change at a time per session id, and a gate that keeps new work off a conversation being cut.
+export class LifecycleLocks {
   #tails = new Map<string, Promise<void>>()
   #gated = new Set<string>()
   readonly startupTimeoutMs: number
@@ -10,8 +10,8 @@ export class AgentHandovers {
     this.onError = options.onError ?? (() => {})
   }
 
-  async run<T>(agentIds: readonly string[], step: () => Promise<T>): Promise<T> {
-    const ids = [...new Set(agentIds)].sort()
+  async run<T>(sessionIds: readonly string[], step: () => Promise<T>): Promise<T> {
+    const ids = [...new Set(sessionIds)].sort()
     const previous = ids.map((id) => this.#tails.get(id) ?? Promise.resolve())
     let release!: () => void
     const done = new Promise<void>((resolve) => {
@@ -46,4 +46,4 @@ export class AgentHandovers {
   }
 }
 
-export const ROTATING = 'conversation is rotating'
+export const CUT_IN_PROGRESS = 'a new conversation is starting'

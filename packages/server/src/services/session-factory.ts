@@ -57,8 +57,14 @@ export type SessionFactoryDeps = {
   avatar?: { directory: AvatarDirectory; isAgent: (sessionId: string | undefined) => boolean }
 }
 
-// `agent` marks a create the agent is bound to only after the runner exists, as `brief` does for its brief.
-export type BuildOptions = { brief?: string; instructionScope?: InstructionScope; agent?: boolean; id?: string }
+// `agent` marks a named create whose index row is written in `beforeStart`: after the record, before the first event.
+export type BuildOptions = {
+  brief?: string
+  instructionScope?: InstructionScope
+  agent?: boolean
+  id?: string
+  beforeStart?: (runner: Runner) => Promise<void>
+}
 
 // A dormant rebuild spreads the stored config back in, so the principal's flag can arrive on the request; a create
 // door passes it beside the request instead, because the host's hook and a job record see only the wire type.
@@ -337,6 +343,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     const built = await buildRunner(config, undefined, options?.id, options)
     try {
       await deps.openRecord?.(built, config)
+      await options?.beforeStart?.(built)
     } catch (error) {
       built.close('error')
       throw error

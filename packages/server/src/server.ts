@@ -24,8 +24,8 @@ import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
 import { rerollAvatar } from './routes/agents.ts'
 import { createHistoryReader, engineHomeOf } from './services/history-reader.ts'
-import { AgentHandovers, ROTATING } from './services/handovers.ts'
-import { recoverHandovers, rotateAgent } from './routes/agent-handover.ts'
+import { LifecycleLocks, CUT_IN_PROGRESS } from './services/lifecycle-locks.ts'
+import { reconcileIdentity } from './routes/named-sessions.ts'
 import { createQueueSocketHub } from './routes/queue-ws.ts'
 import { upgradeSession } from './routes/session-upgrade.ts'
 import { dispatchRoute, httpRoutes } from './routes/table.ts'
@@ -85,9 +85,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const diagnose: DiagnosticSink = options.onDiagnostic ?? (() => {})
   const records = new SessionRecords(options.sessions?.store ?? new MemorySessionRecordStore())
   const cuts = new ConversationCuts()
-  const handovers = new AgentHandovers({
+  const locks = new LifecycleLocks({
     startupTimeoutMs: options.agentStartupTimeoutMs,
-    onError: (error) => diagnose(error, 'agent-handover'),
+    onError: (error) => diagnose(error, 'lifecycle'),
   })
   const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter => options.engines?.[engine ?? 'claude'] ?? getEngineAdapter(engine)
 
@@ -158,7 +158,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     sleepAfterMs: options.agentSleepAfterMs,
     allowShared: options.agentSharing?.allowShared,
     modeOf: (agent) =>
-      (agent.sessionId === undefined ? undefined : registry.get(agent.sessionId)?.info().permissionMode) ??
+      registry.get(agent.id)?.info().permissionMode ??
       agent.config.permissionMode ??
       (agent.config.profile === undefined ? undefined : profiles.get(agent.config.profile)?.defaults?.permissionMode),
     gateway: options.relay?.gateway,
@@ -191,14 +191,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       ? undefined
       : new ContextResetService({
           ...options.agentContextReset,
-          agentOf: (sessionId) => agents.bySession(sessionId)?.id,
           cut: async (sessionId, prompt) => {
-            const expectedGeneration = records.conversationOf(sessionId) ?? 1
-            await cuts.cut(sessionId, { expectedGeneration, prompt, reason: 'context_reset' })
-          },
-          restartAgent: async (agentId, sessionId, prompt) => {
-            const scope = registry.get(sessionId)?.info().scope
-            await rotateAgent(ctx, agentId, { ok: true, operator: true, ...(scope ? { scope } : {}) }, { prompt, expected: sessionId })
+            const runner = registry.get(sessionId)
+            if (!runner) {
+              throw new Error('the session ended before its reset could run')
+            }
+            await cuts.clearOnIdle(runner, 'context_reset', prompt)
           },
           onError: (error) => diagnose(error, 'context-reset'),
         })
@@ -207,7 +205,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const avatarChanges: AvatarDirectory | undefined = options.avatars
     ? {
         change: async (sessionId, seed) => {
-          const agent = agents.bySession(sessionId)
+          const agent = agents.get(sessionId)
           if (!agent) {
             throw new Error('only an agent has an avatar, and this session is not one')
           }
@@ -290,19 +288,19 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     options.peers?.enabled === false
       ? undefined
       : createPeerService({
-          refuse: (sessionId) => (handovers.gated(sessionId) ? ROTATING : undefined),
+          refuse: (sessionId) => (locks.gated(sessionId) ? CUT_IN_PROGRESS : undefined),
           refs: { registry, parking },
           projects,
           teams: {
             relayAgent: (sessionId) => agents.relayAgent(sessionId),
             spansGateways: (sessionId) => {
-              const agent = agents.bySession(sessionId)
+              const agent = agents.get(sessionId)
               return agent !== undefined && agents.spansGateways(agent)
             },
             agentName: (agentId) => agents.get(agentId)?.name,
             vouches: (ref, gateway, owner) => agents.vouches(ref, gateway, owner),
             withheld: (sessionId) => {
-              const agent = agents.bySession(sessionId)
+              const agent = agents.get(sessionId)
               return agent !== undefined && agents.frozen(agent.id)
             },
           },
@@ -406,7 +404,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     avatar: avatarChanges
       ? {
           directory: avatarDirectoryHandle(() => ownAvatarChanges),
-          isAgent: (sessionId) => sessionId !== undefined && agents.bySession(sessionId) !== undefined,
+          isAgent: (sessionId) => sessionId !== undefined && agents.get(sessionId) !== undefined,
         }
       : undefined,
   })
@@ -474,7 +472,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     registry,
     parking,
     history,
-    handovers,
+    locks,
     records,
     cuts,
     engineSleep,
@@ -539,6 +537,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     queue,
     engineSleep,
     closeQueueSockets: queueSockets.clear,
+    flushRecords: () => records.flush(),
     diagnose,
     releaseDirectories: () => {
       teamLinks?.stop()
@@ -562,6 +561,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     parking,
     records,
     cuts,
+    locks,
     shells,
     listen: async (port, host) => {
       await profiles.refreshStored()
@@ -570,7 +570,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       await stampOwners()
       teamLinks?.start()
       await parking.hydrate()
-      await recoverHandovers(ctx, (error) => diagnose(error, 'agent-handover'))
+      await reconcileIdentity(ctx, (error) => diagnose(error, 'agent-index'), options.sessions?.store !== undefined)
       await cuts.recover((error) => diagnose(error, 'conversation-cut'))
       await shells?.hydrate()
       for (const owner of [...agents.list(), ...(await parking.listInfo())].map((record) => record.owner)) {

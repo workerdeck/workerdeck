@@ -4,7 +4,7 @@ import type { SubmitExecutionResultRequest } from '@workerdeck/protocol'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
-import { ROTATING } from '../services/handovers.ts'
+import { CUT_IN_PROGRESS } from '../services/lifecycle-locks.ts'
 import { SessionFenced } from '../services/parking.ts'
 import { entryInfo } from './conversations.ts'
 import { sessionInfoOf } from './session-lookup.ts'
@@ -69,12 +69,12 @@ export async function handleExecutionResult(
     }
   }
   const holder = parking.sessionFor(executionId)
-  if (holder !== undefined && ctx.handovers.gated(holder)) {
-    fail(409, ROTATING)
+  if (holder !== undefined && ctx.locks.gated(holder)) {
+    fail(409, CUT_IN_PROGRESS)
   }
   const applied = await parking.submitResult(executionId, result).catch((error: unknown) => {
     if (error instanceof SessionFenced) {
-      fail(409, ROTATING)
+      fail(409, CUT_IN_PROGRESS)
     }
     throw error
   })

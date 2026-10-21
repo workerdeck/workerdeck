@@ -1,12 +1,11 @@
 import type { ParkedExecution, Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, type AgentRef, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import { engineOf } from '../lib/profile-env.ts'
 import type { SessionRegistry } from './registry.ts'
 import {
-  isArchived,
   isDormant,
   isLiveRecord,
-  type ArchivedSessionRecord,
+  type SessionCapture,
   type DormantSessionRecord,
   type ParkedSessionRecord,
   type SessionStore,
@@ -36,7 +35,7 @@ export type SessionParkOptions = {
   onParked?: (sessionId: string, executionId: string) => void
   onResumed?: (sessionId: string, runner: Runner) => void
   onError?: (error: unknown, context: ParkErrorContext) => void
-  engineHome?: (profile: string | undefined, engine: NonNullable<SessionInfo['engine']>) => ArchivedSessionRecord['home']
+  engineHome?: (profile: string | undefined, engine: NonNullable<SessionInfo['engine']>) => SessionCapture['home']
   // The write token: the conversation a record is taken for, refused by the store once a cut has moved past it.
   conversationOf?: (sessionId: string) => number | undefined
 }
@@ -53,7 +52,7 @@ export class SessionParkManager {
   #watches = new Map<string, () => void>()
   #closed = false
   #renaming: Promise<void> | undefined
-  #archiving = new Set<string>()
+  #fencedIds = new Set<string>()
 
   constructor(options: SessionParkOptions) {
     this.#options = options
@@ -71,7 +70,7 @@ export class SessionParkManager {
   async hydrate(): Promise<void> {
     const floor = Date.now() + (this.#options.expiredGraceMs ?? 60_000)
     for (const record of await this.#options.store.list()) {
-      if (isDormant(record) || isArchived(record)) {
+      if (isDormant(record)) {
         continue
       }
       for (const execution of record.executions) {
@@ -136,7 +135,7 @@ export class SessionParkManager {
           if (this.#closed) {
             return
           }
-          if (this.#archiving.has(runner.id)) {
+          if (this.#fencedIds.has(runner.id)) {
             this.#forgetSession(runner.id)
             return
           }
@@ -306,7 +305,7 @@ export class SessionParkManager {
     await Promise.all(this.#storeOps.values())
     const records = await this.#options.store.list()
     return records
-      .filter((record) => !isArchived(record) && this.#options.registry.get(record.id) === undefined)
+      .filter((record) => this.#options.registry.get(record.id) === undefined)
       .map((record) => (isDormant(record) ? { ...record.info, engineAsleep: true } : record.info))
   }
 
@@ -325,7 +324,7 @@ export class SessionParkManager {
       return settled === undefined ? undefined : { applied: false, sessionId: settled }
     }
     const runner = await this.ensureLive(sessionId)
-    if (this.#archiving.has(sessionId)) {
+    if (this.#fencedIds.has(sessionId)) {
       throw new SessionFenced(sessionId)
     }
     if (!runner) {
@@ -383,7 +382,7 @@ export class SessionParkManager {
 
   // Blocks every later write and wake for the session, then waits out the writes and the wake already under way.
   async fence(sessionId: string): Promise<void> {
-    this.#archiving.add(sessionId)
+    this.#fencedIds.add(sessionId)
     await this.#resuming.get(sessionId)?.catch(() => undefined)
     await this.#storeOps.get(sessionId)
   }
@@ -394,23 +393,17 @@ export class SessionParkManager {
   }
 
   fenced(sessionId: string): boolean {
-    return this.#archiving.has(sessionId)
+    return this.#fencedIds.has(sessionId)
   }
 
   unfence(sessionId: string): void {
-    this.#archiving.delete(sessionId)
+    this.#fencedIds.delete(sessionId)
   }
 
-  // The archive of a fenced session, from its live runner or its stored record; undefined when neither exists.
-  async archiveOf(
-    sessionId: string,
-    link: { agentId?: string; agent?: AgentRef; supersededBy?: string },
-  ): Promise<ArchivedSessionRecord | undefined> {
+  // What a fenced session's conversation leaves behind, from its live runner or its stored record; undefined when neither exists.
+  async capture(sessionId: string): Promise<SessionCapture | undefined> {
     const runner = this.#options.registry.get(sessionId)
     const stored = runner ? undefined : await this.#queue(sessionId, () => this.#options.store.get(sessionId))
-    if (stored && isArchived(stored)) {
-      return stored
-    }
     const config = runner ? this.#configs.get(sessionId) : stored?.config
     const source = runner?.info() ?? stored?.info
     if (!config || !source) {
@@ -420,29 +413,14 @@ export class SessionParkManager {
     const snapshot = runner?.snapshot?.() ?? (stored && !isDormant(stored) ? stored.snapshot : undefined)
     const home = config.engineHome ?? this.#options.engineHome?.(info.profile, engineOf(info))
     return {
-      kind: 'archived',
       id: sessionId,
-      info: {
-        ...this.#stamped(info),
-        status: 'closed',
-        pendingPermissionCount: 0,
-        archived: true,
-        ...(link.supersededBy ? { supersededBy: link.supersededBy } : {}),
-        ...(link.agent ? { agent: link.agent } : {}),
-      },
+      info: { ...this.#stamped(info), status: 'closed', pendingPermissionCount: 0 },
       config: { ...config, meta: info.meta, statusLabel: info.statusLabel },
-      ...(link.agentId ? { agentId: link.agentId } : {}),
       ...(info.sdkSessionId ? { engineSessionId: info.sdkSessionId } : {}),
       ...(info.profile ? { profile: info.profile } : {}),
       ...(home ? { home } : {}),
       ...(snapshot ? { snapshot } : {}),
-      archivedAt: Date.now(),
     }
-  }
-
-  async saveArchive(record: ArchivedSessionRecord): Promise<void> {
-    this.#archiving.add(record.id)
-    await this.#queue(record.id, () => this.#options.store.save(record))
   }
 
   close(): void {
@@ -487,7 +465,7 @@ export class SessionParkManager {
   }
 
   async #rememberDormant(runner: Runner): Promise<void> {
-    if (this.#archiving.has(runner.id)) {
+    if (this.#fencedIds.has(runner.id)) {
       return
     }
     const config = this.#ownedConfig(runner)
@@ -510,7 +488,7 @@ export class SessionParkManager {
   }
 
   async #persistLive(runner: Runner): Promise<void> {
-    if (this.#archiving.has(runner.id)) {
+    if (this.#fencedIds.has(runner.id)) {
       return
     }
     const config = this.#ownedConfig(runner)
@@ -591,7 +569,7 @@ export class SessionParkManager {
     while (this.#renaming) {
       await this.#renaming
     }
-    if (this.#archiving.has(id)) {
+    if (this.#fencedIds.has(id)) {
       return undefined
     }
     const inFlight = this.#resuming.get(id)
@@ -609,7 +587,7 @@ export class SessionParkManager {
 
   async #rebuild(id: string): Promise<Runner | undefined> {
     const record = await this.#queue(id, () => this.#options.store.get(id))
-    if (!record || isArchived(record)) {
+    if (!record) {
       return undefined
     }
     let runner: Runner
@@ -619,8 +597,8 @@ export class SessionParkManager {
       this.#options.onError?.(error, { sessionId: id, phase: 'resume' })
       throw error
     }
-    // A handover fenced the session while the factory ran: the conversation is leaving, so this runner never registers.
-    if (this.#archiving.has(id)) {
+    // A cut or a close fenced the session while the factory ran: the conversation is leaving, so this runner never registers.
+    if (this.#fencedIds.has(id)) {
       runner.close('server')
       return undefined
     }

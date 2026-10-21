@@ -4,8 +4,6 @@ import type { WebSocketServer } from 'ws'
 import type { ServerContext } from '../context.ts'
 import { refuseUpgrade } from '../lib/http.ts'
 import { parseSessionRoute } from '../lib/parse-route.ts'
-import { viewArchive } from '../services/archives.ts'
-import { isArchived } from '../services/session-store.ts'
 import { entryInfo, historyEvents } from './conversations.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 import { attachArchive, attachClient } from './ws.ts'
@@ -52,12 +50,6 @@ export async function upgradeSession(
   const known = await sessionInfoOf(ctx, route.id)
   if (known && !auth.canSee(authCtx, known)) {
     refuseUpgrade(socket, '404 Not Found')
-    return
-  }
-  const stored = known && !ctx.registry.get(route.id) ? await parking.get(route.id) : null
-  if (known && stored && isArchived(stored)) {
-    const view = await viewArchive(ctx.history, stored)
-    wss.handleUpgrade(req, socket, head, (ws) => attachArchive(ctx, ws, view.info, view.events, req))
     return
   }
   const runner = await parking.ensureLive(route.id).catch(() => undefined)

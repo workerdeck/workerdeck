@@ -4,6 +4,7 @@ import {
   readStatusLabelInput,
   type PeerSessionsResponse,
   type ResolvePermissionRequest,
+  type SessionAgentRequest,
   type SessionInfo,
   type UpdateSessionRequest,
 } from '@workerdeck/protocol'
@@ -12,17 +13,17 @@ import type { SessionItemRoute, SessionRoute } from '../lib/parse-route.ts'
 import { permissionDecision } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { isArchived, isDormant } from '../services/session-store.ts'
+import { isDormant } from '../services/session-store.ts'
 import type { ServerContext } from '../context.ts'
-import { ROTATING } from '../services/handovers.ts'
+import { CUT_IN_PROGRESS } from '../services/lifecycle-locks.ts'
 import { vetCreateRequest } from './create-vet.ts'
-import { retireAgent } from './agents.ts'
 import { handleAttachments } from './attachments.ts'
 import { handleConversations } from './conversations.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
 import { handleProjectIcon } from './project-icon.ts'
-import { requireLive, requireWritable, resolveSession, type ResolvedSession } from './session-lookup.ts'
+import { createNamedSession, endSession, identityOf, nameSession, retireAgent, unnameSession } from './named-sessions.ts'
+import { listSessions, requireLive, resolveSession, type ResolvedSession } from './session-lookup.ts'
 import { handleShells } from './shells.ts'
 import { handleToolResult } from './tool-results.ts'
 import { sleepRunner } from './sleep.ts'
@@ -87,22 +88,33 @@ export async function handleSessions(
     await dispatchItem(ctx, req, res, auth, route, resolved)
     return
   }
-  const erase = route.kind === 'session' && req.method === 'DELETE'
-  requireWritable(await resolveSession(ctx, route.id, auth), req.method, erase)
-  if (ctx.handovers.gated(route.id)) {
-    fail(409, ROTATING)
+  const before = await resolveSession(ctx, route.id, auth)
+  if (ctx.locks.gated(route.id)) {
+    fail(409, CUT_IN_PROGRESS)
   }
   // Protocol 2: a mutating call names the conversation it was meant for, and a stale or missing one is refused, a
   // DELETE included. Re-checked under the session's lifecycle lock, so a call queued behind a cut never lands on n+1.
   const expected = expectedConversation(ctx, req, route.id)
-  await ctx.handovers.run([route.id], async () => {
+  const recheck = async (): Promise<ResolvedSession> => {
     const resolved = await resolveSession(ctx, route.id, auth)
-    requireWritable(resolved, req.method, erase)
     const current = ctx.records.conversationOf(route.id) ?? 1
     if (current !== expected) {
       fail(409, `the session moved on to conversation ${current}`)
     }
-    await dispatchItem(ctx, req, res, auth, route, resolved)
+    return resolved
+  }
+  const agent = route.kind === 'session' && req.method === 'DELETE' ? ctx.agents.get(route.id) : undefined
+  if (agent) {
+    // Retiring locks the agent's members too, so it takes the locks itself rather than under this route's.
+    if (!ctx.auth.isOperator(auth)) {
+      fail(403, `${agent.name} is an agent; only an operator can delete it`)
+    }
+    await retireAgent(ctx, agent.id, 'release', async () => void (await recheck()))
+    json(res, 200, { session: ctx.projects.withProject({ ...before.info, status: 'closed' }) })
+    return
+  }
+  await ctx.locks.run([route.id], async () => {
+    await dispatchItem(ctx, req, res, auth, route, await recheck())
   })
 }
 
@@ -132,16 +144,30 @@ async function dispatchItem(
 }
 
 async function handleCollection(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, auth: AuthContext): Promise<void> {
-  const { auth: authSvc, factory, parking, projects, registry } = ctx
+  const { auth: authSvc, factory, projects } = ctx
   requireMethod(req, 'GET', 'POST')
   if (req.method === 'GET') {
-    const sessions = [...registry.list(), ...(await parking.listInfo())]
+    const sessions = await listSessions(ctx, new URL(req.url ?? '', 'http://x').searchParams.get('closed') === '1')
     json(res, 200, {
       sessions: sessions.filter((session) => authSvc.canSee(auth, session)).map((session) => projects.withProject(session)),
     })
     return
   }
-  const vetted = vetCreateRequest(ctx, await readJsonBody(req, ctx.maxBodyBytes), auth)
+  const body = await readJsonBody(req, ctx.maxBodyBytes)
+  const named = isRecord(body) && body.agent !== undefined ? body.agent : undefined
+  if (named !== undefined) {
+    if (!authSvc.isOperator(auth)) {
+      fail(403, 'only an operator can name a session')
+    }
+    if (!isRecord(named)) {
+      fail(400, 'agent must be an object')
+    }
+    const { agent: _agent, ...request } = body as Record<string, unknown>
+    const created = await createNamedSession(ctx, identityOf(named as SessionAgentRequest), request, auth)
+    json(res, 201, { session: projects.withProject(created.session) })
+    return
+  }
+  const vetted = vetCreateRequest(ctx, body, auth)
   if (!vetted.ok) {
     fail(vetted.status, vetted.error)
   }
@@ -150,7 +176,7 @@ async function handleCollection(ctx: ServerContext, req: IncomingMessage, res: S
 }
 
 async function handleSession({ ctx, req, res, auth, route, runner, parked, info }: SessionCall<'session' | 'ws'>): Promise<void> {
-  const { attachmentStore, bridge, parking, producedFiles, projects, registry } = ctx
+  const { parking, projects } = ctx
   requireMethod(req, 'GET', 'PATCH', 'DELETE')
   if (req.method === 'GET') {
     json(res, 200, { session: projects.withProject(info) })
@@ -165,6 +191,13 @@ async function handleSession({ ctx, req, res, auth, route, runner, parked, info 
     const label = body?.statusLabel === undefined ? undefined : readStatusLabelInput(body.statusLabel)
     if (typeof label === 'string') {
       fail(400, label)
+    }
+    if (body?.agent !== undefined) {
+      await renameIdentity(ctx, auth, info, body.agent)
+      if (body.title === undefined && label === undefined) {
+        json(res, 200, { session: projects.withProject(runner?.info() ?? info) })
+        return
+      }
     }
     if (!runner && parked) {
       let renamed: SessionInfo | undefined = parked.info
@@ -195,26 +228,30 @@ async function handleSession({ ctx, req, res, auth, route, runner, parked, info 
     json(res, 200, { session: projects.withProject(live.info()) })
     return
   }
-  if (parked && isArchived(parked) && !ctx.auth.isOperator(auth)) {
-    fail(403, 'only an operator can erase a past conversation')
+  await endSession(ctx, route.id)
+  json(res, 200, { session: projects.withProject(runner?.info() ?? { ...(parked?.info ?? info), status: 'closed' as const }) })
+}
+
+// Naming and un-naming are the `/agents` routes' to guard: operator only, an un-name refused in a team.
+async function renameIdentity(ctx: ServerContext, auth: AuthContext, info: SessionInfo, agent: unknown): Promise<void> {
+  if (!ctx.auth.isOperator(auth)) {
+    fail(403, 'only an operator can name a session')
   }
-  const agent = ctx.agents.bySession(route.id)
-  if (agent) {
-    if (!ctx.auth.isOperator(auth)) {
-      fail(403, `${agent.name} is an agent; only an operator can delete it`)
+  if (agent === null) {
+    if (!ctx.agents.get(info.id)) {
+      fail(409, 'this session has no name to remove')
     }
-    await retireAgent(ctx, agent, 'release', route.id)
-  } else if (!(parked && isArchived(parked))) {
-    await ctx.cuts.closeLocked(route.id)
+    await unnameSession(ctx, info.id)
+    return
   }
-  registry.remove(route.id)
-  bridge.remove(route.id)
-  await parking.discard(route.id)
-  attachmentStore.drop(route.id)
-  producedFiles.drop(route.id)
-  json(res, 200, {
-    session: projects.withProject(runner?.info() ?? { ...parked!.info, status: 'closed' as const }),
-  })
+  if (!isRecord(agent)) {
+    fail(400, 'agent must be an object or null')
+  }
+  await nameSession(ctx, info, agent as SessionAgentRequest)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 async function handlePeers({ ctx, req, res, route }: SessionCall<'peers'>): Promise<void> {

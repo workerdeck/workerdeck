@@ -179,8 +179,7 @@ describe('agents in the state dir', () => {
     const { base, stateDir } = await start([])
     const post = (path: string, body: unknown) =>
       fetch(`${base}/v1${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-    const session = (await (await post('/sessions', { cwd: '/tmp' })).json()) as { session: { id: string } }
-    expect((await post('/agents', { adopt: session.session.id, name: 'Atlas' })).status).toBe(201)
+    expect((await post('/sessions', { cwd: '/tmp', agent: { name: 'Atlas' } })).status).toBe(201)
     const stored = JSON.parse(await readFile(join(stateDir!, 'agents.json'), 'utf8')) as Array<{ name: string }>
     expect(stored.map((agent) => agent.name)).toEqual(['Atlas'])
   })

@@ -146,12 +146,8 @@ describe('what goes to the relay', () => {
       ...(allowShared === undefined ? {} : { allowShared }),
     })
     await service.hydrate()
-    const lead = (await service.create({
-      ...(service.draft({ name: 'Box', sharing: 'shared' }) as StoredAgent),
-      sessionId: 's1',
-    })) as StoredAgent
-    const member = service.draft({ name: 'Mate', sharing: 'shared', lead: lead.id }) as StoredAgent
-    await service.create({ ...member, sessionId: 's2' })
+    const lead = (await service.create(service.draft({ id: 's1', name: 'Box', sharing: 'shared' }) as StoredAgent)) as StoredAgent
+    await service.create(service.draft({ id: 's2', name: 'Mate', sharing: 'shared', lead: lead.id }) as StoredAgent)
     return service
   }
 
@@ -168,7 +164,7 @@ describe('what goes to the relay', () => {
   it('shares nothing on a gateway that turned sharing off, without rewriting the record', async () => {
     const service = await agents(false)
     expect(service.relayAgent('s1')?.shared).toBeUndefined()
-    expect(service.bySession('s1')?.sharing).toBe('shared')
+    expect(service.get('s1')?.sharing).toBe('shared')
     expect(service.decorate({ id: 's1' } as SessionInfo).agent?.shared).toBeUndefined()
   })
 })

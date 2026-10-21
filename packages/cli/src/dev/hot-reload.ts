@@ -37,7 +37,7 @@ async function persistProvider(parking: Parking, runner: CarriedRunner): Promise
   parking.touch(runner)
   await parking.flush(runner.id)
   const record = await parking.get(runner.id)
-  return record && record.kind !== 'dormant' && record.kind !== 'archived' && record.parkedAt >= before ? how : 'lost'
+  return record && record.kind !== 'dormant' && record.parkedAt >= before ? how : 'lost'
 }
 
 // Runs the gateway inside a shell that can re-evaluate every module under `packages/` in place, carrying the live

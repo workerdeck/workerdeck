@@ -140,8 +140,6 @@ export type TranscriptState = {
   totalCostUsd: number
   costUsd?: number
   usageByModel?: ByModel
-  // The agent moved on to this session; the shown one is closing into a past conversation.
-  supersededBy?: string
   lastSeq: number
 }
 
@@ -780,10 +778,6 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       }
     }
 
-    case 'session_superseded': {
-      return { ...base, supersededBy: event.successor, pendingApprovals: [] }
-    }
-
     case 'session_error': {
       return {
         ...base,
@@ -813,8 +807,8 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
   }
 }
 
-export function successorOf(state: Pick<TranscriptState, 'supersededBy' | 'session'>): string | undefined {
-  return state.supersededBy ?? (state.session?.archived === true ? state.session.supersededBy : undefined)
+export function successorOf(state: Pick<TranscriptState, 'session'>): string | undefined {
+  return state.session?.archived === true ? state.session.supersededBy : undefined
 }
 
 function agentResetNotice(reason: string): string {

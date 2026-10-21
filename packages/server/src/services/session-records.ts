@@ -5,7 +5,6 @@ import type { PendingPromptInfo, ProfileEngine } from '@workerdeck/protocol'
 import { isMissing, writeFileAtomic } from '../lib/atomic-file.ts'
 import {
   durableConfig,
-  isArchived,
   parseStoredRecord,
   toDurableRecord,
   type EngineHome,
@@ -196,7 +195,7 @@ export class SessionRecords {
         return undefined
       }
       const base = current ?? freshRecord(runtime.id)
-      return isArchived(runtime) ? { ...base, runtime } : { ...base, runtime, running: durableConfig(runtime.config) }
+      return { ...base, runtime, running: durableConfig(runtime.config) }
     })
   }
 
@@ -221,6 +220,11 @@ export class SessionRecords {
       return next
     })
     return cleared
+  }
+
+  // A record opened for a create that did not go through: removed only while it still holds nothing.
+  async discard(id: string): Promise<void> {
+    await this.transact(id, (current) => (current && current.runtime === undefined && disposable(current) ? null : undefined))
   }
 
   // Seeding only (tests, the P2 migration): a runtime for a record still on its first conversation, no token asked.
@@ -301,7 +305,7 @@ function checkConversation(id: string, current: SessionRecord | null, conversati
 }
 
 // Owner, scope and config are the session's own: they go with it. Anything a cut or a close wrote keeps the record.
-function disposable(record: SessionRecord): boolean {
+export function disposable(record: SessionRecord): boolean {
   return (
     record.conversation === 1 &&
     record.conversations.length === 0 &&

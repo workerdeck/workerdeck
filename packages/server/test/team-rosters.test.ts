@@ -372,7 +372,6 @@ describe('restart edge cases', () => {
         createdAt: 1,
         updatedAt: 1,
         avatarSeed: 'M',
-        pastSessions: [],
         config: {},
         lead: leadId,
         remoteLead: { name: 'AC-Lead', state: 'joined', since: 1, op: 'op-old' },
@@ -426,7 +425,6 @@ describe('schema 2 migration', () => {
     createdAt: 1,
     updatedAt: 1,
     avatarSeed: id,
-    pastSessions: [],
     config: {},
     ...extra,
   })
@@ -502,21 +500,21 @@ describe('schema 2 migration', () => {
 
   it('loads a record from a newer schema but never writes, publishes or reconciles it', async () => {
     const mesh = new Mesh()
-    const future = base('F', { schema: 3, sessionId: 's-f', lead: 'mac:L', remoteLead: { name: 'L', state: 'joined', since: 1 } })
+    const future = base('s-f', { name: 'F', schema: 3, lead: 'mac:L', remoteLead: { name: 'L', state: 'joined', since: 1 } })
     const store = createMemoryAgentStore([future])
     let writes = 0
-    const counting: AgentStore = { ...store, apply: (changes) => (writes++, store.apply!(changes)) }
+    const counting: AgentStore = { ...store, apply: (changes) => (writes++, store.apply(changes)) }
     const win = await mesh.add('win', counting)
     expect(writes).toBe(0)
-    expect(win.agents.get('F')).toEqual(future)
-    expect(await win.agents.update('F', { name: 'Renamed' })).toEqual({
+    expect(win.agents.get('s-f')).toEqual(future)
+    expect(await win.agents.update('s-f', { name: 'Renamed' })).toEqual({
       status: 409,
       error: 'F was written by a newer WorkerDeck; this one leaves it as it is',
     })
     expect(win.agents.relayAgent('s-f')).toBeUndefined()
     await win.teams.reconcile()
     expect(writes).toBe(0)
-    expect(win.agents.get('F')).toEqual(future)
+    expect(win.agents.get('s-f')).toEqual(future)
   })
 })
 
@@ -528,7 +526,6 @@ describe('second review', () => {
     createdAt: 1,
     updatedAt: 1,
     avatarSeed: id,
-    pastSessions: [],
     config: {},
     ...extra,
   })

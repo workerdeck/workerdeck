@@ -546,20 +546,17 @@ the sender's gateway and only a remote session's id and title travel into the en
 
 ## Agents and teams
 
-An **agent** is a long-lived identity the gateway keeps (`AgentInfo`: name, avatar, a standing
-brief, the config its sessions start from) that owns one session at a time. Each session is one
-**conversation** of the agent; the agent survives it. Clear, compaction, engine sleep and dormancy
-all keep the session id. **Rotation** ("New conversation", `POST /agents/:id/restart`, or the agent's
-own `context_reset`) starts a fresh session under the same identity and team and **archives** the old
-one: read-only, off `GET /sessions`, listed in the agent's `conversations` and served from the
-engine's own store (the gateway keeps no transcript copy). `POST /agents` creates an agent and its
-first session in one call through the ordinary create ladder, or adopts an existing session
-(`adopt`). **Deleting** an agent (`DELETE`) archives its current session, releases its members (or
-retires them, `members: 'retire'`) and leaves a **tombstone**, so its history stays reachable under
-Past agents (`GET /agents?retired=1`). Rotation and deletion share one handover: a per-agent lock, a
-gate on the old session, an `expectedSessionId` check, and a durable intent that startup recovery
-finishes after a crash. Clients select an agent, not a session, and follow it into each new
-conversation. Invariants: `docs/GOTCHAS.md` §Agent conversations.
+An **agent** is a named session: the session's record plus an identity row (`AgentInfo`: name,
+avatar, a standing brief, team) in the agent index under the **same id**. Each conversation of the
+session is one history entry; the id survives them all. "New conversation" (`POST
+/sessions/:id/conversations`, `POST /agents/:id/restart`, a typed `/clear`, the agent's own
+`context_reset`) is the conversation cut, for named and unnamed sessions alike; past conversations
+are served from the engine's own store (the gateway keeps no transcript copy). `POST /agents` and
+`POST /sessions { agent }` create a named session through the ordinary create ladder; `PATCH
+/sessions/:id { agent }` names or un-names one. **Deleting** an agent (`DELETE`) writes a
+**tombstone**, then closes its record (the current conversation joins the history), releasing its
+members (or retiring them, `members: 'retire'`), so its history stays reachable under Past agents
+(`GET /agents?retired=1`). Invariants: `docs/GOTCHAS.md` §Agent conversations.
 
 A **team** is a lead and the agents whose `lead` names it, one level deep. Teams gate peer
 messaging: a member reaches only its lead and teammates, and nobody outside a team reaches its

@@ -1001,13 +1001,12 @@ read back before the runner registers (`requested` = the sanitized config the ne
 A runtime clear is `resumed` (the record stays) or `ended`; an ended session whose record holds nothing beyond its
 first conversation loses the file, one with history or `closedAt` keeps it. **The conversation cut**
 (`ConversationCuts`, `conversation-cuts.ts`) keeps the id and starts conversation n+1: under the per-id lock
-(`handovers.run`), then the parking fence, then short record transactions, it validates (idle, `expectedGeneration`,
-no job, no agent: agents still rotate until they move onto one id), writes a `prepared` intent with readback, stops
+(`locks.run`, `services/lifecycle-locks.ts`), then the parking fence, then short record transactions, it validates
+(idle and no unanswered input, `expectedGeneration`, no job; named sessions cut like any other), writes a `prepared` intent with readback, stops
 the runner quietly (registry watchers evicted first, so no `session_closed` webhook or push; shells killed), and
 commits in one transaction: history entry with frozen `auth`, `conversation + 1`, `running` = the exact target,
 `runtime` = a dormant record with no engine id and the committed epoch, `pendingPrompt`, `cut.phase = committed`. The
-fresh start uses that epoch as is, and the intent stays until the successor is durable (the agent handover's rule:
-startup awaited up to `agentStartupTimeoutMs`, then a runtime for n+1 read back that names the engine conversation,
+fresh start uses that epoch as is, and the intent stays until the successor is durable (startup awaited up to `agentStartupTimeoutMs`, then a runtime for n+1 read back that names the engine conversation,
 or a live snapshot for an engine without resume); a start that fails, early or late, is a durable `startFailed` for
 Retry start. Recovery before listen rolls `prepared` back, resumes an existing successor or starts `committed` once,
 and turns a `sending` prompt into `uncertain`, never resending it. The write token is required: an untokened runtime
@@ -1017,12 +1016,15 @@ token before the runner writes, and the cache only ever moves forward. Every mut
 `generation` (an untokened attach subscribes but never resizes); both are re-checked under the session's lifecycle
 lock. `POST .../conversations`, `/retry` and `/pending` take `expectedGeneration` in the body and re-authorize the
 caller on the current projection inside the same lock that cuts, retries or sends. A prompt refused before the
-engine saw it (ended or missing conversation, a rotation in flight, a refusal) is acked `notDelivered: true`; one
+engine saw it (ended or missing conversation, a cut in flight, a refusal) is acked `notDelivered: true`; one
 that may have run never is. A stale resend is refused and never runs, and its ack reports the prompt's retained
 outcome in the conversation it named (`PromptAcks`, keyed by session, n and clientId): ran = a plain ack, refused there
 = `notDelivered`, forgotten (evicted, restarted) = `uncertain`, which react keeps as an `UnsentPrompt` marked uncertain. `packages/client` stamps the token a command was created with and never rewrites it on a
 resend; `useClaudeSession` keeps an undelivered prompt as `unsentPrompts`. Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`), typed exact
-`/clear` and WS `clear_context` (queued until idle), and `context_reset` of a non-agent session. History reads
+`/clear` and WS `clear_context` (queued until idle), `context_reset`, and `POST /agents/:id/restart`, named or not.
+Named sessions (create record then index row then start, naming by `PATCH /sessions/:id { agent }`, retire as
+tombstone then close under the members' multi-lock, startup reconciliation, the session list from records) are in
+`docs/GOTCHAS.md` § Agent conversations. History reads
 (`GET .../conversations[/n]`, WS `?conversation=n`) bypass `resolveSession` and authorize on the entry's frozen
 `auth`; an execution of an ended conversation answers 409, authorized on that entry too. A socket is bound to its
 runner and conversation: a command from a replaced runner or with a stale `generation` is refused, and the old
@@ -1365,8 +1367,8 @@ would otherwise re-render the transcript at the shell's output rate. Only `statu
 record and the detach reason are state, and the invariants around the three frames are in
 `docs/GOTCHAS.md` § Shell sessions.
 
-- **Agent conversations.** The reducer records `session_superseded` (pending approvals drop); `successorOf`
-  reads it, also from an archived attach. `useDraft`/`useAttachments` carry an unsent draft and staged files to
+- **Agent conversations.** `session_superseded` is gone (a cut keeps the id); `successorOf` reads only an
+  archived attach's `supersededBy`, until the follow machinery goes. `useDraft`/`useAttachments` carry an unsent draft and staged files to
   the successor and never send them. `useArchivedView` re-reads a session whose live view ended (an agent deleted
   under it comes back archived) and pairs it with the agent list through protocol `archivedView`; a caller that
   cannot list agents never sees "deleted".

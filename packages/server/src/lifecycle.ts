@@ -25,6 +25,8 @@ export type ServerLifecycleDeps = {
   closeQueueSockets: () => void
   // Resolves once the agent store's in-flight write has landed; the next generation hydrates only after close.
   releaseDirectories: () => Promise<void>
+  // Resolves once every session record write already queued has landed, so a closed generation leaves no write behind.
+  flushRecords?: () => Promise<void>
   diagnose: DiagnosticSink
 }
 
@@ -122,7 +124,7 @@ function closeServer(deps: ServerLifecycleDeps): Promise<void> {
       }
     }, SOCKET_CLOSE_GRACE_MS)
     force.unref()
-    const finish = (): void => void flushed.then(() => resolve())
+    const finish = (): void => void Promise.all([flushed, deps.flushRecords?.().catch(() => {})]).then(() => resolve())
     const deadline = setTimeout(finish, CLOSE_DEADLINE_MS)
     deadline.unref()
     const drained = Promise.all([

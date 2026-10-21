@@ -1,25 +1,12 @@
 import { join } from 'node:path'
 import type { AgentInfo } from '@workerdeck/protocol'
-import type { ArchivedSessionRecord } from './session-store.ts'
 import { readJsonOrSync, writeJsonAtomicSync } from '../lib/atomic-file.ts'
 
 // Store-only fields, stripped from every `AgentInfo`: `schema` marks the record layout (`AGENT_SCHEMA`), `pendingJoin` is a
-// remote join the lead may already have accepted, and `roster` versions the team this agent leads.
-// A rotation or retirement committed to the agent record and not yet finished; recovery at startup completes it.
-export type HandoverIntent = {
-  op: 'rotate' | 'retire'
-  from?: string
-  to?: string
-  prompt?: string
-  promptState: 'unsent' | 'sending' | 'sent'
-  archive?: ArchivedSessionRecord
-  startError?: string
-  startedAt: number
-}
-
-export type StoredAgent = AgentInfo & {
+// remote join the lead may already have accepted, and `roster` versions the team this agent leads. The row's id is the
+// session's id; a row still carrying `sessionId` / `pastSessions` predates the merge and waits for the migration.
+export type StoredAgent = Omit<AgentInfo, 'sessionId' | 'pastSessions' | 'conversations' | 'undelivered' | 'startFailed'> & {
   avatarSeed: string
-  pending?: HandoverIntent
   // Set on a retired agent's tombstone: kept for its conversation history, outside every active lookup.
   retiredAt?: number
   avatarRecipe?: unknown
@@ -32,19 +19,16 @@ export const AGENT_SCHEMA = 2
 
 export type AgentStoreChanges = { saves: StoredAgent[]; deletes: string[] }
 
+// `apply` is one atomic write: every save and delete of a change lands together or not at all.
 export type AgentStore = {
   list(): StoredAgent[] | Promise<StoredAgent[]>
-  save(agent: StoredAgent): void | Promise<void>
-  delete(id: string): void | Promise<void>
-  apply?(changes: AgentStoreChanges): void | Promise<void>
+  apply(changes: AgentStoreChanges): void | Promise<void>
 }
 
 export function createMemoryAgentStore(seed: StoredAgent[] = []): AgentStore {
   const agents = new Map(seed.map((a) => [a.id, a]))
   return {
     list: () => [...agents.values()],
-    save: (agent) => void agents.set(agent.id, agent),
-    delete: (id) => void agents.delete(id),
     apply: ({ saves, deletes }) => {
       for (const agent of saves) {
         agents.set(agent.id, agent)
@@ -68,17 +52,6 @@ export function createFileAgentStore(path = join(process.cwd(), '.workerdeck', '
   const write = (agents: Map<string, StoredAgent>): void => writeJsonAtomicSync(path, [...agents.values()], { indent: 2 })
   return {
     list: () => [...read().values()],
-    save: (agent) => {
-      const agents = read()
-      agents.set(agent.id, agent)
-      write(agents)
-    },
-    delete: (id) => {
-      const agents = read()
-      if (agents.delete(id)) {
-        write(agents)
-      }
-    },
     apply: ({ saves, deletes }) => {
       const agents = read()
       for (const agent of saves) {

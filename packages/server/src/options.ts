@@ -25,6 +25,7 @@ import type { AvatarProvider } from './services/avatars.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionRecords, SessionRecordStore } from './services/session-records.ts'
 import type { ConversationCuts } from './services/conversation-cuts.ts'
+import type { LifecycleLocks } from './services/lifecycle-locks.ts'
 import type { ShellRegistry } from './services/shells.ts'
 
 export type ShellAgentWriteOption = 'read-only' | 'gated' | 'allow'
@@ -214,6 +215,7 @@ export type WorkerServer = {
   parking: SessionParkManager
   records: SessionRecords
   cuts: ConversationCuts
+  locks: LifecycleLocks
   // Null unless `shell.enabled`. The CLI's force-shutdown path reaches `killAllSync` through it.
   shells: ShellRegistry | null
   listen: (port: number, host?: string) => Promise<{ port: number }>

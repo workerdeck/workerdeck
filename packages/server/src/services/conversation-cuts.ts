@@ -4,7 +4,7 @@ import type { ServerContext } from '../context.ts'
 import { fail } from '../lib/http.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import { freshRecord, requestedConfig, type ConversationEntry, type SessionCut, type SessionRecord } from './session-records.ts'
-import { durableConfig, isArchived, isDormant, type DormantSessionRecord, type StoredSessionRecord } from './session-store.ts'
+import { durableConfig, isDormant, type DormantSessionRecord, type StoredSessionRecord } from './session-store.ts'
 
 export type CutReason = 'user' | 'clear' | 'context_reset'
 
@@ -22,8 +22,9 @@ export type CutGuard = (record: SessionRecord | null) => Promise<void> | void
 export type CutFault = 'commit' | 'start' | 'after-stop' | 'after-commit'
 
 export const CONVERSATION_ENDED = 'this conversation has ended; reattach to the current one'
+export const UNANSWERED_REFUSAL = 'the session has a message it has not answered yet; start a new conversation once it has'
+const UNANSWERED_SCAN = 500
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
-export const AGENT_CUT_REFUSAL = 'an agent starts a new conversation through its own rotation'
 
 export class ConversationCuts {
   #context: ServerContext | undefined
@@ -58,7 +59,7 @@ export class ConversationCuts {
   // `guard` runs inside the lifecycle lock on the record as it is then: the caller's own check of the current
   // conversation and of its sight of the session, so nothing it decided before the lock can be acted on after it.
   cut(id: string, request: CutRequest, guard?: CutGuard): Promise<CutResult> {
-    return this.#ctx.handovers.run([id], () => this.#cut(id, request, guard))
+    return this.#ctx.locks.run([id], () => this.#cut(id, request, guard))
   }
 
   // The one rule for every door that asks while a turn runs: the cut waits for the next idle.
@@ -67,7 +68,7 @@ export class ConversationCuts {
     if (isJobRun(runner.info())) {
       fail(409, JOB_CUT_REFUSAL)
     }
-    if (runner.info().status === 'idle') {
+    if (runner.info().status === 'idle' && !unanswered(runner)) {
       return this.cut(runner.id, { expectedGeneration: ctx.records.conversationOf(runner.id) ?? 1, reason, ...(prompt ? { prompt } : {}) })
     }
     this.#queueOnIdle(runner, reason, prompt)
@@ -80,12 +81,12 @@ export class ConversationCuts {
     }
     const ctx = this.#ctx
     const unsubscribe = runner.subscribe((event) => {
-      if (event.type === 'status_changed' && event.status === 'idle') {
+      if (event.type === 'status_changed' && event.status === 'idle' && !unanswered(runner)) {
         this.#queued.delete(runner.id)
         unsubscribe()
         const expectedGeneration = ctx.records.conversationOf(runner.id) ?? 1
         this.cut(runner.id, { expectedGeneration, reason, ...(prompt ? { prompt } : {}) }).catch((error: unknown) =>
-          ctx.handovers.onError(error),
+          ctx.locks.onError(error),
         )
       }
       if (event.type === 'session_closed') {
@@ -116,24 +117,24 @@ export class ConversationCuts {
     const live = ctx.registry.get(id)
     const stored = live ? null : await ctx.parking.get(id)
     const info = live?.info() ?? stored?.info
-    if (!info || (stored && isArchived(stored))) {
+    if (!info) {
       fail(404, 'session not found')
     }
     if (isJobRun(info)) {
       fail(409, JOB_CUT_REFUSAL)
     }
-    if (ctx.agents.bySession(id)) {
-      fail(409, AGENT_CUT_REFUSAL)
-    }
     if (live && info.status !== 'idle') {
       fail(409, 'the session is busy; start a new conversation once it is idle')
+    }
+    if (live && unanswered(live)) {
+      fail(409, UNANSWERED_REFUSAL)
     }
     if (stored && !isDormant(stored)) {
       fail(409, 'the session is parked mid-turn')
     }
     const target = this.#target(record?.requested ?? record?.running ?? stored?.config ?? ctx.parking.configOf(id), request.target)
 
-    ctx.handovers.gate(id)
+    ctx.locks.gate(id)
     try {
       await ctx.parking.fence(id)
       const entry = await this.#capture(id, record, conversation)
@@ -156,7 +157,7 @@ export class ConversationCuts {
       this.#fault('after-commit')
       return await this.#startCommitted(committed)
     } finally {
-      ctx.handovers.ungate(id)
+      ctx.locks.ungate(id)
       if (!this.#failedStarts.has(id)) {
         ctx.parking.unfence(id)
       }
@@ -171,7 +172,7 @@ export class ConversationCuts {
         this.#remember(record.id, entry)
       }
       try {
-        await ctx.handovers.run([record.id], async () => {
+        await ctx.locks.run([record.id], async () => {
           const current = await ctx.records.get(record.id)
           if (current?.cut?.phase === 'prepared') {
             await this.#rollback(record.id)
@@ -191,7 +192,7 @@ export class ConversationCuts {
   // The same n again, never a second cut.
   retryStart(id: string, guard: CutGuard): Promise<CutResult> {
     const ctx = this.#ctx
-    return ctx.handovers.run([id], async () => {
+    return ctx.locks.run([id], async () => {
       const record = await ctx.records.get(id)
       await guard(record)
       if (!record?.startFailed || record.cut?.phase !== 'committed') {
@@ -210,7 +211,7 @@ export class ConversationCuts {
 
   settlePendingPrompt(id: string, send: boolean, guard: CutGuard): Promise<void> {
     const ctx = this.#ctx
-    return ctx.handovers.run([id], async () => {
+    return ctx.locks.run([id], async () => {
       const record = await ctx.records.get(id)
       await guard(record)
       const prompt = record?.pendingPrompt
@@ -239,15 +240,18 @@ export class ConversationCuts {
       if (record?.closedAt !== undefined) {
         return
       }
-      const entry = await this.#capture(id, record, record?.conversation ?? 1).catch(() => undefined)
-      if (!entry) {
+      if (!record) {
         return
       }
+      // A session that ended without durable state has nothing to capture; it still closes, its history kept.
+      const entry = await this.#capture(id, record, record.conversation).catch(() => undefined)
       await ctx.records.transactDurable(id, (current) => {
         const { runtime: _runtime, cut: _cut, pendingPrompt: _prompt, startFailed: _failed, ...rest } = current ?? freshRecord(id)
-        return { ...rest, conversations: [...rest.conversations, entry], closedAt: Date.now() }
+        return { ...rest, conversations: entry ? [...rest.conversations, entry] : rest.conversations, closedAt: Date.now() }
       })
-      this.#remember(id, entry)
+      if (entry) {
+        this.#remember(id, entry)
+      }
     } finally {
       ctx.parking.unfence(id)
     }
@@ -303,7 +307,7 @@ export class ConversationCuts {
 
   async #capture(id: string, record: SessionRecord | null, n: number): Promise<ConversationEntry> {
     const ctx = this.#ctx
-    const archive = await ctx.parking.archiveOf(id, {})
+    const archive = await ctx.parking.capture(id)
     if (!archive) {
       fail(500, 'the session has nothing to capture')
     }
@@ -379,7 +383,7 @@ export class ConversationCuts {
     }
     const started = runner
     const startup = startupOf(ctx, started, prompt !== undefined)
-    const early = await within(startup, ctx.handovers.startupTimeoutMs)
+    const early = await within(startup, ctx.locks.startupTimeoutMs)
     if (early) {
       try {
         await this.#settle(id, cut.to, uncertain, started, early, true)
@@ -389,8 +393,8 @@ export class ConversationCuts {
       return { session: ctx.projects.withProject(started.info()), conversation: cut.to }
     }
     void startup
-      .then((late) => ctx.handovers.run([id], () => this.#settle(id, cut.to, uncertain, started, late, false)))
-      .catch((error: unknown) => ctx.handovers.onError(error))
+      .then((late) => ctx.locks.run([id], () => this.#settle(id, cut.to, uncertain, started, late, false)))
+      .catch((error: unknown) => ctx.locks.onError(error))
     this.#announce(id, cut.to, cut.epoch)
     return { session: ctx.projects.withProject(started.info()), conversation: cut.to }
   }
@@ -430,7 +434,7 @@ export class ConversationCuts {
 
   async #recorded(id: string, to: number, runner: Runner, resumable: boolean): Promise<boolean> {
     const runtime = (await this.#ctx.records.get(id))?.runtime
-    if (!runtime || isArchived(runtime) || runtime.info.conversation !== to) {
+    if (!runtime || runtime.info.conversation !== to) {
       return false
     }
     if (!resumable) {
@@ -557,13 +561,32 @@ function withoutPendingPrompt(record: SessionRecord): SessionRecord {
 
 type Startup = { kind: 'ready' } | { kind: 'failed'; error: string }
 
+// A message n took in (a peer's, queued behind a turn, or a person's) with no turn result after it yet. The cut waits for
+// it to be answered in n: it is never dropped with n's engine, and never carried into n+1.
+function unanswered(runner: Runner): boolean {
+  if (!runner.eventAt) {
+    return false
+  }
+  const last = runner.info().lastSeq
+  for (let seq = last; seq > 0 && seq > last - UNANSWERED_SCAN; seq--) {
+    const event = runner.eventAt(seq)
+    if (event?.type === 'turn_result') {
+      return false
+    }
+    if (event?.type === 'user_message' && event.synthetic !== true && event.parentToolUseId == null) {
+      return true
+    }
+  }
+  return false
+}
+
 // A runtime for n+1 that the engine has named (or a live snapshot): the successor exists and is resumed, not replaced.
 function successorKept(runtime: StoredSessionRecord, to: number): boolean {
-  return !isArchived(runtime) && runtime.info.conversation === to && !(isDormant(runtime) && runtime.sdkSessionId === undefined)
+  return runtime.info.conversation === to && !(isDormant(runtime) && runtime.sdkSessionId === undefined)
 }
 
 // Ready once the engine named a conversation the gateway saved (a first message went out), or left `starting` when
-// there is nothing to resume yet; failed when it fails or closes first. The agent handover's rule, per session id.
+// there is nothing to resume yet; failed when it fails or closes first.
 function startupOf(ctx: ServerContext, runner: Runner, wantsIdentity: boolean): Promise<Startup> {
   return new Promise((resolve) => {
     let reason: string | undefined

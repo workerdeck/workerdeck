@@ -11,7 +11,7 @@ import {
   takeHandedFiles,
 } from '../src/lib/conversation-follow.ts'
 import { clearDrafts, draftKey, readDraft, writeDraft } from '../src/lib/draft-store.ts'
-import { applyEvent, initialTranscriptState, successorOf } from '../src/lib/transcript.ts'
+import { successorOf } from '../src/lib/transcript.ts'
 
 const agent = { id: 'ag', name: 'WD-Test' }
 
@@ -53,16 +53,6 @@ describe('conversations', () => {
       ['a', false, undefined],
     ])
     expect(conversationsOf({ sessionId: 'c', pastSessions: ['a'] }).map((row) => row.sessionId)).toEqual(['c', 'a'])
-  })
-
-  it('a superseded session records its successor and drops its pending approvals', () => {
-    const request = { id: 'req-1', toolName: 'Bash', input: { command: 'ls' }, toolUseId: 'tool-1' }
-    const waiting = applyEvent(initialTranscriptState, { type: 'permission_requested', request, seq: 1, ts: 1 })
-    expect(waiting.pendingApprovals).toHaveLength(1)
-    const next = applyEvent(waiting, { type: 'session_superseded', successor: 'b', seq: 2, ts: 2 })
-    expect(next.items).toEqual(waiting.items)
-    expect(next.pendingApprovals).toEqual([])
-    expect(successorOf(next)).toBe('b')
   })
 
   it('reads the successor off an archived attach, never off a live one', () => {

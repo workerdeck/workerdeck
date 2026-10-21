@@ -1,4 +1,4 @@
-import type { AgentRef, Sharing } from './agents.ts'
+import type { AgentRef, SessionAgentRequest, Sharing } from './agents.ts'
 import type { StatusLabel, StatusLabelInput } from './status-label.ts'
 import type { ByModel, PricingOverrides, ProfileSpend } from './pricing.ts'
 
@@ -338,7 +338,6 @@ export type SessionEventBody =
   | { type: 'tool_output'; toolUseId: string; tail: string }
   | { type: 'sdk_event'; payload: { type: string; [key: string]: unknown } }
   | { type: 'session_error'; message: string }
-  | { type: 'session_superseded'; successor: string }
   | { type: 'session_closed'; reason: 'client' | 'server' | 'error' }
 
 export type SessionEvent = SessionEventBody & {
@@ -785,11 +784,13 @@ export type CreateSessionRequest = {
   meta?: Record<string, unknown>
   scope?: Record<string, string>
   agentContextReset?: boolean
+  // Names the session at create: its record is written first, then the index row, then the engine starts.
+  agent?: SessionAgentRequest
 }
 
 // Typed as a record over the request's keys so a field added above without an entry here, or an entry left behind
 // after a field is removed, fails typecheck: this list is what the gateway projects an untrusted body through.
-const CREATE_SESSION_REQUEST_KEY_SET: Record<keyof CreateSessionRequest, true> = {
+const CREATE_SESSION_REQUEST_KEY_SET: Record<Exclude<keyof CreateSessionRequest, 'agent'>, true> = {
   cwd: true,
   profile: true,
   prompt: true,
@@ -1118,7 +1119,8 @@ export type ListSessionsResponse = { sessions: SessionInfo[] }
 export type CreateSessionResponse = { session: SessionInfo }
 export type GetSessionResponse = { session: SessionInfo }
 
-export type UpdateSessionRequest = { title?: string | null; statusLabel?: StatusLabelInput | null }
+// `agent` names an unnamed session (operator only), updates a named one's identity, and `null` un-names it.
+export type UpdateSessionRequest = { title?: string | null; statusLabel?: StatusLabelInput | null; agent?: SessionAgentRequest | null }
 export type UpdateSessionResponse = { session: SessionInfo }
 
 export type ResolvePermissionRequest =

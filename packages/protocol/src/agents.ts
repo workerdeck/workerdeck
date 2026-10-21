@@ -87,6 +87,18 @@ export type AgentInfo = {
   remoteMembers?: RemoteMember[]
 }
 
+// The identity a create or a PATCH names a session with; the session's own request carries cwd, profile and model.
+export type SessionAgentRequest = {
+  name?: string
+  brief?: string
+  instructionScope?: InstructionScope
+  sleepAfterMs?: number
+  lead?: string
+  owner?: string
+  sharing?: Sharing
+  crossOwner?: boolean
+}
+
 export type InviteRemoteMemberRequest = { agent: string; owner?: string }
 
 export type CreateAgentRequest = {

@@ -14,9 +14,8 @@ import {
 import type { ServerContext } from '../context.ts'
 import { bypassDisabled, permissionDecision, refuseJobInput, refusePermissionMode } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
-import { ROTATING } from '../services/handovers.ts'
+import { CUT_IN_PROGRESS } from '../services/lifecycle-locks.ts'
 import { CONVERSATION_ENDED } from '../services/conversation-cuts.ts'
-import { isArchived } from '../services/session-store.ts'
 import { mentionsFor } from '../services/peers.ts'
 import { sleepRunner } from './sleep.ts'
 import { takesLocalCommands } from '../services/shell-directory.ts'
@@ -32,8 +31,6 @@ export const SHELL_SOCKET_BUFFERED_MAX = 4 * 1024 * 1024
 export const SHELL_DETACHED_BACKPRESSURE = 'backpressure'
 export const SESSION_SOCKET_BUFFERED_MAX = 16 * 1024 * 1024
 export const SESSION_SOCKET_BACKPRESSURE_CODE = 1013
-// The conversation was archived under a live socket (rotation, Delete agent): a reconnect attaches the archive.
-export const SESSION_ARCHIVED_CODE = 4010
 // A cut rolled back under a live socket: nothing moved on, so a reconnect attaches the same conversation.
 export const CONVERSATION_KEPT_CODE = 1012
 
@@ -70,12 +67,6 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
         return
       }
       send({ type: 'event', event })
-      if (live && event.type === 'session_closed') {
-        void parking
-          .get(runner.id)
-          .then((record) => record && isArchived(record) && ws.close(SESSION_ARCHIVED_CODE, 'conversation archived'))
-          .catch(() => {})
-      }
     },
     afterSeq,
     { coalesceReplay: true, truncateResults, imageRefs },
@@ -225,16 +216,16 @@ type Bound = { runner: Runner; access: AttachAccess; client: Client; conversatio
 async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Bound): Promise<void> {
   const { attachmentStore, bridge } = ctx
   const { runner, access, client } = bound
-  if (ctx.registry.get(runner.id) !== runner && !ctx.handovers.gated(runner.id)) {
+  if (ctx.registry.get(runner.id) !== runner && !ctx.locks.gated(runner.id)) {
     throw new NotDelivered(CONVERSATION_ENDED)
   }
   if (tokenRefusal(ctx, frame, bound)) {
     throw new NotDelivered(CONVERSATION_ENDED)
   }
-  if (ctx.handovers.gated(runner.id)) {
-    throw new NotDelivered(ROTATING)
+  if (ctx.locks.gated(runner.id)) {
+    throw new NotDelivered(CUT_IN_PROGRESS)
   }
-  if (isClearRequest(frame) && !ctx.agents.bySession(runner.id)) {
+  if (isClearRequest(frame)) {
     await ctx.cuts.clearOnIdle(runner, 'clear')
     return
   }
@@ -248,8 +239,8 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
       // matched on the whole message by the CLI, so nothing may be appended to one, and a failure
       // to resolve is silent - a hint must never lose the text it was a hint about.
       const mentions = ctx.peers && !isSlashCommand(frame.text) ? await mentionsFor(ctx.peers, runner.id, frame.text).catch(() => []) : []
-      if (ctx.handovers.gated(runner.id) || ctx.registry.get(runner.id) !== runner) {
-        throw new NotDelivered(ROTATING)
+      if (ctx.locks.gated(runner.id) || ctx.registry.get(runner.id) !== runner) {
+        throw new NotDelivered(CUT_IN_PROGRESS)
       }
       if (tokenRefusal(ctx, frame, bound)) {
         throw new NotDelivered(CONVERSATION_ENDED)
@@ -283,13 +274,6 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
         throw new Error(`the ${engineOf(runner.info())} engine cannot move a task to the background`)
       }
       await runner.backgroundTask(frame.toolUseId)
-      return
-    }
-    case 'clear_context': {
-      if (!runner.clearContext) {
-        throw new Error(`the ${engineOf(runner.info())} engine cannot clear a conversation`)
-      }
-      await runner.clearContext()
       return
     }
     case 'set_permission_mode': {
