@@ -2,11 +2,13 @@ import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import {
   ENGINE_CAPABILITIES,
   INPUT_CHANGED_CODE,
+  UNCERTAIN_PROMPT_CODE,
   UNCONFIRMED_INPUT_CODE,
   errorMessage,
   isJobRun,
   type ConversationTarget,
   type SessionInfo,
+  type UncertainPromptRefusal,
   type UnconfirmedInputRefusal,
 } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
@@ -47,6 +49,8 @@ export const NOTHING_TO_DISCARD = 'this engine has no pending input a discard ca
 export const STILL_STARTING = 'the session is still starting; try again once it has started'
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
 export const GENERATION_ENDED = 'the gateway is reloading; the next one finishes this new conversation'
+export const UNCERTAIN_PROMPT =
+  'a message may not have reached the session; choose Send again or Dismiss for it before starting a new conversation'
 export const WOKE_DURING_CUT = 'the session woke while the new conversation was being prepared; try again'
 
 export class ConversationCuts {
@@ -55,6 +59,7 @@ export class ConversationCuts {
   #ended = new Map<string, EndedExecution>()
   #leaving = new Map<string, string>()
   #queued = new Map<string, () => void>()
+  #waiting = new Map<string, Array<(cut: boolean) => void>>()
   #failedStarts = new Set<string>()
   #firstStarts = new Map<string, Promise<void>>()
   #closed = false
@@ -138,46 +143,69 @@ export class ConversationCuts {
     this.#firstStarts.set(id, settled)
   }
 
-  // The one rule for every door that asks while a turn runs: the cut waits for the next idle.
-  clearOnIdle(runner: Runner, reason: CutReason, prompt?: string): Promise<CutResult> | undefined {
+  // The one rule for every door that asks while a turn runs: the cut waits for the next idle. `outcome` hears whether a
+  // queued cut happened (true) or was dropped, failed before its commit, or lost its runner (false).
+  async clearOnIdle(runner: Runner, reason: CutReason, prompt?: string, outcome?: (cut: boolean) => void): Promise<CutResult | undefined> {
     const ctx = this.#ctx
     if (isJobRun(runner.info())) {
       fail(409, JOB_CUT_REFUSAL)
     }
     refuseUnconfirmed(runner, ctx.records.conversationOf(runner.id) ?? 1)
+    refuseUncertainPrompt(await ctx.records.get(runner.id))
     if (runner.info().status === 'idle' && !unanswered(runner)) {
-      return this.cut(runner.id, { expectedGeneration: ctx.records.conversationOf(runner.id) ?? 1, reason, ...(prompt ? { prompt } : {}) })
+      return await this.cut(runner.id, { expectedGeneration: ctx.records.conversationOf(runner.id) ?? 1, reason, ...(prompt ? { prompt } : {}) })
     }
-    this.#queueOnIdle(runner, reason, prompt)
+    this.#queueOnIdle(runner, reason, prompt, outcome)
     return undefined
   }
 
-  #queueOnIdle(runner: Runner, reason: CutReason, prompt: string | undefined): void {
-    if (this.#queued.has(runner.id)) {
+  #queueOnIdle(runner: Runner, reason: CutReason, prompt: string | undefined, outcome: ((cut: boolean) => void) | undefined): void {
+    const ctx = this.#ctx
+    const id = runner.id
+    const waiting = this.#waiting.get(id) ?? []
+    if (outcome) {
+      waiting.push(outcome)
+    }
+    this.#waiting.set(id, waiting)
+    if (this.#queued.has(id)) {
       return
     }
-    const ctx = this.#ctx
+    const from = ctx.records.conversationOf(id) ?? 1
+    const leave = (): Array<(cut: boolean) => void> => {
+      this.#queued.delete(id)
+      unsubscribe()
+      const heard = this.#waiting.get(id) ?? []
+      this.#waiting.delete(id)
+      return heard
+    }
+    const tell = (heard: Array<(cut: boolean) => void>, cut: boolean): void => {
+      for (const listener of heard) {
+        listener(cut)
+      }
+    }
     const unsubscribe = runner.subscribe((event) => {
       if (event.type === 'status_changed' && event.status === 'idle' && unanswered(runner) && runner.inputConfirmable?.() === false) {
-        this.#queued.delete(runner.id)
-        unsubscribe()
-        ctx.locks.onError(new Error(`${reason} for ${runner.id} dropped: ${UNCONFIRMED_INPUT}`))
+        tell(leave(), false)
+        ctx.locks.onError(new Error(`${reason} for ${id} dropped: ${UNCONFIRMED_INPUT}`))
         return
       }
       if (event.type === 'status_changed' && event.status === 'idle' && !unanswered(runner)) {
-        this.#queued.delete(runner.id)
-        unsubscribe()
-        const expectedGeneration = ctx.records.conversationOf(runner.id) ?? 1
-        this.cut(runner.id, { expectedGeneration, reason, ...(prompt ? { prompt } : {}) }).catch((error: unknown) =>
-          ctx.locks.onError(error),
+        const heard = leave()
+        const expectedGeneration = ctx.records.conversationOf(id) ?? 1
+        this.cut(id, { expectedGeneration, reason, ...(prompt ? { prompt } : {}) }).then(
+          () => tell(heard, true),
+          (error: unknown) => {
+            tell(heard, (ctx.records.conversationOf(id) ?? 1) > from)
+            ctx.locks.onError(new Error(`${reason} for ${id} dropped: ${errorMessage(error)}`))
+          },
         )
+        return
       }
       if (event.type === 'session_closed') {
-        this.#queued.delete(runner.id)
-        unsubscribe()
+        tell(leave(), false)
       }
     }, runner.info().lastSeq)
-    this.#queued.set(runner.id, unsubscribe)
+    this.#queued.set(id, unsubscribe)
   }
 
   async #cut(id: string, request: CutRequest, guard: CutGuard | undefined): Promise<CutResult> {
@@ -197,6 +225,7 @@ export class ConversationCuts {
     if (record?.startFailed) {
       fail(409, 'the new conversation did not start; retry starting it first')
     }
+    refuseUncertainPrompt(record)
     const live = ctx.registry.get(id)
     const stored = live ? null : await ctx.parking.get(id)
     const info = live?.info() ?? stored?.info
@@ -725,6 +754,15 @@ function unanswered(runner: Runner): boolean {
 
 // An engine that cannot confirm consumption never has its queued input guessed away: the cut is refused, distinctly,
 // with what a person needs to confirm a discard of exactly this set.
+// A cut would overwrite or strip the only durable copy of a prompt whose delivery a person has not settled yet.
+function refuseUncertainPrompt(record: SessionRecord | null): void {
+  const prompt = record?.pendingPrompt
+  if (record && prompt?.state === 'uncertain') {
+    const details: Omit<UncertainPromptRefusal, 'error' | 'code'> = { conversation: record.conversation, promptConversation: prompt.n }
+    fail(409, UNCERTAIN_PROMPT, UNCERTAIN_PROMPT_CODE, details)
+  }
+}
+
 export function refuseUnconfirmed(runner: Runner, conversation: number): void {
   if (unanswered(runner) && runner.inputConfirmable?.() === false) {
     fail(409, UNCONFIRMED_INPUT, UNCONFIRMED_INPUT_CODE, unconfirmedDetails(runner, conversation))

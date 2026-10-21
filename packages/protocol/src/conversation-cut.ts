@@ -43,6 +43,7 @@ export type RetryStartRequest = { expectedGeneration: number }
 
 export const UNCONFIRMED_INPUT_CODE = 'unconfirmed_input'
 export const INPUT_CHANGED_CODE = 'input_changed'
+export const UNCERTAIN_PROMPT_CODE = 'uncertain_prompt'
 
 // The 409 a cut answers while the engine cannot confirm its queued input was consumed. A person who accepts losing that
 // input confirms with `DiscardAndCutRequest`, which binds this conversation and this revision of the pending set.
@@ -54,6 +55,9 @@ export type UnconfirmedInputRefusal = {
   pendingInput: number
   mayIncludePeer: boolean
 }
+
+// Every cut door's 409 while a prompt of unknown delivery waits for a person's Send again or Dismiss.
+export type UncertainPromptRefusal = { error: string; code: typeof UNCERTAIN_PROMPT_CODE; conversation: number; promptConversation: number }
 
 // `POST /sessions/:id/conversations/discard`: refused with 409 `input_changed` once any input arrived since the refusal.
 export type DiscardAndCutRequest = { expectedGeneration: number; inputRevision: string; prompt?: string }

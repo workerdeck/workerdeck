@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AttachmentInput, EngineAdapter, SendMessageOptions, SessionRunnerConfig } from '@workerdeck/core'
 import {
   CONVERSATION_ENDED_CLOSE_CODE,
+  UNCERTAIN_PROMPT_CODE,
   ENGINE_CAPABILITIES,
   type ProfileInfo,
   type ServerFrame,
@@ -634,18 +635,19 @@ describe('prompt acks are keyed by conversation', () => {
     expect(built[1]!.sent).toEqual(['fresh'])
     next.ws.close()
   })
+})
 
-  it('never cuts twice for a typed /clear whose ack the cut swallowed, resent on the next socket', async () => {
+describe('a typed /clear is acked with its cut\'s outcome', () => {
+  it('acks a /clear on its own socket before the announce closes it, and never cuts twice for a resend', async () => {
     const dir = await fixture.stateDir()
     const { server, base, wsBase, built } = await gateway(dir)
     const id = await create(base)
     await idle(server, id)
     const old = await attach(wsBase, id)
     old.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'c-1' })
-    // The cut closes this socket before the prompt's ack goes out, so the client resends it on the next socket.
     expect(await old.closed).toBe(CONVERSATION_ENDED_CLOSE_CODE)
-    expect(old.frames.frames.some((frame) => frame.type === 'ack')).toBe(false)
-    expect((await server.records.get(id))?.conversation).toBe(2)
+    const told = old.frames.frames.filter((frame) => frame.type === 'ack' || (frame.type as string) === 'conversation_started')
+    expect(told).toEqual([{ type: 'ack', clientId: 'c-1' }, expect.objectContaining({ type: 'conversation_started', conversation: 2 })])
     await idle(server, id)
     const next = await attach(wsBase, id)
     next.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'c-1' })
@@ -654,6 +656,158 @@ describe('prompt acks are keyed by conversation', () => {
     expect((await server.records.get(id))?.conversation).toBe(2)
     expect(built).toHaveLength(2)
     next.ws.close()
+  })
+
+  it('holds the ack of a /clear queued behind a turn until its cut has run', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, wsBase, built } = await gateway(dir)
+    const id = await create(base)
+    await idle(server, id)
+    const socket = await attach(wsBase, id)
+    built[0]!.busy()
+    socket.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'q-1' })
+    socket.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'q-1' })
+    await wait(40)
+    expect(socket.frames.frames.filter((frame) => frame.type === 'ack')).toEqual([])
+    built[0]!.settle()
+    expect(await socket.closed).toBe(CONVERSATION_ENDED_CLOSE_CODE)
+    const told = socket.frames.frames.filter((frame) => frame.type === 'ack' || (frame.type as string) === 'conversation_started')
+    expect(told).toEqual([{ type: 'ack', clientId: 'q-1' }, expect.objectContaining({ type: 'conversation_started', conversation: 2 })])
+    expect(built).toHaveLength(2)
+  })
+
+  it('acks a /clear whose cut was refused, now or once queued, as not delivered', async () => {
+    const dir = await fixture.stateDir()
+    const diagnostics: unknown[] = []
+    const { server, base, wsBase, built } = await gateway(dir, { options: { onDiagnostic: (error) => diagnostics.push(error) } })
+    const id = await create(base)
+    await idle(server, id)
+    const socket = await attach(wsBase, id)
+    await uncertain(server, id)
+    socket.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'r-1' })
+    expect(await ackOf(socket.frames, 'r-1')).toEqual({ type: 'ack', clientId: 'r-1', notDelivered: true })
+    await call(base, `/sessions/${id}/conversations/pending`, 'POST', { expectedGeneration: 1, send: false })
+
+    built[0]!.busy()
+    socket.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'r-2' })
+    await wait(30)
+    await uncertain(server, id)
+    built[0]!.settle()
+    expect(await ackOf(socket.frames, 'r-2')).toEqual({ type: 'ack', clientId: 'r-2', notDelivered: true })
+    await vi.waitFor(() => expect(diagnostics.map(String).join()).toContain('dropped'))
+    expect((await server.records.get(id))?.conversation).toBe(1)
+    expect(socket.ws.readyState).toBe(WebSocket.OPEN)
+    socket.ws.close()
+  })
+
+  it('answers a resend whose outcome a restart lost as uncertain once the session moved on, and runs it once if it never did', async () => {
+    const dir = await fixture.stateDir()
+    const restart = async (current: Awaited<ReturnType<typeof gateway>>) => {
+      await current.server.parking.flush()
+      await current.server.close()
+      fixture.servers.splice(fixture.servers.indexOf(current.server), 1)
+      return await gateway(dir)
+    }
+    const first = await gateway(dir)
+    const moved = await create(first.base)
+    const kept = await create(first.base)
+    await idle(first.server, moved)
+    await idle(first.server, kept)
+    const left = await attach(first.wsBase, moved)
+    first.built[0]!.busy()
+    left.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'x-1' })
+    await wait(20)
+    left.ws.close()
+    await left.closed
+    first.built[0]!.settle()
+    await vi.waitFor(async () => expect((await first.server.records.get(moved))?.conversation).toBe(2))
+    await idle(first.server, moved)
+    const lost = await attach(first.wsBase, kept)
+    first.built[1]!.busy()
+    lost.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'y-1' })
+    await wait(20)
+    lost.ws.close()
+    await lost.closed
+
+    const second = await restart(first)
+    const afterMove = await attach(second.wsBase, moved)
+    afterMove.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'x-1' })
+    expect(await ackOf(afterMove.frames, 'x-1')).toEqual({ type: 'ack', clientId: 'x-1', uncertain: true })
+    expect((await second.server.records.get(moved))?.conversation).toBe(2)
+    afterMove.ws.close()
+
+    const unmoved = await attach(second.wsBase, kept)
+    unmoved.send({ generation: 1, type: 'user_message', text: '/clear', clientId: 'y-1' })
+    expect(await ackOf(unmoved.frames, 'y-1')).toEqual({ type: 'ack', clientId: 'y-1' })
+    expect((await second.server.records.get(kept))?.conversation).toBe(2)
+  })
+})
+
+// Seeds what recovery leaves after a crash while a prompt was being sent: its delivery is unknown.
+async function uncertain(server: WorkerServer, id: string): Promise<void> {
+  await server.records.transactDurable(id, (current) => ({ ...current!, pendingPrompt: { text: 'lost', n: current!.conversation, state: 'uncertain' } }))
+}
+
+describe('an uncertain prompt holds every cut door', () => {
+  it('refuses REST, discard, restart, typed /clear, clear_context and context_reset with its own code, and keeps the prompt', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, wsBase, built } = await gateway(dir)
+    const id = await create(base)
+    await idle(server, id)
+    await uncertain(server, id)
+    const expected = { code: UNCERTAIN_PROMPT_CODE, conversation: 1, promptConversation: 1, error: expect.stringContaining('Send again or Dismiss') }
+
+    expect(await cut(base, id, 1)).toMatchObject({ status: 409, body: expected })
+    const discard = await call(base, `/sessions/${id}/conversations/discard`, 'POST', { expectedGeneration: 1, inputRevision: 'any' })
+    expect(discard).toMatchObject({ status: 409, body: expected })
+    const socket = await attach(wsBase, id)
+    socket.send({ generation: 1, type: 'clear_context' })
+    expect(await socket.frames.waitFor((frame) => frame.type === 'protocol_error')).toMatchObject({ message: expect.stringContaining('Send again') })
+    socket.send({ generation: 1, type: 'user_message', text: '/clear' })
+    await vi.waitFor(() => expect(socket.frames.frames.filter((frame) => frame.type === 'protocol_error')).toHaveLength(2))
+    await expect(server.cuts.clearOnIdle(built[0]!, 'context_reset', 'next')).rejects.toMatchObject({ code: UNCERTAIN_PROMPT_CODE })
+    built[0]!.busy()
+    await expect(server.cuts.clearOnIdle(built[0]!, 'context_reset')).rejects.toMatchObject({ code: UNCERTAIN_PROMPT_CODE })
+    built[0]!.settle()
+    await wait(30)
+
+    const record = await server.records.get(id)
+    expect(record).toMatchObject({ conversation: 1, pendingPrompt: { text: 'lost', state: 'uncertain' } })
+    expect(built).toHaveLength(1)
+    expect(built[0]!.sent).toEqual(['work'])
+
+    expect((await call(base, `/sessions/${id}/conversations/pending`, 'POST', { expectedGeneration: 1, send: false })).status).toBe(200)
+    expect((await cut(base, id, 1)).status).toBe(200)
+    socket.ws.close()
+  })
+
+  it('refuses the restart of a named session the same way', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir)
+    const created = await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'work', agent: { name: 'Named' } })
+    expect(created.status).toBe(201)
+    const id = created.body.session.id as string
+    await idle(server, id)
+    await uncertain(server, id)
+    const restart = await call(base, `/agents/${id}/restart`, 'POST', { expectedGeneration: 1 })
+    expect(restart).toMatchObject({ status: 409, body: { code: UNCERTAIN_PROMPT_CODE } })
+    expect((await server.records.get(id))?.pendingPrompt).toMatchObject({ text: 'lost', state: 'uncertain' })
+  })
+
+  it('drops a context_reset queued before the prompt became uncertain, with a diagnostic', async () => {
+    const dir = await fixture.stateDir()
+    const diagnostics: unknown[] = []
+    const { server, base, built } = await gateway(dir, { options: { onDiagnostic: (error) => diagnostics.push(error) } })
+    const id = await create(base)
+    await idle(server, id)
+    built[0]!.busy()
+    expect(await server.cuts.clearOnIdle(built[0]!, 'context_reset', 'next')).toBeUndefined()
+    await uncertain(server, id)
+    built[0]!.settle()
+    await vi.waitFor(() => expect(diagnostics.map(String).join()).toContain('context_reset for'))
+    expect(diagnostics.map(String).join()).toContain('Send again or Dismiss')
+    expect(await server.records.get(id)).toMatchObject({ conversation: 1, pendingPrompt: { text: 'lost', state: 'uncertain' } })
+    expect(built).toHaveLength(1)
   })
 })
 
