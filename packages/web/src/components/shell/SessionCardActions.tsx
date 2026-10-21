@@ -11,7 +11,6 @@ import {
 import { Button, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, cn } from '@workerdeck/ui'
 import {
   BedDouble,
-  Eraser,
   Globe,
   History,
   Lock,
@@ -33,15 +32,14 @@ export type CardAction =
   | { kind: 'rename' }
   | { kind: 'status' }
   | { kind: 'avatar' }
-  | { kind: 'clear' }
   | { kind: 'sleep' }
   | { kind: 'close' }
-  | { kind: 'adopt' }
+  | { kind: 'make-agent' }
   | { kind: 'join'; lead: SessionRow }
   | { kind: 'leave' }
   | { kind: 'sharing'; sharing: Sharing }
   | { kind: 'dissolve' }
-  | { kind: 'restart' }
+  | { kind: 'new-conversation' }
   | { kind: 'retry-start' }
   | { kind: 'undelivered'; send: boolean }
   | { kind: 'conversations' }
@@ -85,18 +83,19 @@ export function SessionCardActions({
   const leads = agent?.lead === undefined && !agent?.leads ? teamLeads(rows, row.hostId, row) : []
   const sleepable = canSleep(info)
   const gate = newConversationGate(info)
+  const cuttable = clearContextOffered(info)
   const undelivered = agentInfo?.undelivered
 
   return (
     // The card is one big select target and React events bubble out of portals, so the menu's clicks stop here.
     <span className="flex shrink-0 items-center" onClick={stop} onDoubleClick={stop}>
-      {info.capabilities?.clearContext && clearContextOffered(info) ? (
+      {cuttable && gate.enabled ? (
         <QuickAction
-          label="Clear context"
-          title="Clear the conversation - the session keeps running and the old conversation stays resumable"
-          onClick={() => onAction({ kind: 'clear' })}
+          label="New conversation"
+          title={`New conversation: ${NEW_CONVERSATION_HINT.toLowerCase()}`}
+          onClick={() => onAction({ kind: 'new-conversation' })}
         >
-          <Eraser className="size-3 text-fg-3" />
+          <RotateCcw className="size-3 text-fg-3" />
         </QuickAction>
       ) : null}
       {sleepable ? (
@@ -144,7 +143,7 @@ export function SessionCardActions({
           ) : null}
           <MenuSeparator />
           {agent ? null : (
-            <Item icon={<UserPlus />} onClick={() => onAction({ kind: 'adopt' })}>
+            <Item icon={<UserPlus />} onClick={() => onAction({ kind: 'make-agent' })}>
               Make agent
             </Item>
           )}
@@ -184,19 +183,23 @@ export function SessionCardActions({
               </Item>
             )
           ) : null}
-          {agent ? (
+          {cuttable ? (
             <>
               <MenuSeparator />
-              <Item icon={<History />} onClick={() => onAction({ kind: 'conversations' })}>
-                Conversations…
-              </Item>
               <Item
                 icon={<RotateCcw />}
                 disabled={!gate.enabled}
                 title={gate.enabled ? NEW_CONVERSATION_HINT : gate.reason}
-                onClick={() => onAction({ kind: 'restart' })}
+                onClick={() => onAction({ kind: 'new-conversation' })}
               >
                 New conversation
+              </Item>
+            </>
+          ) : null}
+          {agent ? (
+            <>
+              <Item icon={<History />} onClick={() => onAction({ kind: 'conversations' })}>
+                Conversations…
               </Item>
               {agentInfo?.startFailed !== undefined ? (
                 <Item

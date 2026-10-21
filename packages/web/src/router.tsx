@@ -30,7 +30,7 @@ const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/$hostId/$sessionId',
   component: SessionView,
-  // `agent` makes the view an agent selection, so a reload after a rotation resolves to the agent's current conversation.
+  // `conversation` addresses a past conversation of the session, read-only; absent is the current one.
   // `sn`/`rn`/`shn` are nonces: without them a repeat of the same id is a props-equal no-op, and asking twice must count twice.
   validateSearch: (
     search: Record<string, unknown>,
@@ -41,7 +41,6 @@ const sessionRoute = createRoute({
     rn?: number
     shell?: string
     shn?: number
-    agent?: string
     conversation?: number
   } => ({
     subagent: typeof search.subagent === 'string' ? search.subagent : undefined,
@@ -50,7 +49,6 @@ const sessionRoute = createRoute({
     rn: typeof search.rn === 'number' ? search.rn : undefined,
     shell: typeof search.shell === 'string' ? search.shell : undefined,
     shn: typeof search.shn === 'number' ? search.shn : undefined,
-    agent: typeof search.agent === 'string' ? search.agent : undefined,
     conversation: typeof search.conversation === 'number' ? search.conversation : undefined,
   }),
 })

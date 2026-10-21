@@ -64,7 +64,7 @@ type SessionViewInnerProps = { hostId: string; sessionId: string; conversation?:
 
 function SessionViewInner({ hostId, sessionId, conversation, client }: SessionViewInnerProps) {
   const navigate = useNavigate()
-  const { subagent, sn, reveal, rn, shell, shn, agent } = useSearch({ from: '/sessions/$hostId/$sessionId' })
+  const { subagent, sn, reveal, rn, shell, shn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
   // The workspace asks for this record too and nothing de-dupes, but one small GET beats threading the panel's
   // session state back out through a prop nobody else wants.
   const { info, error } = useSessionInfo(client, sessionId)
@@ -156,7 +156,7 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
           void navigate({
             to: '/sessions/$hostId/$sessionId',
             params: { hostId, sessionId },
-            search: (prev) => (toolUseId === undefined ? { agent: prev.agent } : { subagent: toolUseId, sn: prev.sn, agent: prev.agent }),
+            search: (prev) => (toolUseId === undefined ? { conversation: prev.conversation } : { subagent: toolUseId, sn: prev.sn, conversation: prev.conversation }),
             replace: true,
           })
         }}
@@ -171,7 +171,7 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
           void navigate({
             to: '/sessions/$hostId/$sessionId',
             params: { hostId, sessionId },
-            search: (prev) => ({ subagent: prev.subagent, sn: prev.sn, shell: shellId, shn: prev.shn, agent: prev.agent }),
+            search: (prev) => ({ subagent: prev.subagent, sn: prev.sn, shell: shellId, shn: prev.shn, conversation: prev.conversation }),
             replace: true,
           })
         }}
@@ -189,7 +189,7 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
           void navigate({
             to: '/sessions/$hostId/$sessionId',
             params: { hostId, sessionId },
-            search: info?.agent || agent ? { agent: info?.agent?.id ?? agent } : {},
+            search: {},
           })
         }
         unseen={unseen}

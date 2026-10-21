@@ -46,6 +46,8 @@ import {
   AvatarDialog,
   crossOwnerDrop,
   rowOwner,
+  startNewConversation,
+  useDiscardConfirmation,
   type GroupTarget,
 } from '@workerdeck/ui'
 import { Archive, ChevronDown, Layers, Plus, RefreshCw, Search, UserPlus } from 'lucide-react'
@@ -88,6 +90,7 @@ export function SessionsSidebar() {
   const [avatarFor, setAvatarFor] = useState<SessionRow>()
   const [deleting, setDeleting] = useState<DeleteAgentTarget>()
   const [conversationsOf, setConversationsOf] = useState<ConversationsTarget>()
+  const discard = useDiscardConfirmation()
   const [pastAgents, setPastAgents] = useState(false)
   const { byHost: agentsByHost, refresh: refreshAgents } = useAgents()
   const [crossing, setCrossing] = useState<CrossOwnerQuestion>()
@@ -125,7 +128,7 @@ export function SessionsSidebar() {
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
       // Cleared explicitly, because an omitted `search` inherits the current one and would carry a framed sub-agent along.
-      search: agentSearch(row),
+      search: {},
     })
 
   // The current conversation opens the session itself, a past one by its number, read-only.
@@ -135,7 +138,7 @@ export function SessionsSidebar() {
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: agent.hostId, sessionId: agent.agentId },
-      search: current && !agent.deleted ? { agent: agent.agentId } : { conversation: n },
+      search: current && !agent.deleted ? {} : { conversation: n },
     })
   }
 
@@ -144,7 +147,7 @@ export function SessionsSidebar() {
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
-      search: { subagent: toolUseId, sn: ++subagentNonce.current, ...agentSearch(row) },
+      search: { subagent: toolUseId, sn: ++subagentNonce.current },
     })
 
   const shellNonce = useRef(0)
@@ -152,7 +155,7 @@ export function SessionsSidebar() {
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
-      search: { shell: shellId, shn: ++shellNonce.current, ...agentSearch(row) },
+      search: { shell: shellId, shn: ++shellNonce.current },
     })
 
   const killShell = (row: SessionRow, shellId: string) => {
@@ -260,47 +263,35 @@ export function SessionsSidebar() {
   const retryStart = (row: SessionRow, agentId: string) =>
     agentCall(row, 'Could not start the new conversation', (client) => client.retryAgentStart(agentId, row.info.conversation ?? 1))
 
-  const newConversation = (row: SessionRow, agentId: string) => {
+  const newConversation = (row: SessionRow) => {
     const client = clientFor(row.hostId)
     if (!client) {
       return
     }
-    void client
-      .restartAgent(agentId, row.info.conversation ?? 1)
-      .then(() => toast.success(`New conversation started. ${NEW_CONVERSATION_HINT}`))
+    const expectedGeneration = row.info.conversation ?? 1
+    void startNewConversation(client, row.info.id, { expectedGeneration }, discard.confirm)
+      .then((started) => {
+        if (started) {
+          toast.success(`New conversation started. ${NEW_CONVERSATION_HINT}`)
+        }
+      })
       .catch((e: unknown) => {
         const message = errorMessage(e, 'Could not start a new conversation')
         if (message.includes('retry starting it first')) {
-          toast.error(message, { action: { label: 'Retry start', onClick: () => retryStart(row, agentId) } })
+          toast.error(message, {
+            action: {
+              label: 'Retry start',
+              onClick: () =>
+                agentCall(row, 'Could not start the new conversation', (retry) =>
+                  retry.retryConversationStart(row.info.id, expectedGeneration),
+                ),
+            },
+          })
           return
         }
-        toast.error(message)
+        toast.error(message, { action: { label: 'Try again', onClick: () => newConversation(row) } })
       })
       .finally(() => void refresh())
-  }
-
-  const clearContext = (row: SessionRow) => {
-    const client = clientFor(row.hostId)
-    if (!client) {
-      return
-    }
-    // A clear is a session command, not a REST route, so this list borrows a socket for one frame.
-    // `reconnect: false` is load-bearing: it must not become a second permanent subscriber to the session.
-    const handle = client.attach(row.info.id, { reconnect: false })
-    const done = setTimeout(() => {
-      handle.detach()
-      toast.error('Clear failed - the gateway did not answer')
-    }, 5_000)
-    handle.on('attached', () => {
-      handle.clearContext()
-      // Let the frame flush before the socket goes, so watchers see the `conversation_reset`.
-      setTimeout(() => {
-        clearTimeout(done)
-        handle.detach()
-        toast.success('Context cleared - the previous conversation stays resumable')
-        void refresh()
-      }, 150)
-    })
   }
 
   const onCardAction = (row: SessionRow, action: CardAction) => {
@@ -318,10 +309,6 @@ export function SessionsSidebar() {
         setAvatarFor(row)
         break
       }
-      case 'clear': {
-        clearContext(row)
-        break
-      }
       case 'sleep': {
         agentCall(row, 'Sleep failed', (client) => client.sleepSession(row.info.id))
         break
@@ -330,7 +317,7 @@ export function SessionsSidebar() {
         agentCall(row, 'Delete failed', (client) => client.deleteSession(row.info.id))
         break
       }
-      case 'adopt': {
+      case 'make-agent': {
         agentCall(row, 'Could not make an agent', (client) => client.nameSession(row.info.id, {}))
         break
       }
@@ -359,10 +346,8 @@ export function SessionsSidebar() {
         })
         break
       }
-      case 'restart': {
-        if (agent) {
-          newConversation(row, agent.id)
-        }
+      case 'new-conversation': {
+        newConversation(row)
         break
       }
       case 'retry-start': {
@@ -415,7 +400,7 @@ export function SessionsSidebar() {
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
-      search: task.toolUseId ? { reveal: task.toolUseId, rn: ++revealNonce.current, ...agentSearch(row) } : agentSearch(row),
+      search: task.toolUseId ? { reveal: task.toolUseId, rn: ++revealNonce.current } : {},
     })
 
   const newAgent = (
@@ -599,6 +584,7 @@ export function SessionsSidebar() {
         }}
       />
 
+      {discard.dialog}
       <DeleteAgentDialog
         target={deleting}
         onClose={() => setDeleting(undefined)}
@@ -624,10 +610,6 @@ export function SessionsSidebar() {
       />
     </>
   )
-}
-
-function agentSearch(row: SessionRow): { agent?: string } {
-  return row.info.agent ? { agent: row.info.agent.id } : {}
 }
 
 type CrossOwnerQuestion = { move: TeamMove; resolve: (yes: boolean) => void }
