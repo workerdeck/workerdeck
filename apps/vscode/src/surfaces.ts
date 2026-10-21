@@ -31,12 +31,13 @@ export class SurfaceRegistry implements vscode.Disposable {
     return [...this.#tabs]
   }
 
-  find(hostId: string, sessionId: string): AnySurface | undefined {
-    return this.all().find((surface) => surface.holds(hostId, sessionId))
+  tabFor(hostId: string, sessionId: string, conversation?: number): SessionEditorTab | undefined {
+    return this.tabs().find((tab) => tab.holds(hostId, sessionId, conversation))
   }
 
-  tabFor(hostId: string, sessionId: string): SessionEditorTab | undefined {
-    return this.tabs().find((tab) => tab.holds(hostId, sessionId))
+  // Every tab on the session, its past conversations included.
+  tabsOf(hostId: string, sessionId: string): SessionEditorTab[] {
+    return this.tabs().filter((tab) => tab.showsSession(hostId, sessionId))
   }
 
   activeTab(): SessionEditorTab | undefined {
@@ -52,7 +53,7 @@ export class SurfaceRegistry implements vscode.Disposable {
     const open: Record<string, 'editor'> = {}
     for (const tab of this.#tabs) {
       const session = tab.session
-      if (session) {
+      if (session && session.conversation === undefined) {
         open[`${session.host.id}:${session.sessionId}`] = 'editor'
       }
     }

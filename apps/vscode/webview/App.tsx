@@ -22,8 +22,7 @@ type Shown = {
   hostName: string
   cwd?: string
   unseen?: { itemCount: number; since: number }
-  agentId?: string
-  carryFrom?: string
+  conversation?: number
 }
 
 export function App({
@@ -73,7 +72,14 @@ export function App({
           // What an editor tab hands the serializer on window reload; harmless in the bottom panel.
           const session = msg.session
           bridge.setState<SurfaceState | undefined>(
-            session ? { hostId: session.hostId, sessionId: session.sessionId, cwd: session.cwd, agentId: session.agentId } : undefined,
+            session
+              ? {
+                  hostId: session.hostId,
+                  sessionId: session.sessionId,
+                  cwd: session.cwd,
+                  ...(session.conversation === undefined ? {} : { conversation: session.conversation }),
+                }
+              : undefined,
           )
         } else if (msg.kind === 'wd-set-model') {
           controls.current?.setModel(msg.model)
@@ -162,9 +168,10 @@ export function App({
   return (
     <div ref={page} className="h-screen">
       <SessionPanel
-        key={`${shown.baseUrl}#${shown.sessionId}`}
+        key={`${shown.baseUrl}#${shown.sessionId}#${shown.conversation ?? ''}`}
         client={client}
         sessionId={shown.sessionId}
+        conversation={shown.conversation}
         className="h-full"
         transcriptVariant={variant}
         terminalMetrics={terminalMetrics}

@@ -18,7 +18,7 @@ export function deleteAgentDetail(name: string): string {
   return `${name} leaves your agents. Its conversations stay under Past agents. Team members are released.`
 }
 
-// The current conversation opens as the agent (it follows), a past one in its own editor tab that never follows.
+// The current conversation opens where the session would, a past one read-only in its own editor tab.
 export async function showConversations(deps: ConversationsDeps, agent: ConversationsAgent): Promise<void> {
   const host = deps.store.get(agent.hostId)
   const client = host && (await clientFor(deps.store, host))
@@ -50,7 +50,7 @@ export async function showConversations(deps: ConversationsDeps, agent: Conversa
   if (!picked) {
     return
   }
-  await deps.selectSession(agent.hostId, agent.agentId, picked.current ? {} : { target: 'editor' })
+  await deps.selectSession(agent.hostId, agent.agentId, picked.current ? {} : { target: 'editor', conversation: picked.row.n })
 }
 
 export async function showPastAgents(deps: ConversationsDeps): Promise<void> {

@@ -21,6 +21,7 @@ import {
   type TeamMovePlan,
   type WorkerDeckClient,
 } from '@workerdeck/client'
+import { startNewConversation, type DiscardConfirmText } from '@workerdeck/ui/format'
 import { clientFor } from './gateway.ts'
 import { deleteAgentDetail, showConversations } from './conversations.ts'
 import { agentDefaultsCached, relayOfCached } from './machine.ts'
@@ -48,7 +49,7 @@ const SEARCH_OPEN_KEY = 'workerdeck.searchOpen.v1'
 
 const FILTERED_CONTEXT_KEY = 'workerdeck.sessionsFiltered'
 
-export type SelectOptions = { subagentToolUseId?: string; revealToolUseId?: string; shellId?: string; target?: SurfaceTarget }
+export type SelectOptions = { subagentToolUseId?: string; revealToolUseId?: string; shellId?: string; target?: SurfaceTarget; conversation?: number }
 
 export type SidebarDelegate = {
   selectSession: (hostId: string, sessionId: string, options?: SelectOptions) => Promise<void>
@@ -307,11 +308,19 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       detail: 'The line under the name in the list; the agent can change it with set_status',
       run: () => this.#setStatus(hostId, info),
     })
-    if (info.capabilities?.clearContext && clearContextOffered(info)) {
+    if (clearContextOffered(info)) {
+      const gate = newConversationGate(info)
       items.push({
-        label: '$(clear-all) Clear context',
-        detail: 'Start a fresh conversation - the old one stays resumable',
-        run: () => this.#clearSession(hostId, sessionId),
+        label: '$(debug-restart) New conversation',
+        description: gate.enabled ? undefined : gate.reason,
+        detail: NEW_CONVERSATION_HINT,
+        run: async () => {
+          if (!gate.enabled) {
+            void vscode.window.showInformationMessage(`WorkerDeck: ${gate.reason}.`)
+            return
+          }
+          await this.#newConversation(hostId, info)
+        },
       })
     }
     if (canSleep(info)) {
@@ -426,19 +435,6 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
             { hostId, agentId: agent.id, name: agent.name },
           ),
       })
-      const gate = newConversationGate(info)
-      items.push({
-        label: '$(debug-restart) New conversation',
-        description: gate.enabled ? undefined : gate.reason,
-        detail: NEW_CONVERSATION_HINT,
-        run: async () => {
-          if (!gate.enabled) {
-            void vscode.window.showInformationMessage(`WorkerDeck: ${gate.reason}.`)
-            return
-          }
-          await this.#newConversation(hostId, info, agent.id)
-        },
-      })
     }
     return items
   }
@@ -453,7 +449,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     }
     const choice = await vscode.window.showInformationMessage(message, NEW_CONVERSATION_NOW)
     if (choice === NEW_CONVERSATION_NOW) {
-      await this.#newConversation(saved.hostId, info, saved.agentId)
+      await this.#newConversation(saved.hostId, info)
     }
   }
 
@@ -499,23 +495,32 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     return items
   }
 
-  async #newConversation(hostId: string, info: SessionInfo, agentId: string): Promise<void> {
+  async #newConversation(hostId: string, info: SessionInfo): Promise<void> {
     const host = this.#store.get(hostId)
     const client = host && (await clientFor(this.#store, host))
     if (!client) {
       return
     }
+    const expectedGeneration = info.conversation ?? 1
     try {
-      await client.restartAgent(agentId, info.conversation ?? 1)
+      await startNewConversation(client, info.id, { expectedGeneration }, confirmDiscard)
     } catch (err) {
       const message = errorMessage(err)
       if (message.includes('retry starting it first')) {
         const choice = await vscode.window.showErrorMessage(`WorkerDeck: ${message}`, 'Retry start')
         if (choice === 'Retry start') {
-          await this.#agentCall(hostId, 'could not start the new conversation', (retry) => retry.retryAgentStart(agentId, info.conversation ?? 1))
+          await this.#agentCall(hostId, 'could not start the new conversation', (retry) => retry.retryConversationStart(info.id, expectedGeneration))
         }
       } else {
-        void vscode.window.showErrorMessage(`WorkerDeck: could not start a new conversation - ${message}`)
+        const choice = await vscode.window.showErrorMessage(`WorkerDeck: could not start a new conversation - ${message}`, 'Try again')
+        if (choice === 'Try again') {
+          await this.#model.refresh()
+          const fresh = this.#model.sessionsOf(hostId).find((s) => s.id === info.id)
+          if (fresh) {
+            await this.#newConversation(hostId, fresh)
+          }
+          return
+        }
       }
     }
     await this.#model.refresh()
@@ -758,24 +763,6 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     await this.#model.refresh()
   }
 
-  async #clearSession(hostId: string, sessionId: string): Promise<void> {
-    const info = this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)
-    const confirmed = await vscode.window.showWarningMessage(
-      `Clear the conversation in "${info?.title ?? sessionId.slice(0, 8)}"?`,
-      {
-        modal: true,
-        detail:
-          'The session keeps running and starts a fresh conversation. The old one is not ' +
-          'deleted - it stays resumable from "Resume a previous session".',
-      },
-      'Clear context',
-    )
-    if (confirmed !== 'Clear context') {
-      return
-    }
-    await this.#command(hostId, sessionId, (handle) => handle.clearContext())
-  }
-
   async #killShell(hostId: string, sessionId: string, shellId: string): Promise<void> {
     const host = this.#store.get(hostId)
     const client = host && (await clientFor(this.#store, host))
@@ -879,4 +866,9 @@ export function statusLabelFrom(input: string): StatusLabelInput | null {
     return { emoji: first, text: rest.join('').trim() }
   }
   return { text: line }
+}
+
+async function confirmDiscard(text: DiscardConfirmText): Promise<boolean> {
+  const choice = await vscode.window.showWarningMessage(text.title, { modal: true, detail: text.detail }, text.confirm)
+  return choice === text.confirm
 }

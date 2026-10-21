@@ -560,8 +560,8 @@ misalignment.
 
 **Agents.** `workerdeck.newAgent` (the person icon in the Sessions title) runs the New Session flow
 and then asks for a name and a brief (`createAgent` in `new-session.ts`). Team verbs live in the
-card's `⋯` QuickPick (`#teamItems` in `sidebar.ts`): Make agent (adopt), Add to team, Leave team,
-Dissolve team, New conversation (restart), Retire. Avatars are fetched host-side by
+card's `⋯` QuickPick (`#teamItems` in `sidebar.ts`): Make agent (`nameSession`), Add to team, Leave team,
+Dissolve team, Conversations, Delete agent. Avatars are fetched host-side by
 `AgentAvatarCache` and posted as `wd-agent-avatars`. **Change avatar** is the one `⋯` row that
 does not stay native: a QuickPick cannot show the candidates, so it posts `wd-avatar-picker` and the
 sidebar webview opens `packages/ui`'s `AvatarDialog` (the dashboard's picker) over a
@@ -594,10 +594,11 @@ became one always-visible `⋯` in the card's `actions` slot (`CardMenu`, which 
 `wd-session-menu`) opening a **QuickPick**, decided host-side off the polled model - a
 popover anchored in a 280px view would be clipped by the view's own bounds, and a card that went
 stale between the poll and the press must not offer Stop for a finished session. That QuickPick
-is also where **Clear context** lives - the first Clear control on any client - gated on
-`SessionInfo.capabilities.clearContext` (absent = false, so the verb is simply not offered), sent as a session command over a transient attach exactly like Stop, and confirmed with copy
-that never says "deleted": the session keeps running, the conversation starts fresh, and the old
-one stays resumable from the resume picker. Second, **rename is a double-click on the title** -
+is also where **New conversation** lives, on every live card, named or not: Clear context and New conversation
+are one cut, so a card offers it once (`clearContextOffered` shows it, `newConversationGate` enables it). It goes
+over REST through `startNewConversation` (`@workerdeck/ui/format`), so a refusal over unread input becomes a modal
+that states the count, warns when peer messages may be in it, and on confirm calls `discardAndCut`; input that
+arrives meanwhile asks again. Second, **rename is a double-click on the title** -
 `SessionItem`'s default `renameOn`, and the editor's own feel - where the dashboard, spending its
 row hover on three actions instead, drives the same editor from a pencil (`renameOn='external'`).
 The colours are not this file's business either: `styles.css` repoints `--row-hover` and
@@ -774,10 +775,11 @@ close is asynchronous, so its `close` event lands after `dispose()` returns and 
 be posted into the new document. Per-view listeners still belong in `wire`, which must not be
 re-run on reload or they double-register.
 
-- **Agent conversations.** `SessionRef.agentId` (persisted) marks a panel or tab that follows its agent: the
-  webview posts `wd-superseded` and the host retargets in place, on that and on every list refresh, without
-  taking focus; `wd-go-to-current` does the same from an archive's banner. Conversations is a QuickPick from
-  the card menu (past rows open a separate tab that never follows); `workerdeck.pastAgents` lists retired
+- **Agent conversations.** A session keeps its id across conversations, so nothing follows anything: surfaces
+  are keyed by address (`SessionRef.conversation`, persisted in `SurfaceState`; absent = the current one).
+  A past conversation always opens read-only in its own editor tab (the panel shows current conversations only),
+  titled `<name> · conversation n`; `wd-go-to-current` from its banner opens the current one where a click would.
+  Conversations is a QuickPick from the card menu; `workerdeck.pastAgents` lists retired
   agents into the same pick. Delete agent... replaces Retire; the card menu fetches the agent record when it
   opens, for Send again / Dismiss and Retry start.
 

@@ -79,11 +79,6 @@ export class SessionPanelView extends SessionSurface<vscode.WebviewView> impleme
     this.#panelDelegate.sessionChanged(undefined)
   }
 
-  override follow(session: SessionRef): void {
-    super.follow(session)
-    this.#panelDelegate.sessionChanged(this.session)
-  }
-
   retitleHeld(title: string): void {
     if (!this.#held || this.#heldTitle === title) {
       return

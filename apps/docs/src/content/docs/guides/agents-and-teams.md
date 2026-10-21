@@ -30,10 +30,12 @@ of the session data clients receive.
 
 ## Conversations
 
-*New conversation* in an agent's card menu (idle agents only) starts a clean conversation: same
+*New conversation* on a card (idle sessions only, named or not) starts a clean conversation: same
 card, same place in the list, an empty transcript. Previous chat context is not carried over. An
-agent can do the same itself with the `context_reset` tool, which runs once its turn ends. A typed
-`/clear` still clears within the current conversation; agent cards offer no *Clear context*.
+agent can do the same itself with the `context_reset` tool, which runs once its turn ends, and a
+typed `/clear` does the same cut. If the session still has messages it has not answered, you are
+asked first: the dialog says how many, warns when some may come from peer agents, and discards
+them only when you confirm.
 
 The old conversation becomes a history entry of the same session: it stays readable, read-only,
 under *Conversations* on the agent (card menu on the dashboard and in VS Code, a long-press on the

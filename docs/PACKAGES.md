@@ -2048,15 +2048,16 @@ targets), `gatewayCount` (the extension counts configured gateways, not gateways
 `showSubset={false}` (the extension draws its subset line above the scroller). A list filtered to
 nothing by the workspace scope alone says "Nothing in this folder" with a "Show all folders" way
 out; the dashboard never scopes, so it never sees it.
-Its hover affordances are pencil / **eraser** / trash (`RowAction`, hover-revealed, each stopping
+Its hover affordances are pencil / **new conversation** / trash (`RowAction`, hover-revealed, each stopping
 the click so an action cannot also select), which is the opposite of the extension's single
 always-on overflow glyph and the right call for each: there are three of them here and a sidebar
-card has room for one. The eraser is the one with two
-gates rather than one: the host must pass `onClearContext` *and* the row's own
-`capabilities.clearContext` must say so, because a clear is a **session command over a socket**,
-not a REST call - a list holding only REST clients has to borrow a handle for one frame (see
-`packages/web`'s sidebar, and the VS Code card's menu, which do exactly the same thing). Its copy
-never says "deleted": the engine keeps the old conversation and it stays resumable.
+card has room for one. New conversation is the one with
+two gates: the host must pass `onNewConversation`, and the row must be live (`clearContextOffered`) and cuttable
+now (`newConversationGate`). It is the one cut entry on a card (Clear context and New conversation are the same
+cut). Hosts run it through `startNewConversation` with `useDiscardConfirmation` (or their own modal), which turns
+an `unconfirmed_input` refusal into a confirmed `discardAndCut` and asks again on `input_changed`.
+`SessionPanel` does the same for a socket `/clear` or Clear context command that the gateway refuses: within
+10 s of the ask, a protocol error re-asks the cut over REST to get the actionable 409.
 The **bed** (`onSleep`) is gated three ways: the host passes it, the row's
 `capabilities.engineSleep` is true, and the session is `idle` and not already asleep. It is a REST
 call (`sleepSession`), so unlike the eraser it needs no borrowed socket. An asleep card
@@ -2396,11 +2397,11 @@ with other owners / Make private. Drag to join and the menu's Join both go throu
 drawn under the card, and an open invitation adds a toast with a Withdraw invitation action. `useAgentAvatars` fetches each avatar path once per page (a
 failure retries after 60 s); the session header draws `AgentHeading` for an agent.
 
-- **Agent conversations.** The session route takes `agent=<id>`: agent cards set it and `useAgentFollow`
-  keeps it (navigate with replace), so a reload resolves to the agent's current conversation; a link without it
-  never moves (history). Conversations dialog from the card menu and the tray hover card, Past agents in the New
-  dropdown, Delete agent... (confirmed, `expectedSessionId`), New conversation gated by `newConversationGate`,
-  Clear context only where `clearContextOffered`. `useAgents` polls `listAgents` every 15 s for
+- **Agent conversations.** The session route takes `conversation=<n>` for a past conversation (read-only);
+  without it the route is the current one, which a stable id makes reload-safe. Sub-agent and shell frames carry
+  `conversation` along. Conversations dialog from the card menu and the tray hover card, Past agents in the New
+  dropdown, Delete agent... (confirmed, `expectedGeneration`), and one New conversation entry on every live card
+  (quick action and menu), with the discard confirmation (`useDiscardConfirmation`). `useAgents` polls `listAgents` every 15 s for
   `undelivered` (Send again / Dismiss) and `startFailed` (Retry start).
 
 ## `packages/cli`
