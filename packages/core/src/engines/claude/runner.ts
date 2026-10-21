@@ -107,10 +107,8 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #input = new InputQueue()
   // Sends the CLI took and has not answered yet, oldest first; a turn's assistant frames name the send they answer.
   #unanswered: string[] = []
-  #stampedSinceResult = false
-  // A producer that never stamps (older CLIs): each turn then consumes every send made before it started.
+  // Whether this CLI names the sends it answers: one that never does cannot confirm queued input was consumed.
   #stamps = false
-  #turnBase = 0
   // The row a compaction is drawing on, from the first 'compacting' status to the boundary that
   // settles it. The boundary has a uuid of its own, but it is the *end* of the compaction, so
   // correlating here is what lets one row settle rather than two rows appear.
@@ -590,38 +588,29 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     })
   }
 
-  // A slash command is the CLI's to run once it has read it, turn or not; any other send waits for its answer.
+  // A slash command is the CLI's to run once it has read it, turn or not; any other send waits for a reply naming it.
   pendingInput(): number {
     return Math.max(this.#unanswered.length, this.#input.pending)
   }
 
+  inputConfirmable(): boolean {
+    return this.#stamps
+  }
+
+  // The only clearing: a top-level reply that names its sends. Nothing is inferred from turn timing or results.
   #trackAnswers(msg: SDKMessage): void {
-    if ((msg.type === 'assistant' || msg.type === 'stream_event') && msg.parent_tool_use_id === null) {
-      const stamp = msg as { user_message_uuid?: string; user_message_uuids?: string[] }
-      const answered = stamp.user_message_uuids ?? (stamp.user_message_uuid === undefined ? [] : [stamp.user_message_uuid])
-      const at = Math.max(-1, ...answered.map((uuid) => this.#unanswered.indexOf(uuid)))
-      if (answered.length > 0) {
-        this.#stamps = true
-      }
-      if (at >= 0) {
-        this.#unanswered.splice(0, at + 1)
-        this.#stampedSinceResult = true
-      }
+    if ((msg.type !== 'assistant' && msg.type !== 'stream_event') || msg.parent_tool_use_id !== null) {
       return
     }
-    if (msg.type === 'system' && msg.subtype === 'session_state_changed' && msg.state === 'running') {
-      this.#turnBase = this.#unanswered.length
+    const stamp = msg as { user_message_uuid?: string; user_message_uuids?: string[] }
+    const answered = stamp.user_message_uuids ?? (stamp.user_message_uuid === undefined ? [] : [stamp.user_message_uuid])
+    if (answered.length === 0) {
       return
     }
-    if (msg.type === 'result') {
-      if (!this.#stamps) {
-        this.#unanswered.splice(0, Math.max(this.#turnBase, 1))
-      } else if (!this.#stampedSinceResult && msg.subtype !== 'success') {
-        // A turn that ended before any frame named its send (an interrupt, an early error) still consumed it.
-        this.#unanswered.shift()
-      }
-      this.#turnBase = 0
-      this.#stampedSinceResult = false
+    this.#stamps = true
+    const at = Math.max(-1, ...answered.map((uuid) => this.#unanswered.indexOf(uuid)))
+    if (at >= 0) {
+      this.#unanswered.splice(0, at + 1)
     }
   }
 

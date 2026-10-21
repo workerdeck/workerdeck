@@ -127,6 +127,8 @@ export interface Runner {
   setOwner?(owner: string | undefined): void
   // Messages the engine took in and has not consumed yet: a conversation cut waits until this is 0.
   pendingInput?(): number
+  // False when the engine cannot tell consumed input from queued input; a cut then refuses rather than guess.
+  inputConfirmable?(): boolean
   settleExecution?(executionId: string, result: ToolExecutionResult): boolean
   park?(): RunnerSnapshot | undefined
   snapshot?(): RunnerSnapshot | undefined

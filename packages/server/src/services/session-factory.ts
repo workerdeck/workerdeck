@@ -1,3 +1,4 @@
+import type { PendingIdentity } from './session-records.ts'
 import {
   supportsPermissionMode,
   type CreateSessionRequest,
@@ -51,7 +52,7 @@ export type SessionFactoryDeps = {
   parking: SessionParkManager
   bridge: BridgeHub
   // Persisted and read back before the runner is registered or started: a session never works without its record.
-  openRecord?: (runner: Runner, config: SessionRunnerConfig) => Promise<void>
+  openRecord?: (runner: Runner, config: SessionRunnerConfig, identity?: PendingIdentity) => Promise<void>
   // The first message is about to reach the engine (`sending`), and the start has been handed over.
   handingOff?: (id: string) => Promise<unknown>
   started?: (runner: Runner) => void
@@ -66,6 +67,8 @@ export type BuildOptions = {
   instructionScope?: InstructionScope
   agent?: boolean
   id?: string
+  // A named create's identity, written with the record's first-start intent before `beforeStart` writes the index row.
+  identity?: (runner: Runner) => Promise<PendingIdentity>
   beforeStart?: (runner: Runner) => Promise<void>
 }
 
@@ -345,7 +348,8 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   const createRunner = async (config: SessionRunnerConfig, options?: BuildOptions): Promise<Runner> => {
     const built = await buildRunner(config, undefined, options?.id, options)
     try {
-      await deps.openRecord?.(built, config)
+      const identity = await options?.identity?.(built)
+      await deps.openRecord?.(built, config, identity)
       await options?.beforeStart?.(built)
       await deps.handingOff?.(built.id)
     } catch (error) {

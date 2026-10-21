@@ -18,7 +18,7 @@ import { JobQueue } from '@workerdeck/queue'
 import { isJobRun, isSharing, mergePricing, type CreateSessionRequest, type ProfileEngine, type SessionInfo } from '@workerdeck/protocol'
 import type { ServerContext } from './context.ts'
 import { createServerLifecycle } from './lifecycle.ts'
-import { httpErrorStatus, json } from './lib/http.ts'
+import { HttpError, httpErrorStatus, json } from './lib/http.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
@@ -392,7 +392,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     registry,
     parking,
     bridge,
-    openRecord: async (runner, config) => {
+    openRecord: async (runner, config, identity) => {
       const info = runner.info()
       const requested = requestedConfig(config)
       await records.open(runner.id, {
@@ -401,7 +401,14 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         requested,
         ...(isJobRun(info)
           ? {}
-          : { firstStart: { epoch: info.epoch ?? config.epoch ?? 0, target: requested, ...(config.prompt ? { prompt: config.prompt } : {}) } }),
+          : {
+              firstStart: {
+                epoch: info.epoch ?? config.epoch ?? 0,
+                target: requested,
+                ...(config.prompt ? { prompt: config.prompt } : {}),
+                ...(identity ? { identity } : {}),
+              },
+            }),
       })
     },
     handingOff: (id) => cuts.handingOff(id),
@@ -517,7 +524,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     handleRequest(req, res).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'internal error'
       if (!res.headersSent) {
-        json(res, httpErrorStatus(error), { error: message })
+        const code = error instanceof HttpError ? error.code : undefined
+        json(res, httpErrorStatus(error), { error: message, ...(code ? { code } : {}) })
       } else {
         res.end()
       }

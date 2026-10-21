@@ -1476,7 +1476,13 @@ id. Its conversations are the record's history entries; the cut (`services/conve
   startup and readback rules, settled in the background; a later cut waits for it), so a crash
   anywhere is recovered by `cuts.recover` under the same id: a fresh start with a `pending`
   prompt, never a resend of a `sending` one (it surfaces as `uncertain`, `AgentInfo.undelivered`).
-  A failed start is Retry start. A crash before the index row recovers an unnamed session. While
+  A failed start is Retry start. A named create's intent also carries its identity (the index row
+  it is about to write, avatar recipe and brief included, held only until the start is durable),
+  and its first start never runs without the row: recovery writes a missing row from that copy
+  under the same validation, and a refusal (the name taken since, a join to another gateway that
+  did not finish) leaves `startFailed` with the reason, no engine started, until naming it by PATCH
+  and Retry start complete it. A cut behind a first start waits at most `agentStartupTimeoutMs`,
+  then answers 409. While
   the intent is owed a record with no runner lists as `starting`. A failed index write closes the
   runner and discards the record. Shutdown leaves in-flight intents for the next generation.
 - **Naming is a PATCH.** `PATCH /sessions/:id { agent }` names an unnamed session (operator only,
@@ -1504,19 +1510,21 @@ id. Its conversations are the record's history entries; the cut (`services/conve
 - **The index store must apply atomically.** `AgentStore` is `{ list, apply }`; the save/delete
   fallback is gone, so a retire with released members can never land half.
 - **Unanswered input holds a cut.** `Runner.pendingInput()` is the engine's own count of input it
-  took and has not consumed: claude stamps each send with a uuid and counts it consumed once a
-  top-level reply names it (`user_message_uuid` / `user_message_uuids`, which also cover a batch
-  and a send folded into a turn), or once a turn that ended unsuccessfully had no stamped frame; a
-  slash command counts only until the SDK reads it, since it may run no turn. Codex counts queued
-  turns and steers in flight, the provider engine messages not yet sent to the model. While it is
-  above 0 a cut is refused (409) and a cut queued for the next idle (`/clear`, `context_reset`)
-  waits. Such a message is answered in n: never dropped with n's engine, never carried into n+1.
-  While a cut runs, peer sends are refused (`delivered: false`, "a new conversation is starting")
-  so the sender resends to n+1. A runner without `pendingInput` is not checked. The claude stamps
-  are read from SDK 0.3.293's documented fields (the supported producer; no version check exists to
-  pin it); no real CLI run has confirmed them yet. A producer that has stamped nothing this session
-  falls back: each turn result consumes every send made before that turn started (at least one),
-  so the count can never stay stuck.
+  took and has not consumed. Claude stamps each send with a uuid; the only automatic clearing is a
+  top-level reply naming it (`user_message_uuid` / `user_message_uuids`, which also cover a batch
+  and a send folded into a turn; a later send named implies the earlier ones). Nothing is inferred
+  from turn timing or results, so an interrupted or unstamped turn leaves its sends pending. A slash
+  command counts only until the SDK reads it, since it may run no turn. The SDK bundles its own CLI
+  per platform at the same version, so the stamping producer is pinned by our SDK dependency
+  (0.3.293); `pathToClaudeCodeExecutable` can point elsewhere, and `inputConfirmable()` is false until
+  a producer has stamped. Codex counts queued turns and steers in flight, the provider engine
+  messages not yet sent to the model. While input is pending a cut is refused with 409 (unanswered),
+  or with code `unconfirmed_input` when the engine cannot confirm consumption; a queued `/clear` or
+  `context_reset` cut waits for an idle with nothing pending and is dropped (logged) on an
+  unconfirmable engine, and `context_reset` refuses up front with that reason so the agent sees it.
+  Such a message is answered in n: never dropped with n's engine, never carried into n+1. While a
+  cut runs, peer sends are refused (`delivered: false`, "a new conversation is starting"). A runner
+  without `pendingInput` is not checked. No real CLI run has confirmed the stamps yet.
 - **Runtime absent is not a status.** `GET /sessions` lists from the records: a runner or runtime
   says what a session is; a record with neither (it ran and left nothing to wake) is listed
   `failed` and refuses a wake, unless it never held anything; closed records only with `?closed=1`.

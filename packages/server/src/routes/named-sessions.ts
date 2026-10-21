@@ -61,14 +61,19 @@ export async function createNamedSession(
   const config = ctx.factory.buildRunnerConfig(vetted.request, { operator: ctx.auth.isOperator(auth), ...(owner === undefined ? {} : { owner }) })
   const remoteLead = remoteLeadOf(ctx, identity.lead)
   let agent: StoredAgent | undefined
+  let stamped = draft
   try {
     const runner = await ctx.factory.createRunner(config, {
       id: draft.id,
       brief: draft.config.brief?.trim() || undefined,
       instructionScope: draft.config.instructionScope,
       agent: true,
-      beforeStart: async (built) => {
-        agent = await writeIdentity(ctx, draft, built.info(), remoteLead, crossOwner)
+      identity: async (built) => {
+        stamped = await withAvatar(ctx, draft, built.info())
+        return { agent: stamped, ...(crossOwner ? { crossOwner } : {}), ...(remoteLead ? { remoteLead } : {}) }
+      },
+      beforeStart: async () => {
+        agent = await createIdentity(ctx, stamped, remoteLead, crossOwner)
       },
     })
     return { agent: agents.get(runner.id) ?? agent!, session: runner.info() }
@@ -479,8 +484,15 @@ async function writeIdentity(
   remoteLead: string | undefined,
   crossOwner: boolean,
 ): Promise<StoredAgent> {
+  return createIdentity(ctx, await withAvatar(ctx, draft, info), remoteLead, crossOwner)
+}
+
+async function withAvatar(ctx: ServerContext, draft: StoredAgent, info: SessionInfo): Promise<StoredAgent> {
   const recipe = await rollAvatar(ctx, draft, info)
-  const stamped = recipe === undefined ? draft : { ...draft, avatarRecipe: recipe }
+  return recipe === undefined ? draft : { ...draft, avatarRecipe: recipe }
+}
+
+async function createIdentity(ctx: ServerContext, stamped: StoredAgent, remoteLead: string | undefined, crossOwner: boolean): Promise<StoredAgent> {
   return settled(
     remoteLead
       ? await joinRemote(ctx, stamped, remoteLead, (joined) => ctx.agents.create(stamped, joined))

@@ -299,6 +299,10 @@ describe('context_reset through the gateway', () => {
     await vi.waitFor(() => expect(harnesses).toHaveLength(1))
     const [first] = harnesses
     first!.emit(INIT)
+    await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(1))
+    first!.emit(REPLY)
+    // The reply names the turn's send once the runner has read it.
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
     const result = await gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect(result.isError).toBeFalsy()
@@ -335,10 +339,13 @@ describe('context_reset through the gateway', () => {
     await vi.waitFor(() => expect(harnesses).toHaveLength(1))
     const [first] = harnesses
     first!.emit(INIT)
+    await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(1))
+    first!.emit(REPLY)
+    // The reply names the turn's send once the runner has read it.
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
     const result = await gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect(result.content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
-    first!.emit(REPLY)
     first!.emit(RESULT)
 
     await vi.waitFor(() => expect(harnesses).toHaveLength(2))

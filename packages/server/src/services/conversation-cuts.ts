@@ -23,6 +23,9 @@ export type CutFault = 'commit' | 'start' | 'after-stop' | 'after-commit'
 
 export const CONVERSATION_ENDED = 'this conversation has ended; reattach to the current one'
 export const UNANSWERED_REFUSAL = 'the session has a message it has not answered yet; start a new conversation once it has'
+export const UNCONFIRMED_INPUT = 'the engine cannot confirm queued input was consumed; send a message and wait for its reply, then try again'
+export const UNCONFIRMED_INPUT_CODE = 'unconfirmed_input'
+export const STILL_STARTING = 'the session is still starting; try again once it has started'
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
 
 export class ConversationCuts {
@@ -66,7 +69,10 @@ export class ConversationCuts {
   // `guard` runs inside the lifecycle lock on the record as it is then: the caller's own check of the current
   // conversation and of its sight of the session, so nothing it decided before the lock can be acted on after it.
   async cut(id: string, request: CutRequest, guard?: CutGuard): Promise<CutResult> {
-    await this.#firstStarts.get(id)
+    const first = this.#firstStarts.get(id)
+    if (first && (await within(first.then(() => true), this.#ctx.locks.startupTimeoutMs)) === undefined) {
+      fail(409, STILL_STARTING)
+    }
     return await this.#ctx.locks.run([id], () => this.#cut(id, request, guard))
   }
 
@@ -111,6 +117,7 @@ export class ConversationCuts {
     if (isJobRun(runner.info())) {
       fail(409, JOB_CUT_REFUSAL)
     }
+    refuseUnconfirmed(runner)
     if (runner.info().status === 'idle' && !unanswered(runner)) {
       return this.cut(runner.id, { expectedGeneration: ctx.records.conversationOf(runner.id) ?? 1, reason, ...(prompt ? { prompt } : {}) })
     }
@@ -124,6 +131,12 @@ export class ConversationCuts {
     }
     const ctx = this.#ctx
     const unsubscribe = runner.subscribe((event) => {
+      if (event.type === 'status_changed' && event.status === 'idle' && unanswered(runner) && runner.inputConfirmable?.() === false) {
+        this.#queued.delete(runner.id)
+        unsubscribe()
+        ctx.locks.onError(new Error(`${reason} for ${runner.id} dropped: ${UNCONFIRMED_INPUT}`))
+        return
+      }
       if (event.type === 'status_changed' && event.status === 'idle' && !unanswered(runner)) {
         this.#queued.delete(runner.id)
         unsubscribe()
@@ -168,6 +181,9 @@ export class ConversationCuts {
     }
     if (live && info.status !== 'idle') {
       fail(409, 'the session is busy; start a new conversation once it is idle')
+    }
+    if (live) {
+      refuseUnconfirmed(live)
     }
     if (live && unanswered(live)) {
       fail(409, UNANSWERED_REFUSAL)
@@ -293,7 +309,7 @@ export class ConversationCuts {
       // A session that ended without durable state has nothing to capture; it still closes, its history kept.
       const entry = await this.#capture(id, record, record.conversation).catch(() => undefined)
       await ctx.records.transactDurable(id, (current) => {
-        const { runtime: _runtime, cut: _cut, pendingPrompt: _prompt, startFailed: _failed, ...rest } = current ?? freshRecord(id)
+        const { runtime: _runtime, cut: _cut, pendingPrompt: _prompt, startFailed: _failed, identity: _identity, ...rest } = current ?? freshRecord(id)
         return { ...rest, conversations: entry ? [...rest.conversations, entry] : rest.conversations, closedAt: Date.now() }
       })
       if (entry) {
@@ -410,6 +426,13 @@ export class ConversationCuts {
     const cut = record.cut!
     const intent = record.pendingPrompt?.n === cut.to ? record.pendingPrompt : undefined
     const live = ctx.registry.get(id)
+    if (!live && cut.from === 0 && record.identity) {
+      const refused = await this.#restoreIdentity(record)
+      if (refused !== undefined) {
+        await this.#failStart(id, cut.to, refused, false)
+        fail(409, `the named session did not start: ${refused}`)
+      }
+    }
     if (!live && record.runtime && successorKept(record.runtime, cut.to)) {
       await this.#confirm(id, cut.to, intent !== undefined)
       this.#announce(id, cut.to, cut.epoch)
@@ -494,10 +517,25 @@ export class ConversationCuts {
     return !isDormant(runtime) || named === undefined || runtime.sdkSessionId === named
   }
 
+  // A named first start never runs without its index row: the row is there, or written now from the record's copy
+  // under the same validation, or the start is refused (a name taken since) and stays recoverable.
+  async #restoreIdentity(record: SessionRecord): Promise<string | undefined> {
+    const ctx = this.#ctx
+    const pending = record.identity!
+    if (ctx.agents.get(record.id)) {
+      return undefined
+    }
+    if (pending.remoteLead !== undefined) {
+      return 'its join to a team on another gateway did not finish; name it again'
+    }
+    const created = await ctx.agents.create(pending.agent, undefined, pending.crossOwner === true)
+    return 'error' in created && 'status' in created ? created.error : undefined
+  }
+
   async #confirm(id: string, to: number, uncertain: boolean): Promise<void> {
     this.#failedStarts.delete(id)
     await this.#ctx.records.transactDurable(id, (current) => {
-      const { cut: _done, startFailed: _failed, pendingPrompt, ...rest } = current!
+      const { cut: _done, startFailed: _failed, identity: _identity, pendingPrompt, ...rest } = current!
       const lost = uncertain && pendingPrompt?.n === to
       return lost ? { ...rest, pendingPrompt: { ...pendingPrompt, state: 'uncertain' } } : rest
     })
@@ -615,6 +653,13 @@ type Startup = { kind: 'ready' } | { kind: 'failed'; error: string }
 // answered in n, so it is never dropped with n's engine and never carried into n+1. The runner's own state decides.
 function unanswered(runner: Runner): boolean {
   return (runner.pendingInput?.() ?? 0) > 0
+}
+
+// An engine that cannot confirm consumption never has its queued input guessed away: the cut is refused, distinctly.
+export function refuseUnconfirmed(runner: Runner): void {
+  if (unanswered(runner) && runner.inputConfirmable?.() === false) {
+    fail(409, UNCONFIRMED_INPUT, UNCONFIRMED_INPUT_CODE)
+  }
 }
 
 // A runtime for n+1 that the engine has named (or a live snapshot): the successor exists and is resumed, not replaced.

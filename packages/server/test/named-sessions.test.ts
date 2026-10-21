@@ -48,9 +48,15 @@ class Engine extends EngineRunner {
   pendingInput(): number {
     return this.#pending
   }
+
+  confirmable = true
+
+  inputConfirmable(): boolean {
+    return this.confirmable
+  }
 }
 
-type Hooks = { options?: Partial<WorkerServerOptions>; agentStore?: AgentStore; diagnostics?: unknown[] }
+type Hooks = { options?: Partial<WorkerServerOptions>; agentStore?: AgentStore; diagnostics?: unknown[]; hold?: Promise<void> }
 
 async function gateway(dir: string, hooks: Hooks = {}) {
   const built: Engine[] = []
@@ -61,6 +67,7 @@ async function gateway(dir: string, hooks: Hooks = {}) {
     checkAvailability: async () => ({ available: true }),
     createRunner: ({ config, id }) => {
       const runner = new Engine(id ?? `s${built.length + 1}-${dir.slice(-6)}`, config)
+      runner.hold = hooks.hold
       built.push(runner)
       return runner
     },
@@ -514,6 +521,68 @@ describe('review probes', () => {
     await idle(second.server, session.id)
     expect(second.built.at(-1)!.config.owner).toBe('bob')
     expect((await second.server.records.get(session.id))?.owner).toBe('bob')
+  })
+})
+
+describe('recheck probes', () => {
+  async function crashedNamedCreate(dir: string, taken: boolean): Promise<string> {
+    const first = await gateway(dir)
+    const victim = await createNamed(first.base, 'Atlas')
+    const other = await createNamed(first.base, 'Other')
+    await idle(first.server, victim.id)
+    await idle(first.server, other.id)
+    await stop(first.server)
+    const path = join(dir, 'agents.json')
+    const rows = JSON.parse(await readFile(path, 'utf8')) as StoredAgent[]
+    const row = rows.find((candidate) => candidate.id === victim.id)!
+    const kept = rows.filter((candidate) => candidate.id !== victim.id).map((candidate) => (taken ? { ...candidate, name: 'Atlas' } : candidate))
+    await writeFile(path, JSON.stringify(kept))
+    const records = createFileSessionRecordStore({ dir: join(dir, 'sessions') })
+    const { runtime: _runtime, ...bare } = (await records.get(victim.id))!
+    await records.save({ ...bare, cut: { from: 0, to: 1, phase: 'committed', epoch: 0, target: bare.requested! }, identity: { agent: row } })
+    return victim.id
+  }
+
+  it('names a named create that crashed between its intent and its index row, then starts it', async () => {
+    const dir = await fixture.stateDir()
+    const id = await crashedNamedCreate(dir, false)
+    const second = await gateway(dir)
+    expect(second.built.map((runner) => runner.id)).toEqual([id])
+    expect(((await call(second.base, '/agents')).body.agents as AgentInfo[]).map((agent) => [agent.id, agent.name]).sort()).toContainEqual([id, 'Atlas'])
+  })
+
+  it('never starts a named create unnamed: a name taken at recovery leaves a failed create that naming and Retry start complete', async () => {
+    const dir = await fixture.stateDir()
+    const id = await crashedNamedCreate(dir, true)
+    const second = await gateway(dir)
+    expect(second.built).toHaveLength(0)
+    expect((await second.server.records.get(id))?.startFailed?.error).toContain('already exists')
+    expect(second.server.registry.get(id)).toBeUndefined()
+    expect((await call(second.base, `/sessions/${id}`, 'PATCH', { agent: { name: 'Atlas 2' } }, 1)).status).toBe(200)
+    expect((await call(second.base, `/agents/${id}/retry-start`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
+    expect(second.built.map((runner) => runner.id)).toEqual([id])
+    expect((await call(second.base, `/agents/${id}`)).body.agent).toMatchObject({ id, name: 'Atlas 2' })
+  })
+
+  it('refuses a cut with a distinct code when the engine cannot confirm queued input was consumed', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
+    await idle(server, id)
+    built[0]!.confirmable = false
+    const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    expect(refused).toMatchObject({ status: 409, body: { code: 'unconfirmed_input', error: expect.stringContaining('cannot confirm') } })
+    expect(built).toHaveLength(1)
+  })
+
+  it('answers a cut behind a first start that does not settle with 409 instead of hanging', async () => {
+    const dir = await fixture.stateDir()
+    const held = deferred()
+    const { base } = await gateway(dir, { hold: held.promise, options: { agentStartupTimeoutMs: 50 } })
+    const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a' })).body.session.id as string
+    const res = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    expect(res.status).toBe(409)
+    held.resolve()
   })
 })
 

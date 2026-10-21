@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import type { PendingPromptInfo, ProfileEngine } from '@workerdeck/protocol'
 import { isMissing, writeFileAtomic } from '../lib/atomic-file.ts'
+import type { StoredAgent } from './agent-store.ts'
 import {
   durableConfig,
   parseStoredRecord,
@@ -39,6 +40,9 @@ export type PendingPrompt = PendingPromptInfo
 
 export type StartFailure = { n: number; error: string }
 
+// A named create's identity, kept with its first-start intent: the first conversation never starts without its index row.
+export type PendingIdentity = { agent: StoredAgent; crossOwner?: boolean; remoteLead?: string }
+
 export type SessionRecord = {
   id: string
   owner?: string
@@ -51,6 +55,7 @@ export type SessionRecord = {
   cut?: SessionCut
   pendingPrompt?: PendingPrompt
   startFailed?: StartFailure
+  identity?: PendingIdentity
   closedAt?: number
   createdAt: number
 }
@@ -110,7 +115,7 @@ export class MemorySessionRecordStore implements SessionRecordStore {
 
 // `firstStart`: the create's start intent (and its first message) land with the record, so no crash loses either.
 export type SessionOpening = Pick<SessionRecord, 'owner' | 'scope' | 'requested'> & {
-  firstStart?: { epoch: number; target: SessionRunnerConfig; prompt?: string }
+  firstStart?: { epoch: number; target: SessionRunnerConfig; prompt?: string; identity?: PendingIdentity }
 }
 
 export class SessionRecords {
@@ -192,6 +197,9 @@ export class SessionRecords {
         next.cut = { from: 0, to: 1, phase: 'committed', epoch: first.epoch, target: first.target }
         if (first.prompt) {
           next.pendingPrompt = { text: first.prompt, n: 1, state: 'pending' }
+        }
+        if (first.identity) {
+          next.identity = first.identity
         }
       }
       return next

@@ -1,5 +1,6 @@
 import type { ContextResetDirectory, ContextResetRequest, Runner } from '@workerdeck/core'
 import { isJobRun, type SessionEvent } from '@workerdeck/protocol'
+import { UNCONFIRMED_INPUT } from './conversation-cuts.ts'
 
 export type AgentContextResetOptions = {
   // Whether a session the request and profile say nothing about gets `context_reset`. Off unless set.
@@ -69,6 +70,9 @@ export class ContextResetService implements ContextResetDirectory {
     }
     if (!runner.clearContext && !this.#options.cut) {
       throw new Error('this engine cannot clear its conversation')
+    }
+    if ((runner.pendingInput?.() ?? 0) > 0 && runner.inputConfirmable?.() === false) {
+      throw new Error(`refused: ${UNCONFIRMED_INPUT}`)
     }
     if (this.#pending.has(sessionId) || this.#running.has(sessionId)) {
       throw new Error('a reset is already scheduled for this session')

@@ -172,6 +172,8 @@ describe('agents', () => {
     first.harness.emit(initMessage)
     await vi.waitFor(() => expect(appended(first.harness)).toBe('You own the iOS client.'))
     await vi.waitFor(async () => expect(await fileRuntimeStore(dir).get(sessionId)).not.toBeNull())
+    // The brief rides the pending identity only until the first start is durable.
+    await vi.waitFor(async () => expect((await first.server.records.get(sessionId))?.identity).toBeUndefined())
     const raw = await readFile(join(dir, `${encodeURIComponent(sessionId)}.json`), 'utf8')
     expect(raw).not.toContain('You own the iOS client.')
 
