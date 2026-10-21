@@ -9,6 +9,7 @@ import {
   conversationSpan,
   discardConfirmText,
   startNewConversation,
+  uncertainPromptOf,
   type CutClient,
 } from '../src/lib/conversations.ts'
 
@@ -156,5 +157,20 @@ describe('session conversations', () => {
     const request = { expectedGeneration: 4, target: { cwd: '/elsewhere' } } as unknown as Parameters<typeof startNewConversation>[2]
     await startNewConversation(client, 's1', request, async () => true)
     expect(newConversation).toHaveBeenCalledWith('s1', { expectedGeneration: 4 })
+  })
+})
+
+describe('uncertainPromptOf', () => {
+  it('reads the conversation a Send again or Dismiss binds, and nothing from any other refusal', () => {
+    const refusal = new WorkerDeckError('decide first', 409, {
+      error: 'decide first',
+      code: 'uncertain_prompt',
+      conversation: 3,
+      promptConversation: 2,
+    })
+    expect(uncertainPromptOf(refusal)).toEqual({ promptConversation: 2 })
+    expect(uncertainPromptOf(new WorkerDeckError('busy', 409, { error: 'busy' }))).toBeUndefined()
+    expect(uncertainPromptOf(new WorkerDeckError('x', 500, { code: 'uncertain_prompt', promptConversation: 2 }))).toBeUndefined()
+    expect(uncertainPromptOf(new Error('x'))).toBeUndefined()
   })
 })

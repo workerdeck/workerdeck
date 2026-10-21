@@ -20,7 +20,13 @@ import {
   type TeamMovePlan,
   type WorkerDeckClient,
 } from '@workerdeck/client'
-import { conversationRecovery, startNewConversation, type ConversationRecovery, type DiscardConfirmText } from '@workerdeck/ui/format'
+import {
+  conversationRecovery,
+  startNewConversation,
+  uncertainPromptOf,
+  type ConversationRecovery,
+  type DiscardConfirmText,
+} from '@workerdeck/ui/format'
 import { clientFor } from './gateway.ts'
 import { deleteAgentDetail, showConversations } from './conversations.ts'
 import { agentDefaultsCached, relayOfCached } from './machine.ts'
@@ -48,7 +54,13 @@ const SEARCH_OPEN_KEY = 'workerdeck.searchOpen.v1'
 
 const FILTERED_CONTEXT_KEY = 'workerdeck.sessionsFiltered'
 
-export type SelectOptions = { subagentToolUseId?: string; revealToolUseId?: string; shellId?: string; target?: SurfaceTarget; conversation?: number }
+export type SelectOptions = {
+  subagentToolUseId?: string
+  revealToolUseId?: string
+  shellId?: string
+  target?: SurfaceTarget
+  conversation?: number
+}
 
 export type SidebarDelegate = {
   selectSession: (hostId: string, sessionId: string, options?: SelectOptions) => Promise<void>
@@ -462,14 +474,19 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     return answer && conversationRecovery(answer)
   }
 
-  #recoveryItems(hostId: string, info: SessionInfo, recovery: ConversationRecovery | undefined): (vscode.QuickPickItem & { run: () => Promise<void> })[] {
+  #recoveryItems(
+    hostId: string,
+    info: SessionInfo,
+    recovery: ConversationRecovery | undefined,
+  ): (vscode.QuickPickItem & { run: () => Promise<void> })[] {
     const items: (vscode.QuickPickItem & { run: () => Promise<void> })[] = []
     const failed = recovery?.startFailed
     if (failed) {
       items.push({
         label: '$(debug-restart) Retry start',
         detail: failed.error,
-        run: () => this.#agentCall(hostId, 'could not start the new conversation', (client) => client.retryConversationStart(info.id, failed.n)),
+        run: () =>
+          this.#agentCall(hostId, 'could not start the new conversation', (client) => client.retryConversationStart(info.id, failed.n)),
       })
     }
     const uncertain = recovery?.uncertainPrompt
@@ -479,12 +496,14 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           label: '$(send) Send again',
           description: 'first message may not have arrived',
           detail: uncertain.text,
-          run: () => this.#agentCall(hostId, 'could not send the message again', (client) => client.settlePendingPrompt(info.id, true, uncertain.n)),
+          run: () =>
+            this.#agentCall(hostId, 'could not send the message again', (client) => client.settlePendingPrompt(info.id, true, uncertain.n)),
         },
         {
           label: '$(close) Dismiss',
           detail: 'Drop the first message that may not have arrived',
-          run: () => this.#agentCall(hostId, 'could not dismiss the message', (client) => client.settlePendingPrompt(info.id, false, uncertain.n)),
+          run: () =>
+            this.#agentCall(hostId, 'could not dismiss the message', (client) => client.settlePendingPrompt(info.id, false, uncertain.n)),
         },
       )
     }
@@ -502,10 +521,21 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       await startNewConversation(client, info.id, { expectedGeneration }, confirmDiscard)
     } catch (err) {
       const message = errorMessage(err)
-      if (message.includes('retry starting it first')) {
+      const uncertain = uncertainPromptOf(err)
+      if (uncertain) {
+        const choice = await vscode.window.showErrorMessage(`WorkerDeck: ${message}`, 'Send again', 'Dismiss')
+        if (choice) {
+          const send = choice === 'Send again'
+          await this.#agentCall(hostId, send ? 'could not send the message again' : 'could not dismiss the message', (client) =>
+            client.settlePendingPrompt(info.id, send, uncertain.promptConversation),
+          )
+        }
+      } else if (message.includes('retry starting it first')) {
         const choice = await vscode.window.showErrorMessage(`WorkerDeck: ${message}`, 'Retry start')
         if (choice === 'Retry start') {
-          await this.#agentCall(hostId, 'could not start the new conversation', (retry) => retry.retryConversationStart(info.id, expectedGeneration))
+          await this.#agentCall(hostId, 'could not start the new conversation', (retry) =>
+            retry.retryConversationStart(info.id, expectedGeneration),
+          )
         }
       } else {
         const choice = await vscode.window.showErrorMessage(`WorkerDeck: could not start a new conversation - ${message}`, 'Try again')
@@ -536,7 +566,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     if (confirmed !== 'Delete agent') {
       return
     }
-    await this.#agentCall(hostId, 'could not delete the agent', (client) => client.retireAgent(agent.id, { expectedGeneration: info.conversation ?? 1 }))
+    await this.#agentCall(hostId, 'could not delete the agent', (client) =>
+      client.retireAgent(agent.id, { expectedGeneration: info.conversation ?? 1 }),
+    )
   }
 
   // The picker draws the candidates, so it lives in this webview; a request before the view has booted waits for `onReady`.

@@ -48,6 +48,7 @@ import {
   rowOwner,
   conversationRecovery,
   startNewConversation,
+  uncertainPromptOf,
   useDiscardConfirmation,
   type ConversationRecovery,
   type GroupTarget,
@@ -271,6 +272,18 @@ export function SessionsSidebar() {
       })
       .catch((e: unknown) => {
         const message = errorMessage(e, 'Could not start a new conversation')
+        const uncertain = uncertainPromptOf(e)
+        if (uncertain) {
+          const settle = (send: boolean) =>
+            agentCall(row, send ? 'Could not send the message again' : 'Could not dismiss the message', (pending) =>
+              pending.settlePendingPrompt(row.info.id, send, uncertain.promptConversation),
+            )
+          toast.error(message, {
+            action: { label: 'Send again', onClick: () => settle(true) },
+            cancel: { label: 'Dismiss', onClick: () => settle(false) },
+          })
+          return
+        }
         if (message.includes('retry starting it first')) {
           toast.error(message, {
             action: {

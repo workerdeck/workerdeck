@@ -254,6 +254,7 @@ export {
   conversationSpan,
   discardConfirmText,
   startNewConversation,
+  uncertainPromptOf,
   type ArchivedBannerText,
   type ConfirmDiscard,
   type ConversationRecovery,

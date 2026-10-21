@@ -1,4 +1,4 @@
-import { unconfirmedInputOf, type WorkerDeckClient } from '@workerdeck/client'
+import { unconfirmedInputOf, WorkerDeckError, type WorkerDeckClient } from '@workerdeck/client'
 import type {
   ArchivedView,
   ConversationRow,
@@ -7,7 +7,7 @@ import type {
   NewConversationResponse,
   UnconfirmedInputRefusal,
 } from '@workerdeck/protocol'
-import { INPUT_CHANGED_CODE } from '@workerdeck/protocol'
+import { INPUT_CHANGED_CODE, UNCERTAIN_PROMPT_CODE } from '@workerdeck/protocol'
 
 export type ConversationRowText = {
   date: string
@@ -136,6 +136,15 @@ export async function startNewConversation(
       refusal = next
     }
   }
+}
+
+// A cut refused until a person decides on a prompt that may not have reached the engine: Send again or Dismiss, both bound to `promptConversation`.
+export function uncertainPromptOf(error: unknown): { promptConversation: number } | undefined {
+  if (!(error instanceof WorkerDeckError) || error.status !== 409 || error.code !== UNCERTAIN_PROMPT_CODE) {
+    return undefined
+  }
+  const n = error.body?.promptConversation
+  return typeof n === 'number' ? { promptConversation: n } : undefined
 }
 
 function capital(text: string): string {
