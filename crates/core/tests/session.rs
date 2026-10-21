@@ -666,7 +666,7 @@ fn encodes_background_task_with_and_without_an_id() {
 
 #[test]
 fn decodes_attached_frame() {
-    let json = r#"{"type":"attached","protocolVersion":1,"replayingFrom":0,
+    let json = r#"{"type":"attached","protocolVersion":2,"replayingFrom":0,
        "session":{"id":"s1","status":"idle","cwd":"/x","createdAt":1722300000000,
                   "lastSeq":12,"pendingPermissionCount":0}}"#;
     let Some(Frame::Attached(attached)) = decode_frame(json.as_bytes()) else { panic!("expected attached") };
@@ -677,7 +677,7 @@ fn decodes_attached_frame() {
 
 #[test]
 fn decodes_the_shell_offer_on_the_attached_frame() {
-    let json = r#"{"type":"attached","protocolVersion":1,"replayingFrom":0,"shell":true,
+    let json = r#"{"type":"attached","protocolVersion":2,"replayingFrom":0,"shell":true,
        "session":{"id":"s1","status":"idle","cwd":"/x","createdAt":1722300000000,
                   "lastSeq":0,"pendingPermissionCount":0}}"#;
     let Some(Frame::Attached(attached)) = decode_frame(json.as_bytes()) else { panic!("expected attached") };

@@ -13,7 +13,7 @@ the Agent SDK. Dependency-free, browser-safe, depends
 on nothing and everything depends on it. Two helpers ride along because every client needs them to agree:
 `errorMessage(e, fallback?)` (an `Error`'s message, else the fallback, else `String(e)`) and
 `resolvePosix(target, cwd)` (a file link's normalized absolute path, or nothing for a relative one
-before the cwd is known; the dashboard's file links and the extension's both resolve through it). `chunkShellInput(data)` splits shell input into frames the gateway accepts (`SHELL_INPUT_MAX`, measured in UTF-8 bytes so it never undercounts the gateway's UTF-16 check, never inside a grapheme); `SessionHandle.writeShell` sends one `shell_input` per chunk, which is what lets a large paste reach a shell. iOS's `SessionHandle.chunk` is the same rule. Breaking → bump `PROTOCOL_VERSION`, which is **1**:
+before the cwd is known; the dashboard's file links and the extension's both resolve through it). `chunkShellInput(data)` splits shell input into frames the gateway accepts (`SHELL_INPUT_MAX`, measured in UTF-8 bytes so it never undercounts the gateway's UTF-16 check, never inside a grapheme); `SessionHandle.writeShell` sends one `shell_input` per chunk, which is what lets a large paste reach a shell. iOS's `SessionHandle.chunk` is the same rule. Breaking → bump `PROTOCOL_VERSION`, which is **2** since the conversation cut (`SessionInfo.conversation`, the `conversation_started` frame, close code `CONVERSATION_ENDED_CLOSE_CODE` 4011, `x-workerdeck-generation`); before that it was **1**:
 it was collapsed from 7 before the public launch, the counter having been climbing through a
 period when every consumer was rebuilt from this repo anyway and nothing in the wild spoke an
 older one. **From the public launch it is locked** - after that a bump is a real promise to
@@ -995,8 +995,25 @@ one `SessionStore` seam. That seam is an adapter over `SessionRecords` (`session
 is the `runtime` field of the session's one `SessionRecord`, written in a short per-id transaction that merges
 it into the latest record, so a whole-record parking write never clobbers the rest. The host supplies the
 `SessionRecordStore` as `sessions.store` (memory + JSON-file, the file one durable across restarts). A runtime
-write or clear carries the conversation it was taken for and is refused (`StaleConversationError`) once the
-record has moved on; clearing the runtime of a record that holds nothing else removes its file. **Parking** is deferred execution's other half and needs `Runner.park()` - which only
+write or clear carries the conversation it was taken for (parking stamps `info.conversation`) and is refused
+(`StaleConversationError`) once the record has moved on. Every session gets its record at create, persisted and
+read back before the runner registers (`requested` = the sanitized config the next conversation starts from).
+A runtime clear is `resumed` (the record stays) or `ended`; an ended session whose record holds nothing beyond its
+first conversation loses the file, one with history or `closedAt` keeps it. **The conversation cut**
+(`ConversationCuts`, `conversation-cuts.ts`) keeps the id and starts conversation n+1: under the per-id lock
+(`handovers.run`), then the parking fence, then short record transactions, it validates (idle, `expectedGeneration`,
+no job, no agent: agents still rotate until they move onto one id), writes a `prepared` intent with readback, stops
+the runner quietly (registry watchers evicted first, so no `session_closed` webhook or push; shells killed), and
+commits in one transaction: history entry with frozen `auth`, `conversation + 1`, `running` = the exact target,
+`runtime` = a dormant record with no engine id and the committed epoch, `pendingPrompt`, `cut.phase = committed`. The
+fresh start uses that epoch as is. Recovery before listen rolls `prepared` back, starts `committed` once, and turns
+a `sending` prompt into `uncertain`. Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`), typed exact
+`/clear` and WS `clear_context` (queued until idle), and `context_reset` of a non-agent session. History reads
+(`GET .../conversations[/n]`, WS `?conversation=n`) bypass `resolveSession` and authorize on the entry's frozen
+`auth`; an execution of an ended conversation answers 409, authorized on that entry too. A socket is bound to its
+runner and conversation: a command from a replaced runner or with a stale `generation` is refused, and the old
+socket gets `conversation_started` then close 4011 once the commit is durable. An unnamed `DELETE` appends the
+current conversation to the history and sets `closedAt`. **Parking** is deferred execution's other half and needs `Runner.park()` - which only
 the provider engine has, because claude and codex run behind a binary that owns its process
 state. **Dormancy** is the restart story for those two: a `DormantSessionRecord` holds no
 transcript at all, just the id, the `sdkSessionId` to resume from and the config to rebuild

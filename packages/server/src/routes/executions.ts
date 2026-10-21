@@ -1,12 +1,17 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ToolExecutionResult } from '@workerdeck/core'
-import type { SubmitExecutionResultRequest } from '@workerdeck/protocol'
+import type { SessionInfo, SubmitExecutionResultRequest } from '@workerdeck/protocol'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 import { ROTATING } from '../services/handovers.ts'
 import { SessionFenced } from '../services/parking.ts'
+import type { FrozenAuth } from '../services/session-records.ts'
 import { sessionInfoOf } from './session-lookup.ts'
+
+function frozenInfo(id: string, auth: FrozenAuth): SessionInfo {
+  return { id, status: 'closed', cwd: '', createdAt: 0, lastSeq: 0, pendingPermissionCount: 0, owner: auth.owner, scope: auth.scope }
+}
 
 export async function handleExecutionResult(
   ctx: ServerContext,
@@ -36,6 +41,14 @@ export async function handleExecutionResult(
     result = { status: 'failed', reason: body.reason, error: body.error, logs: body.logs }
   } else {
     fail(400, "status must be 'ok' or 'failed'")
+  }
+  const ended = ctx.cuts.endedExecution(executionId)
+  if (ended) {
+    const scoped = auth.allowedProfiles || auth.scope || ctx.options.authorizeSession
+    if (scoped && !authSvc.canSee(auth, { ...(await sessionInfoOf(ctx, ended.id)), ...frozenInfo(ended.id, ended.auth) })) {
+      fail(404, 'execution not found')
+    }
+    fail(409, `execution belongs to conversation ${ended.n}, which has ended`)
   }
   if (auth.allowedProfiles || auth.scope || ctx.options.authorizeSession) {
     const owner = parking.sessionFor(executionId)

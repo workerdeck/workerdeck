@@ -3,6 +3,7 @@ import type { WebSocket } from 'ws'
 import { isSlashCommand, type Runner } from '@workerdeck/core'
 import {
   CLIENT_ID_MAX,
+  CONVERSATION_ENDED_CLOSE_CODE,
   PROTOCOL_VERSION,
   SHELL_COMMAND_MAX,
   type ClientFrame,
@@ -14,6 +15,7 @@ import type { ServerContext } from '../context.ts'
 import { bypassDisabled, permissionDecision, refuseJobInput, refusePermissionMode } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import { ROTATING } from '../services/handovers.ts'
+import { CONVERSATION_ENDED } from '../services/conversation-cuts.ts'
 import { isArchived } from '../services/session-store.ts'
 import { mentionsFor } from '../services/peers.ts'
 import { sleepRunner } from './sleep.ts'
@@ -32,6 +34,8 @@ export const SESSION_SOCKET_BUFFERED_MAX = 16 * 1024 * 1024
 export const SESSION_SOCKET_BACKPRESSURE_CODE = 1013
 // The conversation was archived under a live socket (rotation, Delete agent): a reconnect attaches the archive.
 export const SESSION_ARCHIVED_CODE = 4010
+// A cut rolled back under a live socket: nothing moved on, so a reconnect attaches the same conversation.
+export const CONVERSATION_KEPT_CODE = 1012
 
 export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage, access: AttachAccess): void {
   const { bridge, parking } = ctx
@@ -46,6 +50,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     }
   }
   const client: Client = { send, open: () => ws.readyState === ws.OPEN, buffered: () => ws.bufferedAmount, shells: new Map() }
+  const conversation = ctx.records.conversationOf(runner.id) ?? 1
 
   send({
     type: 'attached',
@@ -77,6 +82,19 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
   )
   live = true
   const detachBridge = bridge.attach(runner.id, send)
+  const leaveCut = ctx.cuts.socket(runner.id, {
+    detach: () => {
+      unsubscribe()
+      detachBridge()
+      detachShells(client)
+    },
+    announce: (next, epoch) => {
+      send({ type: 'conversation_started', conversation: next, epoch })
+      ws.close(CONVERSATION_ENDED_CLOSE_CODE, 'conversation started')
+    },
+    drop: () => ws.close(CONVERSATION_KEPT_CODE, 'conversation kept'),
+  })
+  const bound: Bound = { runner, access, client, conversation }
 
   // After the replay is wired, so a fresh reading arrives as a live event behind the history rather than racing it.
   // The replay faithfully re-installs whatever this session last heard, which on an idle session can be days old,
@@ -101,20 +119,20 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     }
     // Prompts run in arrival order, and a close waits behind them: resolving mentions is async.
     if (frame?.type === 'close') {
-      prompts = prompts.then(() => handleCommand(ctx, frame, runner, access, client).catch(report))
+      prompts = prompts.then(() => handleCommand(ctx, frame, bound).catch(report))
       return
     }
     if (frame?.type !== 'user_message') {
-      handleCommand(ctx, frame, runner, access, client).catch(report)
+      handleCommand(ctx, frame, bound).catch(report)
       return
     }
     const clientId = typeof frame.clientId === 'string' && frame.clientId.length <= CLIENT_ID_MAX ? frame.clientId : undefined
     prompts = prompts.then(async () => {
       if (!clientId) {
-        await handleCommand(ctx, frame, runner, access, client).catch(report)
+        await handleCommand(ctx, frame, bound).catch(report)
         return
       }
-      await ctx.promptAcks.run(runner.id, clientId, () => handleCommand(ctx, frame, runner, access, client)).catch(report)
+      await ctx.promptAcks.run(`${runner.id}:${conversation}`, clientId, () => handleCommand(ctx, frame, bound)).catch(report)
       send({ type: 'ack', clientId })
     })
   })
@@ -123,6 +141,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     detachShells(client)
     unsubscribe()
     detachBridge()
+    leaveCut()
     parking.onDetach(runner.id)
     ctx.engineSleep.onDetach(runner.id)
   })
@@ -178,10 +197,27 @@ export function attachArchive(
   })
 }
 
-async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Runner, access: AttachAccess, client: Client): Promise<void> {
+// A socket is bound to the runner and the conversation it attached to; the stable id never routes it into the next one.
+type Bound = { runner: Runner; access: AttachAccess; client: Client; conversation: number }
+
+async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Bound): Promise<void> {
   const { attachmentStore, bridge } = ctx
+  const { runner, access, client, conversation } = bound
+  if (ctx.registry.get(runner.id) !== runner && !ctx.handovers.gated(runner.id)) {
+    throw new Error(CONVERSATION_ENDED)
+  }
+  if (
+    (typeof frame.generation === 'number' && frame.generation !== conversation) ||
+    (ctx.records.conversationOf(runner.id) ?? 1) !== conversation
+  ) {
+    throw new Error(CONVERSATION_ENDED)
+  }
   if (ctx.handovers.gated(runner.id)) {
     throw new Error(ROTATING)
+  }
+  if (isClearRequest(frame) && !ctx.agents.bySession(runner.id)) {
+    await ctx.cuts.clearOnIdle(runner, 'clear')
+    return
   }
   switch (frame.type) {
     case 'user_message': {
@@ -312,6 +348,11 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       throw new Error(`unknown command: ${(frame as { type?: string }).type}`)
     }
   }
+}
+
+// Exact: a typed `/clear` alone, nothing attached. Anything longer is ordinary text for the engine.
+function isClearRequest(frame: ClientFrame): boolean {
+  return frame.type === 'clear_context' || (frame.type === 'user_message' && frame.text.trim() === '/clear' && !frame.attachmentIds?.length)
 }
 
 function permittedShells(ctx: ServerContext, runner: Runner, access: AttachAccess): ShellRegistry {

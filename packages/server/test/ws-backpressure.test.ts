@@ -62,6 +62,8 @@ function context(): ServerContext {
     parking: { onDetach: () => {} },
     projects: { withProject: <T>(info: T) => info },
     shells: null,
+    records: { conversationOf: () => 1 },
+    cuts: { socket: () => () => {} },
   } as unknown as ServerContext
 }
 

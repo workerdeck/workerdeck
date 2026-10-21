@@ -11,6 +11,7 @@ import {
   type SessionRecord,
 } from '../src/index.ts'
 import type { DormantSessionRecord } from '../src/services/session-store.ts'
+import type { ConversationEntry } from '../src/services/session-records.ts'
 
 let dir: string
 beforeEach(async () => {
@@ -31,8 +32,12 @@ function dormant(id: string, config: Partial<SessionRunnerConfig> = {}): Dormant
   }
 }
 
+function historyEntry(n: number, endedAt: number): ConversationEntry {
+  return { n, engine: 'claude', cwd: '/tmp/project', startedAt: 0, endedAt, executions: [], auth: {} }
+}
+
 function ledger(id: string, conversation = 1): SessionRecord {
-  return { id, owner: 'tobias', conversation, conversations: [{ n: 1, endedAt: 5 }], createdAt: 1 }
+  return { id, owner: 'tobias', conversation, conversations: [historyEntry(1, 5)], createdAt: 1 }
 }
 
 describe('SessionRecords', () => {
@@ -81,7 +86,7 @@ describe('SessionRecords', () => {
     await records.transact('s1', () => ({ ...ledger('s1'), conversations: [] }))
     await Promise.all(
       Array.from({ length: 5 }, (_, i) =>
-        records.transact('s1', (current) => ({ ...current!, conversations: [...current!.conversations, { n: i, endedAt: i }] })),
+        records.transact('s1', (current) => ({ ...current!, conversations: [...current!.conversations, historyEntry(i, i)] })),
       ),
     )
     expect((await records.get('s1'))?.conversations.map((entry) => entry.n)).toEqual([0, 1, 2, 3, 4])

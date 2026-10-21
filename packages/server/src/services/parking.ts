@@ -37,6 +37,8 @@ export type SessionParkOptions = {
   onResumed?: (sessionId: string, runner: Runner) => void
   onError?: (error: unknown, context: ParkErrorContext) => void
   engineHome?: (profile: string | undefined, engine: NonNullable<SessionInfo['engine']>) => ArchivedSessionRecord['home']
+  // The write token: the conversation a record is taken for, refused by the store once a cut has moved past it.
+  conversationOf?: (sessionId: string) => number | undefined
 }
 
 export class SessionParkManager {
@@ -353,7 +355,30 @@ export class SessionParkManager {
         this.#settled.delete(executionId)
       }
     }
-    await this.#queue(sessionId, () => this.#options.store.delete(sessionId))
+    const conversation = this.#conversation(sessionId)
+    await this.#queue(sessionId, () => this.#options.store.delete(sessionId, conversation, 'ended'))
+  }
+
+  executionsOf(sessionId: string): string[] {
+    return [...this.#owners, ...this.#settled].filter(([, owner]) => owner === sessionId).map(([executionId]) => executionId)
+  }
+
+  configOf(sessionId: string): SessionRunnerConfig | undefined {
+    return this.#configs.get(sessionId)
+  }
+
+  dropExecutions(sessionId: string): void {
+    for (const [executionId, owner] of this.#owners) {
+      if (owner === sessionId) {
+        this.#clearTimer(executionId)
+        this.#owners.delete(executionId)
+      }
+    }
+    for (const [executionId, owner] of this.#settled) {
+      if (owner === sessionId) {
+        this.#settled.delete(executionId)
+      }
+    }
   }
 
   // Blocks every later write and wake for the session, then waits out the writes and the wake already under way.
@@ -432,6 +457,20 @@ export class SessionParkManager {
     this.#detachTimers.clear()
   }
 
+  #conversation(sessionId: string): number | undefined {
+    return this.#options.conversationOf?.(sessionId)
+  }
+
+  #stamped(info: SessionInfo): SessionInfo {
+    const conversation = this.#conversation(info.id)
+    return conversation === undefined ? info : { ...info, conversation }
+  }
+
+  #idleRecordBase(runner: Runner, config: SessionRunnerConfig): ReturnType<typeof idleRecordBase> {
+    const base = idleRecordBase(runner, config)
+    return { ...base, info: this.#stamped(base.info) }
+  }
+
   #forgetSession(sessionId: string): void {
     this.#watches.delete(sessionId)
     clearTimeout(this.#detachTimers.get(sessionId))
@@ -459,7 +498,7 @@ export class SessionParkManager {
     const sdkSessionId = info.sdkSessionId
     const record: DormantSessionRecord = {
       kind: 'dormant',
-      ...idleRecordBase(runner, config),
+      ...this.#idleRecordBase(runner, config),
       ...(sdkSessionId === undefined ? {} : { sdkSessionId }),
       savedAt: Date.now(),
     }
@@ -490,7 +529,7 @@ export class SessionParkManager {
         }
         const record: ParkedSessionRecord = {
           kind: 'live',
-          ...idleRecordBase(runner, config),
+          ...this.#idleRecordBase(runner, config),
           snapshot,
           executions: snapshot.parked,
           parkedAt: Date.now(),
@@ -525,7 +564,7 @@ export class SessionParkManager {
       return
     }
     this.#options.onParked?.(id, executions[0]!)
-    const info = { ...runner.info(), status: 'parked' as const }
+    const info = this.#stamped({ ...runner.info(), status: 'parked' as const })
     this.#options.registry.evict(id)
     const record: ParkedSessionRecord = {
       kind: 'parked',
@@ -604,7 +643,8 @@ export class SessionParkManager {
     this.watch(runner, isDormant(record) ? 0 : record.snapshot.seq)
     this.#options.onResumed?.(id, runner)
     if (!isDormant(record) && !isLiveRecord(record)) {
-      await this.#queue(id, () => this.#options.store.delete(id))
+      const conversation = this.#conversation(id)
+      await this.#queue(id, () => this.#options.store.delete(id, conversation, 'resumed'))
     }
     void runner.start()
     return runner

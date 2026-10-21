@@ -63,8 +63,10 @@ export interface SessionStore {
   save(record: StoredSessionRecord): Promise<void>
   get(id: string): Promise<StoredSessionRecord | null>
   list(): Promise<StoredSessionRecord[]>
-  delete(id: string, conversation?: number): Promise<boolean>
+  delete(id: string, conversation?: number, reason?: RuntimeClear): Promise<boolean>
 }
+
+export type RuntimeClear = 'ended' | 'resumed'
 
 export function durableConfig(config: SessionRunnerConfig): SessionRunnerConfig {
   const source = config as Record<string, unknown>

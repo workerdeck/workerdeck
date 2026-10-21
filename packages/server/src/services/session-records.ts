@@ -1,21 +1,42 @@
 import { readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { SessionRunnerConfig } from '@workerdeck/core'
+import type { RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
+import type { PendingPromptInfo, ProfileEngine } from '@workerdeck/protocol'
 import { isMissing, writeFileAtomic } from '../lib/atomic-file.ts'
 import {
   durableConfig,
   isArchived,
   parseStoredRecord,
   toDurableRecord,
+  type EngineHome,
+  type RuntimeClear,
   type SessionStore,
   type StoredSessionRecord,
 } from './session-store.ts'
 
-export type ConversationEntry = { n: number; endedAt: number }
+export type FrozenAuth = { owner?: string; scope?: Record<string, string>; originalSessionId?: string }
 
-export type SessionCut = { phase: 'pending' | 'committed' }
+export type ConversationEntry = {
+  n: number
+  engine: ProfileEngine
+  profile?: string
+  engineHome?: EngineHome
+  cwd: string
+  engineSessionId?: string
+  snapshot?: RunnerSnapshot
+  running?: SessionRunnerConfig
+  title?: string
+  costUsd?: number
+  startedAt: number
+  endedAt: number
+  executions: string[]
+  auth: FrozenAuth
+  transcript?: 'unavailable'
+}
 
-export type PendingPrompt = { text: string; n: number; state: 'pending' | 'sending' }
+export type SessionCut = { from: number; to: number; phase: 'prepared' | 'committed'; epoch: number; target: SessionRunnerConfig }
+
+export type PendingPrompt = PendingPromptInfo
 
 export type StartFailure = { n: number; error: string }
 
@@ -82,27 +103,39 @@ export class MemorySessionRecordStore implements SessionRecordStore {
   }
 }
 
+export type SessionOpening = Pick<SessionRecord, 'owner' | 'scope' | 'requested'>
+
 export class SessionRecords {
   #store: SessionRecordStore
   #ops = new Map<string, Promise<void>>()
+  #conversations = new Map<string, number>()
 
   constructor(store: SessionRecordStore) {
     this.#store = store
   }
 
   get(id: string): Promise<SessionRecord | null> {
-    return this.#serial(id, () => this.#store.get(id))
+    return this.#serial(id, async () => this.#known(id, await this.#store.get(id)))
   }
 
-  list(): Promise<SessionRecord[]> {
-    return this.#store.list()
+  async list(): Promise<SessionRecord[]> {
+    const records = await this.#store.list()
+    for (const record of records) {
+      this.#conversations.set(record.id, record.conversation)
+    }
+    return records
+  }
+
+  // The committed conversation, as far as this process has read or written it; undefined for an id it has not seen.
+  conversationOf(id: string): number | undefined {
+    return this.#conversations.get(id)
   }
 
   // `merge` is synchronous on purpose: a transaction must never await parking, a runner, or another queued op.
   // `undefined` leaves the record as it is, `null` removes it.
   transact(id: string, merge: SessionRecordMerge): Promise<SessionRecord | null> {
     return this.#serial(id, async () => {
-      const current = await this.#store.get(id)
+      const current = this.#known(id, await this.#store.get(id))
       const next = merge(current)
       if (next === undefined) {
         return current
@@ -111,9 +144,36 @@ export class SessionRecords {
         if (current) {
           await this.#store.delete(id)
         }
+        this.#conversations.delete(id)
         return null
       }
       await this.#store.save(next)
+      this.#conversations.set(id, next.conversation)
+      return next
+    })
+  }
+
+  // A transaction whose result must be on disk before the caller acts on it: read back and compared.
+  async transactDurable(id: string, merge: (current: SessionRecord | null) => SessionRecord): Promise<SessionRecord> {
+    const next = (await this.transact(id, merge))!
+    const back = await this.#serial(id, () => this.#store.get(id))
+    if (!back || durableView(back) !== durableView(next)) {
+      throw new Error(`session record '${id}' did not read back as written`)
+    }
+    return next
+  }
+
+  open(id: string, opening: SessionOpening): Promise<SessionRecord> {
+    return this.transactDurable(id, (current) => {
+      const { closedAt: _closed, ...base } = current ?? freshRecord(id)
+      const next: SessionRecord = { ...base }
+      for (const key of ['owner', 'scope', 'requested'] as const) {
+        if (opening[key] === undefined) {
+          delete next[key]
+        } else {
+          ;(next as Record<string, unknown>)[key] = opening[key]
+        }
+      }
       return next
     })
   }
@@ -121,21 +181,29 @@ export class SessionRecords {
   async saveRuntime(runtime: StoredSessionRecord, conversation?: number): Promise<void> {
     await this.transact(runtime.id, (current) => {
       checkConversation(runtime.id, current, conversation)
+      if (current?.closedAt !== undefined) {
+        return undefined
+      }
       const base = current ?? freshRecord(runtime.id)
       return isArchived(runtime) ? { ...base, runtime } : { ...base, runtime, running: durableConfig(runtime.config) }
     })
   }
 
-  async clearRuntime(id: string, conversation?: number): Promise<boolean> {
+  // `resumed`: the runtime moved into a live runner and the session goes on. `ended`: the session is over, and a
+  // record with nothing beyond its first conversation goes with it.
+  async clearRuntime(id: string, conversation?: number, reason: RuntimeClear = 'ended'): Promise<boolean> {
     let cleared = false
     await this.transact(id, (current) => {
-      if (!current?.runtime) {
+      if (!current) {
         return undefined
       }
       checkConversation(id, current, conversation)
-      cleared = true
-      if (holdsOnlyRuntime(current)) {
+      cleared = current.runtime !== undefined
+      if (reason === 'ended' && disposable(current)) {
         return null
+      }
+      if (!cleared) {
+        return undefined
       }
       const next = { ...current }
       delete next.runtime
@@ -149,12 +217,19 @@ export class SessionRecords {
       save: (record) => this.saveRuntime(record, conversationOf(record)),
       get: async (id) => (await this.get(id))?.runtime ?? null,
       list: async () => (await this.list()).flatMap((record) => (record.runtime ? [record.runtime] : [])),
-      delete: (id, conversation) => this.clearRuntime(id, conversation),
+      delete: (id, conversation, reason) => this.clearRuntime(id, conversation, reason),
     }
   }
 
   async flush(): Promise<void> {
     await Promise.all(this.#ops.values())
+  }
+
+  #known(id: string, record: SessionRecord | null): SessionRecord | null {
+    if (record) {
+      this.#conversations.set(id, record.conversation)
+    }
+    return record
   }
 
   #serial<T>(id: string, op: () => Promise<T>): Promise<T> {
@@ -174,7 +249,21 @@ export class SessionRecords {
   }
 }
 
-function freshRecord(id: string): SessionRecord {
+// What the next conversation starts from: the session's durable config without anything bound to one conversation.
+export function requestedConfig(config: SessionRunnerConfig): SessionRunnerConfig {
+  const {
+    prompt: _prompt,
+    resume: _resume,
+    forkSession: _fork,
+    epoch: _epoch,
+    engineHome: _home,
+    statusLabel: _label,
+    ...rest
+  } = durableConfig(config)
+  return rest
+}
+
+export function freshRecord(id: string): SessionRecord {
   return { id, conversation: 1, conversations: [], createdAt: Date.now() }
 }
 
@@ -185,19 +274,30 @@ function checkConversation(id: string, current: SessionRecord | null, conversati
   }
 }
 
-// `running` is left out: it only mirrors the runtime's config until a cut makes it the ledger's own.
-function holdsOnlyRuntime(record: SessionRecord): boolean {
+// Owner, scope and config are the session's own: they go with it. Anything a cut or a close wrote keeps the record.
+function disposable(record: SessionRecord): boolean {
   return (
     record.conversation === 1 &&
     record.conversations.length === 0 &&
-    record.owner === undefined &&
-    record.scope === undefined &&
-    record.requested === undefined &&
     record.cut === undefined &&
     record.pendingPrompt === undefined &&
     record.startFailed === undefined &&
     record.closedAt === undefined
   )
+}
+
+function durableView(record: SessionRecord): string {
+  const { conversation, cut, pendingPrompt, startFailed, closedAt, conversations, owner, scope } = toDurableSessionRecord(record)
+  return JSON.stringify({
+    conversation,
+    cut,
+    pendingPrompt,
+    startFailed,
+    closedAt,
+    entries: conversations.map((entry) => entry.n),
+    owner,
+    scope,
+  })
 }
 
 function conversationOf(record: StoredSessionRecord): number | undefined {
@@ -211,6 +311,8 @@ export function toDurableSessionRecord(record: SessionRecord): SessionRecord {
     ...(record.runtime ? { runtime: toDurableRecord(record.runtime) } : {}),
     ...(record.running ? { running: durableConfig(record.running) } : {}),
     ...(record.requested ? { requested: durableConfig(record.requested) } : {}),
+    ...(record.cut ? { cut: { ...record.cut, target: durableConfig(record.cut.target) } } : {}),
+    conversations: record.conversations.map((entry) => (entry.running ? { ...entry, running: durableConfig(entry.running) } : entry)),
   }
 }
 

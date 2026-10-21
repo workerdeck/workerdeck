@@ -17,6 +17,7 @@ export type SessionItemRoute =
   | { kind: 'files'; id: string; filePath?: string }
   | { kind: 'peers'; id: string }
   | { kind: 'sleep'; id: string }
+  | { kind: 'conversations'; id: string; conversation?: string }
 
 export type SessionRoute = { kind: 'collection' } | SessionItemRoute
 
@@ -81,6 +82,9 @@ function itemRoute(rawId: string, parts: string[]): SessionItemRoute | null {
   if (length === 4 && section === 'events' && fourth === 'result') {
     const seq = Number(third)
     return Number.isInteger(seq) && seq >= 0 ? { kind: 'tool-result', id: decode(rawId), resultSeq: seq } : null
+  }
+  if (length <= 3 && section === 'conversations') {
+    return { kind: 'conversations', id: decode(rawId), conversation: optional(third) }
   }
   if (length === 2 && section === 'sleep') {
     return { kind: 'sleep', id: decode(rawId) }

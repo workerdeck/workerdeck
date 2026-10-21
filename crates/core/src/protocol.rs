@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-pub const PROTOCOL_VERSION: i64 = 1;
+pub const PROTOCOL_VERSION: i64 = 2;
 pub const SHELL_INPUT_MAX: usize = 4096;
 
 pub enum Frame {

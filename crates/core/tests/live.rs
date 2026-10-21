@@ -59,7 +59,7 @@ impl Host {
 
     fn attach(&mut self, replaying_from: i64, last_seq: i64, created_at: f64, now: f64) {
         self.frame(
-            json!({"type": "attached", "protocolVersion": 1, "replayingFrom": replaying_from, "acks": true,
+            json!({"type": "attached", "protocolVersion": 2, "replayingFrom": replaying_from, "acks": true,
                 "session": {"id": "s1", "status": "running", "cwd": "/repo", "createdAt": created_at, "lastSeq": last_seq, "pendingPermissionCount": 0}}),
             now,
         );
@@ -630,7 +630,7 @@ fn a_session_without_reported_models_offers_its_profile_catalog_and_switches_ove
     let mut host = Host::new();
     host.open();
     host.frame(
-        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
             "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "profile": "codex",
                 "model": "gpt-5.6", "effort": "high", "permissionMode": "default", "canBypassPermissions": false,
                 "capabilities": {"permissionModes": ["default", "bypassPermissions", "acceptEdits"], "reasoningEfforts": ["low", "high"]}}}),
@@ -669,7 +669,7 @@ fn a_session_without_reported_models_offers_its_profile_catalog_and_switches_ove
 
 #[test]
 fn a_failed_catalog_fetch_is_retried_on_the_next_attach_but_a_missing_route_is_not() {
-    let attached = json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+    let attached = json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
         "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "profile": "codex"}});
     let catalog = |effects: Vec<Effect>| {
         effects.into_iter().find_map(|effect| match effect {
@@ -707,7 +707,7 @@ fn sleep_stays_off_from_the_send_until_the_session_answers_and_lists_flag_the_ch
     let mut host = Host::new();
     host.open();
     host.frame(
-        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
             "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "sdkSessionId": "sdk",
                 "capabilities": {"engineSleep": true, "attachments": ["image"]}}}),
         0.0,
@@ -740,7 +740,7 @@ fn sleep_stays_off_from_the_send_until_the_session_answers_and_lists_flag_the_ch
 
 fn attach_archived(host: &mut Host, replaying_from: i64, last_seq: i64, epoch: i64, now: f64) {
     host.frame(
-        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": replaying_from, "acks": true,
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": replaying_from, "acks": true,
             "session": {"id": "s1", "status": "closed", "cwd": "/repo", "createdAt": 1.0, "lastSeq": last_seq, "epoch": epoch,
                 "pendingPermissionCount": 0, "archived": true, "supersededBy": "s2"}}),
         now,
@@ -815,7 +815,7 @@ fn an_agent_session_offers_new_conversation_instead_of_clear_context() {
     let mut host = Host::new();
     host.open();
     host.frame(
-        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
             "session": {"id": "s1", "status": "running", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0,
                 "capabilities": {"clearContext": true}, "agent": {"id": "ag", "name": "WD-Test"}}}),
         0.0,
@@ -834,7 +834,7 @@ fn an_archived_agent_conversation_reads_as_deleted_once_the_agents_are_known() {
     let mut host = Host::new();
     host.open();
     host.frame(
-        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
             "session": {"id": "s1", "status": "closed", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0,
                 "archived": true, "agent": {"id": "ag", "name": "WD-Test"}}}),
         0.0,

@@ -76,6 +76,7 @@ export class EngineRunner implements Runner {
       lastSeq: this.#seq,
       pendingPermissionCount: 0,
       title: 'Archived talk',
+      ...(this.config.epoch === undefined ? {} : { epoch: this.config.epoch }),
     }
   }
 
@@ -106,6 +107,15 @@ export class EngineRunner implements Runner {
   busy(): void {
     this.#status = 'running'
     this.#emit({ type: 'status_changed', status: 'running' })
+  }
+
+  settle(): void {
+    this.#status = 'idle'
+    this.#emit({ type: 'status_changed', status: 'idle' })
+  }
+
+  emit(body: SessionEventBody): void {
+    this.#emit(body)
   }
 
   close(): void {

@@ -561,7 +561,7 @@ class SessionModelTest {
         const val RESOLVED = """{"type":"event","event":{"type":"permission_resolved","requestId":"r1","seq":2,"ts":1}}"""
 
         const val METERED =
-            """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Metered","status":"idle","cwd":"/r","createdAt":1,"profile":"p1","lastSeq":0,"pendingPermissionCount":0,"capabilities":{"rateLimits":true}}}"""
+            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Metered","status":"idle","cwd":"/r","createdAt":1,"profile":"p1","lastSeq":0,"pendingPermissionCount":0,"capabilities":{"rateLimits":true}}}"""
 
         const val CONTEXT_USAGE =
             """{"type":"event","event":{"type":"context_usage","usage":{"totalTokens":124000,"maxTokens":200000,"percentage":62,"model":"claude-opus-4-6","categories":[{"name":"Messages","tokens":98000,"color":"#497eae"}]},"seq":1,"ts":1760000001000}}"""
@@ -573,16 +573,16 @@ class SessionModelTest {
             """{"profiles":[{"name":"p1","usage":{"seven_day":{"info":{"status":"allowed","utilization":71},"updatedAt":1760000003000}},"spend":{"weekUsd":41.2,"monthUsd":160,"weekByModel":{},"unpricedShare":0}}]}"""
 
         const val ARCHIVED_AGENT =
-            """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Old work","status":"closed","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"archived":true,"agent":{"id":"ag","name":"WD-Test"}}}"""
+            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Old work","status":"closed","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"archived":true,"agent":{"id":"ag","name":"WD-Test"}}}"""
 
         const val LIVE_AGENT =
-            """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Work","status":"idle","sdkSessionId":"sdk","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"capabilities":{"clearContext":true},"agent":{"id":"ag","name":"WD-Test"}}}"""
+            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Work","status":"idle","sdkSessionId":"sdk","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"capabilities":{"clearContext":true},"agent":{"id":"ag","name":"WD-Test"}}}"""
 
         fun agents(extra: String) =
             """{"agents":[{"id":"ag","name":"WD-Test","createdAt":0,"updatedAt":0,"pastSessions":[],"config":{},$extra}]}"""
 
         const val ATTACHED =
-            """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Deck work","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"""
+            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Deck work","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"""
 
         const val SHELL_ROW =
             """{"type":"event","event":{"type":"user_message","parentToolUseId":null,"synthetic":true,"replay":true,"seq":2,"ts":1,"shell":{"id":"sh_1","sessionId":"s1","ordinal":1,"command":"npm run dev","label":"npm run dev","cwd":"/r","owner":"user","status":"running","startedAt":1,"bytes":0,"cols":80,"rows":24},"message":{"role":"user","content":"<local-command-stdout>${'$'} npm run dev\nlistening</local-command-stdout>"}}}"""

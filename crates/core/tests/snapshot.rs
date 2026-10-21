@@ -43,7 +43,7 @@ fn session() -> LiveSession {
     let mut live = LiveSession::new(0, true, "n".into(), METRICS);
     live.opened();
     live.received(
-        &json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+        &json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
             "session": {"id": "s1", "status": "running", "cwd": "/repo", "createdAt": 1, "lastSeq": 0, "pendingPermissionCount": 0}})
         .to_string(),
         0.0,

@@ -15,7 +15,7 @@ import {
 } from '@workerdeck/core'
 import type { AvatarDirectory, EngineAdapter, PeerDirectory, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
-import { isSharing, mergePricing, type CreateSessionRequest, type ProfileEngine } from '@workerdeck/protocol'
+import { isSharing, mergePricing, type CreateSessionRequest, type ProfileEngine, type SessionInfo } from '@workerdeck/protocol'
 import type { ServerContext } from './context.ts'
 import { createServerLifecycle } from './lifecycle.ts'
 import { httpErrorStatus, json } from './lib/http.ts'
@@ -54,7 +54,8 @@ import { SessionRegistry } from './services/registry.ts'
 import { OwnerService } from './services/owners.ts'
 import { createSessionFactory, type SessionFactory } from './services/session-factory.ts'
 import { createShellDirectory, createShellRegistry, type ShellRegistry } from './services/shells.ts'
-import { MemorySessionRecordStore, SessionRecords } from './services/session-records.ts'
+import { MemorySessionRecordStore, SessionRecords, requestedConfig } from './services/session-records.ts'
+import { ConversationCuts } from './services/conversation-cuts.ts'
 import { isDormant, type StoredSessionRecord } from './services/session-store.ts'
 
 export type {
@@ -82,6 +83,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const corsOrigins = options.cors?.origins.length ? new Set(options.cors.origins) : undefined
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
   const diagnose: DiagnosticSink = options.onDiagnostic ?? (() => {})
+  const records = new SessionRecords(options.sessions?.store ?? new MemorySessionRecordStore())
+  const cuts = new ConversationCuts()
   const handovers = new AgentHandovers({
     startupTimeoutMs: options.agentStartupTimeoutMs,
     onError: (error) => diagnose(error, 'agent-handover'),
@@ -160,9 +163,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       (agent.config.profile === undefined ? undefined : profiles.get(agent.config.profile)?.defaults?.permissionMode),
     gateway: options.relay?.gateway,
   })
+  // Every session the gateway hands out names its conversation; a history entry's info already carries its own.
+  const withConversation = (info: SessionInfo): SessionInfo =>
+    info.conversation === undefined ? { ...info, conversation: records.conversationOf(info.id) ?? 1 } : info
   const projects = new ProjectInfoService({
     decorate: (info) => {
-      const decorated = agents.decorate(shells ? shells.decorate(info) : info)
+      const decorated = agents.decorate(shells ? shells.decorate(withConversation(info)) : withConversation(info))
       const owner = decorated.owner ?? owners.ownerFor(decorated.profile)
       return owner === undefined || owner === decorated.owner ? decorated : { ...decorated, owner }
     },
@@ -186,6 +192,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       : new ContextResetService({
           ...options.agentContextReset,
           agentOf: (sessionId) => agents.bySession(sessionId)?.id,
+          cut: async (sessionId, prompt) => {
+            const expectedGeneration = records.conversationOf(sessionId) ?? 1
+            await cuts.cut(sessionId, { expectedGeneration, prompt, reason: 'context_reset' })
+          },
           restartAgent: async (agentId, sessionId, prompt) => {
             const scope = registry.get(sessionId)?.info().scope
             await rotateAgent(ctx, agentId, { ok: true, operator: true, ...(scope ? { scope } : {}) }, { prompt, expected: sessionId })
@@ -257,7 +267,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       options.bridge?.onResult?.(sessionId, executionId, result)
     },
   })
-  const records = new SessionRecords(options.sessions?.store ?? new MemorySessionRecordStore())
   const parking = new SessionParkManager({
     registry,
     store: records.runtimeStore(),
@@ -266,6 +275,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     persistLive: options.parking?.persistLive,
     onError: options.parking?.onError,
     rebuild: (record) => rebuildRunner(factory, record),
+    conversationOf: (sessionId) => records.conversationOf(sessionId),
     attachedCount: (sessionId) => bridge.attachedCount(sessionId),
     onParking: (sessionId) => queue?.canParkSession(sessionId) ?? true,
     onParked: (sessionId, executionId) => void queue?.onSessionParking(sessionId, executionId),
@@ -383,6 +393,14 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     registry,
     parking,
     bridge,
+    openRecord: async (runner, config) => {
+      const info = runner.info()
+      await records.open(runner.id, {
+        ...((info.owner ?? config.owner) ? { owner: info.owner ?? config.owner } : {}),
+        ...(config.scope ? { scope: config.scope } : {}),
+        requested: requestedConfig(config),
+      })
+    },
     agentBrief: (sessionId) => agents.briefFor(sessionId),
     agentInstructionScope: (sessionId) => agents.instructionScopeFor(sessionId),
     avatar: avatarChanges
@@ -457,6 +475,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     parking,
     history,
     handovers,
+    records,
+    cuts,
     engineSleep,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
     bridge,
@@ -473,6 +493,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     generation,
     pricingOverrides: Object.keys(pricing.overrides).length > 0 ? pricing.overrides : undefined,
   }
+  cuts.bind(ctx)
   const routes = httpRoutes(ctx)
 
   const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -539,6 +560,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     queue,
     bridge,
     parking,
+    records,
+    cuts,
     shells,
     listen: async (port, host) => {
       await profiles.refreshStored()
@@ -548,6 +571,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       teamLinks?.start()
       await parking.hydrate()
       await recoverHandovers(ctx, (error) => diagnose(error, 'agent-handover'))
+      await cuts.recover((error) => diagnose(error, 'conversation-cut'))
       await shells?.hydrate()
       for (const owner of [...agents.list(), ...(await parking.listInfo())].map((record) => record.owner)) {
         owners.retain(owner)

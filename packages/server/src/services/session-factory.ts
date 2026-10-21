@@ -50,6 +50,8 @@ export type SessionFactoryDeps = {
   registry: SessionRegistry
   parking: SessionParkManager
   bridge: BridgeHub
+  // Persisted and read back before the runner is registered or started: a session never works without its record.
+  openRecord?: (runner: Runner, config: SessionRunnerConfig) => Promise<void>
   agentBrief?: (sessionId: string | undefined) => string | undefined
   agentInstructionScope?: (sessionId: string | undefined) => InstructionScope | undefined
   avatar?: { directory: AvatarDirectory; isAgent: (sessionId: string | undefined) => boolean }
@@ -332,7 +334,14 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   }
 
   const createRunner = async (config: SessionRunnerConfig, options?: BuildOptions): Promise<Runner> => {
-    const runner = registry.register(await buildRunner(config, undefined, options?.id, options))
+    const built = await buildRunner(config, undefined, options?.id, options)
+    try {
+      await deps.openRecord?.(built, config)
+    } catch (error) {
+      built.close('error')
+      throw error
+    }
+    const runner = registry.register(built)
     // Watchers first, then start: a session must not emit anything before the things that persist and account for it are listening.
     parking.remember(runner.id, config)
     parking.watch(runner)

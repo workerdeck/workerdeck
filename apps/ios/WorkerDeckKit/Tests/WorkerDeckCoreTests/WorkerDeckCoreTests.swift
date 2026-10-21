@@ -3,7 +3,7 @@ import Testing
 import WorkerDeckCore
 
 private let attached =
-  #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Deck work","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"#
+  #"{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Deck work","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"#
 
 private func corpus(_ name: String) throws -> String {
   let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../../../../crates/core/tests/conformance")

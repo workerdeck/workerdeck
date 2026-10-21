@@ -84,14 +84,14 @@ enum CoreReplayFixture {
     event(#""type":"rate_limit","info":{"status":"allowed","rateLimitType":"seven_day","utilization":83}"#)
     event(#""type":"status_changed","status":"idle""#)
     let attached =
-      #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"shell":true,"session":{"id":"fixture","title":"Core fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"profile":"fixture","totalCostUsd":1.84,"costUsd":1.62,"usageByModel":{"claude-opus-4-6":{"input":120000,"output":30000,"cacheWrite5m":0,"cacheWrite1h":0,"cacheRead":900000}},"lastSeq":\#(seq),"pendingPermissionCount":0,"capabilities":{"attachments":["image","pdf","text"],"slashCommands":true,"skillsList":true,"backgroundTasks":true,"rateLimits":true}}}"#
+      #"{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"shell":true,"session":{"id":"fixture","title":"Core fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"profile":"fixture","totalCostUsd":1.84,"costUsd":1.62,"usageByModel":{"claude-opus-4-6":{"input":120000,"output":30000,"cacheWrite5m":0,"cacheWrite1h":0,"cacheRead":900000}},"lastSeq":\#(seq),"pendingPermissionCount":0,"capabilities":{"attachments":["image","pdf","text"],"slashCommands":true,"skillsList":true,"backgroundTasks":true,"rateLimits":true}}}"#
     return [attached] + events
   }
 
   // One running shell behind the last row, answered here instead of by a gateway: its attach replays a numbered
   // scrollback, typed input echoes, and Enter prints a listing and a fresh prompt.
   static let archivedFrames = [
-    #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"fixture","title":"Past fixture","status":"closed","cwd":"/work/fixture","createdAt":1760000000000,"lastActivityAt":1760000600000,"lastSeq":1,"pendingPermissionCount":0,"archived":true,"supersededBy":"next","agent":{"id":"ag","name":"WD-Test"}}}"#,
+    #"{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"fixture","title":"Past fixture","status":"closed","cwd":"/work/fixture","createdAt":1760000000000,"lastActivityAt":1760000600000,"lastSeq":1,"pendingPermissionCount":0,"archived":true,"supersededBy":"next","agent":{"id":"ag","name":"WD-Test"}}}"#,
     #"{"type":"event","event":{"type":"user_message","message":{"role":"user","content":"Archived turn"},"parentToolUseId":null,"uuid":"u-1","seq":1,"ts":1760000001000}}"#,
   ]
 

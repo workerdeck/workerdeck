@@ -6,7 +6,7 @@ fn attached(session_extra: &str, events: &[&str]) -> std::sync::Arc<Session> {
     let session = Session::new(0, true, "n".into(), Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 });
     session.opened();
     let attached = format!(
-        r#"{{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{{"id":"s1","status":"idle","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0{session_extra}}}}}"#
+        r#"{{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{{"id":"s1","status":"idle","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0{session_extra}}}}}"#
     );
     let mut batch = format!("{attached}\n");
     for (index, body) in events.iter().enumerate() {

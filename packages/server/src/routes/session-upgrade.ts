@@ -6,6 +6,7 @@ import { refuseUpgrade } from '../lib/http.ts'
 import { parseSessionRoute } from '../lib/parse-route.ts'
 import { viewArchive } from '../services/archives.ts'
 import { isArchived } from '../services/session-store.ts'
+import { entryInfo, historyEvents } from './conversations.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 import { attachArchive, attachClient } from './ws.ts'
 
@@ -27,6 +28,19 @@ export async function upgradeSession(
   const authCtx = await auth.authenticate(req)
   if (!authCtx.ok) {
     refuseUpgrade(socket, '401 Unauthorized')
+    return
+  }
+  // A past conversation: authorized on its frozen projection, read-only, never a fall-through to the current runner.
+  const conversation = new URL(req.url ?? '/', 'http://internal').searchParams.get('conversation')
+  if (conversation !== null) {
+    const entry = (await ctx.records.get(route.id))?.conversations.find((candidate) => String(candidate.n) === conversation)
+    if (!entry || !auth.canSee(authCtx, entryInfo(route.id, entry))) {
+      refuseUpgrade(socket, '404 Not Found')
+      return
+    }
+    const events = await historyEvents(ctx, route.id, entry)
+    const info = { ...entryInfo(route.id, entry), epoch: entry.n, lastSeq: events?.at(-1)?.seq ?? 0 }
+    wss.handleUpgrade(req, socket, head, (ws) => attachArchive(ctx, ws, info, events, req))
     return
   }
   const known = await sessionInfoOf(ctx, route.id)

@@ -5,7 +5,7 @@ import bi.atomic.workerdeck.core.ffi.Session
 
 object Fixtures {
     const val ATTACHED =
-        """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"""
+        """{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"""
 
     fun user(seq: Int, text: String) =
         """{"type":"event","event":{"type":"user_message","message":{"role":"user","content":"$text"},"parentToolUseId":null,"uuid":"u$seq","seq":$seq,"ts":1}}"""

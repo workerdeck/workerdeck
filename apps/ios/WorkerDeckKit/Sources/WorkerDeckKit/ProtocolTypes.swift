@@ -6,7 +6,7 @@ import Foundation
 /// Keys are spelled explicitly per type. Never decode with a global key-conversion strategy.
 public enum WorkerProtocol {
   /// Mirror of PROTOCOL_VERSION. Compare against the attached frame's `protocolVersion`.
-  public static let version = 1
+  public static let version = 2
   /// Mirror of SHELL_COMMAND_MAX - the longest `$` command the gateway accepts.
   public static let shellCommandMax = 4000
   /// Mirror of SHELL_LABEL_MAX.

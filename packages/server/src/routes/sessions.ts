@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
+  GENERATION_HEADER,
   readStatusLabelInput,
   type PeerSessionsResponse,
   type ResolvePermissionRequest,
@@ -17,6 +18,7 @@ import { ROTATING } from '../services/handovers.ts'
 import { vetCreateRequest } from './create-vet.ts'
 import { retireAgent } from './agents.ts'
 import { handleAttachments } from './attachments.ts'
+import { handleConversations } from './conversations.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
 import { handleProjectIcon } from './project-icon.ts'
@@ -38,6 +40,7 @@ type SessionCall<K extends ItemKind> = ResolvedSession & {
 type ItemHandlers = { [K in ItemKind]: (call: SessionCall<K>) => Promise<void> | void }
 
 const ITEM_HANDLERS: ItemHandlers = {
+  conversations: () => fail(404, 'not found'),
   session: handleSession,
   ws: handleSession,
   attachments: ({ ctx, req, res, route, info }) => handleAttachments(ctx, req, res, route.id, info, route.attachmentId),
@@ -74,10 +77,23 @@ export async function handleSessions(
     await handleCollection(ctx, req, res, auth)
     return
   }
+  if (route.kind === 'conversations') {
+    await handleConversations(ctx, req, res, route.id, route.conversation, auth)
+    return
+  }
   const resolved = await resolveSession(ctx, route.id, auth)
   requireWritable(resolved, req.method, route.kind === 'session' && req.method === 'DELETE')
-  if (req.method !== 'GET' && req.method !== 'HEAD' && ctx.handovers.gated(route.id)) {
+  const mutating = req.method !== 'GET' && req.method !== 'HEAD'
+  if (mutating && ctx.handovers.gated(route.id)) {
     fail(409, ROTATING)
+  }
+  // A mutating call names the conversation it was meant for; a stale one never reaches the next.
+  const generation = req.headers[GENERATION_HEADER]
+  if (mutating && typeof generation === 'string') {
+    const current = ctx.records.conversationOf(route.id) ?? 1
+    if (Number(generation) !== current) {
+      fail(409, `the session moved on to conversation ${current}`)
+    }
   }
   const handler = ITEM_HANDLERS[route.kind] as (call: SessionCall<ItemKind>) => Promise<void> | void
   await handler({ ...resolved, ctx, req, res, auth, route })
@@ -156,6 +172,8 @@ async function handleSession({ ctx, req, res, auth, route, runner, parked, info 
       fail(403, `${agent.name} is an agent; only an operator can delete it`)
     }
     await retireAgent(ctx, agent, 'release', route.id)
+  } else if (!(parked && isArchived(parked))) {
+    await ctx.cuts.close(route.id)
   }
   registry.remove(route.id)
   bridge.remove(route.id)

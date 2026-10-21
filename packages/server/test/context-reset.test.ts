@@ -4,7 +4,7 @@ import type { ClearContextOptions, Runner } from '@workerdeck/core'
 import type { AgentInfo, AgentResponse, SessionEvent, SessionEventBody, SessionInfo, SessionStatus } from '@workerdeck/protocol'
 import { CONTEXT_RESET_RESTART_SCHEDULED, CONTEXT_RESET_SCHEDULED, ContextResetService } from '../src/services/context-resets.ts'
 import { fakeHarness } from './helpers.ts'
-import { attachSocket, createSession, get, shellFixture } from './shell-helpers.ts'
+import { createSession, get, shellFixture } from './shell-helpers.ts'
 
 const REQUEST = { prompt: 'continue from @NEXT.md', reason: 'context at 80%' }
 
@@ -289,28 +289,34 @@ describe('context_reset through the gateway', () => {
     expect(Object.keys(gatewayTools(byDefault))).not.toContain('context_reset')
   })
 
-  it('clears the claude conversation after the turn, stamps the reason on the reset, then sends the prompt', async () => {
-    const harness = fakeHarness()
-    const { base, wsBase } = await fx.startServer(harness, { agentContextReset: { default: true } })
+  it('cuts a new conversation under the same id after the turn, its prompt the first message of the next one', async () => {
+    const harnesses: Array<ReturnType<typeof fakeHarness>> = []
+    const queryFn = (params: Parameters<ReturnType<typeof fakeHarness>['queryFn']>[0]) => {
+      const next = fakeHarness()
+      harnesses.push(next)
+      return next.queryFn(params)
+    }
+    const { base } = await fx.startServer({ queryFn } as ReturnType<typeof fakeHarness>, { agentContextReset: { default: true } })
     const id = await createSession(base, 'operator', { cwd: fx.tempDir(), prompt: 'work' })
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
-    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
-    harness.emit(INIT)
+    await vi.waitFor(() => expect(harnesses).toHaveLength(1))
+    const [first] = harnesses
+    first!.emit(INIT)
 
-    const result = await gatewayTools(harness).context_reset!.handler(REQUEST, {})
+    const result = await gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect(result.isError).toBeFalsy()
     expect(result.content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
-    expect(inputTexts(harness)).toEqual(['work'])
+    expect(inputTexts(first!)).toEqual(['work'])
 
-    harness.emit(RESULT)
-    await vi.waitFor(() => expect(inputTexts(harness)).toEqual(['work', '/clear']))
-    harness.emit({ type: 'conversation_reset', new_conversation_id: 'sdk-2' } as unknown as SDKMessage)
-    await vi.waitFor(() => expect(inputTexts(harness)).toEqual(['work', '/clear', REQUEST.prompt]))
-
-    const reset = await collector.waitFor((frame) => frame.type === 'event' && frame.event.type === 'conversation_reset')
-    expect(reset).toMatchObject({ event: { agentReason: REQUEST.reason, sdkSessionId: 'sdk-2' } })
-    ws.close()
+    first!.emit(RESULT)
+    await vi.waitFor(() => expect(harnesses).toHaveLength(2))
+    const second = harnesses[1]!
+    expect(second.captured.options?.resume).toBeUndefined()
+    await vi.waitFor(() => expect(inputTexts(second)).toEqual([REQUEST.prompt]))
+    expect(inputTexts(first!)).toEqual(['work'])
+    const session = await info(base, id)
+    expect(session).toMatchObject({ id, conversation: 2 })
   })
+
   it("closes an agent's session after the turn and binds the agent to a new one that starts with the prompt", async () => {
     const harness = fakeHarness()
     const { base } = await fx.startServer(harness)

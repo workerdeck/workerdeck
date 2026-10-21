@@ -215,7 +215,7 @@ pub fn dump_vt(shell_path: &str) -> String {
     out
 }
 
-const ATTACHED: &str = r#"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","status":"running","cwd":"/w","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"#;
+const ATTACHED: &str = r#"{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","status":"running","cwd":"/w","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"#;
 const VISIBLE_ROWS: usize = 20;
 
 // The FFI workload without the FFI: what `LiveSession` itself costs per frame, so a device run can tell binding

@@ -250,7 +250,7 @@ fn a_new_agent_seed_waits_for_the_meta_lists_leads_first_and_follows_the_profile
     assert!(list.agent_seed("h1".into(), None, None).is_none());
     assert!(!list.set_meta("h1".into(), "<html>".into()));
     assert!(
-        list.set_meta("h1".into(), r#"{"protocolVersion":1,"agents":{"owner":"tobias","sharing":"shared","allowShared":true}}"#.into())
+        list.set_meta("h1".into(), r#"{"protocolVersion":2,"agents":{"owner":"tobias","sharing":"shared","allowShared":true}}"#.into())
     );
     let seed = list.agent_seed("h1".into(), Some("s1".into()), None).unwrap();
     let names: Vec<_> = seed.leads.iter().map(|l| l.name.as_str()).collect();

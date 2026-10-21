@@ -244,7 +244,9 @@ describe('deferred execution: parking and result ingestion', () => {
     const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE' })
     expect(((await deleted.json()) as { session: SessionInfo }).session.status).toBe('closed')
     expect(await running!.parking.get(session.id)).toBeNull()
-    expect((await submitResult(h.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 1 } })).status).toBe(404)
+    const late = await submitResult(h.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 1 } })
+    expect(late.status).toBe(409)
+    expect(((await late.json()) as { error: string }).error).toContain('conversation 1, which has ended')
     expect(h.runners).toHaveLength(1)
   })
 
@@ -407,8 +409,19 @@ describe('deferred execution: durability across a restart', () => {
     expect(resumed.settled).toEqual([{ executionId: 'exec-1', result: { status: 'ok', output: 42, logs: undefined } }])
     expect(resumed.info().lastSeq).toBeGreaterThan(2)
     expect(await running!.parking.get(session.id)).toBeNull()
-    expect(await readdir(dir)).toEqual([])
+    expect(await runtimeFiles()).toEqual([])
   })
+
+  // The record outlives its runtime (it was written at create): what must be gone is the runtime inside it.
+  const runtimeFiles = async (): Promise<string[]> => {
+    const names = await readdir(dir)
+    const held = await Promise.all(
+      names.map(async (name) =>
+        (await createFileSessionRecordStore({ dir }).get(decodeURIComponent(name.replace(/\.json$/, ''))))?.runtime ? name : undefined,
+      ),
+    )
+    return held.filter((name): name is string => name !== undefined)
+  }
 
   // A store whose `save` takes real time: the park evicts before the write lands, opening the window these tests aim at.
   const slowSaveStore = (delayMs: number): SessionRecordStore => {
@@ -439,7 +452,7 @@ describe('deferred execution: durability across a restart', () => {
     expect(await res.json()).toEqual({ applied: true, sessionId: session.id })
     expect(h.runners[1]!.settled).toHaveLength(1)
     expect(await running!.parking.get(session.id)).toBeNull()
-    expect(await readdir(dir)).toEqual([])
+    expect(await runtimeFiles()).toEqual([])
   })
 
   it('keeps a session deleted during the save window deleted', async () => {
@@ -452,12 +465,12 @@ describe('deferred execution: durability across a restart', () => {
     const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE' })
     expect(deleted.status).toBe(200)
     await new Promise((resolve) => setTimeout(resolve, 150))
-    expect(await readdir(dir)).toEqual([])
+    expect(await runtimeFiles()).toEqual([])
     const listed = (await fetch(`${h.base}/sessions`).then((r) => r.json())) as {
       sessions: SessionInfo[]
     }
     expect(listed.sessions).toEqual([])
-    expect((await submitResult(h.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 1 } })).status).toBe(404)
+    expect((await submitResult(h.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 1 } })).status).toBe(409)
   })
 
   it('gives an execution whose deadline passed during the outage a grace window', async () => {

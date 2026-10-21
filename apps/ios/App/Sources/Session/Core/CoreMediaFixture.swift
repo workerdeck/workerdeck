@@ -24,7 +24,7 @@ enum CoreMediaFixture {
   }
 
   private static func attached(lastSeq: Int) -> String {
-    #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"shell":true,"session":{"id":"fixture","title":"Media fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"lastSeq":\#(lastSeq),"pendingPermissionCount":0,"capabilities":{"backgroundTasks":true,"engineSleep":true}}}"#
+    #"{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"shell":true,"session":{"id":"fixture","title":"Media fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"lastSeq":\#(lastSeq),"pendingPermissionCount":0,"capabilities":{"backgroundTasks":true,"engineSleep":true}}}"#
   }
 
   private static var media: [String] {

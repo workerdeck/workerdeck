@@ -14,6 +14,7 @@ import type { AvailabilityTracker } from './services/availability.ts'
 import type { BridgeHub } from './services/bridge.ts'
 import type { EngineSleepTimers } from './services/engine-sleep.ts'
 import type { AgentHandovers } from './services/handovers.ts'
+import type { ConversationCuts } from './services/conversation-cuts.ts'
 import type { HistoryReader } from './services/history-reader.ts'
 import type { HostFileRoots } from './services/host-files.ts'
 import type { SessionParkManager } from './services/parking.ts'
@@ -23,6 +24,7 @@ import type { PromptAcks } from './services/prompt-acks.ts'
 import type { ProjectInfoService } from './services/project-info.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionFactory } from './services/session-factory.ts'
+import type { SessionRecords } from './services/session-records.ts'
 import type { ShellRegistry } from './services/shells.ts'
 
 export type ServerContext = {
@@ -48,6 +50,8 @@ export type ServerContext = {
   parking: SessionParkManager
   history: HistoryReader
   handovers: AgentHandovers
+  records: SessionRecords
+  cuts: ConversationCuts
   engineSleep: EngineSleepTimers
   // Undefined when peer messaging is off; the send path then resolves no `#` mentions.
   // The composed directory, relay included: what a session's `peers_list` answers.

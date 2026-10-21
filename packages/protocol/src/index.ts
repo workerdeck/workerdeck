@@ -2,7 +2,9 @@ import type { AgentRef, Sharing } from './agents.ts'
 import type { StatusLabel, StatusLabelInput } from './status-label.ts'
 import type { ByModel, PricingOverrides, ProfileSpend } from './pricing.ts'
 
-export const PROTOCOL_VERSION = 1
+export const PROTOCOL_VERSION = 2
+
+export const CONVERSATION_ENDED_CLOSE_CODE = 4011
 
 export type SessionStatus = 'starting' | 'running' | 'awaiting_approval' | 'idle' | 'parked' | 'failed' | 'closed'
 
@@ -519,8 +521,12 @@ export type ServerFrame =
   | { type: 'protocol_error'; message: string }
   // The prompt reached the gateway and was handled, run or refused; a refusal arrives as a `protocol_error` first.
   | { type: 'ack'; clientId: string }
+  | ConversationStartedFrame
 
-export type ClientFrame = SessionCommand
+export type ConversationStartedFrame = { type: 'conversation_started'; conversation: number; epoch: number }
+
+// `generation`: the conversation the sender meant; a frame for an ended one is refused, never applied to the next.
+export type ClientFrame = SessionCommand & { generation?: number }
 
 export type ProfileDefaults = {
   model?: string
@@ -904,6 +910,7 @@ export type SessionInfo = {
   // so no `PROTOCOL_VERSION` bump, and a reader that finds it absent on either side must keep
   // trusting the seq.
   epoch?: number
+  conversation?: number
   pendingPermissionCount: number
   subagents?: SubagentInfo[]
   checklist?: ChecklistItem[]
@@ -1352,6 +1359,7 @@ export type QueueStatsResponse = { stats: QueueStats }
 export * from './accounts.ts'
 export * from './agents.ts'
 export * from './checklist.ts'
+export * from './conversation-cut.ts'
 export * from './conversations.ts'
 export * from './errors.ts'
 export * from './paths.ts'

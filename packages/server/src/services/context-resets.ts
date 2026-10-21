@@ -1,5 +1,5 @@
 import type { ContextResetDirectory, ContextResetRequest, Runner } from '@workerdeck/core'
-import type { SessionEvent } from '@workerdeck/protocol'
+import { isJobRun, type SessionEvent } from '@workerdeck/protocol'
 
 export type AgentContextResetOptions = {
   // Whether a session the request and profile say nothing about gets `context_reset`. Off unless set.
@@ -12,6 +12,8 @@ export type ContextResetServiceOptions = AgentContextResetOptions & {
   // An agent's reset starts it a new session instead of clearing this one; limits count per agent, across its sessions.
   agentOf?: (sessionId: string) => string | undefined
   restartAgent?: (agentId: string, sessionId: string, prompt: string) => Promise<void>
+  // Any other session's reset is a conversation cut under the same id, its prompt the first message of the next one.
+  cut?: (sessionId: string, prompt: string) => Promise<void>
   onError?: (error: unknown, sessionId: string) => void
   now?: () => number
   resetTimeoutMs?: number
@@ -70,8 +72,11 @@ export class ContextResetService implements ContextResetDirectory {
     if (this.#closed || !runner || runner.info().agentContextReset !== true) {
       throw new Error('context reset is not enabled for this session')
     }
+    if (isJobRun(runner.info())) {
+      throw new Error('a job run cannot reset its conversation')
+    }
     const agent = this.#agentOf(sessionId)
-    if (agent === undefined && !runner.clearContext) {
+    if (agent === undefined && !runner.clearContext && !this.#options.cut) {
       throw new Error('this engine cannot clear its conversation')
     }
     if (this.#pending.has(sessionId) || this.#running.has(sessionId)) {
@@ -141,6 +146,11 @@ export class ContextResetService implements ContextResetDirectory {
       if (agent !== undefined) {
         await this.#options.restartAgent!(agent, runner.id, request.prompt)
         this.#record(`agent:${agent}`)
+        return
+      }
+      if (this.#options.cut) {
+        await this.#options.cut(runner.id, request.prompt)
+        this.#record(runner.id)
         return
       }
       if (!runner.clearContext) {

@@ -185,7 +185,7 @@ describe('handover: the successor record is read back, not assumed', () => {
       list: () => inner.list(),
       delete: (id) => inner.delete(id),
       save: async (record) => {
-        if (broken && record.runtime?.kind !== 'archived') {
+        if (broken && record.runtime !== undefined && record.runtime.kind !== 'archived') {
           throw new Error('disk full')
         }
         await inner.save(record)
@@ -217,7 +217,7 @@ describe('handover: the successor record is read back, not assumed', () => {
       list: () => inner.list(),
       delete: (id) => inner.delete(id),
       save: async (record) => {
-        if (broken && record.runtime?.kind !== 'archived') {
+        if (broken && record.runtime !== undefined && record.runtime.kind !== 'archived') {
           throw new Error('disk full')
         }
         await inner.save(record)

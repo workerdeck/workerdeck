@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -404,7 +404,9 @@ describe('sessions that survive a restart', () => {
     await vi.waitFor(async () => {
       expect(await store.get(session.id)).toBeNull()
     })
-    expect(await readdir(dir)).toEqual([])
+    expect(await store.records.get(session.id)).toMatchObject({ closedAt: expect.any(Number), conversations: [{ n: 1 }] })
+    const restarted = await startGateway(fileRuntimeStore(dir))
+    expect(((await (await fetch(`${restarted.base}/sessions`)).json()) as { sessions: unknown[] }).sessions).toEqual([])
   })
 
   it('keeps the record when a resumed session is woken, so the next restart still finds it', async () => {
