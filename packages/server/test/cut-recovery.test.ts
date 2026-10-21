@@ -35,6 +35,16 @@ afterEach(fixture.cleanup)
 // Every runner names its own engine conversation, so n and n+1 never share an engine pointer; a resume keeps it.
 class Engine extends EngineRunner {
   readonly engineName = `sdk-${++serial}`
+  // Leaves `starting` for idle before it names its engine conversation, as an engine may.
+  idleFirst: Promise<void> | undefined
+
+  override async start(): Promise<void> {
+    if (this.idleFirst) {
+      await this.idleFirst
+      this.settle()
+    }
+    await super.start()
+  }
 
   override info(): SessionInfo {
     const info = super.info()
@@ -49,6 +59,8 @@ class Engine extends EngineRunner {
 
 type Hooks = {
   building?: (runner: Engine) => void
+  // Holds the factory itself: the runner is built, but the build has not returned yet.
+  factory?: (runner: Engine) => Promise<void> | undefined
   options?: Partial<WorkerServerOptions>
   store?: (inner: SessionRecordStore) => SessionRecordStore
 }
@@ -69,7 +81,8 @@ function build(dir: string, hooks: Hooks = {}) {
       const runner = new Engine(id ?? `s${built.length + 1}-${dir.slice(-6)}`, config)
       built.push(runner)
       hooks.building?.(runner)
-      return runner
+      const paused = hooks.factory?.(runner)
+      return paused ? paused.then(() => runner) : runner
     },
   }
   const server: WorkerServer = createWorkerServer({
@@ -544,6 +557,9 @@ describe('a hot reload with a cut in flight', () => {
     expect(carried).toMatchObject({ runner: old, conversation: 1 })
     await closeOld(first.server, gate.release)
     await pending
+    // The closed generation's own rollback must land first: two writers on one file share its temp path.
+    await vi.waitFor(async () => expect((await onDisk(dir, id)).cut).toBeUndefined())
+    await first.server.records.flush()
 
     const second = build(dir)
     expect(second.server.adoptSession(carried)).toBe(true)
@@ -642,5 +658,101 @@ describe('a hot reload with a cut in flight', () => {
     })
     expect(record.cut).toBeUndefined()
     expect(record.startFailed).toBeUndefined()
+  })
+
+  it('committed with the factory still building: the closed generation disposes of what it built and starts nothing', async () => {
+    const dir = await fixture.stateDir()
+    let resume: (() => void) | undefined
+    let building: (() => void) | undefined
+    const paused = new Promise<void>((resolve) => {
+      building = resolve
+    })
+    let builds = 0
+    const first = await gateway(dir, {
+      factory: () => {
+        if (++builds !== 2) {
+          return undefined
+        }
+        building!()
+        return new Promise<void>((resolve) => {
+          resume = resolve
+        })
+      },
+    })
+    const id = await create(first.base)
+    await idle(first.server, id)
+    const pending = cut(first.base, id, 1, 'next').catch(() => undefined)
+    await paused
+    expect(first.server.releaseSession(id)).toBeUndefined()
+    await closeOld(first.server)
+    resume!()
+    await pending
+    const late = first.built[1]!
+    await vi.waitFor(() => expect(late.info().status).toBe('closed'))
+    expect(first.server.registry.get(id)).toBeUndefined()
+    expect(late.sent).toEqual([])
+    const left = await onDisk(dir, id)
+    expect(left).toMatchObject({ conversation: 2, cut: { phase: 'committed', to: 2 }, pendingPrompt: { text: 'next', state: 'sending' } })
+    expect(left.startFailed).toBeUndefined()
+
+    const second = await gateway(dir)
+    await idle(second.server, id)
+    expect(second.built).toHaveLength(1)
+    expect(second.built[0]!.sent).toEqual([])
+    const record = await onDisk(dir, id)
+    expect(record).toMatchObject({
+      conversation: 2,
+      pendingPrompt: { state: 'uncertain' },
+      runtime: { sdkSessionId: second.built[0]!.engineName },
+    })
+    expect(record.cut).toBeUndefined()
+    expect(record.startFailed).toBeUndefined()
+  })
+
+  it('a carried successor that goes idle before naming its conversation keeps the intent and the prompt until it names one', async () => {
+    const dir = await fixture.stateDir()
+    let idleNow: (() => void) | undefined
+    let nameNow: (() => void) | undefined
+    let builds = 0
+    const first = await gateway(dir, {
+      options: { agentStartupTimeoutMs: 5000 },
+      building: (runner) => {
+        if (++builds === 2) {
+          runner.idleFirst = new Promise((resolve) => {
+            idleNow = resolve
+          })
+          runner.hold = new Promise((resolve) => {
+            nameNow = resolve
+          })
+        }
+      },
+    })
+    const id = await create(first.base)
+    await idle(first.server, id)
+    const pending = cut(first.base, id, 1, 'next').catch(() => undefined)
+    await vi.waitFor(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
+    const fresh = first.built[1]!
+    const carried = first.server.releaseSession(id)!
+    await closeOld(first.server)
+
+    const second = build(dir, { options: { agentStartupTimeoutMs: 5000 } })
+    expect(second.server.adoptSession(carried)).toBe(true)
+    const listening = listenOn(second.server)
+    idleNow!()
+    await vi.waitFor(() => expect(fresh.info().status).toBe('idle'))
+    await second.server.parking.flush()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(await onDisk(dir, id)).toMatchObject({ cut: { phase: 'committed', to: 2 }, pendingPrompt: { text: 'next', state: 'sending' } })
+
+    nameNow!()
+    await listening
+    await pending
+    await vi.waitFor(async () => expect((await onDisk(dir, id)).cut).toBeUndefined())
+    const record = await onDisk(dir, id)
+    expect(record.pendingPrompt).toBeUndefined()
+    expect(record.startFailed).toBeUndefined()
+    expect(record.runtime).toMatchObject({ sdkSessionId: fresh.engineName, info: { conversation: 2 } })
+    expect(fresh.sent).toEqual(['next'])
+    expect(second.built).toHaveLength(0)
   })
 })

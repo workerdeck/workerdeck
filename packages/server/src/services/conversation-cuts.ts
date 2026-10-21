@@ -10,7 +10,7 @@ import {
   type UnconfirmedInputRefusal,
 } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
-import { fail } from '../lib/http.ts'
+import { fail, HttpError } from '../lib/http.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import { freshRecord, requestedConfig, type ConversationEntry, type SessionCut, type SessionRecord } from './session-records.ts'
 import { durableConfig, isDormant, type DormantSessionRecord, type StoredSessionRecord } from './session-store.ts'
@@ -123,11 +123,12 @@ export class ConversationCuts {
       if (record?.cut?.from !== 0) {
         return
       }
-      const startup = await startupOf(ctx, runner, record.pendingPrompt?.n === 1)
+      const identity = record.pendingPrompt?.n === 1
+      const startup = await startupOf(ctx, runner, identity)
       if (this.#closed) {
         return
       }
-      await ctx.locks.run([id], () => this.#settle(id, 1, false, runner, startup, false))
+      await ctx.locks.run([id], () => this.#settle(id, 1, { uncertain: false, identity }, runner, startup, false))
     })()
       .catch((error: unknown) => ctx.locks.onError(error))
       .finally(() => {
@@ -500,31 +501,35 @@ export class ConversationCuts {
         this.#fault('start')
         runner = await this.#startFresh(id, cut, prompt)
       } catch (error) {
+        if (generationEnded(error)) {
+          throw error
+        }
         await this.#failStart(id, cut.to, errorMessage(error), prompt !== undefined)
         this.#announce(id, cut.to, cut.epoch)
         fail(502, `the new conversation did not start: ${errorMessage(error)}`)
       }
     }
     const started = runner
-    const startup = startupOf(ctx, started, prompt !== undefined)
+    const owed: Owed = { uncertain, identity: prompt !== undefined || carried }
+    const startup = startupOf(ctx, started, owed.identity)
     const early = await within(startup, ctx.locks.startupTimeoutMs)
     if (early) {
       try {
-        await this.#settle(id, cut.to, uncertain, started, early, true)
+        await this.#settle(id, cut.to, owed, started, early, true)
       } finally {
         this.#announce(id, cut.to, cut.epoch)
       }
       return { session: ctx.projects.withProject(started.info()), conversation: cut.to }
     }
     void startup
-      .then((late) => (this.#closed ? undefined : ctx.locks.run([id], () => this.#settle(id, cut.to, uncertain, started, late, false))))
+      .then((late) => (this.#closed ? undefined : ctx.locks.run([id], () => this.#settle(id, cut.to, owed, started, late, false))))
       .catch((error: unknown) => ctx.locks.onError(error))
     this.#announce(id, cut.to, cut.epoch)
     return { session: ctx.projects.withProject(started.info()), conversation: cut.to }
   }
 
   // `strict` answers the caller, so a failure throws; otherwise it settles in the background for nobody.
-  async #settle(id: string, to: number, uncertain: boolean, runner: Runner, startup: Startup, strict: boolean): Promise<void> {
+  async #settle(id: string, to: number, owed: Owed, runner: Runner, startup: Startup, strict: boolean): Promise<void> {
     if (this.#closed) {
       return
     }
@@ -532,34 +537,33 @@ export class ConversationCuts {
     if (record?.cut?.phase !== 'committed' || record.cut.to !== to || (!strict && record.startFailed !== undefined)) {
       return
     }
-    const failure = startup.kind === 'failed' ? startup.error : await this.#durability(id, to, runner)
+    const failure = startup.kind === 'failed' ? startup.error : await this.#durability(id, to, runner, owed.identity)
     if (failure === undefined) {
-      await this.#confirm(id, to, uncertain)
+      await this.#confirm(id, to, owed.uncertain)
       return
     }
-    await this.#failStart(id, to, failure, false)
-    if (strict) {
+    if ((await this.#failStart(id, to, failure, false)) && strict) {
       fail(502, `the new conversation did not start: ${failure}`)
     }
   }
 
   // Read back, never assumed from a flush. An engine with neither resume nor a live snapshot has nothing to keep.
-  async #durability(id: string, to: number, runner: Runner): Promise<string | undefined> {
+  async #durability(id: string, to: number, runner: Runner, identity: boolean): Promise<string | undefined> {
     const ctx = this.#ctx
     const info = runner.info()
     const resumable = (info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume
     if (!resumable && !ctx.parking.persistsLive(runner)) {
       return undefined
     }
-    if (await this.#recorded(id, to, runner, resumable)) {
+    if (await this.#recorded(id, to, runner, resumable, identity)) {
       return undefined
     }
     ctx.parking.touch(runner)
     await ctx.parking.flush(id)
-    return (await this.#recorded(id, to, runner, resumable)) ? undefined : 'the new conversation could not be saved'
+    return (await this.#recorded(id, to, runner, resumable, identity)) ? undefined : 'the new conversation could not be saved'
   }
 
-  async #recorded(id: string, to: number, runner: Runner, resumable: boolean): Promise<boolean> {
+  async #recorded(id: string, to: number, runner: Runner, resumable: boolean, identity: boolean): Promise<boolean> {
     const runtime = (await this.#ctx.records.get(id))?.runtime
     if (!runtime || runtime.info.conversation !== to) {
       return false
@@ -568,7 +572,10 @@ export class ConversationCuts {
       return runtime.kind === 'live'
     }
     const named = runner.info().sdkSessionId
-    return !isDormant(runtime) || named === undefined || runtime.sdkSessionId === named
+    if (named === undefined) {
+      return !identity
+    }
+    return !isDormant(runtime) || runtime.sdkSessionId === named
   }
 
   // A named first start never runs without its index row: the row is there, or written now from the record's copy
@@ -588,18 +595,22 @@ export class ConversationCuts {
 
   async #confirm(id: string, to: number, uncertain: boolean): Promise<void> {
     this.#failedStarts.delete(id)
-    await this.#ctx.records.transactDurable(id, (current) => {
+    await this.#owned(id, to, (current) => {
       const { cut: _done, startFailed: _failed, identity: _identity, pendingPrompt, ...rest } = current!
       const lost = uncertain && pendingPrompt?.n === to
       return lost ? { ...rest, pendingPrompt: { ...pendingPrompt, state: 'uncertain' } } : rest
     })
   }
 
-  async #failStart(id: string, to: number, error: string, unsent: boolean): Promise<void> {
+  // False when the intent is no longer this generation's to fail.
+  async #failStart(id: string, to: number, error: string, unsent: boolean): Promise<boolean> {
     const ctx = this.#ctx
+    if (this.#closed) {
+      return false
+    }
     this.#failedStarts.add(id)
     void ctx.parking.fence(id)
-    await ctx.records.transactDurable(id, (current) => {
+    return await this.#owned(id, to, (current) => {
       const prompt = current!.pendingPrompt
       return {
         ...current!,
@@ -636,6 +647,10 @@ export class ConversationCuts {
     const built = ctx.factory.buildRunnerConfig({ ...cut.target, prompt, resume: undefined, forkSession: undefined })
     const config: SessionRunnerConfig = { ...built, epoch: cut.epoch }
     const runner = await ctx.factory.buildRunner(config, undefined, id)
+    if (this.#closed) {
+      runner.close('server')
+      fail(503, GENERATION_ENDED)
+    }
     if (runner.id !== id) {
       runner.close('error')
       throw new Error(`the engine built ${runner.id}, expected ${id}`)
@@ -698,11 +713,36 @@ export class ConversationCuts {
     }
   }
 
+  // A settling write runs only while this generation is open and the intent for `to` is still committed, checked as
+  // the transaction runs: a reload or another settle may have moved it on during any await before it.
+  async #owned(id: string, to: number, merge: (current: SessionRecord) => SessionRecord): Promise<boolean> {
+    try {
+      await this.#ctx.records.transactDurable(id, (current) => {
+        if (this.#closed || current?.cut?.phase !== 'committed' || current.cut.to !== to) {
+          throw NOT_OWNED
+        }
+        return merge(current)
+      })
+      return true
+    } catch (error) {
+      if (error === NOT_OWNED) {
+        return false
+      }
+      throw error
+    }
+  }
+
   #fault(step: CutFault): void {
     if (this.faults.has(step)) {
       throw new Error(`injected fault at ${step}`)
     }
   }
+}
+
+const NOT_OWNED = new Error('the intent is no longer this generation\'s')
+
+function generationEnded(error: unknown): boolean {
+  return error instanceof HttpError && error.message === GENERATION_ENDED
 }
 
 function withoutSnapshot(entry: ConversationEntry): ConversationEntry {
@@ -714,6 +754,9 @@ function withoutPendingPrompt(record: SessionRecord): SessionRecord {
   const { pendingPrompt: _gone, ...rest } = record
   return rest
 }
+
+// `identity`: the start was handed a prompt, so only an engine conversation the successor named makes it durable.
+type Owed = { uncertain: boolean; identity: boolean }
 
 type Startup = { kind: 'ready' } | { kind: 'failed'; error: string }
 
