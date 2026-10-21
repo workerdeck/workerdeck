@@ -194,6 +194,10 @@ async function handleSession({ ctx, req, res, auth, route, runner, parked, info 
     if (typeof label === 'string') {
       fail(400, label)
     }
+    // Settings write the record before anything else could refuse, so they never share a PATCH with another key.
+    if (body?.config !== undefined && (body.agent !== undefined || body.title !== undefined || body.statusLabel !== undefined)) {
+      fail(400, 'config is patched on its own, without agent, title or statusLabel')
+    }
     const config = body?.config === undefined ? undefined : readSettingsPatch(body.config)
     if (config && isJobRun(info)) {
       fail(409, 'a job run has no next conversation to configure')

@@ -5,7 +5,13 @@ import WebSocket from 'ws'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { EngineAdapter, SessionRunnerConfig } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type AgentInfo, type ProfileEngine, type ProfileInfo, type SessionInfo } from '@workerdeck/protocol'
-import { createFileAgentStore, createFileSessionRecordStore, createWorkerServer, type WorkerServer, type WorkerServerOptions } from '../src/index.ts'
+import {
+  createFileAgentStore,
+  createFileSessionRecordStore,
+  createWorkerServer,
+  type WorkerServer,
+  type WorkerServerOptions,
+} from '../src/index.ts'
 import type { StoredAgent } from '../src/services/agent-store.ts'
 import { EngineRunner } from './engine-runner.ts'
 import { frameCollector, gatewayFixture } from './helpers.ts'
@@ -105,7 +111,9 @@ async function gateway(dir: string, hooks: Hooks = {}) {
     sessions: { store: createFileSessionRecordStore({ dir: join(dir, 'sessions') }) },
     agentStore: createFileAgentStore(join(dir, 'agents.json')),
     parking: { parkDelayMs: 10 },
-    historyReader: { read: async (target) => ({ kind: 'ok', events: [{ type: 'user_message', text: `from ${target.engineSessionId}` }] as never }) },
+    historyReader: {
+      read: async (target) => ({ kind: 'ok', events: [{ type: 'user_message', text: `from ${target.engineSessionId}` }] as never }),
+    },
     onDiagnostic: (error) => hooks.diagnostics?.push(error),
     ...hooks.options,
   })
@@ -116,7 +124,13 @@ async function gateway(dir: string, hooks: Hooks = {}) {
 
 type Call = { status: number; body: Record<string, any> }
 
-async function call(base: string, path: string, method = 'GET', body?: unknown, extra: { generation?: number; token?: string } = {}): Promise<Call> {
+async function call(
+  base: string,
+  path: string,
+  method = 'GET',
+  body?: unknown,
+  extra: { generation?: number; token?: string } = {},
+): Promise<Call> {
   const res = await fetch(`${base}${path}`, {
     method,
     headers: {
@@ -129,7 +143,13 @@ async function call(base: string, path: string, method = 'GET', body?: unknown, 
   return { status: res.status, body: (await res.json()) as Record<string, any> }
 }
 
-async function createNamed(base: string, name: string, extra: Record<string, unknown> = {}, request: Record<string, unknown> = {}, token?: string) {
+async function createNamed(
+  base: string,
+  name: string,
+  extra: Record<string, unknown> = {},
+  request: Record<string, unknown> = {},
+  token?: string,
+) {
   const res = await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', ...request, agent: { name, ...extra } }, { token })
   expect(res.status).toBe(201)
   return res.body.session as SessionInfo
@@ -476,9 +496,19 @@ describe('history under its frozen auth across an owner move', () => {
     const record = (await server.records.get(id))!
     expect(record.conversation).toBe(2)
     const entry = record.conversations[0]!
-    expect(entry).toMatchObject({ n: 1, transcript: 'unavailable', auth: before.auth, startedAt: before.startedAt, endedAt: before.endedAt })
-    for (const key of ['engineSessionId', 'engineHome', 'snapshot', 'running', 'title', 'costUsd', 'profile']) {
+    expect(entry).toMatchObject({
+      n: 1,
+      transcript: 'unavailable',
+      auth: before.auth,
+      startedAt: before.startedAt,
+      endedAt: before.endedAt,
+    })
+    expect([entry.cwd, entry.profile]).toEqual([before.cwd, before.profile])
+    for (const key of ['engineSessionId', 'engineHome', 'snapshot', 'running', 'title', 'costUsd']) {
       expect(entry).not.toHaveProperty(key)
+    }
+    for (const executionId of before.executions) {
+      expect(server.cuts.endedExecution(executionId)?.entry).toEqual(entry)
     }
     const read = await call(base, `/sessions/${id}/conversations/1`)
     expect(read).toMatchObject({ status: 200, body: { events: [], info: { conversation: 1, transcript: 'unavailable' } } })
@@ -519,7 +549,9 @@ describe('the list from records: runtime absent is not a status', () => {
     const dormant = await createPlain(first.base)
     await idle(first.server, closed)
     await idle(first.server, dormant)
-    expect((await fetch(`${first.base}/sessions/${closed}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })).status).toBe(200)
+    expect(
+      (await fetch(`${first.base}/sessions/${closed}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })).status,
+    ).toBe(200)
 
     const running = await createPlain(first.base)
     await idle(first.server, running)
@@ -532,7 +564,9 @@ describe('the list from records: runtime absent is not a status', () => {
     const live = ((await call(first.base, '/sessions')).body.sessions as SessionInfo[]).find((info) => info.id === running)
     expect(live?.status).toBe('running')
     expect((await call(first.base, '/sessions')).body.sessions.map((info: SessionInfo) => info.id)).not.toContain(closed)
-    expect((await call(first.base, '/sessions?closed=1')).body.sessions).toContainEqual(expect.objectContaining({ id: closed, status: 'closed' }))
+    expect((await call(first.base, '/sessions?closed=1')).body.sessions).toContainEqual(
+      expect.objectContaining({ id: closed, status: 'closed' }),
+    )
     runner.settle()
     await stop(first.server)
 
@@ -582,7 +616,12 @@ describe('engine switch at the cut', () => {
     expect(record.requested).toMatchObject({ profile: 'codex-b' })
     expect(record.requested).not.toHaveProperty('model')
     expect(record.requested).not.toHaveProperty('permissionMode')
-    expect(record.conversations[0]).toMatchObject({ n: 1, engine: 'claude', profile: 'claude-a', running: { model: 'claude-model', permissionMode: 'plan' } })
+    expect(record.conversations[0]).toMatchObject({
+      n: 1,
+      engine: 'claude',
+      profile: 'claude-a',
+      running: { model: 'claude-model', permissionMode: 'plan' },
+    })
     expect((await call(base, `/sessions/${id}`)).body.session).toMatchObject({ engine: 'codex', profile: 'codex-b', conversation: 2 })
   })
 
@@ -691,6 +730,19 @@ describe('settings of the next conversation on every session', () => {
     expect(built.at(-1)!.config.permissionMode).toBeUndefined()
     expect(built.at(-1)!.config.contextReset).toBeUndefined()
     expect((await server.records.get(id))?.running).toMatchObject({ model: 'm2' })
+  })
+
+  it('refuses settings mixed with another key before writing anything', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir)
+    const id = await createPlain(base, { model: 'm1' })
+    await idle(server, id)
+    const before = await server.records.get(id)
+    for (const extra of [{ agent: 42 }, { agent: { name: 'Wren' } }, { title: 'x' }, { statusLabel: null }]) {
+      const mixed = await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2' }, ...extra }, { generation: 1 })
+      expect(mixed.status).toBe(400)
+    }
+    expect(await server.records.get(id)).toEqual(before)
   })
 
   it('validates the whole patch first and changes nothing on a refusal', async () => {

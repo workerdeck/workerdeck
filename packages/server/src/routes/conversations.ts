@@ -188,12 +188,24 @@ function eraseConversation(ctx: ServerContext, id: string, n: number): Promise<E
     if (!entry) {
       fail(409, 'the current conversation cannot be erased; start a new conversation first')
     }
-    const { engine, startedAt, endedAt, executions, auth } = entry
-    const erased: ConversationEntry = { n, engine, cwd: '', startedAt, endedAt, executions, auth, transcript: 'unavailable' }
+    // cwd and profile stay: with owner and scope they are what a custom authorizeSession sees for this conversation.
+    const { engine, profile, cwd, startedAt, endedAt, executions, auth } = entry
+    const erased: ConversationEntry = {
+      n,
+      engine,
+      ...(profile ? { profile } : {}),
+      cwd,
+      startedAt,
+      endedAt,
+      executions,
+      auth,
+      transcript: 'unavailable',
+    }
     await ctx.records.transactDurable(id, (latest) => ({
       ...latest!,
       conversations: latest!.conversations.map((candidate) => (candidate.n === n ? erased : candidate)),
     }))
+    ctx.cuts.forgetEntry(id, erased)
     return { erased: entrySummary(erased) }
   })
 }

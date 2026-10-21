@@ -31,7 +31,12 @@ export type CutRequest = {
 export type CutResult = { session: SessionInfo; conversation: number }
 
 // A socket attached to one conversation: detached quietly at the stop, told and closed once the commit is durable.
-export type CutSocket = { conversation: number; detach: () => void; announce: (conversation: number, epoch: number) => void; drop: () => void }
+export type CutSocket = {
+  conversation: number
+  detach: () => void
+  announce: (conversation: number, epoch: number) => void
+  drop: () => void
+}
 
 export type EndedExecution = { id: string; entry: ConversationEntry }
 
@@ -41,10 +46,12 @@ export type CutFault = 'commit' | 'start' | 'after-stop' | 'after-commit'
 
 export const CONVERSATION_ENDED = 'this conversation has ended; reattach to the current one'
 export const UNANSWERED_REFUSAL = 'the session has a message it has not answered yet; start a new conversation once it has'
-export const UNCONFIRMED_INPUT = 'the engine cannot confirm queued input was consumed; send a message and wait for its reply, then try again'
+export const UNCONFIRMED_INPUT =
+  'the engine cannot confirm queued input was consumed; send a message and wait for its reply, then try again'
 export { UNCONFIRMED_INPUT_CODE }
 export const INPUT_CHANGED = 'new input arrived since the discard was confirmed; review it and confirm again'
-export const NO_LONGER_CONFIRMABLE = 'the session stopped since the discard was confirmed and its pending input went with it; start a new conversation'
+export const NO_LONGER_CONFIRMABLE =
+  'the session stopped since the discard was confirmed and its pending input went with it; start a new conversation'
 export const NOTHING_TO_DISCARD = 'this engine has no pending input a discard can bind'
 export const STILL_STARTING = 'the session is still starting; try again once it has started'
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
@@ -58,7 +65,7 @@ export class ConversationCuts {
   #sockets = new Map<string, Set<CutSocket>>()
   #ended = new Map<string, EndedExecution>()
   #leaving = new Map<string, string>()
-  #queued = new Map<string, () => void>()
+  #queued = new Map<string, { runner: Runner; leave: () => void }>()
   #waiting = new Map<string, Array<(cut: boolean) => void>>()
   #failedStarts = new Set<string>()
   #firstStarts = new Map<string, Promise<void>>()
@@ -89,6 +96,11 @@ export class ConversationCuts {
     }
   }
 
+  // An erased conversation's executions keep their 409, with nothing of the erased payload behind it.
+  forgetEntry(id: string, erased: ConversationEntry): void {
+    this.#remember(id, erased)
+  }
+
   endedExecution(executionId: string): EndedExecution | undefined {
     return this.#ended.get(executionId)
   }
@@ -102,7 +114,13 @@ export class ConversationCuts {
   // conversation and of its sight of the session, so nothing it decided before the lock can be acted on after it.
   async cut(id: string, request: CutRequest, guard?: CutGuard): Promise<CutResult> {
     const first = this.#firstStarts.get(id)
-    if (first && (await within(first.then(() => true), this.#ctx.locks.startupTimeoutMs)) === undefined) {
+    if (
+      first &&
+      (await within(
+        first.then(() => true),
+        this.#ctx.locks.startupTimeoutMs,
+      )) === undefined
+    ) {
       fail(409, STILL_STARTING)
     }
     return await this.#ctx.locks.run([id], () => this.#cut(id, request, guard))
@@ -151,18 +169,34 @@ export class ConversationCuts {
     if (isJobRun(runner.info())) {
       fail(409, JOB_CUT_REFUSAL)
     }
-    refuseUnconfirmed(runner, ctx.records.conversationOf(runner.id) ?? 1)
+    const n = ctx.records.conversationOf(runner.id) ?? 1
+    refuseUnconfirmed(runner, n)
     refuseUncertainPrompt(await ctx.records.get(runner.id))
-    if (runner.info().status === 'idle' && !unanswered(runner)) {
-      return await this.cut(runner.id, { expectedGeneration: ctx.records.conversationOf(runner.id) ?? 1, reason, ...(prompt ? { prompt } : {}) })
+    // Another door may have cut while the record was read: this request was made of n's runner and never reaches n+1.
+    const now = ctx.records.conversationOf(runner.id) ?? 1
+    if (this.#closed || ctx.registry.get(runner.id) !== runner || now !== n || runner.info().status === 'closed') {
+      fail(409, `the session moved on to conversation ${now}`)
     }
-    this.#queueOnIdle(runner, reason, prompt, outcome)
+    if (runner.info().status === 'idle' && !unanswered(runner)) {
+      return await this.cut(runner.id, { expectedGeneration: n, reason, ...(prompt ? { prompt } : {}) })
+    }
+    this.#queueOnIdle(runner, n, reason, prompt, outcome)
     return undefined
   }
 
-  #queueOnIdle(runner: Runner, reason: CutReason, prompt: string | undefined, outcome: ((cut: boolean) => void) | undefined): void {
+  #queueOnIdle(
+    runner: Runner,
+    from: number,
+    reason: CutReason,
+    prompt: string | undefined,
+    outcome: ((cut: boolean) => void) | undefined,
+  ): void {
     const ctx = this.#ctx
     const id = runner.id
+    const stale = this.#queued.get(id)
+    if (stale && stale.runner !== runner) {
+      stale.leave()
+    }
     const waiting = this.#waiting.get(id) ?? []
     if (outcome) {
       waiting.push(outcome)
@@ -171,7 +205,6 @@ export class ConversationCuts {
     if (this.#queued.has(id)) {
       return
     }
-    const from = ctx.records.conversationOf(id) ?? 1
     const leave = (): Array<(cut: boolean) => void> => {
       this.#queued.delete(id)
       unsubscribe()
@@ -192,8 +225,7 @@ export class ConversationCuts {
       }
       if (event.type === 'status_changed' && event.status === 'idle' && !unanswered(runner)) {
         const heard = leave()
-        const expectedGeneration = ctx.records.conversationOf(id) ?? 1
-        this.cut(id, { expectedGeneration, reason, ...(prompt ? { prompt } : {}) }).then(
+        this.cut(id, { expectedGeneration: from, reason, ...(prompt ? { prompt } : {}) }).then(
           () => tell(heard, true),
           (error: unknown) => {
             tell(heard, (ctx.records.conversationOf(id) ?? 1) > from)
@@ -206,7 +238,7 @@ export class ConversationCuts {
         tell(leave(), false)
       }
     }, runner.info().lastSeq)
-    this.#queued.set(id, unsubscribe)
+    this.#queued.set(id, { runner, leave: () => tell(leave(), false) })
   }
 
   async #cut(id: string, request: CutRequest, guard: CutGuard | undefined): Promise<CutResult> {
@@ -386,7 +418,14 @@ export class ConversationCuts {
       // A session that ended without durable state has nothing to capture; it still closes, its history kept.
       const entry = await this.#capture(id, record, record.conversation).catch(() => undefined)
       await ctx.records.transactDurable(id, (current) => {
-        const { runtime: _runtime, cut: _cut, pendingPrompt: _prompt, startFailed: _failed, identity: _identity, ...rest } = current ?? freshRecord(id)
+        const {
+          runtime: _runtime,
+          cut: _cut,
+          pendingPrompt: _prompt,
+          startFailed: _failed,
+          identity: _identity,
+          ...rest
+        } = current ?? freshRecord(id)
         return { ...rest, conversations: entry ? [...rest.conversations, entry] : rest.conversations, closedAt: Date.now() }
       })
       if (entry) {
@@ -768,7 +807,7 @@ export class ConversationCuts {
   }
 }
 
-const NOT_OWNED = new Error('the intent is no longer this generation\'s')
+const NOT_OWNED = new Error("the intent is no longer this generation's")
 
 function generationEnded(error: unknown): boolean {
   return error instanceof HttpError && error.message === GENERATION_ENDED

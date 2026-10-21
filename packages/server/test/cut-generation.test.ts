@@ -637,7 +637,7 @@ describe('prompt acks are keyed by conversation', () => {
   })
 })
 
-describe('a typed /clear is acked with its cut\'s outcome', () => {
+describe("a typed /clear is acked with its cut's outcome", () => {
   it('acks a /clear on its own socket before the announce closes it, and never cuts twice for a resend', async () => {
     const dir = await fixture.stateDir()
     const { server, base, wsBase, built } = await gateway(dir)
@@ -745,7 +745,10 @@ describe('a typed /clear is acked with its cut\'s outcome', () => {
 
 // Seeds what recovery leaves after a crash while a prompt was being sent: its delivery is unknown.
 async function uncertain(server: WorkerServer, id: string): Promise<void> {
-  await server.records.transactDurable(id, (current) => ({ ...current!, pendingPrompt: { text: 'lost', n: current!.conversation, state: 'uncertain' } }))
+  await server.records.transactDurable(id, (current) => ({
+    ...current!,
+    pendingPrompt: { text: 'lost', n: current!.conversation, state: 'uncertain' },
+  }))
 }
 
 describe('an uncertain prompt holds every cut door', () => {
@@ -755,14 +758,21 @@ describe('an uncertain prompt holds every cut door', () => {
     const id = await create(base)
     await idle(server, id)
     await uncertain(server, id)
-    const expected = { code: UNCERTAIN_PROMPT_CODE, conversation: 1, promptConversation: 1, error: expect.stringContaining('Send again or Dismiss') }
+    const expected = {
+      code: UNCERTAIN_PROMPT_CODE,
+      conversation: 1,
+      promptConversation: 1,
+      error: expect.stringContaining('Send again or Dismiss'),
+    }
 
     expect(await cut(base, id, 1)).toMatchObject({ status: 409, body: expected })
     const discard = await call(base, `/sessions/${id}/conversations/discard`, 'POST', { expectedGeneration: 1, inputRevision: 'any' })
     expect(discard).toMatchObject({ status: 409, body: expected })
     const socket = await attach(wsBase, id)
     socket.send({ generation: 1, type: 'clear_context' })
-    expect(await socket.frames.waitFor((frame) => frame.type === 'protocol_error')).toMatchObject({ message: expect.stringContaining('Send again') })
+    expect(await socket.frames.waitFor((frame) => frame.type === 'protocol_error')).toMatchObject({
+      message: expect.stringContaining('Send again'),
+    })
     socket.send({ generation: 1, type: 'user_message', text: '/clear' })
     await vi.waitFor(() => expect(socket.frames.frames.filter((frame) => frame.type === 'protocol_error')).toHaveLength(2))
     await expect(server.cuts.clearOnIdle(built[0]!, 'context_reset', 'next')).rejects.toMatchObject({ code: UNCERTAIN_PROMPT_CODE })
@@ -808,6 +818,35 @@ describe('an uncertain prompt holds every cut door', () => {
     expect(diagnostics.map(String).join()).toContain('Send again or Dismiss')
     expect(await server.records.get(id)).toMatchObject({ conversation: 1, pendingPrompt: { text: 'lost', state: 'uncertain' } })
     expect(built).toHaveLength(1)
+  })
+})
+
+describe('a door that asked n while another door cut', () => {
+  it('refuses the stale request instead of queueing it on n, so a later clear of n+1 still cuts', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const id = await create(base)
+    await idle(server, id)
+    built[0]!.busy()
+    const paused = deferred()
+    const get = server.records.get.bind(server.records)
+    const spy = vi.spyOn(server.records, 'get').mockImplementationOnce(async (key) => {
+      await paused.promise
+      return await get(key)
+    })
+    const stale = server.cuts.clearOnIdle(built[0]!, 'context_reset')
+    built[0]!.settle()
+    expect((await cut(base, id, 1)).status).toBe(200)
+    await idle(server, id)
+    paused.resolve()
+    await expect(stale).rejects.toMatchObject({ status: 409 })
+    spy.mockRestore()
+
+    const next = built.at(-1)!
+    next.busy()
+    expect(await server.cuts.clearOnIdle(next, 'context_reset')).toBeUndefined()
+    next.settle()
+    await vi.waitFor(async () => expect((await server.records.get(id))?.conversation).toBe(3))
   })
 })
 
