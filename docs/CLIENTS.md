@@ -779,9 +779,11 @@ re-run on reload or they double-register.
   are keyed by address (`SessionRef.conversation`, persisted in `SurfaceState`; absent = the current one).
   A past conversation always opens read-only in its own editor tab (the panel shows current conversations only),
   titled `<name> · conversation n`; `wd-go-to-current` from its banner opens the current one where a click would.
-  Conversations is a QuickPick from the card menu; `workerdeck.pastAgents` lists retired
-  agents into the same pick. Delete agent... replaces Retire; the card menu fetches the agent record when it
-  opens, for Send again / Dismiss and Retry start.
+  Conversations is a QuickPick from every card's menu (`client.conversations(id)` through `conversationList`,
+  named or not); `workerdeck.pastAgents` lists retired
+  agents into the same pick. Delete agent... replaces Retire; the card menu fetches the session's conversations
+  when it opens (`conversationRecovery`), for Retry start (`retryConversationStart`) and Send again / Dismiss
+  (`settlePendingPrompt`) on any session.
 
 ## `apps/embedded`
 

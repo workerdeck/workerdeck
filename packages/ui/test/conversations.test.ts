@@ -3,6 +3,8 @@ import { WorkerDeckError } from '@workerdeck/client'
 import type { UnconfirmedInputRefusal } from '@workerdeck/protocol'
 import {
   archivedBannerText,
+  conversationList,
+  conversationRecovery,
   conversationRowText,
   conversationSpan,
   discardConfirmText,
@@ -120,5 +122,39 @@ describe('discard and cut', () => {
       discardAndCut: vi.fn(),
     }
     await expect(startNewConversation(busy, 's1', { expectedGeneration: 4 }, async () => true)).rejects.toThrow('session is busy')
+  })
+})
+
+describe('session conversations', () => {
+  const history = [
+    { n: 1, engine: 'claude' as const, cwd: '/w', startedAt: 10, endedAt: 20, title: 'first' },
+    { n: 2, engine: 'claude' as const, cwd: '/w', startedAt: 20, endedAt: 30, transcript: 'unavailable' as const },
+  ]
+
+  it('lists the current conversation on top and the past ones newest first, for any session', () => {
+    expect(conversationList({ conversation: 3, history }, 'now')).toEqual([
+      { n: 3, current: true, startedAt: 30, title: 'now' },
+      { n: 2, current: false, startedAt: 20, endedAt: 30, transcript: 'unavailable' },
+      { n: 1, current: false, startedAt: 10, endedAt: 20, title: 'first' },
+    ])
+    expect(conversationList({ conversation: 3, closed: true, history }).map((row) => row.current)).toEqual([false, false])
+  })
+
+  it('offers a retry for a failed start and a choice only for an uncertain first message', () => {
+    expect(conversationRecovery({ conversation: 3, history, startFailed: { n: 3, error: 'boom' } })).toEqual({
+      startFailed: { n: 3, error: 'boom' },
+    })
+    expect(conversationRecovery({ conversation: 3, history, pendingPrompt: { text: 'hi', n: 3, state: 'pending' } })).toEqual({})
+    expect(conversationRecovery({ conversation: 3, history, pendingPrompt: { text: 'hi', n: 3, state: 'uncertain' } })).toEqual({
+      uncertainPrompt: { n: 3, text: 'hi' },
+    })
+  })
+
+  it('never sends a target, which a discard could not carry', async () => {
+    const newConversation = vi.fn<CutClient['newConversation']>(async () => done)
+    const client: CutClient = { newConversation, discardAndCut: vi.fn() }
+    const request = { expectedGeneration: 4, target: { cwd: '/elsewhere' } } as unknown as Parameters<typeof startNewConversation>[2]
+    await startNewConversation(client, 's1', request, async () => true)
+    expect(newConversation).toHaveBeenCalledWith('s1', { expectedGeneration: 4 })
   })
 })

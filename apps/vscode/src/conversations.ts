@@ -1,33 +1,32 @@
 import * as vscode from 'vscode'
-import { conversationDate, conversationRowText } from '@workerdeck/ui/format'
-import { errorMessage, type AgentConversationsResponse, type RetiredAgentInfo } from '@workerdeck/protocol'
+import { conversationDate, conversationList, conversationRowText } from '@workerdeck/ui/format'
+import { errorMessage, type ConversationRow, type RetiredAgentInfo } from '@workerdeck/protocol'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 import type { SelectOptions } from './sidebar.ts'
-
-type Row = AgentConversationsResponse['conversations'][number]
 
 export type ConversationsDeps = {
   store: HostStore
   selectSession: (hostId: string, sessionId: string, options?: SelectOptions) => Promise<void>
 }
 
-export type ConversationsAgent = { hostId: string; agentId: string; name: string; deleted?: boolean }
+// Any session, named or not; `deleted` is a retired agent from Past agents.
+export type ConversationsTarget = { hostId: string; sessionId: string; name: string; title?: string; deleted?: boolean }
 
 export function deleteAgentDetail(name: string): string {
   return `${name} leaves your agents. Its conversations stay under Past agents. Team members are released.`
 }
 
 // The current conversation opens where the session would, a past one read-only in its own editor tab.
-export async function showConversations(deps: ConversationsDeps, agent: ConversationsAgent): Promise<void> {
+export async function showConversations(deps: ConversationsDeps, agent: ConversationsTarget): Promise<void> {
   const host = deps.store.get(agent.hostId)
   const client = host && (await clientFor(deps.store, host))
   if (!client) {
     return
   }
-  let rows: Row[]
+  let rows: ConversationRow[]
   try {
-    rows = (await client.agentConversations(agent.agentId)).conversations
+    rows = conversationList(await client.conversations(agent.sessionId), agent.title)
   } catch (err) {
     void vscode.window.showErrorMessage(`WorkerDeck: could not list the conversations - ${errorMessage(err)}`)
     return
@@ -35,7 +34,7 @@ export async function showConversations(deps: ConversationsDeps, agent: Conversa
   const now = Date.now()
   const picked = await vscode.window.showQuickPick(
     rows.map((row) => {
-      const text = conversationRowText({ ...row, title: row.title ?? row.session?.title }, now)
+      const text = conversationRowText(row, now)
       const current = text.current && !agent.deleted
       return {
         label: `${current ? '$(circle-filled)' : '$(history)'} ${text.title}`,
@@ -50,7 +49,7 @@ export async function showConversations(deps: ConversationsDeps, agent: Conversa
   if (!picked) {
     return
   }
-  await deps.selectSession(agent.hostId, agent.agentId, picked.current ? {} : { target: 'editor', conversation: picked.row.n })
+  await deps.selectSession(agent.hostId, agent.sessionId, picked.current ? {} : { target: 'editor', conversation: picked.row.n })
 }
 
 export async function showPastAgents(deps: ConversationsDeps): Promise<void> {
@@ -72,7 +71,7 @@ export async function showPastAgents(deps: ConversationsDeps): Promise<void> {
     { title: 'Past agents', placeHolder: rows.length ? 'Deleted agents keep their conversations here' : 'No deleted agents' },
   )
   if (picked) {
-    await showConversations(deps, { hostId: picked.host.id, agentId: picked.agent.id, name: picked.agent.name, deleted: true })
+    await showConversations(deps, { hostId: picked.host.id, sessionId: picked.agent.id, name: picked.agent.name, deleted: true })
   }
 }
 

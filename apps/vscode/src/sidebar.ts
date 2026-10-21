@@ -6,7 +6,6 @@ import {
   clearContextOffered,
   errorMessage,
   newConversationGate,
-  type AgentInfo,
   type SessionInfo,
   type StatusLabelInput,
 } from '@workerdeck/protocol'
@@ -21,7 +20,7 @@ import {
   type TeamMovePlan,
   type WorkerDeckClient,
 } from '@workerdeck/client'
-import { startNewConversation, type DiscardConfirmText } from '@workerdeck/ui/format'
+import { conversationRecovery, startNewConversation, type ConversationRecovery, type DiscardConfirmText } from '@workerdeck/ui/format'
 import { clientFor } from './gateway.ts'
 import { deleteAgentDetail, showConversations } from './conversations.ts'
 import { agentDefaultsCached, relayOfCached } from './machine.ts'
@@ -346,11 +345,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           },
     )
     const name = agent?.name ?? info.title ?? sessionId.slice(0, 8)
-    // Read here, not from the list: only the agent record carries a first message a crash may have kept.
-    const withAgent = agent
-      ? this.#agentRecord(hostId, agent.id).then((record) => [...this.#recoveryItems(hostId, info, record), ...items])
-      : items
-    const picked = await vscode.window.showQuickPick(withAgent, {
+    // Read here, not from the list: only the session's conversations carry a failed start or an uncertain first message.
+    const withRecovery = this.#recovery(hostId, info.id).then((recovery) => [...this.#recoveryItems(hostId, info, recovery), ...items])
+    const picked = await vscode.window.showQuickPick(withRecovery, {
       title: info.owner ? `${name} · owner ${info.owner}` : name,
       placeHolder: 'Session actions',
     })
@@ -426,16 +423,21 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           run: () => openAgentFile(hostId, agent.id, agent.name, 'brief'),
         },
       )
-      items.push({
-        label: '$(history) Conversations…',
-        detail: "This agent's conversations; past ones open read-only",
-        run: () =>
-          showConversations(
-            { store: this.#store, selectSession: this.#delegate.selectSession },
-            { hostId, agentId: agent.id, name: agent.name },
-          ),
-      })
     }
+    items.push({
+      label: '$(history) Conversations…',
+      detail: 'Past conversations open read-only',
+      run: () =>
+        showConversations(
+          { store: this.#store, selectSession: this.#delegate.selectSession },
+          {
+            hostId,
+            sessionId: info.id,
+            name: agent?.name ?? info.title ?? info.id.slice(0, 8),
+            ...(info.title ? { title: info.title } : {}),
+          },
+        ),
+    })
     return items
   }
 
@@ -453,42 +455,36 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     }
   }
 
-  async #agentRecord(hostId: string, agentId: string): Promise<AgentInfo | undefined> {
+  async #recovery(hostId: string, sessionId: string): Promise<ConversationRecovery | undefined> {
     const host = this.#store.get(hostId)
     const client = host && (await clientFor(this.#store, host))
-    const agents = await client?.listAgents().catch((): AgentInfo[] | undefined => undefined)
-    return agents?.find((candidate) => candidate.id === agentId)
+    const answer = await client?.conversations(sessionId).catch(() => undefined)
+    return answer && conversationRecovery(answer)
   }
 
-  #recoveryItems(
-    hostId: string,
-    info: SessionInfo,
-    record: AgentInfo | undefined,
-  ): (vscode.QuickPickItem & { run: () => Promise<void> })[] {
-    const agentId = info.agent?.id
-    if (agentId === undefined) {
-      return []
-    }
+  #recoveryItems(hostId: string, info: SessionInfo, recovery: ConversationRecovery | undefined): (vscode.QuickPickItem & { run: () => Promise<void> })[] {
     const items: (vscode.QuickPickItem & { run: () => Promise<void> })[] = []
-    if (record?.startFailed !== undefined) {
+    const failed = recovery?.startFailed
+    if (failed) {
       items.push({
         label: '$(debug-restart) Retry start',
-        detail: record.startFailed,
-        run: () => this.#agentCall(hostId, 'could not start the new conversation', (client) => client.retryAgentStart(agentId, info.conversation ?? 1)),
+        detail: failed.error,
+        run: () => this.#agentCall(hostId, 'could not start the new conversation', (client) => client.retryConversationStart(info.id, failed.n)),
       })
     }
-    if (record?.undelivered !== undefined) {
+    const uncertain = recovery?.uncertainPrompt
+    if (uncertain) {
       items.push(
         {
           label: '$(send) Send again',
           description: 'first message may not have arrived',
-          detail: record.undelivered,
-          run: () => this.#agentCall(hostId, 'could not send the message again', (client) => client.settleUndelivered(agentId, true, info.conversation ?? 1)),
+          detail: uncertain.text,
+          run: () => this.#agentCall(hostId, 'could not send the message again', (client) => client.settlePendingPrompt(info.id, true, uncertain.n)),
         },
         {
           label: '$(close) Dismiss',
           detail: 'Drop the first message that may not have arrived',
-          run: () => this.#agentCall(hostId, 'could not dismiss the message', (client) => client.settleUndelivered(agentId, false, info.conversation ?? 1)),
+          run: () => this.#agentCall(hostId, 'could not dismiss the message', (client) => client.settlePendingPrompt(info.id, false, uncertain.n)),
         },
       )
     }

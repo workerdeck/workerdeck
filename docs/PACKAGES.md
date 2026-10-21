@@ -2056,8 +2056,9 @@ two gates: the host must pass `onNewConversation`, and the row must be live (`cl
 now (`newConversationGate`). It is the one cut entry on a card (Clear context and New conversation are the same
 cut). Hosts run it through `startNewConversation` with `useDiscardConfirmation` (or their own modal), which turns
 an `unconfirmed_input` refusal into a confirmed `discardAndCut` and asks again on `input_changed`.
-`SessionPanel` does the same for a socket `/clear` or Clear context command that the gateway refuses: within
-10 s of the ask, a protocol error re-asks the cut over REST to get the actionable 409.
+`SessionPanel`'s typed `/clear` stays a socket command (it queues for idle); a refusal there is plain protocol-error
+text, never inferred into a REST cut, because a `protocol_error` frame names no command and a guess could cut a
+later conversation.
 The **bed** (`onSleep`) is gated three ways: the host passes it, the row's
 `capabilities.engineSleep` is true, and the session is `idle` and not already asleep. It is a REST
 call (`sleepSession`), so unlike the eraser it needs no borrowed socket. An asleep card
@@ -2399,10 +2400,12 @@ failure retries after 60 s); the session header draws `AgentHeading` for an agen
 
 - **Agent conversations.** The session route takes `conversation=<n>` for a past conversation (read-only);
   without it the route is the current one, which a stable id makes reload-safe. Sub-agent and shell frames carry
-  `conversation` along. Conversations dialog from the card menu and the tray hover card, Past agents in the New
-  dropdown, Delete agent... (confirmed, `expectedGeneration`), and one New conversation entry on every live card
-  (quick action and menu), with the discard confirmation (`useDiscardConfirmation`). `useAgents` polls `listAgents` every 15 s for
-  `undelivered` (Send again / Dismiss) and `startFailed` (Retry start).
+  `conversation` along. Every card, named or not, has Conversations (the session's `conversations(id)` through
+  `conversationList`) and one New conversation entry (quick action and menu) with the discard confirmation
+  (`useDiscardConfirmation`). The card menu reads `conversations(id)` when it opens, so Retry start
+  (`retryConversationStart`) and Send again / Dismiss for an uncertain first message (`settlePendingPrompt`) are
+  there for every session (`conversationRecovery`). Past agents in the New dropdown, Delete agent... (confirmed,
+  `expectedGeneration`).
 
 ## `packages/cli`
 

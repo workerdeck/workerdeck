@@ -1,14 +1,13 @@
-import type { ReactNode, SyntheticEvent } from 'react'
+import { useState, type ReactNode, type SyntheticEvent } from 'react'
 import {
   NEW_CONVERSATION_HINT,
   canSleep,
   clearContextOffered,
   newConversationGate,
-  type AgentInfo,
   type SessionRow,
   type Sharing,
 } from '@workerdeck/protocol'
-import { Button, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, cn } from '@workerdeck/ui'
+import { Button, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, cn, type ConversationRecovery } from '@workerdeck/ui'
 import {
   BedDouble,
   Globe,
@@ -40,8 +39,8 @@ export type CardAction =
   | { kind: 'sharing'; sharing: Sharing }
   | { kind: 'dissolve' }
   | { kind: 'new-conversation' }
-  | { kind: 'retry-start' }
-  | { kind: 'undelivered'; send: boolean }
+  | { kind: 'retry-start'; n: number }
+  | { kind: 'undelivered'; send: boolean; n: number }
   | { kind: 'conversations' }
   | { kind: 'delete' }
 
@@ -68,14 +67,15 @@ export function SessionCardActions({
   row,
   rows,
   allowShared = true,
-  agentInfo,
+  loadRecovery,
   onAction,
 }: {
   row: SessionRow
   rows: SessionRow[]
   allowShared?: boolean
   // The agent's own record, where this gateway lets the caller list agents: it carries a first message a crash may have kept.
-  agentInfo?: AgentInfo
+  // Read when the menu opens: a failed start or an uncertain first message, for any session.
+  loadRecovery?: () => Promise<ConversationRecovery | undefined>
   onAction: (action: CardAction) => void
 }) {
   const { info } = row
@@ -84,7 +84,9 @@ export function SessionCardActions({
   const sleepable = canSleep(info)
   const gate = newConversationGate(info)
   const cuttable = clearContextOffered(info)
-  const undelivered = agentInfo?.undelivered
+  const [recovery, setRecovery] = useState<ConversationRecovery>()
+  const failed = recovery?.startFailed
+  const uncertain = recovery?.uncertainPrompt
 
   return (
     // The card is one big select target and React events bubble out of portals, so the menu's clicks stop here.
@@ -114,7 +116,13 @@ export function SessionCardActions({
       >
         <Trash2 className="size-3 text-fg-3" />
       </QuickAction>
-      <Menu>
+      <Menu
+        onOpenChange={(open) => {
+          if (open && loadRecovery) {
+            void loadRecovery().then(setRecovery)
+          }
+        }}
+      >
         <MenuTrigger
           render={
             <Button
@@ -196,33 +204,29 @@ export function SessionCardActions({
               </Item>
             </>
           ) : null}
+          <Item icon={<History />} onClick={() => onAction({ kind: 'conversations' })}>
+            Conversations…
+          </Item>
+          {failed ? (
+            <Item icon={<RotateCcw />} title={failed.error} onClick={() => onAction({ kind: 'retry-start', n: failed.n })}>
+              Retry start
+            </Item>
+          ) : null}
+          {uncertain ? (
+            <>
+              <div className="max-w-64 truncate px-2 pt-1.5 pb-1 text-label text-fg-4" title={uncertain.text}>
+                First message may not have arrived
+              </div>
+              <Item icon={<Send />} onClick={() => onAction({ kind: 'undelivered', send: true, n: uncertain.n })}>
+                Send again
+              </Item>
+              <Item icon={<X />} onClick={() => onAction({ kind: 'undelivered', send: false, n: uncertain.n })}>
+                Dismiss
+              </Item>
+            </>
+          ) : null}
           {agent ? (
             <>
-              <Item icon={<History />} onClick={() => onAction({ kind: 'conversations' })}>
-                Conversations…
-              </Item>
-              {agentInfo?.startFailed !== undefined ? (
-                <Item
-                  icon={<RotateCcw />}
-                  title={agentInfo.startFailed}
-                  onClick={() => onAction({ kind: 'retry-start' })}
-                >
-                  Retry start
-                </Item>
-              ) : null}
-              {undelivered !== undefined ? (
-                <>
-                  <div className="max-w-64 truncate px-2 pt-1.5 pb-1 text-label text-fg-4" title={undelivered}>
-                    First message may not have arrived
-                  </div>
-                  <Item icon={<Send />} onClick={() => onAction({ kind: 'undelivered', send: true })}>
-                    Send again
-                  </Item>
-                  <Item icon={<X />} onClick={() => onAction({ kind: 'undelivered', send: false })}>
-                    Dismiss
-                  </Item>
-                </>
-              ) : null}
               <MenuSeparator />
               <Item icon={<Trash2 />} destructive onClick={() => onAction({ kind: 'delete' })}>
                 Delete agent…

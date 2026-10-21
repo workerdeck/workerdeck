@@ -46,8 +46,10 @@ import {
   AvatarDialog,
   crossOwnerDrop,
   rowOwner,
+  conversationRecovery,
   startNewConversation,
   useDiscardConfirmation,
+  type ConversationRecovery,
   type GroupTarget,
 } from '@workerdeck/ui'
 import { Archive, ChevronDown, Layers, Plus, RefreshCw, Search, UserPlus } from 'lucide-react'
@@ -55,7 +57,6 @@ import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { NewAgentDialog } from '@/components/NewAgentDialog.tsx'
 import { ConversationsDialog, PastAgentsDialog, type ConversationsTarget } from '@/components/ConversationsDialog.tsx'
 import { DeleteAgentDialog, type DeleteAgentTarget } from '@/components/DeleteAgentDialog.tsx'
-import { agentOn, useAgents } from '@/hooks/useAgents.ts'
 import { SessionCardActions, teamLeads, teamMembers, type CardAction } from './SessionCardActions.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { clientFor, hostById, primaryHost } from '@/lib/hosts.ts'
@@ -92,7 +93,6 @@ export function SessionsSidebar() {
   const [conversationsOf, setConversationsOf] = useState<ConversationsTarget>()
   const discard = useDiscardConfirmation()
   const [pastAgents, setPastAgents] = useState(false)
-  const { byHost: agentsByHost, refresh: refreshAgents } = useAgents()
   const [crossing, setCrossing] = useState<CrossOwnerQuestion>()
   // Kept after close so the dialog does not re-render against another gateway while it fades out.
   const [target, setTarget] = useState<Partial<GroupTarget>>({})
@@ -137,7 +137,7 @@ export function SessionsSidebar() {
     setPastAgents(false)
     void navigate({
       to: '/sessions/$hostId/$sessionId',
-      params: { hostId: agent.hostId, sessionId: agent.agentId },
+      params: { hostId: agent.hostId, sessionId: agent.sessionId },
       search: current && !agent.deleted ? {} : { conversation: n },
     })
   }
@@ -253,15 +253,9 @@ export function SessionsSidebar() {
       return
     }
     void call(client)
-      .then(() => {
-        void refresh()
-        void refreshAgents()
-      })
+      .then(() => void refresh())
       .catch((e: unknown) => toast.error(errorMessage(e, failure)))
   }
-
-  const retryStart = (row: SessionRow, agentId: string) =>
-    agentCall(row, 'Could not start the new conversation', (client) => client.retryAgentStart(agentId, row.info.conversation ?? 1))
 
   const newConversation = (row: SessionRow) => {
     const client = clientFor(row.hostId)
@@ -351,23 +345,17 @@ export function SessionsSidebar() {
         break
       }
       case 'retry-start': {
-        if (agent) {
-          retryStart(row, agent.id)
-        }
+        agentCall(row, 'Could not start the new conversation', (client) => client.retryConversationStart(row.info.id, action.n))
         break
       }
       case 'undelivered': {
-        if (agent) {
-          agentCall(row, action.send ? 'Could not send the message again' : 'Could not dismiss the message', (client) =>
-            client.settleUndelivered(agent.id, action.send, row.info.conversation ?? 1),
-          )
-        }
+        agentCall(row, action.send ? 'Could not send the message again' : 'Could not dismiss the message', (client) =>
+          client.settlePendingPrompt(row.info.id, action.send, action.n),
+        )
         break
       }
       case 'conversations': {
-        if (agent) {
-          setConversationsOf({ hostId: row.hostId, agentId: agent.id, name: agent.name })
-        }
+        setConversationsOf(conversationsTarget(row))
         break
       }
       case 'delete': {
@@ -506,15 +494,13 @@ export function SessionsSidebar() {
             onTeamMove={teamMove}
             relays={relays}
             avatars={avatars}
-            onAgentConversations={(row) =>
-              row.info.agent && setConversationsOf({ hostId: row.hostId, agentId: row.info.agent.id, name: row.info.agent.name })
-            }
+            onAgentConversations={(row) => setConversationsOf(conversationsTarget(row))}
             rowActions={(row) => (
               <SessionCardActions
                 row={row}
                 rows={rows}
                 allowShared={agentDefaults[row.hostId]?.allowShared !== false}
-                agentInfo={agentOn(agentsByHost, row.hostId, row.info.agent?.id)}
+                loadRecovery={() => loadRecovery(row)}
                 onAction={(action) => onCardAction(row, action)}
               />
             )}
@@ -585,14 +571,7 @@ export function SessionsSidebar() {
       />
 
       {discard.dialog}
-      <DeleteAgentDialog
-        target={deleting}
-        onClose={() => setDeleting(undefined)}
-        onDeleted={() => {
-          void refresh()
-          void refreshAgents()
-        }}
-      />
+      <DeleteAgentDialog target={deleting} onClose={() => setDeleting(undefined)} onDeleted={() => void refresh()} />
 
       <ConversationsDialog
         target={conversationsOf}
@@ -613,6 +592,18 @@ export function SessionsSidebar() {
 }
 
 type CrossOwnerQuestion = { move: TeamMove; resolve: (yes: boolean) => void }
+
+async function loadRecovery(row: SessionRow): Promise<ConversationRecovery | undefined> {
+  const answer = await clientFor(row.hostId)
+    ?.conversations(row.info.id)
+    .catch(() => undefined)
+  return answer && conversationRecovery(answer)
+}
+
+function conversationsTarget(row: SessionRow): ConversationsTarget {
+  const name = row.info.agent?.name ?? row.info.title ?? row.info.id.slice(0, 8)
+  return { hostId: row.hostId, sessionId: row.info.id, name, ...(row.info.title ? { title: row.info.title } : {}) }
+}
 
 function CrossOwnerDialog({
   question,

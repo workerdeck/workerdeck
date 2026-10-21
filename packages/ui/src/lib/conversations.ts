@@ -2,6 +2,7 @@ import { unconfirmedInputOf, type WorkerDeckClient } from '@workerdeck/client'
 import type {
   ArchivedView,
   ConversationRow,
+  ConversationsResponse,
   NewConversationRequest,
   NewConversationResponse,
   UnconfirmedInputRefusal,
@@ -27,6 +28,14 @@ export type DiscardConfirmText = {
 }
 
 export type CutClient = Pick<WorkerDeckClient, 'newConversation' | 'discardAndCut'>
+
+// No `target`: a discard binds the refused set and cannot carry one, so a confirmed cut would silently lose it.
+export type CutRequest = Omit<NewConversationRequest, 'target'>
+
+export type ConversationRecovery = {
+  startFailed?: { n: number; error: string }
+  uncertainPrompt?: { n: number; text: string }
+}
 
 export type ConfirmDiscard = (text: DiscardConfirmText, refusal: UnconfirmedInputRefusal) => Promise<boolean>
 
@@ -93,12 +102,15 @@ export function discardConfirmText(refusal: UnconfirmedInputRefusal): DiscardCon
 export async function startNewConversation(
   client: CutClient,
   id: string,
-  request: NewConversationRequest,
+  request: CutRequest,
   confirm: ConfirmDiscard,
 ): Promise<NewConversationResponse | undefined> {
   let refusal: UnconfirmedInputRefusal
   try {
-    return await client.newConversation(id, request)
+    return await client.newConversation(id, {
+      expectedGeneration: request.expectedGeneration,
+      ...(request.prompt === undefined ? {} : { prompt: request.prompt }),
+    })
   } catch (err) {
     const first = unconfirmedInputOf(err)
     if (!first) {
@@ -128,4 +140,38 @@ export async function startNewConversation(
 
 function capital(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+// Newest first, the current conversation on top (its start is the previous one's end).
+export function conversationList(response: ConversationsResponse, currentTitle?: string): ConversationRow[] {
+  const history = [...response.history].sort((a, b) => b.n - a.n)
+  const rows: ConversationRow[] = []
+  if (response.conversation !== undefined && !response.closed) {
+    const startedAt = history[0]?.endedAt
+    rows.push({
+      n: response.conversation,
+      current: true,
+      ...(startedAt === undefined ? {} : { startedAt }),
+      ...(currentTitle ? { title: currentTitle } : {}),
+    })
+  }
+  for (const entry of history) {
+    rows.push({
+      n: entry.n,
+      current: false,
+      ...(entry.startedAt === undefined ? {} : { startedAt: entry.startedAt }),
+      endedAt: entry.endedAt,
+      ...(entry.title ? { title: entry.title } : {}),
+      ...(entry.transcript ? { transcript: entry.transcript } : {}),
+    })
+  }
+  return rows
+}
+
+export function conversationRecovery(response: ConversationsResponse): ConversationRecovery {
+  const prompt = response.pendingPrompt
+  return {
+    ...(response.startFailed ? { startFailed: { n: response.startFailed.n, error: response.startFailed.error } } : {}),
+    ...(prompt?.state === 'uncertain' ? { uncertainPrompt: { n: response.conversation ?? prompt.n, text: prompt.text } } : {}),
+  }
 }

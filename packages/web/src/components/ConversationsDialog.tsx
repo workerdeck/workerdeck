@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react'
-import { errorMessage, type AgentConversationsResponse, type RetiredAgentInfo } from '@workerdeck/protocol'
-import { Dialog, DialogBody, DialogContent, DialogHeader, conversationDate, conversationRowText, cn } from '@workerdeck/ui'
+import { errorMessage, type ConversationRow, type RetiredAgentInfo } from '@workerdeck/protocol'
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogHeader,
+  conversationDate,
+  conversationList,
+  conversationRowText,
+  cn,
+} from '@workerdeck/ui'
 import { clientFor, currentHosts } from '@/lib/hosts.ts'
 
-export type ConversationsTarget = { hostId: string; agentId: string; name: string; deleted?: boolean }
+// Any session, named or not; `deleted` is a retired agent from Past agents.
+export type ConversationsTarget = { hostId: string; sessionId: string; name: string; title?: string; deleted?: boolean }
 
-type Row = AgentConversationsResponse['conversations'][number]
+type Row = ConversationRow
 
 type Loaded<T> = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; value: T }
 
@@ -26,7 +36,7 @@ export function ConversationsDialog({
           description={target?.deleted ? 'Deleted agent: every conversation opens read-only' : 'Past conversations open read-only'}
         />
         <DialogBody>
-          {target ? <ConversationList key={`${target.hostId}:${target.agentId}`} target={target} onOpen={onOpen} /> : null}
+          {target ? <ConversationList key={`${target.hostId}:${target.sessionId}`} target={target} onOpen={onOpen} /> : null}
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -43,13 +53,13 @@ function ConversationList({ target, onOpen }: { target: ConversationsTarget; onO
       return
     }
     client
-      .agentConversations(target.agentId)
-      .then((answer) => live && setLoaded({ state: 'ready', value: answer.conversations }))
+      .conversations(target.sessionId)
+      .then((answer) => live && setLoaded({ state: 'ready', value: conversationList(answer, target.title) }))
       .catch((e: unknown) => live && setLoaded({ state: 'error', message: errorMessage(e, 'Could not list the conversations') }))
     return () => {
       live = false
     }
-  }, [target.hostId, target.agentId])
+  }, [target.hostId, target.sessionId, target.title])
 
   if (loaded.state !== 'ready') {
     return <p className="text-body-sm text-fg-3">{loaded.state === 'loading' ? 'Loading…' : loaded.message}</p>
@@ -60,7 +70,7 @@ function ConversationList({ target, onOpen }: { target: ConversationsTarget; onO
   return (
     <ul className="-mx-2 flex max-h-[60vh] flex-col overflow-y-auto">
       {loaded.value.map((row) => {
-        const text = conversationRowText({ ...row, title: row.title ?? row.session?.title })
+        const text = conversationRowText(row)
         return (
           <li key={row.n}>
             <button
@@ -142,7 +152,7 @@ function PastAgentList({ onPick }: { onPick: (target: ConversationsTarget) => vo
           <li key={`${hostId}:${agent.id}`}>
             <button
               type="button"
-              onClick={() => onPick({ hostId, agentId: agent.id, name: agent.name, deleted: true })}
+              onClick={() => onPick({ hostId, sessionId: agent.id, name: agent.name, deleted: true })}
               className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-row-hover"
             >
               <span className="truncate text-body-sm text-fg-1">{agent.name}</span>
