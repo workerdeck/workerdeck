@@ -399,7 +399,7 @@ describe('sessions that survive a restart', () => {
       expect(await store.get(session.id)).not.toBeNull()
     })
 
-    const res = await fetch(`${gateway.base}/sessions/${session.id}`, { method: 'DELETE' })
+    const res = await fetch(`${gateway.base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     expect(res.status).toBeLessThan(300)
     await vi.waitFor(async () => {
       expect(await store.get(session.id)).toBeNull()

@@ -103,9 +103,9 @@ async function startGateway(
 }
 
 async function call<T>(base: string, path: string, method = 'GET', body?: unknown): Promise<{ status: number; body: T }> {
-  const init: RequestInit = { method }
+  const init: RequestInit = { method, headers: { 'x-workerdeck-generation': '1' } }
   if (body !== undefined) {
-    init.headers = { 'content-type': 'application/json' }
+    init.headers = { 'content-type': 'application/json', 'x-workerdeck-generation': '1' }
     init.body = JSON.stringify(body)
   }
   const res = await fetch(`${base}${path}`, init)
@@ -326,7 +326,10 @@ describe('agents', () => {
       body: JSON.stringify({ name: 'Atlas', config: { cwd: '/tmp/project' } }),
     })
     const { session } = (await created.json()) as AgentResponse
-    const refused = await fetch(`${base}/sessions/${session!.id}`, { method: 'DELETE', headers: { authorization: 'Bearer user' } })
+    const refused = await fetch(`${base}/sessions/${session!.id}`, {
+      method: 'DELETE',
+      headers: { 'x-workerdeck-generation': '1', authorization: 'Bearer user' },
+    })
     expect(refused.status).not.toBe(200)
     expect(((await (await fetch(`${base}/agents`, { headers: op })).json()) as { agents: AgentInfo[] }).agents).toHaveLength(1)
   })

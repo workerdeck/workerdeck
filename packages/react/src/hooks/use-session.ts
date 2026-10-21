@@ -69,8 +69,8 @@ export const REPLAY_HOLD_MAX_MS = 1500
 
 export type UseClaudeSessionOptions = {
   onProtocolError?: (message: string) => void
-  // A prompt the gateway refused because its conversation ended under it: the text, for the composer to offer again.
-  onStalePrompt?: (text: string) => void
+  // A prompt the gateway refused before the engine saw it: the text, for the composer to offer again.
+  onUndeliveredPrompt?: (text: string) => void
   cacheTranscript?: boolean
 }
 
@@ -190,9 +190,9 @@ export function useClaudeSession(
     const offProtocolError = handle.on('protocolError', (message: string) => {
       optionsRef.current?.onProtocolError?.(message)
     })
-    const offStale = handle.on('stalePrompt', ({ text }) => {
+    const offStale = handle.on('undeliveredPrompt', ({ text }) => {
       setUnsentPrompts((held) => [...held, text])
-      optionsRef.current?.onStalePrompt?.(text)
+      optionsRef.current?.onUndeliveredPrompt?.(text)
     })
     return () => {
       offEvent()

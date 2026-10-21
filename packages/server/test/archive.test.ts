@@ -110,7 +110,7 @@ describe('archived conversations', () => {
     expect(rename.status).toBe(409)
     expect(((await rename.json()) as { error: string }).error).toBe('conversation is archived')
 
-    expect((await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE' })).ok).toBe(true)
+    expect((await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })).ok).toBe(true)
     expect((await fetch(`${base}/sessions/${session.id}`)).status).toBe(404)
   })
 

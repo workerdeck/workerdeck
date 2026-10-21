@@ -198,7 +198,7 @@ describe('live sessions that survive a restart', () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
 
-    await fetch(`${gateway.base}/sessions/${session.id}`, { method: 'DELETE' })
+    await fetch(`${gateway.base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     await vi.waitFor(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).toBeNull()
     })

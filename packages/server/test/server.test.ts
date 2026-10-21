@@ -156,7 +156,7 @@ describe('createWorkerServer', () => {
     expect(replayed.type === 'event' && replayed.event.seq).toBe(current.lastSeq)
     ws2.close()
 
-    const delRes = await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE' })
+    const delRes = await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     expect(delRes.status).toBe(200)
     const gone = await fetch(`${base}/sessions/${session.id}`)
     expect(gone.status).toBe(404)

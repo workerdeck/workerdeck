@@ -163,7 +163,9 @@ describe('session notifications', () => {
       const base = `http://127.0.0.1:${port}/v1`
       const session = await createSession(base)
 
-      expect((await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE' })).status).toBe(200)
+      expect(
+        (await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })).status,
+      ).toBe(200)
       await vi.waitFor(() => expect(receiver.received.length).toBe(1))
       expect(receiver.received[0]!.type).toBe('session_closed')
       expect(receiver.received[0]!.reason).toBe('server')

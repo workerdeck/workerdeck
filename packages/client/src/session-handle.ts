@@ -30,8 +30,8 @@ export type SessionHandleEvents = {
   shellAttached: { shellId: string; shell: ShellInfo; cols: number; rows: number; scrollback: string }
   shellOutput: { shellId: string; data: string }
   shellDetached: { shellId: string; reason: string }
-  // A prompt the gateway refused unrun because the conversation it was written for has ended: the sender's to resubmit.
-  stalePrompt: { clientId: string; text: string; attachmentIds?: string[] }
+  // A prompt the gateway refused before the engine saw it (its conversation ended, a rotation was in flight): the sender's to resubmit.
+  undeliveredPrompt: { clientId: string; text: string; attachmentIds?: string[] }
 }
 
 export class SessionHandle {
@@ -278,9 +278,9 @@ export class SessionHandle {
       } else if (frame.type === 'ack') {
         const payload = this.#unacked.get(frame.clientId)
         this.#unacked.delete(frame.clientId)
-        if (frame.stale && payload !== undefined) {
+        if (frame.notDelivered && payload !== undefined) {
           const sent = JSON.parse(payload) as Extract<ClientFrame, { type: 'user_message' }>
-          this.#events.emit('stalePrompt', {
+          this.#events.emit('undeliveredPrompt', {
             clientId: frame.clientId,
             text: sent.text,
             ...(sent.attachmentIds ? { attachmentIds: sent.attachmentIds } : {}),

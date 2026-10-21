@@ -92,10 +92,9 @@ export async function handleSessions(
   if (ctx.handovers.gated(route.id)) {
     fail(409, ROTATING)
   }
-  // Protocol 2: a mutating call names the conversation it was meant for, and a stale or missing one is refused. A
-  // DELETE may omit it; it is then pinned to the conversation current on arrival. Both are re-checked under the
-  // session's lifecycle lock, so a call queued behind a cut never lands on the next conversation.
-  const expected = expectedConversation(ctx, req, route.id, req.method === 'DELETE')
+  // Protocol 2: a mutating call names the conversation it was meant for, and a stale or missing one is refused, a
+  // DELETE included. Re-checked under the session's lifecycle lock, so a call queued behind a cut never lands on n+1.
+  const expected = expectedConversation(ctx, req, route.id)
   await ctx.handovers.run([route.id], async () => {
     const resolved = await resolveSession(ctx, route.id, auth)
     requireWritable(resolved, req.method, erase)
@@ -107,13 +106,10 @@ export async function handleSessions(
   })
 }
 
-function expectedConversation(ctx: ServerContext, req: IncomingMessage, id: string, optional: boolean): number {
+function expectedConversation(ctx: ServerContext, req: IncomingMessage, id: string): number {
   const header = req.headers[GENERATION_HEADER]
   const current = ctx.records.conversationOf(id) ?? 1
   if (typeof header !== 'string') {
-    if (optional) {
-      return current
-    }
     fail(409, `this call must name its conversation (${GENERATION_HEADER}); the session is on conversation ${current}`)
   }
   const named = Number(header)

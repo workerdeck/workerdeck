@@ -241,7 +241,7 @@ describe('deferred execution: parking and result ingestion', () => {
     h.runners[0]!.defer('exec-1')
     await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
 
-    const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE' })
+    const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     expect(((await deleted.json()) as { session: SessionInfo }).session.status).toBe('closed')
     expect(await running!.parking.get(session.id)).toBeNull()
     const late = await submitResult(h.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 1 } })
@@ -462,7 +462,7 @@ describe('deferred execution: durability across a restart', () => {
     h.runners[0]!.defer('exec-1')
     await vi.waitFor(() => expect(running!.registry.get(session.id)).toBeUndefined())
 
-    const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE' })
+    const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     expect(deleted.status).toBe(200)
     await new Promise((resolve) => setTimeout(resolve, 150))
     expect(await runtimeFiles()).toEqual([])

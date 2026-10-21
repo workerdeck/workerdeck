@@ -1013,10 +1013,13 @@ Retry start. Recovery before listen rolls `prepared` back, resumes an existing s
 and turns a `sending` prompt into `uncertain`, never resending it. The write token is required: an untokened runtime
 write is refused (`MissingConversationError`); seeding goes through `bootstrapRuntime`, a hot-reload carry primes the
 token before the runner writes, and the cache only ever moves forward. Every mutating session route requires
-`x-workerdeck-generation` (a DELETE may omit it and is pinned on arrival) and every WS command except
-`shell_attach` / `shell_detach` requires `generation`; both are re-checked under the session's lifecycle lock, and a
-refused prompt is acked `stale: true`, unrun. `packages/client` stamps the token a command was created with and
-never rewrites it on a resend; `useClaudeSession` turns a stale prompt into `unsentPrompts`. Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`), typed exact
+`x-workerdeck-generation`, DELETE included, and every WS command except `shell_attach` / `shell_detach` requires
+`generation` (an untokened attach subscribes but never resizes); both are re-checked under the session's lifecycle
+lock. `POST .../conversations`, `/retry` and `/pending` take `expectedGeneration` in the body and re-authorize the
+caller on the current projection inside the same lock that cuts, retries or sends. A prompt refused before the
+engine saw it (ended or missing conversation, a rotation in flight, a refusal) is acked `notDelivered: true`; one
+that may have run never is. `packages/client` stamps the token a command was created with and never rewrites it on a
+resend; `useClaudeSession` keeps an undelivered prompt as `unsentPrompts`. Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`), typed exact
 `/clear` and WS `clear_context` (queued until idle), and `context_reset` of a non-agent session. History reads
 (`GET .../conversations[/n]`, WS `?conversation=n`) bypass `resolveSession` and authorize on the entry's frozen
 `auth`; an execution of an ended conversation answers 409, authorized on that entry too. A socket is bound to its

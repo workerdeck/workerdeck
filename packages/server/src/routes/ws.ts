@@ -126,7 +126,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     if (refused) {
       report(new Error(refused))
       if (clientId) {
-        send({ type: 'ack', clientId, stale: true })
+        send({ type: 'ack', clientId, notDelivered: true })
       }
       return
     }
@@ -144,14 +144,14 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
         await handleCommand(ctx, frame, bound).catch(report)
         return
       }
-      let stale = false
+      let unrun = false
       await ctx.promptAcks
         .run(`${runner.id}:${conversation}`, clientId, () => handleCommand(ctx, frame, bound))
         .catch((error: unknown) => {
-          stale = error instanceof Error && error.message === CONVERSATION_ENDED
+          unrun = error instanceof NotDelivered
           report(error)
         })
-      send({ type: 'ack', clientId, ...(stale ? { stale: true as const } : {}) })
+      send({ type: 'ack', clientId, ...(unrun ? { notDelivered: true as const } : {}) })
     })
   })
   ws.on('close', () => {
@@ -222,13 +222,13 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
   const { attachmentStore, bridge } = ctx
   const { runner, access, client } = bound
   if (ctx.registry.get(runner.id) !== runner && !ctx.handovers.gated(runner.id)) {
-    throw new Error(CONVERSATION_ENDED)
+    throw new NotDelivered(CONVERSATION_ENDED)
   }
   if (tokenRefusal(ctx, frame, bound)) {
-    throw new Error(CONVERSATION_ENDED)
+    throw new NotDelivered(CONVERSATION_ENDED)
   }
   if (ctx.handovers.gated(runner.id)) {
-    throw new Error(ROTATING)
+    throw new NotDelivered(ROTATING)
   }
   if (isClearRequest(frame) && !ctx.agents.bySession(runner.id)) {
     await ctx.cuts.clearOnIdle(runner, 'clear')
@@ -238,17 +238,17 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
     case 'user_message': {
       const locked = refuseJobInput(runner.info(), ctx.options.disableBypassPermissions)
       if (locked) {
-        throw new Error(locked)
+        throw new NotDelivered(locked)
       }
       // The one place `mentions` is ever set: this frame is a person typing. A slash command is
       // matched on the whole message by the CLI, so nothing may be appended to one, and a failure
       // to resolve is silent - a hint must never lose the text it was a hint about.
       const mentions = ctx.peers && !isSlashCommand(frame.text) ? await mentionsFor(ctx.peers, runner.id, frame.text).catch(() => []) : []
       if (ctx.handovers.gated(runner.id) || ctx.registry.get(runner.id) !== runner) {
-        throw new Error(ROTATING)
+        throw new NotDelivered(ROTATING)
       }
       if (tokenRefusal(ctx, frame, bound)) {
-        throw new Error(CONVERSATION_ENDED)
+        throw new NotDelivered(CONVERSATION_ENDED)
       }
       const options = mentions.length > 0 ? { mentions } : undefined
       if (!frame.attachmentIds?.length) {
@@ -257,7 +257,7 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
       }
       const resolved = attachmentStore.resolve(runner.id, frame.attachmentIds)
       if (!resolved.ok) {
-        throw new Error(`unknown attachment(s): ${resolved.missing.join(', ')}`)
+        throw new NotDelivered(`unknown attachment(s): ${resolved.missing.join(', ')}`)
       }
       runner.sendMessage(frame.text, resolved.attachments, options)
       return
@@ -343,7 +343,9 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
       return
     }
     case 'shell_attach': {
-      await attachShell(permittedShells(ctx, runner, access), client, runner.id, frame.shellId, { cols: frame.cols, rows: frame.rows })
+      // The size is a change to the shell, so only an attach naming this socket's conversation applies it.
+      const size = frame.generation === bound.conversation ? { cols: frame.cols, rows: frame.rows } : undefined
+      await attachShell(permittedShells(ctx, runner, access), client, runner.id, frame.shellId, size)
       return
     }
     case 'shell_input': {
@@ -368,7 +370,12 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
   }
 }
 
-// Subscriptions to a shell's output change nothing; every other command must name the socket's own conversation.
+// Refused before the engine saw it: a prompt refused this way is acked `notDelivered` and its text stays the sender's.
+// Anything thrown once `sendMessage` may have run is a plain Error, so a possibly delivered prompt is never called unrun.
+class NotDelivered extends Error {}
+
+// Subscribing to a shell's output changes nothing (an untokened attach never resizes); every other command must name
+// the socket's own conversation.
 const UNTOKENED: ReadonlySet<string> = new Set(['shell_attach', 'shell_detach'])
 
 function tokenRefusal(ctx: ServerContext, frame: ClientFrame, bound: Bound): string | undefined {
@@ -396,8 +403,10 @@ function permittedShells(ctx: ServerContext, runner: Runner, access: AttachAcces
   return ctx.shells
 }
 
-async function attachShell(shells: ShellRegistry, client: Client, sessionId: string, shellId: string, size: ShellSize): Promise<void> {
-  shells.resize(sessionId, shellId, size)
+async function attachShell(shells: ShellRegistry, client: Client, sessionId: string, shellId: string, size: ShellSize | undefined): Promise<void> {
+  if (size) {
+    shells.resize(sessionId, shellId, size)
+  }
   let detach: (() => void) | undefined
   const drop = (reason: string): void => {
     if (detach === undefined || client.shells.get(shellId) !== detach) {

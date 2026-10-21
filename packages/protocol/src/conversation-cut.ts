@@ -36,4 +36,6 @@ export type ConversationsResponse = {
 
 export type ConversationHistoryResponse = { info: SessionInfo; events: SessionEvent[] }
 
-export type SettlePendingPromptRequest = { send: boolean }
+export type SettlePendingPromptRequest = { expectedGeneration: number; send: boolean }
+
+export type RetryStartRequest = { expectedGeneration: number }

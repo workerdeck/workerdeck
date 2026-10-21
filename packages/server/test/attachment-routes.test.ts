@@ -224,7 +224,7 @@ describe('session attachments', () => {
     const uploaded = (await (await upload(base, id, 'shot.png', 'image/png', PNG)).json()) as {
       attachment: { id: string }
     }
-    await fetch(`${base}/sessions/${id}`, { method: 'DELETE' })
+    await fetch(`${base}/sessions/${id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     const res = await fetch(`${base}/sessions/${id}/attachments/${uploaded.attachment.id}`)
     expect(res.status).toBe(404)
   })

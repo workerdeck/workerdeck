@@ -10,7 +10,7 @@ import type {
 import type { ServerContext } from '../context.ts'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
-import type { ConversationEntry } from '../services/session-records.ts'
+import type { ConversationEntry, SessionRecord } from '../services/session-records.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
 type CutBody = Partial<NewConversationRequest> & Partial<SettlePendingPromptRequest>
@@ -97,20 +97,32 @@ export async function handleConversations(
     fail(404, 'session not found')
   }
   const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as CutBody
+  if (typeof body.expectedGeneration !== 'number') {
+    fail(400, 'expectedGeneration is required')
+  }
+  const expected = body.expectedGeneration
+  // Re-run under the lifecycle lock: the body may arrive long after the checks above, across a cut or a scope change.
+  const guard = async (latest: SessionRecord | null): Promise<void> => {
+    const now = latest?.closedAt === undefined ? await sessionInfoOf(ctx, id) : undefined
+    if (!now || !ctx.auth.canSee(auth, now)) {
+      fail(404, 'session not found')
+    }
+    const at = latest?.conversation ?? 1
+    if (at !== expected) {
+      fail(409, `the session moved on to conversation ${at}`)
+    }
+  }
   if (conversation === 'retry') {
-    json(res, 200, await cuts.retryStart(id))
+    json(res, 200, await cuts.retryStart(id, guard))
     return
   }
   if (conversation === 'pending') {
-    await cuts.settlePendingPrompt(id, body.send === true)
+    await cuts.settlePendingPrompt(id, body.send === true, guard)
     json(res, 200, { ok: true })
     return
   }
   if (conversation !== undefined) {
     fail(404, 'not found')
-  }
-  if (typeof body.expectedGeneration !== 'number') {
-    fail(400, 'expectedGeneration is required')
   }
   if (body.prompt !== undefined && typeof body.prompt !== 'string') {
     fail(400, 'prompt must be a string')
@@ -127,12 +139,16 @@ export async function handleConversations(
   json(
     res,
     200,
-    await cuts.cut(id, {
-      expectedGeneration: body.expectedGeneration,
-      reason: 'user',
-      ...(body.prompt ? { prompt: body.prompt } : {}),
-      ...(body.target ? { target: pickTarget(body.target) } : {}),
-    }),
+    await cuts.cut(
+      id,
+      {
+        expectedGeneration: expected,
+        reason: 'user',
+        ...(body.prompt ? { prompt: body.prompt } : {}),
+        ...(body.target ? { target: pickTarget(body.target) } : {}),
+      },
+      guard,
+    ),
   )
 }
 

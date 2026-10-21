@@ -330,7 +330,7 @@ describe('SessionHandle prompt acks', () => {
   it('keeps the conversation a prompt was written for across a reconnect, and hands a stale refusal back as unsent text', () => {
     const handle = connected(true)
     const stale: string[] = []
-    handle.on('stalePrompt', ({ text }) => stale.push(text))
+    handle.on('undeliveredPrompt', ({ text }) => stale.push(text))
     handle.send('for one')
     const [written] = prompts(latest())
     latest().drop()
@@ -339,7 +339,7 @@ describe('SessionHandle prompt acks', () => {
     latest().deliver({ type: 'attached', protocolVersion: 2, session: { conversation: 2 }, replayingFrom: 0, acks: true })
     const [resent] = latest().sent.map((raw) => JSON.parse(raw) as { generation: number; clientId: string })
     expect(resent).toMatchObject({ generation: 1, clientId: written!.clientId })
-    latest().deliver({ type: 'ack', clientId: written!.clientId, stale: true })
+    latest().deliver({ type: 'ack', clientId: written!.clientId, notDelivered: true })
     expect(stale).toEqual(['for one'])
     handle.send('for two')
     expect(JSON.parse(latest().sent.at(-1)!)).toMatchObject({ text: 'for two', generation: 2 })

@@ -17,6 +17,8 @@ export type CutSocket = { detach: () => void; announce: (conversation: number, e
 
 export type EndedExecution = { id: string; entry: ConversationEntry }
 
+export type CutGuard = (record: SessionRecord | null) => Promise<void> | void
+
 export type CutFault = 'commit' | 'start' | 'after-stop' | 'after-commit'
 
 export const CONVERSATION_ENDED = 'this conversation has ended; reattach to the current one'
@@ -53,8 +55,10 @@ export class ConversationCuts {
     return this.#ended.get(executionId)
   }
 
-  cut(id: string, request: CutRequest): Promise<CutResult> {
-    return this.#ctx.handovers.run([id], () => this.#cut(id, request))
+  // `guard` runs inside the lifecycle lock on the record as it is then: the caller's own check of the current
+  // conversation and of its sight of the session, so nothing it decided before the lock can be acted on after it.
+  cut(id: string, request: CutRequest, guard?: CutGuard): Promise<CutResult> {
+    return this.#ctx.handovers.run([id], () => this.#cut(id, request, guard))
   }
 
   // The one rule for every door that asks while a turn runs: the cut waits for the next idle.
@@ -92,9 +96,10 @@ export class ConversationCuts {
     this.#queued.set(runner.id, unsubscribe)
   }
 
-  async #cut(id: string, request: CutRequest): Promise<CutResult> {
+  async #cut(id: string, request: CutRequest, guard: CutGuard | undefined): Promise<CutResult> {
     const ctx = this.#ctx
     const record = await ctx.records.get(id)
+    await guard?.(record)
     if (record?.closedAt !== undefined) {
       fail(404, 'session not found')
     }
@@ -184,10 +189,11 @@ export class ConversationCuts {
   }
 
   // The same n again, never a second cut.
-  retryStart(id: string): Promise<CutResult> {
+  retryStart(id: string, guard: CutGuard): Promise<CutResult> {
     const ctx = this.#ctx
     return ctx.handovers.run([id], async () => {
       const record = await ctx.records.get(id)
+      await guard(record)
       if (!record?.startFailed || record.cut?.phase !== 'committed') {
         fail(409, 'no new conversation is waiting to start')
       }
@@ -202,10 +208,11 @@ export class ConversationCuts {
     })
   }
 
-  settlePendingPrompt(id: string, send: boolean): Promise<void> {
+  settlePendingPrompt(id: string, send: boolean, guard: CutGuard): Promise<void> {
     const ctx = this.#ctx
     return ctx.handovers.run([id], async () => {
       const record = await ctx.records.get(id)
+      await guard(record)
       const prompt = record?.pendingPrompt
       if (!record || prompt?.state !== 'uncertain') {
         fail(404, 'nothing is waiting to be sent')

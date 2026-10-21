@@ -186,7 +186,7 @@ describe('browser-bridged tool execution over the wire', () => {
     await dispatch(session.id)
     await collector.waitFor((f) => f.type === 'tool_call_request')
 
-    await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE' })
+    await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
 
     await vi.waitFor(() => expect(results).toHaveLength(1))
     expect(results[0]!.result).toMatchObject({ status: 'failed', reason: 'session_closed' })
