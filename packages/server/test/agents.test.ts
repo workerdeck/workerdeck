@@ -6,15 +6,15 @@ import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { AGENT_SLEEP_AFTER_MS_DEFAULT, type AgentInfo, type AgentResponse, type SessionInfo } from '@workerdeck/protocol'
 import {
-  createFileAgentStore,
-  createFileSessionStore,
-  createWorkerServer,
   type AvatarProvider,
+  createFileAgentStore,
+  createFileSessionRecordStore,
+  createWorkerServer,
   type WorkerServerOptions,
 } from '../src/index.ts'
 import { createMemoryAgentStore } from '../src/services/agent-store.ts'
 import { AgentService } from '../src/services/agents.ts'
-import { fakeHarness, gatewayFixture, listenOn } from './helpers.ts'
+import { fakeHarness, fileRuntimeStore, gatewayFixture, listenOn } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -89,7 +89,11 @@ async function startGateway(
     ...extra,
     allowedCwdRoots: ['/tmp'],
     ...(dir
-      ? { parking: { store: createFileSessionStore({ dir }), parkDelayMs: 10 }, agentStore: createFileAgentStore(join(dir, 'agents.json')) }
+      ? {
+          sessions: { store: createFileSessionRecordStore({ dir }) },
+          parking: { parkDelayMs: 10 },
+          agentStore: createFileAgentStore(join(dir, 'agents.json')),
+        }
       : {}),
     buildRunnerConfig: (req) => ({ ...req, queryFn }),
   })
@@ -167,7 +171,7 @@ describe('agents', () => {
     const sessionId = body.session!.id
     first.harness.emit(initMessage)
     await vi.waitFor(() => expect(appended(first.harness)).toBe('You own the iOS client.'))
-    await vi.waitFor(async () => expect(await createFileSessionStore({ dir }).get(sessionId)).not.toBeNull())
+    await vi.waitFor(async () => expect(await fileRuntimeStore(dir).get(sessionId)).not.toBeNull())
     const raw = await readFile(join(dir, `${encodeURIComponent(sessionId)}.json`), 'utf8')
     expect(raw).not.toContain('You own the iOS client.')
 
@@ -192,7 +196,7 @@ describe('agents', () => {
     const first = await startGateway(dir)
     const { body } = await call<AgentResponse>(first.base, '/agents', 'POST', { name: 'Wren', config: { cwd: '/tmp/project' } })
     const sessionId = body.session!.id
-    await vi.waitFor(async () => expect(await createFileSessionStore({ dir }).get(sessionId)).not.toBeNull())
+    await vi.waitFor(async () => expect(await fileRuntimeStore(dir).get(sessionId)).not.toBeNull())
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
@@ -216,7 +220,7 @@ describe('agents', () => {
     const sessionId = body.session!.id
     first.harness.emit(initMessage)
     await vi.waitFor(() => expect(excludes(first.harness)).toContain('/tmp/AGENTS.md'))
-    await vi.waitFor(async () => expect(await createFileSessionStore({ dir }).get(sessionId)).not.toBeNull())
+    await vi.waitFor(async () => expect(await fileRuntimeStore(dir).get(sessionId)).not.toBeNull())
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)

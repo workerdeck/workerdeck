@@ -991,8 +991,12 @@ arrays, never absent, which would grant whatever the host wired), and `EngineCap
 is what makes `cwd` optional for it: `allowedCwdRoots` is not the boundary for a filesystem-less
 engine and must not be mistaken for one.
 `SessionParkManager` (`parking.ts`) owning **both** ways a session outlives its runner, over the
-one `SessionStore` seam (`session-store.ts`: memory + JSON-file, the file one durable across
-restarts). **Parking** is deferred execution's other half and needs `Runner.park()` - which only
+one `SessionStore` seam. That seam is an adapter over `SessionRecords` (`session-records.ts`): parking's record
+is the `runtime` field of the session's one `SessionRecord`, written in a short per-id transaction that merges
+it into the latest record, so a whole-record parking write never clobbers the rest. The host supplies the
+`SessionRecordStore` as `sessions.store` (memory + JSON-file, the file one durable across restarts). A runtime
+write or clear carries the conversation it was taken for and is refused (`StaleConversationError`) once the
+record has moved on; clearing the runtime of a record that holds nothing else removes its file. **Parking** is deferred execution's other half and needs `Runner.park()` - which only
 the provider engine has, because claude and codex run behind a binary that owns its process
 state. **Dormancy** is the restart story for those two: a `DormantSessionRecord` holds no
 transcript at all, just the id, the `sdkSessionId` to resume from and the config to rebuild

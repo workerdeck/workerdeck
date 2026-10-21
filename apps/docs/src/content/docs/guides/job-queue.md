@@ -141,5 +141,5 @@ rather than failing the run. Wiring the executor side is in
 [the server reference](/workerdeck/docs/reference/server/).
 
 A park that may outlive the process needs a durable store -
-`parking: { store: createFileSessionStore({ dir }) }`, plus the restart guard, in
+`sessions: { store: createFileSessionRecordStore({ dir }) }`, plus the restart guard, in
 [Deployment](/workerdeck/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard).

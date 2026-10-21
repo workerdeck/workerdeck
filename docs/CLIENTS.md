@@ -833,8 +833,8 @@ Express's default 404, or the whole connect fails; and a model told to omit an o
 sends `""` or `" "`, so no tool may infer its operation from an absent field. The MCP connect is
 `required: true` and the runner is built by `createProviderRunner` - this app is where both
 seams came from, and it was the thing dropping `ctx.id`. **Sessions survive a restart** - the
-fourth decision in `gateway.ts` worth reading: `parking: { store: createFileSessionStore(...),
-persistLive: true }`, which is the provider engine's only restart mechanism, plus the half that
+fourth decision in `gateway.ts` worth reading: `sessions: { store: createFileSessionRecordStore(...) }`
+plus `parking: { persistLive: true }`, which is the provider engine's only restart mechanism, plus the half that
 is easy to miss - the cookie secret is **persisted** (`auth/secret.ts`, `EMBEDDED_SECRET` else a
 0600 file beside the database) rather than per-process, because a scoped session 404s for
 anyone else, so signing everyone out on boot would preserve every conversation and make each one

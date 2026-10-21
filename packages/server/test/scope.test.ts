@@ -5,15 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { CreateSessionRequest, JobInfo, ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { ParkableRunner } from './parkable-runner.ts'
-import {
-  createFileSessionStore,
-  createWorkerServer,
-  MemorySessionStore,
-  sandboxedProviderProfile,
-  type EngineRunnerContext,
-  type WorkerServer,
-} from '../src/index.ts'
-import { fakeRunner, idleQuery } from './helpers.ts'
+import { createWorkerServer, type EngineRunnerContext, sandboxedProviderProfile, type WorkerServer } from '../src/index.ts'
+import { fakeRunner, fileRuntimeStore, idleQuery, runtimeStore } from './helpers.ts'
 
 let running: WorkerServer | undefined
 const tempDirs: string[] = []
@@ -200,7 +193,7 @@ describe('session scope', () => {
 
   it('never wakes a stored session for a caller who cannot see it', async () => {
     const dir = tempDir('cw-scope-store-')
-    const store = createFileSessionStore({ dir })
+    const store = fileRuntimeStore(dir)
     const configDir = tempDir('cw-scope-wake-')
     const buildRunnerConfig = vi.fn((req: CreateSessionRequest) => ({
       ...req,
@@ -208,7 +201,7 @@ describe('session scope', () => {
     }))
     const base = await startServer({
       profiles: [sandboxed(), { name: 'claude', configDir }],
-      parking: { store },
+      sessions: { store: store.records },
       buildRunnerConfig,
     })
     // A dormant record for an engine that really can resume, so a wake here would genuinely rebuild a runner.
@@ -252,9 +245,9 @@ describe('session scope', () => {
 
   it('survives a restart with its scope intact', async () => {
     const dir = tempDir('cw-scope-restart-')
-    const base = await startServer({ parking: { store: createFileSessionStore({ dir }) } })
+    const base = await startServer({ sessions: { store: fileRuntimeStore(dir).records } })
     // The provider engine writes no dormant record, so this round-trip is asserted on the store directly.
-    const store = createFileSessionStore({ dir })
+    const store = fileRuntimeStore(dir)
     await store.save({
       kind: 'dormant',
       id: 'restarted-1',
@@ -273,7 +266,7 @@ describe('session scope', () => {
     })
     await running?.close()
 
-    const revived = await startServer({ parking: { store: createFileSessionStore({ dir }) } })
+    const revived = await startServer({ sessions: { store: fileRuntimeStore(dir).records } })
     const listAs = async (token: string): Promise<SessionInfo[]> =>
       (
         (await (await fetch(`${revived}/sessions`, as(token))).json()) as {
@@ -474,12 +467,13 @@ describe('session scope', () => {
   it('404s an orphaned execution byte-identically, never disclosing its owner', async () => {
     // The exposed state: parking still maps the execution to its owner while the session is in neither registry nor store (record lost).
     // The first refused submit settles the id; the second must not answer 200 with the sessionId.
-    const store = new MemorySessionStore()
+    const store = runtimeStore()
     const parkable: ParkableRunner[] = []
     running = createWorkerServer({
       authenticate: (req) => PRINCIPALS[(req.headers.authorization ?? '').replace(/^Bearer /, '')] ?? null,
       profiles: [sandboxed()],
-      parking: { parkDelayMs: 10, store },
+      sessions: { store: store.records },
+      parking: { parkDelayMs: 10 },
       createEngineRunner: ({ config, restore }) => {
         const runner = new ParkableRunner(restore?.id ?? `q${parkable.length + 1}`, config, restore)
         parkable.push(runner)

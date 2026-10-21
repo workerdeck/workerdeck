@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
-import { createFileSessionStore, createWorkerServer } from '../src/index.ts'
-import { fakeHarness, fakeRunner, gatewayFixture, listenOn } from './helpers.ts'
+import { createFileSessionRecordStore, createWorkerServer } from '../src/index.ts'
+import { fakeHarness, fakeRunner, fileRuntimeStore, gatewayFixture, listenOn } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -39,7 +39,8 @@ async function startGateway(dir: string) {
   const server = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
-    parking: { store: createFileSessionStore({ dir }), parkDelayMs: 10 },
+    sessions: { store: createFileSessionRecordStore({ dir }) },
+    parking: { parkDelayMs: 10 },
     buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn, instructions: builderInstructions(req.meta) }),
   })
   servers.push(server)
@@ -72,12 +73,12 @@ describe('host-supplied instructions', () => {
     await vi.waitFor(() => expect(appended(first.harness)).toBe(expected))
 
     await vi.waitFor(async () => {
-      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+      expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     const raw = await readFile(join(dir, `${encodeURIComponent(session.id)}.json`), 'utf8')
     expect(raw).not.toContain('box builder browser')
     expect(raw).not.toContain('instructions')
-    expect(JSON.parse(raw).record.config.meta).toEqual({ box: 'box-1' })
+    expect(JSON.parse(raw).record.runtime.config.meta).toEqual({ box: 'box-1' })
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)

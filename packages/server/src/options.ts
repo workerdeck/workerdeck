@@ -23,7 +23,7 @@ import type { ProfileStore } from './services/profile-store.ts'
 import type { AgentStore } from './services/agent-store.ts'
 import type { AvatarProvider } from './services/avatars.ts'
 import type { SessionRegistry } from './services/registry.ts'
-import type { SessionStore } from './services/session-store.ts'
+import type { SessionRecordStore } from './services/session-records.ts'
 import type { ShellRegistry } from './services/shells.ts'
 
 export type ShellAgentWriteOption = 'read-only' | 'gated' | 'allow'
@@ -116,8 +116,10 @@ export type WorkerServerOptions = {
   // Reasoning effort per model, keyed by catalog value or resolved id; a profile's `defaults.efforts` wins per key.
   effortDefaults?: Record<string, string>
   bridge?: BridgeHubOptions
+  sessions?: {
+    store?: SessionRecordStore
+  }
   parking?: {
-    store?: SessionStore
     parkDelayMs?: number
     expiredGraceMs?: number
     persistLive?: boolean

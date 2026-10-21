@@ -162,8 +162,8 @@ How it works, in three pieces:
   which closes the runner, which is the one thing this path exists to avoid. `Runner` is
   self-contained by design (a permission resolves through `runner.resolvePermission`, not through
   a captured service), so a generation-0 runner is a working citizen of generation 3.
-- One `SessionStore` object for the whole process, built once and injected into every generation's
-  `parking` options. A file store is single-process by contract, and two generations holding two of
+- One `SessionRecordStore` object for the whole process, built once and injected into every generation's
+  `sessions` options. A file store is single-process by contract, and two generations holding two of
   them over one directory is exactly the two-servers-one-directory case it refuses to be.
 
 Under VS Code's Host Mode there is one more step, because `workerdeck.host.binaryPath` takes a

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionInfo } from '@workerdeck/protocol'
-import { createFileSessionStore, createWorkerServer } from '../src/index.ts'
+import { createFileSessionRecordStore, createWorkerServer } from '../src/index.ts'
 import { fakeHarness, gatewayFixture, listenOn } from './helpers.ts'
 
 const initMessage = {
@@ -32,7 +32,8 @@ async function startGateway(dir: string) {
   const server = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
-    parking: { store: createFileSessionStore({ dir }), parkDelayMs: 10 },
+    sessions: { store: createFileSessionRecordStore({ dir }) },
+    parking: { parkDelayMs: 10 },
     buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
   })
   servers.push(server)

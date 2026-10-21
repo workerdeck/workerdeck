@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionRunnerConfig } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type EngineCapabilities } from '@workerdeck/protocol'
-import { createFileSessionStore, toDurableRecord, type ParkedSessionRecord } from '../src/index.ts'
+import { createFileSessionRecordStore, type ParkedSessionRecord, toDurableRecord } from '../src/index.ts'
+import { fileRuntimeStore, runtimeStore } from './helpers.ts'
 
 let dir: string
 beforeEach(async () => {
@@ -44,9 +45,9 @@ function record(id: string, config: Partial<SessionRunnerConfig> = {}): ParkedSe
   }
 }
 
-describe('createFileSessionStore', () => {
+describe('the runtime view over the file record store', () => {
   it('round-trips a record through the filesystem', async () => {
-    const store = createFileSessionStore({ dir })
+    const store = fileRuntimeStore(dir)
     await store.save(record('s1'))
 
     const read = await store.get('s1')
@@ -61,7 +62,7 @@ describe('createFileSessionStore', () => {
   })
 
   it('fills capability keys a record parked by an older gateway lacks, keeping the stored ones', async () => {
-    const store = createFileSessionStore({ dir })
+    const store = fileRuntimeStore(dir)
     const { toolFilters: _dropped, ...old } = ENGINE_CAPABILITIES.provider
     const parked = record('s1')
     await store.save({ ...parked, info: { ...parked.info, capabilities: { ...old, resume: false } as EngineCapabilities } })
@@ -71,7 +72,7 @@ describe('createFileSessionStore', () => {
   })
 
   it('leaves no temp files behind and overwrites in place', async () => {
-    const store = createFileSessionStore({ dir })
+    const store = fileRuntimeStore(dir)
     await store.save(record('s1'))
     await store.save({ ...record('s1'), parkedAt: 44 })
     expect(await readdir(dir)).toEqual(['s1.json'])
@@ -79,7 +80,7 @@ describe('createFileSessionStore', () => {
   })
 
   it('never writes credentials, functions, or SDK options to disk', async () => {
-    const store = createFileSessionStore({ dir })
+    const store = fileRuntimeStore(dir)
     await store.save(
       record('s1', {
         env: { ANTHROPIC_API_KEY: 'sk-secret' },
@@ -100,7 +101,7 @@ describe('createFileSessionStore', () => {
   })
 
   it('keeps an id with a path separator inside its directory', async () => {
-    const store = createFileSessionStore({ dir })
+    const store = fileRuntimeStore(dir)
     await store.save(record('../escape/s1'))
     expect(await readdir(dir)).toEqual(['..%2Fescape%2Fs1.json'])
     expect((await store.get('../escape/s1'))?.id).toBe('../escape/s1')
@@ -108,10 +109,10 @@ describe('createFileSessionStore', () => {
 
   it('skips a corrupt, truncated, or foreign-version file instead of failing the boot', async () => {
     const onError = vi.fn()
-    const store = createFileSessionStore({ dir, onError })
+    const store = runtimeStore(createFileSessionRecordStore({ dir, onError }))
     await store.save(record('good'))
-    await writeFile(join(dir, 'truncated.json'), '{"version":1,"record":{"id":"tru')
-    await writeFile(join(dir, 'shapeless.json'), '{"version":1,"record":{"id":"x"}}')
+    await writeFile(join(dir, 'truncated.json'), '{"version":2,"record":{"id":"tru')
+    await writeFile(join(dir, 'shapeless.json'), '{"version":2,"record":{"id":"x"}}')
     await writeFile(join(dir, 'future.json'), '{"version":99,"record":{}}')
     await writeFile(join(dir, 'notes.txt'), 'ignored entirely')
 
@@ -121,12 +122,12 @@ describe('createFileSessionStore', () => {
   })
 
   it('returns null for a session nothing parked', async () => {
-    expect(await createFileSessionStore({ dir }).get('nobody')).toBeNull()
+    expect(await fileRuntimeStore(dir).get('nobody')).toBeNull()
   })
 
   it('refuses to pass an unreadable directory off as an empty one', async () => {
     const onError = vi.fn()
-    const store = createFileSessionStore({ dir, onError })
+    const store = runtimeStore(createFileSessionRecordStore({ dir, onError }))
     await store.save(record('s1'))
     await chmod(dir, 0o000)
     try {
@@ -139,7 +140,7 @@ describe('createFileSessionStore', () => {
 
   it('reports a record stored under a name its id cannot address', async () => {
     const onError = vi.fn()
-    const store = createFileSessionStore({ dir, onError })
+    const store = runtimeStore(createFileSessionRecordStore({ dir, onError }))
     await store.save(record('s1'))
     await rename(join(dir, 's1.json'), join(dir, 'copy-of-s1.json'))
 
@@ -148,14 +149,14 @@ describe('createFileSessionStore', () => {
   })
 
   it('writes transcripts owner-only', async () => {
-    await createFileSessionStore({ dir: join(dir, 'nested') }).save(record('s1'))
+    await fileRuntimeStore(join(dir, 'nested')).save(record('s1'))
     expect((await stat(join(dir, 'nested'))).mode & 0o777).toBe(0o700)
     expect((await stat(join(dir, 'nested', 's1.json'))).mode & 0o777).toBe(0o600)
   })
 
   it('reports a record it cannot serialize rather than writing half of one', async () => {
     const onError = vi.fn()
-    const store = createFileSessionStore({ dir, onError })
+    const store = runtimeStore(createFileSessionRecordStore({ dir, onError }))
     const circular = record('s1')
     ;(circular.snapshot.state as Record<string, unknown>).self = circular.snapshot.state
 
@@ -205,8 +206,11 @@ describe('toDurableRecord', () => {
 
   it('still loads a record written under the old denylist, extra host keys and all', async () => {
     const legacy = record('s1', { backfillHistory: false, hostOnlyLegacy: 'kept' } as Partial<SessionRunnerConfig>)
-    await writeFile(join(dir, 's1.json'), JSON.stringify({ version: 1, record: legacy }))
-    const loaded = await createFileSessionStore({ dir }).get('s1')
+    await writeFile(
+      join(dir, 's1.json'),
+      JSON.stringify({ version: 2, record: { id: 's1', conversation: 1, conversations: [], createdAt: 1, runtime: legacy } }),
+    )
+    const loaded = await fileRuntimeStore(dir).get('s1')
     expect(loaded?.config).toMatchObject({ cwd: '/tmp/project', backfillHistory: false, hostOnlyLegacy: 'kept' })
   })
 })

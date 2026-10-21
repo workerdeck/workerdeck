@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
 import type { EngineAdapter, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type SessionEvent, type SessionEventBody, type SessionInfo } from '@workerdeck/protocol'
-import { createWorkerServer, reloadPlan, type SessionStore, type StoredSessionRecord, type WorkerServer } from '../src/index.ts'
+import { createWorkerServer, reloadPlan, type SessionRecord, type SessionRecordStore, type WorkerServer } from '../src/index.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
 // An engine that runs behind a child process: no `snapshot`, no `park`, resume-capable. This is the shape that a
@@ -113,8 +113,8 @@ afterAll(() => {
   rmSync(configDir, { recursive: true, force: true })
 })
 
-function countingStore(): SessionStore & { saves: number; deletes: number } {
-  const records = new Map<string, StoredSessionRecord>()
+function countingStore(): SessionRecordStore & { saves: number; deletes: number } {
+  const records = new Map<string, SessionRecord>()
   return {
     saves: 0,
     deletes: 0,
@@ -137,7 +137,7 @@ function countingStore(): SessionStore & { saves: number; deletes: number } {
 
 type Built = { server: WorkerServer; runners: CarryRunner[]; notifications: string[] }
 
-function build(store: SessionStore, notifications: string[]): Built {
+function build(store: SessionRecordStore, notifications: string[]): Built {
   const runners: CarryRunner[] = []
   const adapter: EngineAdapter = {
     engine: 'claude',
@@ -155,7 +155,7 @@ function build(store: SessionStore, notifications: string[]): Built {
     allowedCwdRoots: ['/tmp'],
     profiles: [{ name: 'claude', configDir }],
     engines: { claude: adapter },
-    parking: { store },
+    sessions: { store },
     notifications: { onNotification: (notification) => notifications.push(`${notification.type}:${notification.session.id}`) },
   })
   return { server, runners, notifications }
@@ -169,7 +169,7 @@ afterEach(async () => {
   open = []
 })
 
-async function startWith(store: SessionStore, notifications: string[]): Promise<Built & { base: string }> {
+async function startWith(store: SessionRecordStore, notifications: string[]): Promise<Built & { base: string }> {
   const built = build(store, notifications)
   open.push(built.server)
   const { port } = await built.server.listen(0, '127.0.0.1')
@@ -271,7 +271,7 @@ describe('the hot-reload seam', () => {
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
       profiles: [{ name: 'kimi', engine: 'provider', provider: { id: 'moonshotai', model: 'kimi-k3' } }],
-      parking: { store },
+      sessions: { store },
       createEngineRunner: ({ config }) => {
         const runner = new ParkableRunner(`session-${runners.length + 1}`, config)
         runners.push(runner)

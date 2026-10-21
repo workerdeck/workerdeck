@@ -8,7 +8,7 @@ import type {
   RetiredAgentsResponse,
   SessionInfo,
 } from '@workerdeck/protocol'
-import { createFileAgentStore, createFileSessionStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { createFileAgentStore, createFileSessionRecordStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
 import type { StoredAgent } from '../src/services/agent-store.ts'
 import { AgentHandovers } from '../src/services/handovers.ts'
 import { EngineRunner } from './engine-runner.ts'
@@ -24,7 +24,8 @@ async function gateway(dir: string) {
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
     profiles: [profile],
-    parking: { store: createFileSessionStore({ dir: join(dir, 'sessions') }), parkDelayMs: 10 },
+    sessions: { store: createFileSessionRecordStore({ dir: join(dir, 'sessions') }) },
+    parking: { parkDelayMs: 10 },
     agentStore: createFileAgentStore(join(dir, 'agents.json')),
     historyReader: { read: async () => ({ kind: 'missing' }) },
     createEngineRunner: ({ config, id }) => {

@@ -109,18 +109,18 @@ coercion.
 ## Parked sessions
 
 A session whose tool call can't answer in the next few seconds **parks**: the runner is torn down,
-its snapshot goes to a `SessionStore`, and `POST /executions/:id/result` rebuilds it - same id,
+its snapshot goes to the session's record in a `SessionRecordStore`, and `POST /executions/:id/result` rebuilds it - same id,
 same event log, same seq numbering, mid-turn. Results are idempotent by `executionId`. The default
 store is in-memory (a park survives a client disconnect, not a restart); the bundled file store
 survives both, on one host:
 
 ```ts
-import { createFileSessionStore, createWorkerServer } from '@workerdeck/server'
+import { createFileSessionRecordStore, createWorkerServer } from '@workerdeck/server'
 
 createWorkerServer({
   authenticate,
   // Adopted by hydrate() inside listen(): executions re-indexed, watchdogs re-armed.
-  parking: { store: createFileSessionStore({ dir: '/var/lib/workerdeck/parked' }) },
+  sessions: { store: createFileSessionRecordStore({ dir: '/var/lib/workerdeck/sessions' }) },
 })
 ```
 
@@ -218,7 +218,7 @@ OAuth, never reads or forwards tokens - see the repo README's
   plaintext.
 - **A restored session is refreshed in place, not consumed.** A park's record *is* the session and
   is deleted on wake; a live or dormant one is a way back the session still needs next time. If you
-  implement a `SessionStore`, do not "tidy up" a record on read.
+  implement a `SessionRecordStore`, do not "tidy up" a record on read.
 - **One origin is not a convenience.** A browser cannot put an `Authorization` header on a
   WebSocket upgrade, so a cookie is the only credential a tab can present on an attach, and a
   cookie is per-origin. That is what `fallback` is for - an app served from the gateway's own port.

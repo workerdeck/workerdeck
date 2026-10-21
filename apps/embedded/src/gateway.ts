@@ -4,7 +4,7 @@ import type { LanguageModel } from 'ai'
 import { connectMcpTools, QuickJsExecutor } from '@workerdeck/core'
 import { loadEngine } from '@workerdeck/sandbox'
 import {
-  createFileSessionStore,
+  createFileSessionRecordStore,
   createProviderRunner,
   createWorkerServer,
   sandboxedProviderProfile,
@@ -114,15 +114,15 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
     fallback: deps.fallback,
 
     // `persistLive` silently does nothing on the default in-memory store, and needs a persisted cookie secret beside it.
-    parking: {
-      store: createFileSessionStore({
+    sessions: {
+      store: createFileSessionRecordStore({
         dir: deps.sessionDir,
         onError: (error, context) => {
           console.error(`[sessions] ${context.op} ${context.path}:`, error)
         },
       }),
-      persistLive: true,
     },
+    parking: { persistLive: true },
 
     authenticate: (req) => {
       if (!sameOrigin(req)) {

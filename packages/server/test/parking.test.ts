@@ -11,7 +11,7 @@ import {
   type SessionEvent,
   type SessionInfo,
 } from '@workerdeck/protocol'
-import { createFileSessionStore, createWorkerServer, type SessionStore, type WorkerServer } from '../src/index.ts'
+import { createFileSessionRecordStore, createWorkerServer, type SessionRecordStore, type WorkerServer } from '../src/index.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
 function providerProfile(name = 'kimi'): ProfileInfo {
@@ -357,20 +357,21 @@ describe('deferred execution: durability across a restart', () => {
 
   const withStore = async (expiredGraceMs?: number): Promise<Harness> =>
     startServer({
-      parking: { parkDelayMs: 10, expiredGraceMs, store: createFileSessionStore({ dir }) },
+      sessions: { store: createFileSessionRecordStore({ dir }) },
+      parking: { parkDelayMs: 10, expiredGraceMs },
     })
 
   // Aged on the file rather than with a short timer, so the park itself cannot race the watchdog.
   const backdateDeadline = async (sessionId: string): Promise<void> => {
     const path = join(dir, `${sessionId}.json`)
     const file = JSON.parse(await readFile(path, 'utf8')) as {
-      record: { executions: Array<{ expiresAt?: number }>; snapshot: { parked: Array<{ expiresAt?: number }> } }
+      record: { runtime: { executions: Array<{ expiresAt?: number }>; snapshot: { parked: Array<{ expiresAt?: number }> } } }
     }
     const expiresAt = Date.now() - 1000
-    for (const execution of file.record.executions) {
+    for (const execution of file.record.runtime.executions) {
       execution.expiresAt = expiresAt
     }
-    for (const execution of file.record.snapshot.parked) {
+    for (const execution of file.record.runtime.snapshot.parked) {
       execution.expiresAt = expiresAt
     }
     await writeFile(path, JSON.stringify(file))
@@ -410,10 +411,12 @@ describe('deferred execution: durability across a restart', () => {
   })
 
   // A store whose `save` takes real time: the park evicts before the write lands, opening the window these tests aim at.
-  const slowSaveStore = (delayMs: number): SessionStore => {
-    const inner = createFileSessionStore({ dir })
+  const slowSaveStore = (delayMs: number): SessionRecordStore => {
+    const inner = createFileSessionRecordStore({ dir })
     return {
-      ...inner,
+      get: (id) => inner.get(id),
+      list: () => inner.list(),
+      delete: (id) => inner.delete(id),
       save: async (record) => {
         await new Promise((resolve) => setTimeout(resolve, delayMs))
         await inner.save(record)
@@ -423,7 +426,7 @@ describe('deferred execution: durability across a restart', () => {
 
   it('applies a result that lands while the park is still being written', async () => {
     dir = await mkdtemp(join(tmpdir(), 'cw-parked-'))
-    const h = await startServer({ parking: { parkDelayMs: 10, store: slowSaveStore(80) } })
+    const h = await startServer({ sessions: { store: slowSaveStore(80) }, parking: { parkDelayMs: 10 } })
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
     await vi.waitFor(() => expect(running!.registry.get(session.id)).toBeUndefined())
@@ -441,7 +444,7 @@ describe('deferred execution: durability across a restart', () => {
 
   it('keeps a session deleted during the save window deleted', async () => {
     dir = await mkdtemp(join(tmpdir(), 'cw-parked-'))
-    const h = await startServer({ parking: { parkDelayMs: 10, store: slowSaveStore(80) } })
+    const h = await startServer({ sessions: { store: slowSaveStore(80) }, parking: { parkDelayMs: 10 } })
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
     await vi.waitFor(() => expect(running!.registry.get(session.id)).toBeUndefined())

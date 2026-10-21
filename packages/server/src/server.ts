@@ -54,7 +54,8 @@ import { SessionRegistry } from './services/registry.ts'
 import { OwnerService } from './services/owners.ts'
 import { createSessionFactory, type SessionFactory } from './services/session-factory.ts'
 import { createShellDirectory, createShellRegistry, type ShellRegistry } from './services/shells.ts'
-import { isDormant, MemorySessionStore, type StoredSessionRecord } from './services/session-store.ts'
+import { MemorySessionRecordStore, SessionRecords } from './services/session-records.ts'
+import { isDormant, type StoredSessionRecord } from './services/session-store.ts'
 
 export type {
   Authenticator,
@@ -256,9 +257,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       options.bridge?.onResult?.(sessionId, executionId, result)
     },
   })
+  const records = new SessionRecords(options.sessions?.store ?? new MemorySessionRecordStore())
   const parking = new SessionParkManager({
     registry,
-    store: options.parking?.store ?? new MemorySessionStore(),
+    store: records.runtimeStore(),
     parkDelayMs: options.parking?.parkDelayMs,
     expiredGraceMs: options.parking?.expiredGraceMs,
     persistLive: options.parking?.persistLive,

@@ -18,8 +18,8 @@ import {
   type SessionRunnerConfig,
 } from '@workerdeck/core'
 import { createShellDirectory, createShellRegistry, loadPty, type ShellRegistry } from '../src/services/shells.ts'
-import { createFileSessionStore, sandboxedProviderProfile, type EngineRunnerContext, type WorkerServerOptions } from '../src/index.ts'
-import { fakeHarness, fakeRunner } from './helpers.ts'
+import { createFileSessionRecordStore, type EngineRunnerContext, sandboxedProviderProfile, type WorkerServerOptions } from '../src/index.ts'
+import { fakeHarness, fakeRunner, fileRuntimeStore } from './helpers.ts'
 import { attachSocket, createSession, registryFixture, shellFixture } from './shell-helpers.ts'
 
 const ECHO_KEYS = 'echo reloaded; while read -r k; do echo "got $k"; done'
@@ -415,7 +415,8 @@ describe('the gateway stamps the directory only where a shell of that session co
     const stateDir = fixture.tempDir()
     const gateway = (agentWrite: 'read-only' | 'gated' | 'allow'): Partial<WorkerServerOptions> => ({
       engines: { claude },
-      parking: { store: createFileSessionStore({ dir: stateDir }), parkDelayMs: 10 },
+      sessions: { store: createFileSessionRecordStore({ dir: stateDir }) },
+      parking: { parkDelayMs: 10 },
       shell: { enabled: true, artifactDir: fixture.tempDir(), agentWrite },
     })
     const harness = fakeHarness()
@@ -424,8 +425,8 @@ describe('the gateway stamps the directory only where a shell of that session co
     expect(built).toHaveLength(1)
     expect(built[0]!.config).toMatchObject({ createdByOperator: true, shellAgentWrite: 'gated' })
     expect(built[0]!.config.shells).toBeDefined()
-    await vi.waitFor(async () => expect((await createFileSessionStore({ dir: stateDir }).get(id))?.kind).toBe('dormant'))
-    const stored = (await createFileSessionStore({ dir: stateDir }).get(id))!
+    await vi.waitFor(async () => expect((await fileRuntimeStore(stateDir).get(id))?.kind).toBe('dormant'))
+    const stored = (await fileRuntimeStore(stateDir).get(id))!
     expect(stored.config.createdByOperator).toBe(true)
     expect('shells' in stored.config).toBe(false)
     expect('shellAgentWrite' in stored.config).toBe(false)

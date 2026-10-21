@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import {
   createFileAgentStore,
   createFileProfileStore,
-  createFileSessionStore,
+  createFileSessionRecordStore,
   createFileSpendStore,
   createWorkerServer,
   type CarriedSession,
@@ -216,7 +216,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
 
   const fallback = createFallback(auth, webRoot, hostAllowed, apns?.handleRequest ?? createApnsRoute(null, authenticatePush))
 
-  const { agentStore, parking, profileStore, shell, spend } = stateDirDefaults(config)
+  const { agentStore, profileStore, sessions: sessionRecords, shell, spend } = stateDirDefaults(config)
 
   const server = createWorkerServer({
     ...config.options,
@@ -224,7 +224,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
     agentStore,
     // On by default here, off in the library: a mispointed config dir should say so at startup.
     checkCredentials: config.options.checkCredentials ?? true,
-    parking,
+    sessions: sessionRecords,
     shell,
     spend,
     avatars: config.options.avatars ?? new MonkeyartAvatars(config.avatarPacks),
@@ -334,23 +334,23 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
   }
 }
 
-type StateDirDefaults = Pick<WorkerServerOptions, 'agentStore' | 'parking' | 'profileStore' | 'shell' | 'spend'>
+type StateDirDefaults = Pick<WorkerServerOptions, 'agentStore' | 'profileStore' | 'sessions' | 'shell' | 'spend'>
 
 // Everything the state dir backs by default. A config file's own store wins; with no state dir everything stays in memory,
 // and profile management stays refused rather than silently forgetting every profile on restart.
 export function stateDirDefaults(config: ResolvedConfig): StateDirDefaults {
   const { stateDir } = config
-  const parking = { ...config.options.parking }
+  const sessions = { ...config.options.sessions }
   const shell = { ...config.options.shell }
   const spend = { ...config.options.spend }
   if (!stateDir) {
-    return { parking, shell, spend }
+    return { sessions, shell, spend }
   }
-  parking.store ??= createFileSessionStore({
-    dir: join(stateDir, 'parked'),
+  sessions.store ??= createFileSessionRecordStore({
+    dir: join(stateDir, 'sessions'),
     onError: (error, context) => {
       process.stderr.write(
-        `[workerdeck] parked-session store ${context.op} failed for ${context.path}: ` +
+        `[workerdeck] session record store ${context.op} failed for ${context.path}: ` +
           `${error instanceof Error ? error.message : String(error)}\n`,
       )
     },
@@ -363,7 +363,7 @@ export function stateDirDefaults(config: ResolvedConfig): StateDirDefaults {
   })
   const profileStore = config.profileStore ? createFileProfileStore(join(stateDir, 'profiles.json')) : undefined
   const agentStore = config.options.agentStore ?? createFileAgentStore(join(stateDir, 'agents.json'))
-  return { parking, shell, spend, agentStore, ...(profileStore ? { profileStore } : {}) }
+  return { sessions, shell, spend, agentStore, ...(profileStore ? { profileStore } : {}) }
 }
 
 export type BannerInput = {
@@ -400,7 +400,7 @@ export function bannerLines({ url, config, generated, authEnabled, push }: Banne
   }
   lines.push(
     config.stateDir
-      ? `  parked sessions persist in ${join(config.stateDir, 'parked')}`
+      ? `  parked sessions persist in ${join(config.stateDir, 'sessions')}`
       : '  parked sessions are in memory only - a restart drops them',
   )
   if (push) {

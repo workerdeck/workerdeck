@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { ProfileInfo, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
-import { createFileSessionStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { createFileSessionRecordStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
 import { archiveEpoch, viewArchive } from '../src/services/archives.ts'
 import type { HistoryRead, HistoryReader, HistoryTarget } from '../src/services/history-reader.ts'
 import type { ArchivedSessionRecord } from '../src/services/session-store.ts'
 import { EngineRunner } from './engine-runner.ts'
-import { gatewayFixture } from './helpers.ts'
+import { fileRuntimeStore, gatewayFixture } from './helpers.ts'
 
 const HISTORY: SessionEventBody[] = [
   { type: 'user_message', message: { role: 'user', content: 'Remember PELICAN' }, parentToolUseId: null, replay: true, uuid: 'u1' },
@@ -41,7 +41,8 @@ async function gateway(dir: string, history: HistoryReader, extra: ProfileInfo[]
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
     profiles: [profile, ...extra],
-    parking: { store: createFileSessionStore({ dir }), parkDelayMs: 10 },
+    sessions: { store: createFileSessionRecordStore({ dir }) },
+    parking: { parkDelayMs: 10 },
     historyReader: history,
     createEngineRunner: ({ config, id }) => {
       const runner = new EngineRunner(id ?? `session-${built.length + 1}`, config)
@@ -202,7 +203,7 @@ describe('archived conversations', () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir, reader({ kind: 'ok', events: HISTORY }))
     const session = await createSession(first.base)
-    await vi.waitFor(async () => expect((await createFileSessionStore({ dir }).get(session.id))?.kind).toBe('dormant'))
+    await vi.waitFor(async () => expect((await fileRuntimeStore(dir).get(session.id))?.kind).toBe('dormant'))
     await first.server.close()
     fixture.servers.splice(fixture.servers.indexOf(first.server), 1)
 
@@ -227,7 +228,7 @@ describe('the archived record', () => {
     const codex: ProfileInfo = { name: 'codex', engine: 'codex', codexHome }
     const { server } = await gateway(dir, reader({ kind: 'missing' }), [codex])
     const dormant = (id: string, name: string) =>
-      createFileSessionStore({ dir }).save({
+      fileRuntimeStore(dir).save({
         kind: 'dormant',
         id,
         info: {
@@ -259,7 +260,7 @@ describe('the archived record', () => {
     const created = await fixture.stateDir()
     const moved = await fixture.stateDir()
     const { server } = await gateway(dir, reader({ kind: 'missing' }), [{ name: 'codex', engine: 'codex', codexHome: moved }])
-    await createFileSessionStore({ dir }).save({
+    await fileRuntimeStore(dir).save({
       kind: 'dormant',
       id: 'c-3',
       info: {

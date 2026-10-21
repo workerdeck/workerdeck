@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import WebSocket from 'ws'
-import { createFileAgentStore, createFileSessionStore, createWorkerServer, type WorkerServer } from '@workerdeck/server'
+import { createFileAgentStore, createFileSessionRecordStore, createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import type { AgentConversationsResponse, AgentResponse, ServerFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { fail, finish, note, ok, step } from './lib/report.ts'
 
@@ -58,7 +58,7 @@ function gateway(state: string): Promise<{ server: WorkerServer; base: string; w
       { name: 'codex', engine: 'codex' },
     ],
     allowedCwdRoots: [root],
-    parking: { store: createFileSessionStore({ dir: join(state, 'sessions') }) },
+    sessions: { store: createFileSessionRecordStore({ dir: join(state, 'sessions') }) },
     agentStore: createFileAgentStore(join(state, 'agents.json')),
     onDiagnostic: (error, where) => note(`${where}: ${error instanceof Error ? error.message : String(error)}`),
   })

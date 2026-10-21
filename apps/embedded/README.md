@@ -167,7 +167,8 @@ session, and opening it brings back the transcript, the message history, the scr
 the model and the permission mode. It is two options and one non-obvious companion:
 
 ```ts
-parking: { store: createFileSessionStore({ dir: '.embedded/sessions' }), persistLive: true }
+sessions: { store: createFileSessionRecordStore({ dir: '.embedded/sessions' }) },
+parking: { persistLive: true },
 ```
 
 `persistLive` writes the runner's snapshot through after every turn - never on a shutdown hook,
@@ -183,7 +184,7 @@ of them unreachable - the feature would look completely broken while working per
 
 Two things to know before copying this into a real deployment: the record holds the session's whole
 transcript in plaintext, so `.embedded/` wants the protection you would give `~/.claude/projects`;
-and the file store is single-host by design - more than one replica needs a `SessionStore` over
+and the file store is single-host by design - more than one replica needs a `SessionRecordStore` over
 shared storage plus a lease, or two pods will rebuild the same session id.
 
 ## Known edges

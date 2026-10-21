@@ -8,8 +8,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import { createWorkerServer, MemorySessionStore, type WorkerServer } from '../src/index.ts'
-import { fakeHarness, frameCollector, listenOn } from './helpers.ts'
+import { createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { fakeHarness, frameCollector, listenOn, runtimeStore } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -293,7 +293,7 @@ describe('createWorkerServer', () => {
 
   it('fails closed on subscription credentials for a session woken from its dormant record', async () => {
     const harness = fakeHarness()
-    const store = new MemorySessionStore()
+    const store = runtimeStore()
     await store.save({
       kind: 'dormant',
       id: 'woken',
@@ -305,7 +305,7 @@ describe('createWorkerServer', () => {
     running = createWorkerServer({
       allowUnauthenticated: true,
       requireApiKey: true,
-      parking: { store },
+      sessions: { store: store.records },
       buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn, backfillHistory: false }),
     })
     await running.listen(0, '127.0.0.1')

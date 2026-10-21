@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import { MemorySessionStore, SessionParkManager, type StoredSessionRecord } from '../src/index.ts'
+import { SessionParkManager, type StoredSessionRecord } from '../src/index.ts'
+import { runtimeStore } from './helpers.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
 const config: SessionRunnerConfig = { cwd: '/tmp/project', profile: 'kimi', owner: 'ruli' }
 
 function rig(rebuild: (record: StoredSessionRecord) => Promise<Runner> = async (record) => restored(record)) {
-  const store = new MemorySessionStore()
+  const store = runtimeStore()
   const registry = new SessionRegistry()
   const parking = new SessionParkManager({ registry, store, rebuild, attachedCount: () => 0, persistLive: true })
   return { store, registry, parking }
@@ -52,7 +53,7 @@ describe('owner rename against parking', () => {
   })
 
   it('waits for a first recovery save still in flight, which the store does not list yet', async () => {
-    const store = new MemorySessionStore()
+    const store = runtimeStore()
     let release!: () => void
     const saveGate = new Promise<void>((resolve) => (release = resolve))
     let saving = false

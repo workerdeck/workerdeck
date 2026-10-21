@@ -29,24 +29,24 @@ CODEX_HOME threads; codex resumes replay history the same way).
 so a client with no directory in hand should omit it and let the server apply `allowedCwdRoots`. Note the two ids: `SessionInfo.id` is the server-assigned id; `sdkSessionId` is the
 Agent SDK's - the one you feed back as `resume`.
 
-Multi-host session storage is still on the roadmap: the bundled `SessionStore` implementations
+Multi-host session storage is still on the roadmap: the bundled `SessionRecordStore` implementations
 are both single-process (see below). If you need the queue to span hosts, the `QueueAdapter` seam
 is the supported path - see [Job queue](/workerdeck/docs/guides/job-queue/).
 
 ## Restarts, parked sessions, and the deploy guard
 
-A session parked on a deferred execution lives in a `SessionStore`. The default one is in-memory:
+A session parked on a deferred execution lives in the session's record, kept by a `SessionRecordStore`. The default one is in-memory:
 the park survives a client disconnect, not a restart. Since a park can legitimately last days,
 a deploy that restarts the process is how parked work actually gets lost - so point it at the
 bundled file store:
 
 ```ts
-import { createFileSessionStore, createWorkerServer } from '@workerdeck/server'
+import { createFileSessionRecordStore, createWorkerServer } from '@workerdeck/server'
 
 createWorkerServer({
   authenticate,
+  sessions: { store: createFileSessionRecordStore({ dir: '/var/lib/workerdeck/sessions' }) },
   parking: {
-    store: createFileSessionStore({ dir: '/var/lib/workerdeck/parked' }),
     // Boot grace for a deadline that lapsed while the process was down (default 60s):
     // the watchdog must not fail every parked execution at t=0.
     expiredGraceMs: 60_000,

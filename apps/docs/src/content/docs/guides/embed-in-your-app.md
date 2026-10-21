@@ -282,7 +282,8 @@ should *not* solve for you.
 - **Restarts.** Two options, and you need both:
 
   ```ts
-  parking: { store: createFileSessionStore({ dir: '…' }), persistLive: true }
+  sessions: { store: createFileSessionRecordStore({ dir: '…' }) },
+  parking: { persistLive: true },
   ```
 
   A durable store alone is not enough, and this is the trap: `park()` only fires for a session

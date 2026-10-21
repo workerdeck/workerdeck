@@ -8,7 +8,14 @@ import type WebSocket from 'ws'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import type { ServerFrame, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
-import type { WorkerServer } from '../src/index.ts'
+import {
+  createFileSessionRecordStore,
+  MemorySessionRecordStore,
+  SessionRecords,
+  type SessionRecordStore,
+  type SessionStore,
+  type WorkerServer,
+} from '../src/index.ts'
 
 // Controllable stand-in for the Claude Agent SDK. `models` makes the fake query answer
 // `supportedModels`, which is what makes a runner emit `capabilities`.
@@ -255,4 +262,15 @@ export class ScriptedRunner implements Runner {
       listener(event)
     }
   }
+}
+
+// A parking-shaped view over a record store, for seeding and inspecting the runtime records a gateway reads.
+export type RuntimeStore = SessionStore & { records: SessionRecordStore }
+
+export function runtimeStore(records: SessionRecordStore = new MemorySessionRecordStore()): RuntimeStore {
+  return Object.assign(new SessionRecords(records).runtimeStore(), { records })
+}
+
+export function fileRuntimeStore(dir: string): RuntimeStore {
+  return runtimeStore(createFileSessionRecordStore({ dir }))
 }

@@ -202,7 +202,7 @@ async function attach(id: string, prompt?: string, timeoutMs = 120_000): Promise
 
 // Returns whether the record ever appeared, so the caller can say so rather than guess.
 async function waitForRecord(id: string, timeoutMs: number): Promise<boolean> {
-  const dir = join(stateDir, 'parked')
+  const dir = join(stateDir, 'sessions')
   const deadline = Date.now() + timeoutMs
   for (;;) {
     const names = existsSync(dir) ? readdirSync(dir) : []
@@ -358,7 +358,7 @@ async function clearNoChild(id: string): Promise<boolean> {
     return true
   }
   const recordPath = () => {
-    const dir = join(stateDir, 'parked')
+    const dir = join(stateDir, 'sessions')
     const names = existsSync(dir) ? readdirSync(dir) : []
     const name = names.find((n) => n.startsWith(id) && n.endsWith('.json'))
     return name ? join(dir, name) : undefined

@@ -31,12 +31,25 @@ export { BridgeHub } from './services/bridge.ts'
 export type { BridgeHubOptions } from './services/bridge.ts'
 export { SessionParkManager } from './services/parking.ts'
 export type { SessionParkOptions } from './services/parking.ts'
-export { createFileSessionStore, MemorySessionStore, toDurableRecord } from './services/session-store.ts'
-export { isDormant } from './services/session-store.ts'
-export type { FileSessionStoreOptions, ParkedSessionRecord, SessionStore, StoredSessionRecord } from './services/session-store.ts'
+export { isDormant, toDurableRecord } from './services/session-store.ts'
+export type { ParkedSessionRecord, SessionStore, StoredSessionRecord } from './services/session-store.ts'
+export {
+  createFileSessionRecordStore,
+  MemorySessionRecordStore,
+  SessionRecords,
+  StaleConversationError,
+  toDurableSessionRecord,
+} from './services/session-records.ts'
+export type { FileSessionRecordStoreOptions, SessionRecord, SessionRecordMerge, SessionRecordStore } from './services/session-records.ts'
 export { createFileProfileStore, createMemoryProfileStore, type ProfileStore } from './services/profile-store.ts'
 export type { AvatarImage, AvatarProvider } from './services/avatars.ts'
-export { createFileAgentStore, createMemoryAgentStore, type AgentStore, type AgentStoreChanges, type StoredAgent } from './services/agent-store.ts'
+export {
+  createFileAgentStore,
+  createMemoryAgentStore,
+  type AgentStore,
+  type AgentStoreChanges,
+  type StoredAgent,
+} from './services/agent-store.ts'
 export { createShellDirectory, createShellRegistry, shellPermitted, SHELL_REFUSAL } from './services/shells.ts'
 export type {
   ShellDirectoryDeps,

@@ -4,14 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentInfo, AgentResponse, ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import {
   createFileAgentStore,
-  createFileSessionStore,
+  createFileSessionRecordStore,
   createWorkerServer,
+  type SessionRecordStore,
   type WorkerServer,
   type WorkerServerOptions,
 } from '../src/index.ts'
 import type { RunnerSnapshot } from '@workerdeck/core'
 import type { AgentStore, StoredAgent } from '../src/services/agent-store.ts'
-import type { SessionStore } from '../src/services/session-store.ts'
 import { EngineRunner } from './engine-runner.ts'
 import { gatewayFixture } from './helpers.ts'
 import { SESSION_ARCHIVED_CODE } from '../src/routes/ws.ts'
@@ -32,7 +32,8 @@ async function gateway(dir: string, hooks: Hooks = {}) {
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
     profiles: [profile],
-    parking: { store: createFileSessionStore({ dir: join(dir, 'sessions') }), parkDelayMs: 10 },
+    sessions: { store: createFileSessionRecordStore({ dir: join(dir, 'sessions') }) },
+    parking: { parkDelayMs: 10 },
     agentStore: hooks.agentStore ?? createFileAgentStore(join(dir, 'agents.json')),
     historyReader: { read: async () => ({ kind: 'missing' }) },
     agentStartupTimeoutMs: 100,
@@ -177,21 +178,20 @@ describe('handover: the successor is durable before the intent goes', () => {
 describe('handover: the successor record is read back, not assumed', () => {
   it('keeps the intent with a start error when the new record cannot be saved, and Retry start saves it', async () => {
     const dir = await fixture.stateDir()
-    const inner = createFileSessionStore({ dir: join(dir, 'sessions') })
+    const inner = createFileSessionRecordStore({ dir: join(dir, 'sessions') })
     let broken = false
-    const store: SessionStore = {
-      ...inner,
+    const store: SessionRecordStore = {
       get: (id) => inner.get(id),
       list: () => inner.list(),
       delete: (id) => inner.delete(id),
       save: async (record) => {
-        if (broken && record.kind !== 'archived') {
+        if (broken && record.runtime?.kind !== 'archived') {
           throw new Error('disk full')
         }
         await inner.save(record)
       },
     }
-    const { server, base } = await gateway(dir, { options: { parking: { store, parkDelayMs: 10 } } })
+    const { server, base } = await gateway(dir, { options: { sessions: { store }, parking: { parkDelayMs: 10 } } })
     const { agent, session } = await createAgent(base, 'Wren')
     await idle(server, session!.id)
     broken = true
@@ -210,15 +210,14 @@ describe('handover: the successor record is read back, not assumed', () => {
 
   it('reads back the live snapshot of an engine without resume before the intent goes', async () => {
     const dir = await fixture.stateDir()
-    const inner = createFileSessionStore({ dir: join(dir, 'sessions') })
+    const inner = createFileSessionRecordStore({ dir: join(dir, 'sessions') })
     let broken = false
-    const store: SessionStore = {
-      ...inner,
+    const store: SessionRecordStore = {
       get: (id) => inner.get(id),
       list: () => inner.list(),
       delete: (id) => inner.delete(id),
       save: async (record) => {
-        if (broken && record.kind !== 'archived') {
+        if (broken && record.runtime?.kind !== 'archived') {
           throw new Error('disk full')
         }
         await inner.save(record)
@@ -229,7 +228,8 @@ describe('handover: the successor record is read back, not assumed', () => {
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
       profiles: [profile],
-      parking: { store, parkDelayMs: 10, persistLive: true },
+      sessions: { store },
+      parking: { parkDelayMs: 10, persistLive: true },
       agentStore: createFileAgentStore(join(dir, 'agents.json')),
       historyReader: { read: async () => ({ kind: 'missing' }) },
       createEngineRunner: ({ config, id }) => {

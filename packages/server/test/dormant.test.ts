@@ -6,7 +6,8 @@ import WebSocket from 'ws'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { ProfileInfo, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
-import { createFileSessionStore, createWorkerServer, type SessionStore, type WorkerServer } from '../src/index.ts'
+import { createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { fileRuntimeStore, type RuntimeStore } from './helpers.ts'
 
 // Stands in for claude/codex: no `park()`, but resumable from an engine-owned store keyed by `sdkSessionId`.
 class ResumableRunner implements Runner {
@@ -152,13 +153,14 @@ afterEach(async () => {
   }
 })
 
-async function startGateway(store: SessionStore): Promise<Gateway> {
+async function startGateway(store: RuntimeStore): Promise<Gateway> {
   const built: ResumableRunner[] = []
   const server = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
     profiles: [profile('resumable'), profile('plain')],
-    parking: { store, parkDelayMs: 10 },
+    sessions: { store: store.records },
+    parking: { parkDelayMs: 10 },
     createEngineRunner: ({ config, profile: p, id }) => {
       const runner =
         p.name === 'plain'
@@ -213,7 +215,7 @@ async function attachOnce(gateway: Gateway, id: string): Promise<SessionInfo> {
 
 describe('sessions that survive a restart', () => {
   it('remembers a live session once the engine names it, without double-listing it', async () => {
-    const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
+    const store = await stateDir().then((dir) => fileRuntimeStore(dir))
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
 
@@ -227,16 +229,16 @@ describe('sessions that survive a restart', () => {
 
   it('lists the session after a restart and resumes it on attach, under the same id', async () => {
     const dir = await stateDir()
-    const first = await startGateway(createFileSessionStore({ dir }))
+    const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
     await vi.waitFor(async () => {
-      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+      expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
 
-    const second = await startGateway(createFileSessionStore({ dir }))
+    const second = await startGateway(fileRuntimeStore(dir))
     const rows = await list(second.base)
     expect(rows.map((row) => row.id)).toEqual([session.id])
     expect(rows[0]!.status).toBe('idle')
@@ -260,44 +262,44 @@ describe('sessions that survive a restart', () => {
     // The wake starts the log again from zero (`this.watch(runner, isDormant(record) ? 0 : …)`),
     // so every seq a client is holding from before it now points into a log that is gone.
     const dir = await stateDir()
-    const first = await startGateway(createFileSessionStore({ dir }))
+    const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
     expect(session.epoch).toBeUndefined()
     await vi.waitFor(async () => {
-      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+      expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
 
-    const second = await startGateway(createFileSessionStore({ dir }))
+    const second = await startGateway(fileRuntimeStore(dir))
     const woken = await attachOnce(second, session.id)
     expect(woken.epoch).toBe(1)
 
     await second.server.close()
     servers.splice(servers.indexOf(second.server), 1)
-    const third = await startGateway(createFileSessionStore({ dir }))
+    const third = await startGateway(fileRuntimeStore(dir))
     expect((await attachOnce(third, session.id)).epoch).toBe(2)
   })
 
   it('wakes under the name it was renamed to, not the one it was built with', async () => {
     const dir = await stateDir()
-    const first = await startGateway(createFileSessionStore({ dir }))
+    const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
     await vi.waitFor(async () => {
-      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+      expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
 
     const renamed = await rename(first.base, session.id, 'The one I named')
     expect(renamed.title).toBe('The one I named')
     await vi.waitFor(async () => {
-      const record = await createFileSessionStore({ dir }).get(session.id)
+      const record = await fileRuntimeStore(dir).get(session.id)
       expect((record as { config: SessionRunnerConfig }).config.meta?.title).toBe('The one I named')
     })
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
 
-    const second = await startGateway(createFileSessionStore({ dir }))
+    const second = await startGateway(fileRuntimeStore(dir))
     expect((await list(second.base))[0]!.title).toBe('The one I named')
 
     const ws = new WebSocket(`${second.base.replace('http', 'ws')}/sessions/${session.id}/ws`)
@@ -313,15 +315,15 @@ describe('sessions that survive a restart', () => {
 
   it('renames a stored session in place, without waking it', async () => {
     const dir = await stateDir()
-    const first = await startGateway(createFileSessionStore({ dir }))
+    const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
     await vi.waitFor(async () => {
-      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+      expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
 
-    const second = await startGateway(createFileSessionStore({ dir }))
+    const second = await startGateway(fileRuntimeStore(dir))
     const renamed = await rename(second.base, session.id, 'Renamed while asleep')
     expect(renamed.title).toBe('Renamed while asleep')
     expect(second.built).toHaveLength(0)
@@ -333,15 +335,15 @@ describe('sessions that survive a restart', () => {
 
   it('wakes an unrenamed session with its last title as a fallback, never as a rename', async () => {
     const dir = await stateDir()
-    const first = await startGateway(createFileSessionStore({ dir }))
+    const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base, 'resumable', 'Fix the flaky queue test')
     await vi.waitFor(async () => {
-      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+      expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
 
-    const second = await startGateway(createFileSessionStore({ dir }))
+    const second = await startGateway(fileRuntimeStore(dir))
     await attachOnce(second, session.id)
     const config = second.built[0]!.config
     expect(config.meta?.title).toBeUndefined()
@@ -351,18 +353,18 @@ describe('sessions that survive a restart', () => {
 
   it('does not re-run the opening prompt on a wake, and keeps the name it derived from it', async () => {
     const dir = await stateDir()
-    const first = await startGateway(createFileSessionStore({ dir }))
+    const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base, 'resumable', 'Summarize the repo')
     expect(first.built[0]!.sent).toEqual(['Summarize the repo'])
     expect(session.title).toBe('Summarize the repo')
     await vi.waitFor(async () => {
-      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+      expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
 
-    const second = await startGateway(createFileSessionStore({ dir }))
+    const second = await startGateway(fileRuntimeStore(dir))
     const ws = new WebSocket(`${second.base.replace('http', 'ws')}/sessions/${session.id}/ws`)
     await new Promise((resolve, reject) => {
       ws.once('open', resolve)
@@ -378,7 +380,7 @@ describe('sessions that survive a restart', () => {
   })
 
   it('writes nothing for an engine that cannot resume - it would come back empty', async () => {
-    const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
+    const store = await stateDir().then((dir) => fileRuntimeStore(dir))
     const gateway = await startGateway(store)
     const session = await create(gateway.base, 'plain')
     // Give the save every chance to happen before asserting it did not.
@@ -390,7 +392,7 @@ describe('sessions that survive a restart', () => {
 
   it('forgets a session that ends, so a restart does not resurrect it', async () => {
     const dir = await stateDir()
-    const store = createFileSessionStore({ dir })
+    const store = fileRuntimeStore(dir)
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
     await vi.waitFor(async () => {
@@ -407,15 +409,15 @@ describe('sessions that survive a restart', () => {
 
   it('keeps the record when a resumed session is woken, so the next restart still finds it', async () => {
     const dir = await stateDir()
-    const first = await startGateway(createFileSessionStore({ dir }))
+    const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
     await vi.waitFor(async () => {
-      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+      expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
 
-    const second = await startGateway(createFileSessionStore({ dir }))
+    const second = await startGateway(fileRuntimeStore(dir))
     const ws = new WebSocket(`${second.base.replace('http', 'ws')}/sessions/${session.id}/ws`)
     await new Promise((resolve, reject) => {
       ws.once('open', resolve)
@@ -425,12 +427,12 @@ describe('sessions that survive a restart', () => {
     await second.server.close()
     servers.splice(servers.indexOf(second.server), 1)
 
-    const third = await startGateway(createFileSessionStore({ dir }))
+    const third = await startGateway(fileRuntimeStore(dir))
     expect((await list(third.base)).map((row) => row.id)).toEqual([session.id])
   })
 
   it('keeps the session but drops the old engine id when a clear leaves nothing to come back to', async () => {
-    const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
+    const store = await stateDir().then((dir) => fileRuntimeStore(dir))
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
     await vi.waitFor(async () => {
@@ -448,7 +450,7 @@ describe('sessions that survive a restart', () => {
   })
 
   it('re-saves under the new engine session when a clear adopts one', async () => {
-    const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
+    const store = await stateDir().then((dir) => fileRuntimeStore(dir))
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
     await vi.waitFor(async () => {

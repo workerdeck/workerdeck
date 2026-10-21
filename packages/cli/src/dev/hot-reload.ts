@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import * as nodeModule from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { createFileSessionStore, reloadPlan, type CarriedSession, type SessionStore } from '@workerdeck/server'
+import { createFileSessionRecordStore, reloadPlan, type CarriedSession, type SessionRecordStore } from '@workerdeck/server'
 import type { CliFlags } from '../config.ts'
 import type { Instance } from '../lib/instance.ts'
 import { installShutdown } from '../lib/shutdown.ts'
@@ -85,7 +85,7 @@ export async function runHotReload(flags: CliFlags, env: NodeJS.ProcessEnv = pro
     },
   })
 
-  let baseStore: SessionStore | undefined
+  let baseStore: SessionRecordStore | undefined
   let stateDir: string | null = null
   let pidPath: string | undefined
 
@@ -98,12 +98,14 @@ export async function runHotReload(flags: CliFlags, env: NodeJS.ProcessEnv = pro
     // One store object for the whole process. A file store is single-process by contract, and two generations
     // holding two of them over one directory is exactly the two-servers-one-directory case it refuses to be; an
     // in-memory one is worse, because a reload would drop every record it holds.
-    if (resolved.stateDir && !resolved.options.parking?.store) {
-      baseStore ??= createFileSessionStore({ dir: join(resolved.stateDir, 'parked') })
+    if (resolved.stateDir && !resolved.options.sessions?.store) {
+      baseStore ??= createFileSessionRecordStore({ dir: join(resolved.stateDir, 'sessions') })
+    }
+    if (baseStore) {
+      resolved.options.sessions = { ...resolved.options.sessions, store: baseStore }
     }
     resolved.options.parking = {
       ...resolved.options.parking,
-      ...(baseStore ? { store: baseStore } : {}),
       // Forced: the seam persists provider sessions rather than carrying them, and without this their snapshots
       // are never written, so a reload would end them.
       persistLive: true,

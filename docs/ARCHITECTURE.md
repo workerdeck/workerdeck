@@ -187,8 +187,9 @@ boundary: anything a client needs must be expressible as protocol events and com
   dispatch immediately when none is attached, which is what makes autonomous jobs simply never
   bridge. `SessionParkManager` (`server.parking`) owns the other end of the timescale: when an
   unwatched session parks it snapshots, evicts the runner from the registry, and persists to a
-  `SessionStore` (`session-store.ts`: memory by default, `createFileSessionStore()` for one JSON
-  file per park under a directory `hydrate()` adopts on `listen()`; the record holds the whole
+  `SessionStore`, an adapter (`SessionRecords.runtimeStore()`) that keeps the parking record as the `runtime`
+  field of the session's one `SessionRecord` (`session-records.ts`: memory by default,
+  `createFileSessionRecordStore()` for one JSON file per session under a directory `hydrate()` adopts on `listen()`; the record holds the whole
   transcript, so a shared backend is the operator's call). Parked sessions still list, read, and
   serve their files - from the snapshot, with no runner. `POST /executions/:executionId/result` rebuilds the session under the
   same id and folds the result into its loop, idempotently by `executionId`; an execution
@@ -442,7 +443,7 @@ answers `applied: false` rather than applying twice. Because the park is only a 
 boundary, `parked` is not terminal anywhere - `claimNext` never claims one, retention never
 prunes one, and `DELETE /v1/sessions/:id` is what actually ends one.
 
-With `createFileSessionStore()` the boundary survives the process too: `hydrate()` runs inside
+With `createFileSessionRecordStore()` the boundary survives the process too: `hydrate()` runs inside
 `listen()`, re-indexes every stored record's executions, and re-arms their watchdogs - with a
 floor (`parking.expiredGraceMs`, default 60s) under any deadline that passed during the outage,
 since nothing could have been delivered while the process was down. What durability does *not*
