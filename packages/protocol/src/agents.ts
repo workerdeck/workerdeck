@@ -126,7 +126,7 @@ export type UpdateAgentRequest = {
   crossOwner?: boolean
 }
 
-export type RetireAgentRequest = { members?: 'release' | 'retire'; expectedSessionId?: string }
+export type RetireAgentRequest = { members?: 'release' | 'retire'; expectedGeneration: number }
 
 export type AgentsResponse = { agents: AgentInfo[] }
 

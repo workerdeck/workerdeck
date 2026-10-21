@@ -436,7 +436,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
             void vscode.window.showInformationMessage(`WorkerDeck: ${gate.reason}.`)
             return
           }
-          await this.#newConversation(hostId, info.id, agent.id)
+          await this.#newConversation(hostId, info, agent.id)
         },
       })
     }
@@ -453,7 +453,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     }
     const choice = await vscode.window.showInformationMessage(message, NEW_CONVERSATION_NOW)
     if (choice === NEW_CONVERSATION_NOW) {
-      await this.#newConversation(saved.hostId, info.id, saved.agentId)
+      await this.#newConversation(saved.hostId, info, saved.agentId)
     }
   }
 
@@ -478,7 +478,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       items.push({
         label: '$(debug-restart) Retry start',
         detail: record.startFailed,
-        run: () => this.#agentCall(hostId, 'could not start the new conversation', (client) => client.retryAgentStart(agentId)),
+        run: () => this.#agentCall(hostId, 'could not start the new conversation', (client) => client.retryAgentStart(agentId, info.conversation ?? 1)),
       })
     }
     if (record?.undelivered !== undefined) {
@@ -487,32 +487,32 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           label: '$(send) Send again',
           description: 'first message may not have arrived',
           detail: record.undelivered,
-          run: () => this.#agentCall(hostId, 'could not send the message again', (client) => client.settleUndelivered(agentId, true)),
+          run: () => this.#agentCall(hostId, 'could not send the message again', (client) => client.settleUndelivered(agentId, true, info.conversation ?? 1)),
         },
         {
           label: '$(close) Dismiss',
           detail: 'Drop the first message that may not have arrived',
-          run: () => this.#agentCall(hostId, 'could not dismiss the message', (client) => client.settleUndelivered(agentId, false)),
+          run: () => this.#agentCall(hostId, 'could not dismiss the message', (client) => client.settleUndelivered(agentId, false, info.conversation ?? 1)),
         },
       )
     }
     return items
   }
 
-  async #newConversation(hostId: string, sessionId: string, agentId: string): Promise<void> {
+  async #newConversation(hostId: string, info: SessionInfo, agentId: string): Promise<void> {
     const host = this.#store.get(hostId)
     const client = host && (await clientFor(this.#store, host))
     if (!client) {
       return
     }
     try {
-      await client.restartAgent(agentId, undefined, sessionId)
+      await client.restartAgent(agentId, info.conversation ?? 1)
     } catch (err) {
       const message = errorMessage(err)
       if (message.includes('retry starting it first')) {
         const choice = await vscode.window.showErrorMessage(`WorkerDeck: ${message}`, 'Retry start')
         if (choice === 'Retry start') {
-          await this.#agentCall(hostId, 'could not start the new conversation', (retry) => retry.retryAgentStart(agentId))
+          await this.#agentCall(hostId, 'could not start the new conversation', (retry) => retry.retryAgentStart(agentId, info.conversation ?? 1))
         }
       } else {
         void vscode.window.showErrorMessage(`WorkerDeck: could not start a new conversation - ${message}`)
@@ -535,7 +535,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     if (confirmed !== 'Delete agent') {
       return
     }
-    await this.#agentCall(hostId, 'could not delete the agent', (client) => client.retireAgent(agent.id, { expectedSessionId: info.id }))
+    await this.#agentCall(hostId, 'could not delete the agent', (client) => client.retireAgent(agent.id, { expectedGeneration: info.conversation ?? 1 }))
   }
 
   // The picker draws the candidates, so it lives in this webview; a request before the view has booted waits for `onReady`.

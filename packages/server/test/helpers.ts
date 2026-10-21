@@ -31,7 +31,12 @@ export function fakeHarness(models?: Array<Record<string, unknown>>) {
   const backgroundTasks = vi.fn(async (toolUseId?: string) => toolUseId !== 'unknown')
   const setModel = vi.fn(async () => {})
 
+  // Like the CLI, a top-level reply names the send it answers (here: the latest one taken).
   const emit = (msg: SDKMessage) => {
+    const answering = captured.inputs.at(-1)?.uuid
+    if (msg.type === 'assistant' && msg.parent_tool_use_id === null && !('user_message_uuid' in msg) && answering) {
+      msg = { ...msg, user_message_uuid: answering } as SDKMessage
+    }
     if (waiter) {
       const resolve = waiter
       waiter = null

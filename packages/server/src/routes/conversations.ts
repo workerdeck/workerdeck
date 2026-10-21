@@ -10,6 +10,7 @@ import type {
 import type { ServerContext } from '../context.ts'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
+import type { CutGuard } from '../services/conversation-cuts.ts'
 import type { ConversationEntry, SessionRecord } from '../services/session-records.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
@@ -101,17 +102,7 @@ export async function handleConversations(
     fail(400, 'expectedGeneration is required')
   }
   const expected = body.expectedGeneration
-  // Re-run under the lifecycle lock: the body may arrive long after the checks above, across a cut or a scope change.
-  const guard = async (latest: SessionRecord | null): Promise<void> => {
-    const now = latest?.closedAt === undefined ? await sessionInfoOf(ctx, id) : undefined
-    if (!now || !ctx.auth.canSee(auth, now)) {
-      fail(404, 'session not found')
-    }
-    const at = latest?.conversation ?? 1
-    if (at !== expected) {
-      fail(409, `the session moved on to conversation ${at}`)
-    }
-  }
+  const guard = conversationGuard(ctx, id, auth, expected)
   if (conversation === 'retry') {
     json(res, 200, await cuts.retryStart(id, guard))
     return
@@ -150,6 +141,28 @@ export async function handleConversations(
       guard,
     ),
   )
+}
+
+// Re-run under the lifecycle lock: the body may arrive long after the caller's checks, across a cut or a scope change.
+export function conversationGuard(ctx: ServerContext, id: string, auth: AuthContext, expected: number): CutGuard {
+  return async (latest: SessionRecord | null): Promise<void> => {
+    const now = latest?.closedAt === undefined ? await sessionInfoOf(ctx, id) : undefined
+    if (!now || !ctx.auth.canSee(auth, now)) {
+      fail(404, 'session not found')
+    }
+    const at = latest?.conversation ?? 1
+    if (at !== expected) {
+      fail(409, `the session moved on to conversation ${at}`)
+    }
+  }
+}
+
+// A stale-command check for the `/agents` doors: the conversation the caller acted on, named explicitly.
+export function expectedGenerationOf(body: { expectedGeneration?: unknown }): number {
+  if (typeof body.expectedGeneration !== 'number' || !Number.isInteger(body.expectedGeneration)) {
+    fail(400, 'expectedGeneration is required')
+  }
+  return body.expectedGeneration
 }
 
 function pickTarget(target: NonNullable<NewConversationRequest['target']>): NonNullable<NewConversationRequest['target']> {

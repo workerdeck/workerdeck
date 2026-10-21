@@ -218,7 +218,7 @@ function SessionViewInner({ hostId, sessionId, client, follow }: SessionViewInne
                 size="icon-sm"
                 aria-label="Delete agent"
                 title="Delete agent…"
-                onClick={() => setDeleting({ hostId, agentId: info.agent!.id, name: info.agent!.name, sessionId })}
+                onClick={() => setDeleting({ hostId, agentId: info.agent!.id, name: info.agent!.name, conversation: info.conversation ?? 1 })}
               >
                 <Trash2 className="size-4 text-fg-3" />
               </Button>

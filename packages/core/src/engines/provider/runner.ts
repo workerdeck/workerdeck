@@ -90,6 +90,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
   #model: LanguageModel
   #permissionMode: PermissionMode
   #messages: ModelMessage[] = []
+  #unsent = 0
   #pendingToolCalls = new Map<string, PendingToolCall>()
   #dispatched = new Set<string>()
   #turnChain: Promise<void> = Promise.resolve()
@@ -269,8 +270,14 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
           ]
         : modelText
     this.#messages.push({ role: 'user', content })
+    this.#unsent++
     this.echoUser(text, attachments, options)
     this.#scheduleTurn()
+  }
+
+  // User messages the model has not been sent yet.
+  pendingInput(): number {
+    return this.#unsent
   }
 
   protected override assertAccepting(): void {
@@ -375,6 +382,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
         throw new Error('cannot clear context while tool calls are outstanding')
       }
       this.#messages = []
+      this.#unsent = 0
       this.#contextTokens = undefined
       this.localCommands.clear()
       this.core.emit({ type: 'conversation_reset', ...agentResetFields(options) })
@@ -659,6 +667,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
       partials: this.config.includePartialMessages !== false,
     })
     try {
+      this.#unsent = 0
       const result = await agent.stream({ messages: [...this.#messages], abortSignal: abort.signal })
       for await (const part of result.fullStream) {
         if (this.core.closed) {

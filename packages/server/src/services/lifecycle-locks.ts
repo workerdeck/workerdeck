@@ -1,7 +1,9 @@
 // One lifecycle change at a time per session id, and a gate that keeps new work off a conversation being cut.
 export class LifecycleLocks {
   #tails = new Map<string, Promise<void>>()
-  #gated = new Set<string>()
+  // Counted: a retire and a cut may each hold the gate, and one lifting it must not lift the other's.
+  #gated = new Map<string, number>()
+  #held = new Set<string>()
   readonly startupTimeoutMs: number
   readonly onError: (error: unknown) => void
 
@@ -34,11 +36,30 @@ export class LifecycleLocks {
   }
 
   gate(sessionId: string): void {
-    this.#gated.add(sessionId)
+    this.#gated.set(sessionId, (this.#gated.get(sessionId) ?? 0) + 1)
   }
 
   ungate(sessionId: string): void {
-    this.#gated.delete(sessionId)
+    const held = (this.#gated.get(sessionId) ?? 0) - 1
+    if (held > 0) {
+      this.#gated.set(sessionId, held)
+    } else {
+      this.#gated.delete(sessionId)
+    }
+  }
+
+  // A gate that outlives one step: a retirement whose close has not finished keeps it until a later pass does.
+  hold(sessionId: string): void {
+    if (!this.#held.has(sessionId)) {
+      this.#held.add(sessionId)
+      this.gate(sessionId)
+    }
+  }
+
+  release(sessionId: string): void {
+    if (this.#held.delete(sessionId)) {
+      this.ungate(sessionId)
+    }
   }
 
   gated(sessionId: string): boolean {

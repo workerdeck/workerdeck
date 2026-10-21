@@ -1456,39 +1456,56 @@ id. Its conversations are the record's history entries; the cut (`services/conve
 
 - **Field authority.** The record owns `conversation`, `owner`/`scope`, `requested` (what the next
   conversation starts from), `running`, `runtime` and the history. The index owns name, avatar,
-  brief, sharing, lead, order, remote team state and roster. Edit settings (`PATCH /agents/:id
-  { config }`) takes the lifecycle lock and writes the record's `requested` first, then the index;
-  the index keeps its copy of the settings only for the synchronous readers (owner stamping, the
-  permission-mode check of a team across owners). `AgentInfo.config` reads the record's values for
-  the keys it shows.
+  brief, sharing, lead, order, remote team state and roster. `PATCH /agents/:id` takes the
+  lifecycle lock, validates the whole patch (`previewUpdate` plus the settings' create ladder)
+  before any write, writes the record (`requested`, `owner` and the runtime's copy) first, then the
+  index. The index keeps a cache of the engine settings for the synchronous readers (owner
+  stamping, the permission-mode check of a team across owners); `syncSettingsCache` brings it back
+  from the record after an index write that still refused and at startup. `AgentInfo.config`
+  reads set and cleared engine settings from `requested`, so it shows the profile the create pinned.
 - **Create named: record, index row, start.** `POST /agents` and `POST /sessions { agent }` open
   the record (read back), write the index row in `createRunner`'s `beforeStart`, then start the
-  engine, so a team member never runs a turn unnamed. A failed index write closes the runner and
-  discards the still-empty record; a crash between the two writes leaves a record that holds
-  nothing, which no list shows.
+  engine, so a team member never runs a turn unnamed. `startedAt` is written (read back) just
+  before the start, so a record tells three cases apart: no `startedAt` and no index row is an
+  abandoned create (never listed); no `startedAt` with an index row is a named session that never
+  started, which startup reconciliation starts from `requested` (or Retry start does); `startedAt`
+  without runtime or runner ran and left nothing to wake (listed `failed`). A failed index write
+  closes the runner and discards the still-empty record.
 - **Naming is a PATCH.** `PATCH /sessions/:id { agent }` names an unnamed session (operator only,
   owner resolved as for a create) or updates a named one; `{ agent: null }` un-names it and is
   refused while it leads, belongs to, or is joining a team. Un-naming touches only the index.
   `POST /agents { adopt }` is gone (400); the client's cross-gateway team move still calls it and
   needs PATCH naming instead.
-- **Retire: tombstone, then close.** `DELETE /agents/:id` and `DELETE /sessions/:id` on a named
-  session take the lifecycle locks of the agent and every member (sorted, one acquisition), re-check
-  that the team did not change and the conversation is the one named, write the tombstones (and the
-  released members) as one index `apply`, then close each record (`closeLocked`: current
-  conversation appended, `closedAt`) and remove its runner. The DELETE route takes these locks
-  itself instead of the per-route one, because the locks are not reentrant.
+- **Retire: hold, tombstone, then close.** `DELETE /agents/:id { expectedGeneration }` and `DELETE
+  /sessions/:id` on a named session take the lifecycle locks of the agent and every member (sorted,
+  one acquisition), re-check that the team did not change and the conversation is the one named,
+  then hold every leaving session (a counted gate plus the parking fence: no work, no wake) before
+  the tombstones (and the released members) land as one index `apply`. Each record then closes on
+  its own (`closeLocked` with `holdOnFailure`); one that fails stays held and hidden (404, off the
+  list, no peer reach) while the others finish, the DELETE answers 500, and a second `DELETE
+  /agents/:id` on the tombstone or the startup pass finishes it. The DELETE route takes these
+  locks itself instead of the per-route one, because the locks are not reentrant.
+- **The `/agents` lifecycle doors name their conversation.** `restart`, `retry-start`,
+  `undelivered` and `DELETE` require `expectedGeneration` (400 without) and re-check it with the
+  caller's sight of the session inside the lock, as the `/sessions/:id/conversations` routes do;
+  `expectedSessionId` is gone.
 - **Startup reconciliation** (`reconcileIdentity`, before `cuts.recover`): a tombstone whose record
   is still open finishes its close; an index row with no record is dropped with a diagnostic. Rows
   from before the merge (still carrying `sessionId` / `pastSessions`) are left for the migration. The
   drop runs only with a durable `sessions.store`: on the memory default every row would look orphaned.
 - **The index store must apply atomically.** `AgentStore` is `{ list, apply }`; the save/delete
   fallback is gone, so a retire with released members can never land half.
-- **Unanswered input holds a cut.** A message n took in (a peer's queued behind a turn, a person's)
-  with no `turn_result` after it refuses a cut with 409, and a cut queued for the next idle
-  (`/clear`, `context_reset`) waits for an idle without one. Such a message is answered in n: never
-  dropped with n's engine, never carried into n+1. While a cut runs, peer sends are refused
-  (`delivered: false`, "a new conversation is starting") so the sender resends to n+1. The check
-  walks the runner's log back through `eventAt`; a runner without it is not checked.
+- **Unanswered input holds a cut.** `Runner.pendingInput()` is the engine's own count of input it
+  took and has not consumed: claude stamps each send with a uuid and counts it consumed once a
+  top-level reply names it (`user_message_uuid` / `user_message_uuids`, which also cover a batch
+  and a send folded into a turn), or once a turn that ended unsuccessfully had no stamped frame; a
+  slash command counts only until the SDK reads it, since it may run no turn. Codex counts queued
+  turns and steers in flight, the provider engine messages not yet sent to the model. While it is
+  above 0 a cut is refused (409) and a cut queued for the next idle (`/clear`, `context_reset`)
+  waits. Such a message is answered in n: never dropped with n's engine, never carried into n+1.
+  While a cut runs, peer sends are refused (`delivered: false`, "a new conversation is starting")
+  so the sender resends to n+1. A runner without `pendingInput` is not checked. The claude stamps
+  are read from SDK 0.3.293's documented fields; no real CLI run has confirmed them yet.
 - **Runtime absent is not a status.** `GET /sessions` lists from the records: a runner or runtime
   says what a session is; a record with neither (it ran and left nothing to wake) is listed
   `failed` and refuses a wake, unless it never held anything; closed records only with `?closed=1`.

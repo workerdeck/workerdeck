@@ -251,7 +251,8 @@ describe('agents', () => {
       config: { instructionScope: null, sleepAfterMs: 0 },
     })
     expect(patched.status).toBe(200)
-    expect(patched.body.agent.config).toEqual({ cwd: '/tmp/project', model: 'claude-test-1', sleepAfterMs: 0 })
+    // The engine settings read from the record's `requested`, which pins the profile the create resolved.
+    expect(patched.body.agent.config).toEqual({ cwd: '/tmp/project', profile: 'default', model: 'claude-test-1', sleepAfterMs: 0 })
     expect((await call<AgentResponse>(base, `/agents/${body.agent.id}`)).body.agent.config).toEqual(patched.body.agent.config)
   })
 
@@ -292,7 +293,7 @@ describe('agents', () => {
     ).body
     expect(member.agent.lead).toBe(lead.agent.id)
 
-    const retired = await call<{ retired: string[]; released: string[] }>(base, `/agents/${lead.agent.id}`, 'DELETE')
+    const retired = await call<{ retired: string[]; released: string[] }>(base, `/agents/${lead.agent.id}`, 'DELETE', { expectedGeneration: 1 })
     expect(retired.body).toEqual({ retired: [lead.agent.id], released: [member.agent.id] })
     expect(server.registry.get(lead.session!.id)).toBeUndefined()
     expect(await server.records.get(lead.session!.id)).toMatchObject({ closedAt: expect.any(Number), conversations: [{ n: 1 }] })
@@ -340,7 +341,7 @@ describe('agents', () => {
     const member = (
       await call<AgentResponse>(base, '/agents', 'POST', { name: 'Pip', config: { cwd: '/tmp/project' }, lead: lead.agent.id })
     ).body
-    const restarted = await call<AgentResponse>(base, `/agents/${member.agent.id}/restart`, 'POST', {})
+    const restarted = await call<AgentResponse>(base, `/agents/${member.agent.id}/restart`, 'POST', { expectedGeneration: 1 })
     expect(restarted.status).toBe(200)
     expect(restarted.body.agent).toMatchObject({ id: member.agent.id, name: 'Pip', lead: lead.agent.id, sessionId: member.agent.id })
     expect(restarted.body.session!.id).toBe(member.session!.id)
@@ -430,7 +431,7 @@ describe('agents', () => {
     avatars.hold()
     const late = call<{ error: string }>(base, `/agents/${member.id}/avatar`, 'POST', { seed: 'heron' })
     await vi.waitFor(() => expect(avatars.waiting()).toBe(1))
-    expect((await call(base, `/agents/${member.id}`, 'DELETE', {})).status).toBe(200)
+    expect((await call(base, `/agents/${member.id}`, 'DELETE', { expectedGeneration: 1 })).status).toBe(200)
     avatars.release()
     expect(await late).toEqual({ status: 404, body: { error: `no such agent: ${member.id}` } })
     expect((await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents.map((a) => a.name)).toEqual(['Lead'])

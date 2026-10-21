@@ -711,100 +711,34 @@ export class AgentService {
     return (agent.remoteMembers ?? []).filter((member) => member.state === 'invited' && (member.expiresAt ?? Infinity) > now)
   }
 
+  // The write `update` would make, with no write and no side effect: a caller validates a whole patch before any of it lands.
+  previewUpdate(id: string, patch: UpdateAgentRequest, joined?: RemoteJoin): AgentRefusal | null {
+    const current = this.#agents.get(id)
+    if (!current) {
+      return { status: 404, error: `no such agent: ${id}` }
+    }
+    if (this.#frozen.has(id)) {
+      return { status: 409, error: `${current.name} was written by a newer WorkerDeck; this one leaves it as it is` }
+    }
+    const outcome = this.#updated(current, patch, joined)
+    return isAgentRefusal(outcome) ? outcome : null
+  }
+
   // A lead on another gateway is only ever written with the relay's answer in hand (`joined`), never from a bare patch.
   update(id: string, patch: UpdateAgentRequest, options: UpdateOptions = {}): Promise<StoredAgent | AgentRefusal> {
-    const { joined } = options
     let previous: StoredAgent | undefined
     let cancelled: JoinReservation | undefined
     const updated = this.patch(id, (agent) => {
       previous = agent
-      cancelled = undefined
-      const next: StoredAgent = { ...agent }
-      if (patch.name !== undefined) {
-        const name = readName(patch.name)
-        if (typeof name !== 'string') {
-          return name
-        }
-        const taken = this.nameRefusal(name, agent.id)
-        if (taken) {
-          return taken
-        }
-        next.name = name
+      const outcome = this.#updated(agent, patch, options.joined)
+      if (isAgentRefusal(outcome)) {
+        return outcome
       }
-      if (patch.owner !== undefined && patch.owner !== agent.owner) {
-        const refused = this.transferRefusal(agent)
-        if (refused) {
-          return refused
-        }
-        next.owner = patch.owner
-      }
-      if (patch.sharing !== undefined) {
-        if (!isSharing(patch.sharing)) {
-          return { status: 400, error: "sharing must be 'private' or 'shared'" }
-        }
-        if (patch.sharing === 'shared' && !this.#allowShared) {
-          return { status: 409, error: SHARING_OFF }
-        }
-        next.sharing = patch.sharing
-      }
-      if (patch.config !== undefined) {
-        if (!isRecord(patch.config)) {
-          return { status: 400, error: 'config must be an object' }
-        }
-        const merged: Record<string, unknown> = { ...agent.config, ...patch.config }
-        for (const key of Object.keys(merged)) {
-          if (merged[key] === null) {
-            delete merged[key]
-          }
-        }
-        const config = readConfig(merged)
-        if ('error' in config) {
-          return config
-        }
-        next.config = config
-      }
-      if (patch.lead !== undefined && patch.lead !== null && this.#joining.has(id) && joined === undefined) {
-        return { status: 409, error: `${agent.name} is joining a team` }
-      }
-      if (patch.lead === null) {
-        cancelled = this.#joining.get(id)
-        delete next.pendingJoin
-        delete next.lead
-        delete next.remoteLead
-      } else if (patch.lead !== undefined) {
-        if (typeof patch.lead !== 'string') {
-          return { status: 400, error: 'lead must be an agent id or null' }
-        }
-        const leadId = this.localId(patch.lead)
-        if (this.remoteGateway(leadId)) {
-          if (joined?.lead !== leadId || !this.#holdsJoin(id, joined)) {
-            return { status: 409, error: 'a lead on another gateway is joined through the relay' }
-          }
-          if (this.hasMembers(id)) {
-            return { status: 409, error: `${agent.name} leads a team; teams are one level deep` }
-          }
-          next.lead = joined.lead
-          next.remoteLead = joined.remoteLead
-          delete next.pendingJoin
-        } else {
-          const refused = this.leadRefusal(next, leadId, patch.crossOwner === true)
-          if (refused) {
-            return refused
-          }
-          next.lead = leadId
-          delete next.remoteLead
-        }
-      }
-      if (patch.order !== undefined) {
-        if (typeof patch.order !== 'number' || !Number.isFinite(patch.order)) {
-          return { status: 400, error: 'order must be a number' }
-        }
-        next.order = patch.order
-      }
+      cancelled = outcome.cancelled
       if (cancelled) {
         this.#joining.delete(id)
       }
-      return next
+      return outcome.next
     })
     return updated.then((result) => {
       if (!isAgentRefusal(result) && previous && result.lead !== previous.lead) {
@@ -815,6 +749,93 @@ export class AgentService {
       }
       return result
     })
+  }
+
+  #updated(agent: StoredAgent, patch: UpdateAgentRequest, joined: RemoteJoin | undefined): { next: StoredAgent; cancelled?: JoinReservation } | AgentRefusal {
+    let cancelled: JoinReservation | undefined
+    const next: StoredAgent = { ...agent }
+    if (patch.name !== undefined) {
+      const name = readName(patch.name)
+      if (typeof name !== 'string') {
+        return name
+      }
+      const taken = this.nameRefusal(name, agent.id)
+      if (taken) {
+        return taken
+      }
+      next.name = name
+    }
+    if (patch.owner !== undefined && patch.owner !== agent.owner) {
+      const refused = this.transferRefusal(agent)
+      if (refused) {
+        return refused
+      }
+      next.owner = patch.owner
+    }
+    if (patch.sharing !== undefined) {
+      if (!isSharing(patch.sharing)) {
+        return { status: 400, error: "sharing must be 'private' or 'shared'" }
+      }
+      if (patch.sharing === 'shared' && !this.#allowShared) {
+        return { status: 409, error: SHARING_OFF }
+      }
+      next.sharing = patch.sharing
+    }
+    if (patch.config !== undefined) {
+      if (!isRecord(patch.config)) {
+        return { status: 400, error: 'config must be an object' }
+      }
+      const merged: Record<string, unknown> = { ...agent.config, ...patch.config }
+      for (const key of Object.keys(merged)) {
+        if (merged[key] === null) {
+          delete merged[key]
+        }
+      }
+      const config = readConfig(merged)
+      if ('error' in config) {
+        return config
+      }
+      next.config = config
+    }
+    if (patch.lead !== undefined && patch.lead !== null && this.#joining.has(agent.id) && joined === undefined) {
+      return { status: 409, error: `${agent.name} is joining a team` }
+    }
+    if (patch.lead === null) {
+      cancelled = this.#joining.get(agent.id)
+      delete next.pendingJoin
+      delete next.lead
+      delete next.remoteLead
+    } else if (patch.lead !== undefined) {
+      if (typeof patch.lead !== 'string') {
+        return { status: 400, error: 'lead must be an agent id or null' }
+      }
+      const leadId = this.localId(patch.lead)
+      if (this.remoteGateway(leadId)) {
+        if (joined?.lead !== leadId || !this.#holdsJoin(agent.id, joined)) {
+          return { status: 409, error: 'a lead on another gateway is joined through the relay' }
+        }
+        if (this.hasMembers(agent.id)) {
+          return { status: 409, error: `${agent.name} leads a team; teams are one level deep` }
+        }
+        next.lead = joined.lead
+        next.remoteLead = joined.remoteLead
+        delete next.pendingJoin
+      } else {
+        const refused = this.leadRefusal(next, leadId, patch.crossOwner === true)
+        if (refused) {
+          return refused
+        }
+        next.lead = leadId
+        delete next.remoteLead
+      }
+    }
+    if (patch.order !== undefined) {
+      if (typeof patch.order !== 'number' || !Number.isFinite(patch.order)) {
+        return { status: 400, error: 'order must be a number' }
+      }
+      next.order = patch.order
+    }
+    return { next, cancelled }
   }
 
   retire(id: string, members: 'release' | 'retire'): Promise<RetireOutcome | AgentRefusal> {

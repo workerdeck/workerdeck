@@ -65,8 +65,10 @@ export type PeerServiceDeps = {
   defaultOwner?: () => string | undefined
   // A job running in bypass under `disableBypassPermissions: 'sessions'` takes no peer message (`refuseJobInput`).
   disableBypassPermissions?: BypassOption
-  // A reason to hold a message back from a session for now (an agent handover in flight).
+  // A reason to hold a message back from a session for now (a cut or a retirement in flight).
   refuse?: (sessionId: string) => string | undefined
+  // A session no peer may see or reach: a retired agent's whose close has not finished.
+  hidden?: (sessionId: string) => boolean
   options?: PeerServiceOptions
 }
 
@@ -209,10 +211,13 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
   const allSessions = async (): Promise<SessionInfo[]> => {
     const live = registry().list()
     const dormant = (await deps.refs.parking?.listInfo()) ?? []
-    return [...live, ...dormant].map((info) => deps.projects.withProject(info))
+    return [...live, ...dormant].filter((info) => deps.hidden?.(info.id) !== true).map((info) => deps.projects.withProject(info))
   }
 
   const infoOf = async (id: string): Promise<SessionInfo | undefined> => {
+    if (deps.hidden?.(id)) {
+      return undefined
+    }
     const live = registry().get(id)?.info()
     if (live) {
       return deps.projects.withProject(live)

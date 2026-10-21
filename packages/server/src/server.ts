@@ -289,6 +289,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       ? undefined
       : createPeerService({
           refuse: (sessionId) => (locks.gated(sessionId) ? CUT_IN_PROGRESS : undefined),
+          hidden: (sessionId) => agents.tombstone(sessionId) !== undefined,
           refs: { registry, parking },
           projects,
           teams: {
@@ -399,6 +400,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         requested: requestedConfig(config),
       })
     },
+    recordStarted: (id) => records.markStarted(id),
     agentBrief: (sessionId) => agents.briefFor(sessionId),
     agentInstructionScope: (sessionId) => agents.instructionScopeFor(sessionId),
     avatar: avatarChanges

@@ -180,6 +180,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   #planType: string | undefined
   #resolvedEffort: string | undefined
   #queue: QueuedTurn[] = []
+  #steering = 0
   #turnChain: Promise<void> = Promise.resolve()
   #activeTurn: ActiveTurn | undefined
   #connection: AppServerConnection | undefined
@@ -430,10 +431,20 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       this.#enqueueTurn(input)
       return
     }
+    this.#steering++
     active.steerChain = active.steerChain.then(async () => {
-      await active.steerGate
-      await this.#steer(active, input)
+      try {
+        await active.steerGate
+        await this.#steer(active, input)
+      } finally {
+        this.#steering--
+      }
     })
+  }
+
+  // Input queued for a turn of its own, or a steer the app-server has not taken yet.
+  pendingInput(): number {
+    return this.#queue.length + this.#steering
   }
 
   #steerable(active: ActiveTurn): boolean {

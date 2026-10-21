@@ -21,12 +21,16 @@ import {
   agentInfoOf,
   conversationRows,
   createNamedSession,
+  finishRetired,
+  startNeverStarted,
+  waitsForStart,
   requestFromConfig,
   retireAgent,
   rollAvatar,
   settled,
   updateAgent,
 } from './named-sessions.ts'
+import { conversationGuard, expectedGenerationOf } from './conversations.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
 export const ADOPT_GONE = 'adopt is gone: name the session with PATCH /sessions/:id { agent }'
@@ -70,6 +74,11 @@ export async function handleAgents(
     json(res, 200, await conversationRows(ctx, tombstone.id, auth, false))
     return
   }
+  if (tombstone && action === undefined && req.method === 'DELETE') {
+    await ctx.locks.run([tombstone.id], () => finishRetired(ctx, tombstone.id))
+    json(res, 200, { retired: [tombstone.id], released: [] })
+    return
+  }
   const agent = id === undefined ? undefined : agents.get(id)
   if (!agent || extra.length > (action === 'remote-members' ? 1 : 0)) {
     fail(404, 'agent not found')
@@ -80,28 +89,38 @@ export async function handleAgents(
   }
   if (action === 'restart') {
     requireMethod(req, 'POST')
-    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as {
-      prompt?: unknown
-      expectedSessionId?: unknown
-      expectedGeneration?: unknown
-    }
-    // Captured before the lock: a client that names no conversation still never turns two requests into two cuts.
-    const expectedGeneration = expectedOf(ctx, agent, body)
+    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { prompt?: unknown; expectedGeneration?: unknown }
+    const expectedGeneration = expectedGenerationOf(body)
     const prompt = typeof body.prompt === 'string' && body.prompt !== '' ? body.prompt : undefined
-    const cut = await ctx.cuts.cut(agent.id, { expectedGeneration, reason: 'user', ...(prompt ? { prompt } : {}) })
+    const cut = await ctx.cuts.cut(
+      agent.id,
+      { expectedGeneration, reason: 'user', ...(prompt ? { prompt } : {}) },
+      conversationGuard(ctx, agent.id, auth, expectedGeneration),
+    )
     await respond(ctx, res, 200, agent, cut.session)
     return
   }
   if (action === 'retry-start') {
     requireMethod(req, 'POST')
-    const retried = await ctx.cuts.retryStart(agent.id, () => {})
+    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { expectedGeneration?: unknown }
+    const guard = conversationGuard(ctx, agent.id, auth, expectedGenerationOf(body))
+    if (waitsForStart(await ctx.records.get(agent.id), ctx)) {
+      const session = await ctx.locks.run([agent.id], async () => {
+        await guard(await ctx.records.get(agent.id))
+        return startNeverStarted(ctx, agent.id)
+      })
+      await respond(ctx, res, 200, agent, session)
+      return
+    }
+    const retried = await ctx.cuts.retryStart(agent.id, guard)
     await respond(ctx, res, 200, agent, retried.session)
     return
   }
   if (action === 'undelivered') {
     requireMethod(req, 'POST')
-    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { send?: unknown }
-    await ctx.cuts.settlePendingPrompt(agent.id, body.send === true, () => {})
+    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { send?: unknown; expectedGeneration?: unknown }
+    const guard = conversationGuard(ctx, agent.id, auth, expectedGenerationOf(body))
+    await ctx.cuts.settlePendingPrompt(agent.id, body.send === true, guard)
     await respond(ctx, res, 200, agent)
     return
   }
@@ -153,18 +172,11 @@ export async function handleAgents(
     return
   }
   const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as RetireAgentRequest
-  if (body.expectedSessionId !== undefined && body.expectedSessionId !== agent.id) {
-    fail(409, `${agent.name} is session ${agent.id}`)
-  }
-  const outcome = await retireAgent(ctx, agent.id, body.members === 'retire' ? 'retire' : 'release')
+  const guard = conversationGuard(ctx, agent.id, auth, expectedGenerationOf(body))
+  const outcome = await retireAgent(ctx, agent.id, body.members === 'retire' ? 'retire' : 'release', async () =>
+    guard(await ctx.records.get(agent.id)),
+  )
   json(res, 200, { retired: outcome.retired.map((a) => a.id), released: outcome.released.map((a) => a.id) })
-}
-
-function expectedOf(ctx: ServerContext, agent: StoredAgent, body: { expectedSessionId?: unknown; expectedGeneration?: unknown }): number {
-  if (body.expectedSessionId !== undefined && body.expectedSessionId !== agent.id) {
-    fail(409, `${agent.name} is session ${agent.id}`)
-  }
-  return typeof body.expectedGeneration === 'number' ? body.expectedGeneration : (ctx.records.conversationOf(agent.id) ?? 1)
 }
 
 async function createAgent(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, auth: AuthContext) {

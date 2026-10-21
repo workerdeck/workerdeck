@@ -225,7 +225,7 @@ describe('cross-gateway teams, same owner', () => {
     expect((await win.call(`/agents/${second.agent.id}`, 'PATCH', { lead: null })).status).toBe(200)
     await until(async () => (await agentOn(mac, lead.agent.id)).remoteMembers?.length === 1, 'the lead drops the leaver')
 
-    expect((await mac.call(`/agents/${lead.agent.id}`, 'DELETE', {})).status).toBe(200)
+    expect((await mac.call(`/agents/${lead.agent.id}`, 'DELETE', { expectedGeneration: 1 })).status).toBe(200)
     await until(async () => (await agentOn(win, first.agent.id)).lead === undefined, 'the member is released')
     expect((await agentOn(win, first.agent.id)).remoteLead).toBeUndefined()
   })

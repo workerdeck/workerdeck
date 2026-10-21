@@ -258,7 +258,7 @@ export function SessionsSidebar() {
   }
 
   const retryStart = (row: SessionRow, agentId: string) =>
-    agentCall(row, 'Could not start the new conversation', (client) => client.retryAgentStart(agentId))
+    agentCall(row, 'Could not start the new conversation', (client) => client.retryAgentStart(agentId, row.info.conversation ?? 1))
 
   const newConversation = (row: SessionRow, agentId: string) => {
     const client = clientFor(row.hostId)
@@ -266,7 +266,7 @@ export function SessionsSidebar() {
       return
     }
     void client
-      .restartAgent(agentId, undefined, row.info.id)
+      .restartAgent(agentId, row.info.conversation ?? 1)
       .then(() => toast.success(`New conversation started. ${NEW_CONVERSATION_HINT}`))
       .catch((e: unknown) => {
         const message = errorMessage(e, 'Could not start a new conversation')
@@ -374,7 +374,7 @@ export function SessionsSidebar() {
       case 'undelivered': {
         if (agent) {
           agentCall(row, action.send ? 'Could not send the message again' : 'Could not dismiss the message', (client) =>
-            client.settleUndelivered(agent.id, action.send),
+            client.settleUndelivered(agent.id, action.send, row.info.conversation ?? 1),
           )
         }
         break
@@ -387,7 +387,7 @@ export function SessionsSidebar() {
       }
       case 'delete': {
         if (agent) {
-          setDeleting({ hostId: row.hostId, agentId: agent.id, name: agent.name, sessionId: row.info.id })
+          setDeleting({ hostId: row.hostId, agentId: agent.id, name: agent.name, conversation: row.info.conversation ?? 1 })
         }
         break
       }

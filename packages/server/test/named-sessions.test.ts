@@ -1,8 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AttachmentInput, EngineAdapter, SendMessageOptions, SessionRunnerConfig } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, type AgentInfo, type ProfileInfo, type SessionEvent, type SessionInfo } from '@workerdeck/protocol'
+import type { AttachmentInput, EngineAdapter, SendMessageOptions } from '@workerdeck/core'
+import { ENGINE_CAPABILITIES, type AgentInfo, type ProfileInfo, type SessionInfo } from '@workerdeck/protocol'
 import {
   createFileAgentStore,
   createFileSessionRecordStore,
@@ -23,12 +23,7 @@ afterEach(fixture.cleanup)
 
 // Echoes what it is sent and answers nothing until told, so a test can hold a message unanswered.
 class Engine extends EngineRunner {
-  readonly log: SessionEvent[] = []
-
-  constructor(id: string, config: SessionRunnerConfig) {
-    super(id, config)
-    this.subscribe((event) => this.log.push(event))
-  }
+  #pending = 0
 
   override info(): SessionInfo {
     return { ...super.info(), engine: 'claude', capabilities: { ...ENGINE_CAPABILITIES.claude, resume: true } }
@@ -36,6 +31,7 @@ class Engine extends EngineRunner {
 
   override sendMessage(text: string, _attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void {
     super.sendMessage(text)
+    this.#pending++
     this.emit({
       type: 'user_message',
       message: { role: 'user', content: text },
@@ -45,11 +41,12 @@ class Engine extends EngineRunner {
   }
 
   answer(): void {
+    this.#pending = 0
     this.emit({ type: 'turn_result', subtype: 'success', isError: false, numTurns: 1, durationMs: 1, totalCostUsd: 0 } as never)
   }
 
-  eventAt(seq: number): SessionEvent | undefined {
-    return this.log.find((event) => event.seq === seq)
+  pendingInput(): number {
+    return this.#pending
   }
 }
 
@@ -189,7 +186,7 @@ describe('a named session', () => {
     const { server, base, built } = await gateway(dir)
     const session = await createNamed(base, 'Wren')
     await idle(server, session.id)
-    const restarted = await call(base, `/agents/${session.id}/restart`, 'POST', { prompt: 'again' })
+    const restarted = await call(base, `/agents/${session.id}/restart`, 'POST', { prompt: 'again', expectedGeneration: 1 })
     expect(restarted.status).toBe(200)
     expect(restarted.body.agent).toMatchObject({ id: session.id, name: 'Wren', sessionId: session.id })
     expect(restarted.body.session).toMatchObject({ id: session.id, conversation: 2, agent: { id: session.id, name: 'Wren', conversation: 2 } })
@@ -227,7 +224,7 @@ describe('retiring a named session', () => {
     const held = deferred()
     const holding = server.locks.run([member.id], () => held.promise)
     let finished = false
-    const retiring = call(base, `/agents/${lead.id}`, 'DELETE', { members: 'retire' }).then((res) => {
+    const retiring = call(base, `/agents/${lead.id}`, 'DELETE', { members: 'retire', expectedGeneration: 1 }).then((res) => {
       finished = true
       return res
     })
@@ -247,7 +244,7 @@ describe('retiring a named session', () => {
     const late = await createNamed(base, 'Late')
     const gate = deferred()
     const blocking = server.locks.run([first.id], () => gate.promise)
-    const refused = call(base, `/agents/${next.id}`, 'DELETE', { members: 'retire' })
+    const refused = call(base, `/agents/${next.id}`, 'DELETE', { members: 'retire', expectedGeneration: 1 })
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect((await call(base, `/agents/${late.id}`, 'PATCH', { lead: next.id })).status).toBe(200)
     gate.resolve()
@@ -340,6 +337,117 @@ describe('peer messages across a cut', () => {
     expect(await peers.send(sender.id, target.id, 'after')).toMatchObject({ delivered: true, sessionId: target.id })
     expect(next.sent).toEqual(['after'])
     expect(first.sent).toEqual(['are you there'])
+  })
+})
+
+describe('review probes', () => {
+  it('keeps a retirement whose close failed fenced, gated and hidden, closes the other members, and finishes on retry', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const sender = await createNamed(base, 'Sender')
+    const lead = await createNamed(base, 'Lead')
+    const member = await createNamed(base, 'Member', { lead: lead.id })
+    await idle(server, member.id)
+    const original = server.records.transactDurable.bind(server.records)
+    const failing = new Set([lead.id])
+    server.records.transactDurable = ((id, merge) =>
+      original(id, (current) => {
+        const next = merge(current)
+        if (failing.has(id) && next.closedAt !== undefined) {
+          throw new Error('disk full')
+        }
+        return next
+      })) as typeof server.records.transactDurable
+
+    const res = await call(base, `/agents/${lead.id}`, 'DELETE', { members: 'retire', expectedGeneration: 1 })
+    expect(res.status).toBe(500)
+    expect(((await call(base, '/agents?retired=1')).body.retired as Array<{ id: string }>).map((row) => row.id).sort()).toEqual(
+      [lead.id, member.id].sort(),
+    )
+    expect(server.registry.get(lead.id)).toBeDefined()
+    expect((await server.records.get(lead.id))?.closedAt).toBeUndefined()
+    expect(server.parking.fenced(lead.id)).toBe(true)
+    expect(server.locks.gated(lead.id)).toBe(true)
+    expect(await server.records.get(member.id)).toMatchObject({ closedAt: expect.any(Number) })
+    expect(server.registry.get(member.id)).toBeUndefined()
+    expect((await call(base, `/sessions/${lead.id}`)).status).toBe(404)
+    expect((await call(base, `/sessions/${lead.id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(404)
+    expect(((await call(base, '/sessions')).body.sessions as SessionInfo[]).map((info) => info.id)).toEqual([sender.id])
+    expect(await built[0]!.config.peers!.send(sender.id, lead.id, 'still there?')).toMatchObject({ delivered: false })
+
+    failing.clear()
+    expect((await call(base, `/agents/${lead.id}`, 'DELETE', {})).status).toBe(200)
+    expect(await server.records.get(lead.id)).toMatchObject({ closedAt: expect.any(Number) })
+    expect(server.registry.get(lead.id)).toBeUndefined()
+    expect(server.parking.fenced(lead.id)).toBe(false)
+    expect(server.locks.gated(lead.id)).toBe(false)
+  })
+
+  it('refuses /agents lifecycle calls that name no conversation or a stale one', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir)
+    const session = await createNamed(base, 'Wren')
+    await idle(server, session.id)
+    for (const path of ['restart', 'retry-start', 'undelivered']) {
+      expect((await call(base, `/agents/${session.id}/${path}`, 'POST', {})).status).toBe(400)
+    }
+    expect((await call(base, `/agents/${session.id}`, 'DELETE', {})).status).toBe(400)
+    expect((await call(base, `/agents/${session.id}/restart`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
+    expect((await call(base, `/agents/${session.id}/restart`, 'POST', { expectedGeneration: 1 })).status).toBe(409)
+    expect((await server.records.get(session.id))?.conversation).toBe(2)
+    expect((await call(base, `/agents/${session.id}`, 'DELETE', { expectedGeneration: 1 })).status).toBe(409)
+    expect((await call(base, '/agents')).body.agents).toHaveLength(1)
+  })
+
+  it('validates a whole settings patch before writing, and reads set and cleared settings from the record', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir)
+    await createNamed(first.base, 'Taken')
+    const res = await call(first.base, '/agents', 'POST', { name: 'Wren', config: { cwd: '/tmp', profile: 'claude-a', model: 'old' } })
+    const id = res.body.agent.id as string
+    const refused = await call(first.base, `/agents/${id}`, 'PATCH', { name: 'Taken', config: { model: 'new' } })
+    expect(refused.status).toBe(409)
+    expect((await first.server.records.get(id))?.requested?.model).toBe('old')
+    expect((await call(first.base, `/agents/${id}`)).body.agent.config.model).toBe('old')
+    const cleared = await call(first.base, `/agents/${id}`, 'PATCH', { config: { model: null } })
+    expect(cleared.status).toBe(200)
+    expect(cleared.body.agent.config).not.toHaveProperty('model')
+    expect((await first.server.records.get(id))?.requested?.model).toBeUndefined()
+
+    await stop(first.server)
+    const path = join(dir, 'agents.json')
+    const rows = JSON.parse(await readFile(path, 'utf8')) as StoredAgent[]
+    await writeFile(path, JSON.stringify(rows.map((row) => (row.id === id ? { ...row, config: { ...row.config, model: 'stale' } } : row))))
+    await gateway(dir)
+    const healed = (JSON.parse(await readFile(path, 'utf8')) as StoredAgent[]).find((row) => row.id === id)!
+    expect(healed.config).not.toHaveProperty('model')
+  })
+
+  it('tells an abandoned create, a named one never started, and a session that ran without state apart', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir)
+    const named = await createNamed(first.base, 'Atlas')
+    const ran = (await call(first.base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a' })).body.session.id as string
+    const abandoned = (await call(first.base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a' })).body.session.id as string
+    await idle(first.server, ran)
+    await stop(first.server)
+    const records = createFileSessionRecordStore({ dir: join(dir, 'sessions') })
+    for (const id of [named.id, ran, abandoned]) {
+      const { runtime: _runtime, startedAt, ...bare } = (await records.get(id))!
+      await records.save(id === ran ? { ...bare, startedAt } : bare)
+    }
+
+    const second = await gateway(dir)
+    await idle(second.server, named.id)
+    expect(second.built.map((runner) => runner.id)).toEqual([named.id])
+    expect((await second.server.records.get(named.id))?.startedAt).toEqual(expect.any(Number))
+    const listed = (await call(second.base, '/sessions')).body.sessions as SessionInfo[]
+    expect(listed.map((info) => [info.id, info.status]).sort()).toEqual(
+      [
+        [named.id, 'idle'],
+        [ran, 'failed'],
+      ].sort(),
+    )
   })
 })
 

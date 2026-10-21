@@ -1,5 +1,6 @@
 import type { SessionRunnerConfig } from '@workerdeck/core'
 import {
+  errorMessage,
   isSharing,
   type AgentConfig,
   type AgentConversationsResponse,
@@ -14,7 +15,7 @@ import { fail } from '../lib/http.ts'
 import type { StoredAgent } from '../services/agent-store.ts'
 import { SHARING_OFF, isAgentRefusal, type AgentRefusal, type RemoteJoin, type RetireOutcome } from '../services/agents.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { requestedConfig, type SessionRecord } from '../services/session-records.ts'
+import { neverStarted, requestedConfig, type SessionRecord } from '../services/session-records.ts'
 import { entryInfo } from './conversations.ts'
 import { vetCreateRequest } from './create-vet.ts'
 import { sessionInfoOf } from './session-lookup.ts'
@@ -111,7 +112,7 @@ export async function nameSession(ctx: ServerContext, info: SessionInfo, input: 
   if (named) {
     const { brief, instructionScope, sleepAfterMs, ...identity } = input
     const config = stripUndefined({ brief, instructionScope, sleepAfterMs })
-    return settled(await updateAgent(ctx, named, { ...identity, ...(Object.keys(config).length > 0 ? { config } : {}) }))
+    return settled(await updateAgentLocked(ctx, named.id, { ...identity, ...(Object.keys(config).length > 0 ? { config } : {}) }))
   }
   const record = await ctx.records.get(info.id)
   if (!record || record.closedAt !== undefined) {
@@ -130,6 +131,9 @@ export async function nameSession(ctx: ServerContext, info: SessionInfo, input: 
       sharing: sharingFor(ctx, info.profile, input.sharing),
     }),
   )
+  if (draft.owner !== record.owner) {
+    await writeRecordAuthority(ctx, info.id, undefined, draft.owner)
+  }
   const agent = await writeIdentity(ctx, draft, info, remoteLeadOf(ctx, input.lead), input.crossOwner === true)
   ctx.teams?.republish()
   return agent
@@ -142,7 +146,8 @@ export async function unnameSession(ctx: ServerContext, id: string): Promise<voi
   ctx.teams?.republish()
 }
 
-// Index tombstone first, then each session's close. The lock spans the agent and its members, keyed by the one id.
+// Every leaving session is gated and fenced first, then the tombstones land, then each record closes. A close that
+// fails keeps its session gated and fenced (no work, no wake) for the retry or the startup pass to finish.
 export function retireAgent(ctx: ServerContext, id: string, members: 'release' | 'retire', guard?: () => Promise<void>): Promise<RetireOutcome> {
   const crew = ctx.agents.members(id).map((member) => member.id)
   return ctx.locks.run([id, ...crew], async () => {
@@ -154,18 +159,56 @@ export function retireAgent(ctx: ServerContext, id: string, members: 'release' |
       fail(409, `${agent.name}'s team changed; try again`)
     }
     await guard?.()
-    const outcome = await ctx.agents.retire(id, members)
+    const leaving = members === 'retire' ? [id, ...crew.filter((member) => !ctx.agents.frozen(member))] : [id]
+    for (const gone of leaving) {
+      await hold(ctx, gone)
+    }
+    let outcome: RetireOutcome | AgentRefusal
+    try {
+      outcome = await ctx.agents.retire(id, members)
+    } catch (error) {
+      leaving.forEach((gone) => release(ctx, gone))
+      throw error
+    }
     if (isAgentRefusal(outcome)) {
+      leaving.forEach((gone) => release(ctx, gone))
       fail(outcome.status, outcome.error)
     }
+    const retired = new Set(outcome.retired.map((gone) => gone.id))
+    leaving.filter((gone) => !retired.has(gone)).forEach((gone) => release(ctx, gone))
     for (const gone of outcome.retired) {
       ctx.teams?.retiring(gone)
     }
+    const failures: unknown[] = []
     for (const gone of outcome.retired) {
-      await endSession(ctx, gone.id)
+      await finishRetired(ctx, gone.id).catch((error: unknown) => failures.push(error))
+    }
+    if (failures.length > 0) {
+      fail(500, `retired, but closing did not finish (${errorMessage(failures[0])}); delete it again to finish`)
     }
     return outcome
   })
+}
+
+// Idempotent: closes a tombstoned session's record and removes its runner. The caller holds its lifecycle lock.
+export async function finishRetired(ctx: ServerContext, id: string): Promise<void> {
+  await hold(ctx, id)
+  const record = await ctx.records.get(id)
+  if (record && record.closedAt === undefined) {
+    await ctx.cuts.closeLocked(id, { holdOnFailure: true })
+  }
+  await endSession(ctx, id)
+  release(ctx, id)
+}
+
+async function hold(ctx: ServerContext, id: string): Promise<void> {
+  ctx.locks.hold(id)
+  await ctx.parking.fence(id)
+}
+
+function release(ctx: ServerContext, id: string): void {
+  ctx.locks.release(id)
+  ctx.parking.unfence(id)
 }
 
 // A real close (loud: `session_closed` goes out). The caller holds the session's lifecycle lock.
@@ -178,27 +221,62 @@ export async function endSession(ctx: ServerContext, id: string): Promise<void> 
   ctx.producedFiles.drop(id)
 }
 
+// A named session whose create wrote its record and index row but never started the engine: started now, under its
+// id, from the record's `requested`. The caller holds its lifecycle lock.
+export async function startNeverStarted(ctx: ServerContext, id: string): Promise<SessionInfo> {
+  const record = await ctx.records.get(id)
+  const agent = ctx.agents.get(id)
+  const base = record?.requested ?? record?.running
+  if (!record || !agent || !neverStarted(record) || ctx.registry.get(id) || !base) {
+    fail(409, 'no new conversation is waiting to start')
+  }
+  const config = ctx.factory.buildRunnerConfig({ ...base, prompt: undefined, resume: undefined, forkSession: undefined })
+  const runner = await ctx.factory.createRunner(config, {
+    id,
+    brief: agent.config.brief?.trim() || undefined,
+    instructionScope: agent.config.instructionScope,
+    agent: true,
+  })
+  return runner.info()
+}
+
+export function waitsForStart(record: SessionRecord | null, ctx: ServerContext): boolean {
+  return record !== null && neverStarted(record) && ctx.agents.get(record.id) !== undefined && !ctx.registry.get(record.id)
+}
+
 export async function reconcileIdentity(ctx: ServerContext, onError: (error: unknown) => void, dropOrphans: boolean): Promise<void> {
   for (const tombstone of ctx.agents.tombstones()) {
+    const record = await ctx.records.get(tombstone.id).catch((error: unknown) => {
+      onError(error)
+      return null
+    })
+    if (!record || record.closedAt !== undefined) {
+      continue
+    }
     try {
-      await ctx.locks.run([tombstone.id], async () => {
-        const record = await ctx.records.get(tombstone.id)
-        if (record && record.closedAt === undefined) {
-          await endSession(ctx, tombstone.id)
+      await ctx.locks.run([tombstone.id], () => finishRetired(ctx, tombstone.id))
+    } catch (error) {
+      onError(error)
+    }
+  }
+  const orphans: StoredAgent[] = []
+  for (const agent of ctx.agents.indexed()) {
+    try {
+      const record = await ctx.records.get(agent.id)
+      if (record) {
+        await syncSettingsCache(ctx, agent.id)
+        if (waitsForStart(record, ctx)) {
+          await ctx.locks.run([agent.id], () => startNeverStarted(ctx, agent.id))
         }
-      })
+      } else {
+        orphans.push(agent)
+      }
     } catch (error) {
       onError(error)
     }
   }
   if (!dropOrphans) {
     return
-  }
-  const orphans: StoredAgent[] = []
-  for (const agent of ctx.agents.indexed()) {
-    if (!(await ctx.records.get(agent.id))) {
-      orphans.push(agent)
-    }
   }
   if (orphans.length === 0) {
     return
@@ -210,50 +288,123 @@ export async function reconcileIdentity(ctx: ServerContext, onError: (error: unk
 }
 
 // The rest of the patch lands first, so a bad name or config never leaves a join the lead accepted and this side dropped.
-export async function updateAgent(
+export function updateAgent(
   ctx: ServerContext,
   agent: StoredAgent,
   patch: UpdateAgentRequest,
   auth?: AuthContext,
 ): Promise<StoredAgent | AgentRefusal> {
+  return ctx.locks.run([agent.id], () => updateAgentLocked(ctx, agent.id, patch, auth))
+}
+
+// The whole patch is validated before anything is written; the record (settings, owner) is written first, then the
+// index. An index write that still refuses leaves the record as the authority and the cache reconciled from it.
+async function updateAgentLocked(ctx: ServerContext, id: string, patch: UpdateAgentRequest, auth?: AuthContext): Promise<StoredAgent | AgentRefusal> {
+  const current = ctx.agents.get(id)
+  if (!current) {
+    return { status: 404, error: `no such agent: ${id}` }
+  }
   if (patch.owner !== undefined) {
     const owner = ctx.owners.resolve(undefined, patch.owner)
     if (isAgentRefusal(owner)) {
       return owner
     }
   }
-  const outcome = patch.config === undefined || !auth ? await patchAgent(ctx, agent, patch) : await patchSettings(ctx, agent, patch, auth)
-  if (patch.sharing !== undefined && !isAgentRefusal(outcome)) {
-    ctx.teams?.republish()
+  const remoteLead = remoteLeadOf(ctx, patch.lead)
+  const { lead: _lead, ...local } = patch
+  const refused = ctx.agents.previewUpdate(id, remoteLead === undefined ? patch : local)
+  if (refused) {
+    return refused
   }
-  return outcome
-}
-
-function patchSettings(ctx: ServerContext, agent: StoredAgent, patch: UpdateAgentRequest, auth: AuthContext): Promise<StoredAgent | AgentRefusal> {
-  return ctx.locks.run([agent.id], async () => {
-    const current = ctx.agents.get(agent.id)
-    if (!current) {
-      return { status: 404, error: `no such agent: ${agent.id}` }
-    }
+  const owner = patch.owner !== undefined && patch.owner !== current.owner ? patch.owner : undefined
+  let requested: SessionRunnerConfig | undefined
+  if (patch.config !== undefined && auth) {
     const merged: Record<string, unknown> = { ...current.config, ...patch.config }
     for (const key of Object.keys(merged)) {
       if (merged[key] === null) {
         delete merged[key]
       }
     }
-    const vetted = vetCreateRequest(ctx, requestFromConfig(merged as AgentConfig, undefined), auth, current.owner)
+    const principalOwner = owner ?? current.owner
+    const vetted = vetCreateRequest(ctx, requestFromConfig(merged as AgentConfig, undefined), auth, principalOwner)
     if (!vetted.ok) {
       return { status: vetted.status, error: vetted.error }
     }
-    const built = requestedConfig(
-      ctx.factory.buildRunnerConfig(vetted.request, { operator: ctx.auth.isOperator(auth), ...(current.owner ? { owner: current.owner } : {}) }),
+    requested = requestedConfig(
+      ctx.factory.buildRunnerConfig(vetted.request, { operator: ctx.auth.isOperator(auth), ...(principalOwner ? { owner: principalOwner } : {}) }),
     )
-    const record = await ctx.records.get(agent.id)
-    if (record && record.closedAt === undefined) {
-      await ctx.records.transactDurable(agent.id, (latest) => ({ ...latest!, requested: withSettings(latest!.requested ?? latest!.running, built) }))
+  }
+  await writeRecordAuthority(ctx, id, requested, owner)
+  const outcome = await patchAgent(ctx, current, patch)
+  if (isAgentRefusal(outcome)) {
+    await syncSettingsCache(ctx, id)
+  } else if (patch.sharing !== undefined) {
+    ctx.teams?.republish()
+  }
+  return outcome
+}
+
+// The record's own fields: `requested` (what the next conversation starts from) and `owner`, the runtime's copy and the
+// live runner's with it.
+async function writeRecordAuthority(ctx: ServerContext, id: string, settings: SessionRunnerConfig | undefined, owner: string | undefined): Promise<void> {
+  if (settings === undefined && owner === undefined) {
+    return
+  }
+  const record = await ctx.records.get(id)
+  if (!record || record.closedAt !== undefined) {
+    return
+  }
+  await ctx.records.transactDurable(id, (latest) => {
+    const next: SessionRecord = { ...latest! }
+    if (settings) {
+      next.requested = withSettings(latest!.requested ?? latest!.running, settings)
     }
-    return patchAgent(ctx, current, patch)
+    if (owner !== undefined) {
+      next.owner = owner
+      if (latest!.runtime) {
+        next.runtime = { ...latest!.runtime, info: { ...latest!.runtime.info, owner } }
+      }
+    }
+    return next
   })
+  if (owner !== undefined) {
+    ctx.registry.get(id)?.setOwner?.(owner)
+  }
+}
+
+// The index keeps a copy of the record's engine settings for readers that cannot wait on a record; this brings it back
+// in line after a partial failure and at startup.
+export async function syncSettingsCache(ctx: ServerContext, id: string): Promise<void> {
+  const record = await ctx.records.get(id)
+  const requested = record?.requested ?? record?.running
+  if (!requested || !ctx.agents.get(id) || ctx.agents.frozen(id)) {
+    return
+  }
+  await ctx.agents.patch(id, (agent) => {
+    const config = settingsFrom(agent.config, requested)
+    return config === agent.config ? agent : { ...agent, config }
+  })
+}
+
+const SETTING_KEYS = ['cwd', 'profile', 'model', 'reasoningEffort', 'permissionMode'] as const
+
+// Set and cleared from `requested`: the record is the authority for the engine settings an agent shows.
+function settingsFrom(config: AgentConfig, requested: SessionRunnerConfig): AgentConfig {
+  const next: Record<string, unknown> = { ...config }
+  let changed = false
+  for (const key of SETTING_KEYS) {
+    const value = (requested as Record<string, unknown>)[key]
+    const wanted = typeof value === 'string' ? value : undefined
+    if (next[key] !== wanted) {
+      changed = true
+      if (wanted === undefined) {
+        delete next[key]
+      } else {
+        next[key] = wanted
+      }
+    }
+  }
+  return changed ? (next as AgentConfig) : config
 }
 
 function withSettings(base: SessionRunnerConfig | undefined, settings: SessionRunnerConfig): SessionRunnerConfig {
@@ -288,18 +439,9 @@ async function patchAgent(ctx: ServerContext, agent: StoredAgent, patch: UpdateA
 export function agentInfoOf(ctx: ServerContext, agent: StoredAgent, record: SessionRecord | null): AgentInfo {
   const info = ctx.agents.public(agent)
   const requested = record?.requested ?? record?.running
-  const config: AgentConfig = { ...info.config }
-  if (requested) {
-    for (const key of ['cwd', 'profile', 'model', 'reasoningEffort', 'permissionMode'] as const) {
-      const value = (requested as Record<string, unknown>)[key]
-      if (config[key] !== undefined && typeof value === 'string') {
-        ;(config as Record<string, unknown>)[key] = value
-      }
-    }
-  }
   return {
     ...info,
-    config,
+    config: requested ? settingsFrom(info.config, requested) : info.config,
     ...(record?.startFailed ? { startFailed: record.startFailed.error } : {}),
     ...(record?.pendingPrompt?.state === 'uncertain' ? { undelivered: record.pendingPrompt.text } : {}),
   }

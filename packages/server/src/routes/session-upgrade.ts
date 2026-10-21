@@ -48,7 +48,7 @@ export async function upgradeSession(
     return
   }
   const known = await sessionInfoOf(ctx, route.id)
-  if (known && !auth.canSee(authCtx, known)) {
+  if ((known && !auth.canSee(authCtx, known)) || ctx.agents.tombstone(route.id)) {
     refuseUpgrade(socket, '404 Not Found')
     return
   }

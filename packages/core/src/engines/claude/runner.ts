@@ -105,6 +105,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #outputTails = new ToolOutputTails((body) => this.core.emit(body))
   #numTurns: number | undefined
   #input = new InputQueue()
+  // Sends the CLI took and has not answered yet, oldest first; a turn's assistant frames name the send they answer.
+  #unanswered: string[] = []
+  #stampedSinceResult = false
   // The row a compaction is drawing on, from the first 'compacting' status to the boundary that
   // settles it. The boundary has a uuid of its own, but it is the *end* of the compaction, so
   // correlating here is what lets one row settle rather than two rows appear.
@@ -203,11 +206,16 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     const content = blocks.length
       ? ([...blocks, ...(modelText ? [{ type: 'text', text: modelText }] : [])] as unknown as SDKUserMessage['message']['content'])
       : modelText
+    const uuid = randomUUID()
+    if (!isSlashCommand(text)) {
+      this.#unanswered.push(uuid)
+    }
     this.#input.push({
       type: 'user',
       message: { role: 'user', content },
       parent_tool_use_id: null,
       session_id: this.#sdkSessionId,
+      uuid,
     })
     if (this.#asleep) {
       this.#wake()
@@ -579,7 +587,33 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     })
   }
 
+  // A slash command is the CLI's to run once it has read it, turn or not; any other send waits for its answer.
+  pendingInput(): number {
+    return Math.max(this.#unanswered.length, this.#input.pending)
+  }
+
+  #trackAnswers(msg: SDKMessage): void {
+    if ((msg.type === 'assistant' || msg.type === 'stream_event') && msg.parent_tool_use_id === null) {
+      const stamp = msg as { user_message_uuid?: string; user_message_uuids?: string[] }
+      const answered = stamp.user_message_uuids ?? (stamp.user_message_uuid === undefined ? [] : [stamp.user_message_uuid])
+      const at = Math.max(-1, ...answered.map((uuid) => this.#unanswered.indexOf(uuid)))
+      if (at >= 0) {
+        this.#unanswered.splice(0, at + 1)
+        this.#stampedSinceResult = true
+      }
+      return
+    }
+    if (msg.type === 'result') {
+      // A turn that ended before any frame named its send (an interrupt, an early error) still consumed it.
+      if (!this.#stampedSinceResult && msg.subtype !== 'success') {
+        this.#unanswered.shift()
+      }
+      this.#stampedSinceResult = false
+    }
+  }
+
   #handleMessage(msg: SDKMessage): void {
+    this.#trackAnswers(msg)
     if (msg.type === 'system' && msg.subtype === 'init') {
       this.#sdkSessionId = msg.session_id
       this.#model = msg.model

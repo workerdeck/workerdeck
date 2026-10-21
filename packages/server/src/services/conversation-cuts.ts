@@ -23,7 +23,6 @@ export type CutFault = 'commit' | 'start' | 'after-stop' | 'after-commit'
 
 export const CONVERSATION_ENDED = 'this conversation has ended; reattach to the current one'
 export const UNANSWERED_REFUSAL = 'the session has a message it has not answered yet; start a new conversation once it has'
-const UNANSWERED_SCAN = 500
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
 
 export class ConversationCuts {
@@ -101,7 +100,7 @@ export class ConversationCuts {
     const ctx = this.#ctx
     const record = await ctx.records.get(id)
     await guard?.(record)
-    if (record?.closedAt !== undefined) {
+    if (record?.closedAt !== undefined || ctx.agents.tombstone(id)) {
       fail(404, 'session not found')
     }
     const conversation = record?.conversation ?? 1
@@ -232,15 +231,19 @@ export class ConversationCuts {
 
   // An unnamed close: the current conversation joins the history, which stays readable on the closed record.
   // The caller holds the session's lifecycle lock and has re-checked the conversation and the caller's sight of it.
-  async closeLocked(id: string): Promise<void> {
+  // `holdOnFailure`: a failed close leaves the fence up, for a retirement that must not let the session work again.
+  async closeLocked(id: string, options: { holdOnFailure?: boolean } = {}): Promise<void> {
     const ctx = this.#ctx
     await ctx.parking.fence(id)
+    let closed = false
     try {
       const record = await ctx.records.get(id)
       if (record?.closedAt !== undefined) {
+        closed = true
         return
       }
       if (!record) {
+        closed = true
         return
       }
       // A session that ended without durable state has nothing to capture; it still closes, its history kept.
@@ -252,8 +255,11 @@ export class ConversationCuts {
       if (entry) {
         this.#remember(id, entry)
       }
+      closed = true
     } finally {
-      ctx.parking.unfence(id)
+      if (closed || !options.holdOnFailure) {
+        ctx.parking.unfence(id)
+      }
     }
   }
 
@@ -561,23 +567,10 @@ function withoutPendingPrompt(record: SessionRecord): SessionRecord {
 
 type Startup = { kind: 'ready' } | { kind: 'failed'; error: string }
 
-// A message n took in (a peer's, queued behind a turn, or a person's) with no turn result after it yet. The cut waits for
-// it to be answered in n: it is never dropped with n's engine, and never carried into n+1.
+// Input n's engine took and has not consumed (a peer's queued behind a turn, a person's): the cut waits for it to be
+// answered in n, so it is never dropped with n's engine and never carried into n+1. The runner's own state decides.
 function unanswered(runner: Runner): boolean {
-  if (!runner.eventAt) {
-    return false
-  }
-  const last = runner.info().lastSeq
-  for (let seq = last; seq > 0 && seq > last - UNANSWERED_SCAN; seq--) {
-    const event = runner.eventAt(seq)
-    if (event?.type === 'turn_result') {
-      return false
-    }
-    if (event?.type === 'user_message' && event.synthetic !== true && event.parentToolUseId == null) {
-      return true
-    }
-  }
-  return false
+  return (runner.pendingInput?.() ?? 0) > 0
 }
 
 // A runtime for n+1 that the engine has named (or a live snapshot): the successor exists and is resumed, not replaced.

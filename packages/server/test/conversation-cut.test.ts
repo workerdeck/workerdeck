@@ -924,6 +924,14 @@ const RESULT = {
   session_id: 'sdk-1',
 } as unknown as SDKMessage
 
+const REPLY = {
+  type: 'assistant',
+  message: { role: 'assistant', content: [{ type: 'text', text: 'done' }], model: 'claude-test-1', stop_reason: 'end_turn' },
+  parent_tool_use_id: null,
+  uuid: 'u-reply',
+  session_id: 'sdk-1',
+} as unknown as SDKMessage
+
 describe('conversation cut on the real claude runner', () => {
   it('starts the next conversation as a fresh, persisted engine session in the same config dir', async () => {
     const dir = await fixture.stateDir()
@@ -948,6 +956,7 @@ describe('conversation cut on the real claude runner', () => {
     const id = await create(base)
     await vi.waitFor(() => expect(harnesses).toHaveLength(1))
     harnesses[0]!.emit(INIT)
+    harnesses[0]!.emit(REPLY)
     harnesses[0]!.emit(RESULT)
     await idle(server, id)
 

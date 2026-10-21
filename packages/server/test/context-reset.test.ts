@@ -228,6 +228,14 @@ const RESULT = {
   session_id: 'sdk-1',
 } as unknown as SDKMessage
 
+const REPLY = {
+  type: 'assistant',
+  message: { role: 'assistant', content: [{ type: 'text', text: 'done' }], model: 'claude-test-1', stop_reason: 'end_turn' },
+  parent_tool_use_id: null,
+  uuid: 'u-reply',
+  session_id: 'sdk-1',
+} as unknown as SDKMessage
+
 type ToolHandler = (args: unknown, extra: unknown) => Promise<{ isError?: boolean; content: Array<{ text: string }> }>
 
 function gatewayTools(harness: ReturnType<typeof fakeHarness>): Record<string, { handler: ToolHandler }> {
@@ -297,6 +305,8 @@ describe('context_reset through the gateway', () => {
     expect(result.content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
     expect(inputTexts(first!)).toEqual(['work'])
 
+    first!.emit(REPLY)
+
     first!.emit(RESULT)
     await vi.waitFor(() => expect(harnesses).toHaveLength(2))
     const second = harnesses[1]!
@@ -328,6 +338,7 @@ describe('context_reset through the gateway', () => {
 
     const result = await gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect(result.content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
+    first!.emit(REPLY)
     first!.emit(RESULT)
 
     await vi.waitFor(() => expect(harnesses).toHaveLength(2))
@@ -342,5 +353,44 @@ describe('context_reset through the gateway', () => {
       agent: { id: agent.id, name: 'Wren', conversation: 2 },
     })
     expect(inputTexts(first!)).toEqual(['work'])
+  })
+
+  it('holds a cut while the engine has not answered a peer message queued before a turn result; a slash command never holds it', async () => {
+    const harnesses: Array<ReturnType<typeof fakeHarness>> = []
+    const queryFn = (params: Parameters<ReturnType<typeof fakeHarness>['queryFn']>[0]) => {
+      const next = fakeHarness()
+      harnesses.push(next)
+      return next.queryFn(params)
+    }
+    const { base } = await fx.startServer({ queryFn } as ReturnType<typeof fakeHarness>)
+    const id = await createSession(base, 'operator', { cwd: fx.tempDir(), prompt: 'work' })
+    await vi.waitFor(() => expect(harnesses).toHaveLength(1))
+    const first = harnesses[0]!
+    first.emit(INIT)
+    first.emit(REPLY)
+    const runner = fx.server().registry.get(id)!
+    runner.sendMessage('from a peer', undefined, { origin: { kind: 'peer', sessionId: 'p', name: 'P', engine: 'claude', hops: [] } })
+    await vi.waitFor(() => expect(first.captured.inputs).toHaveLength(2))
+    first.emit(RESULT)
+    await vi.waitFor(() => expect(runner.info().status).toBe('idle'))
+    const cut = (generation: number) =>
+      fetch(`${base}/sessions/${id}/conversations`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer operator', 'content-type': 'application/json' },
+        body: JSON.stringify({ expectedGeneration: generation }),
+      })
+    const held = await cut(1)
+    expect(held.status).toBe(409)
+    expect(((await held.json()) as { error: string }).error).toContain('not answered')
+    first.emit(REPLY)
+    first.emit(RESULT)
+    await vi.waitFor(async () => expect((await cut(1)).status).toBe(200))
+
+    await vi.waitFor(() => expect(harnesses).toHaveLength(2))
+    const next = fx.server().registry.get(id)!
+    await vi.waitFor(() => expect(next.info().status).toBe('idle'))
+    next.sendMessage('/cost')
+    await vi.waitFor(() => expect(harnesses[1]!.captured.inputs).toHaveLength(1))
+    expect((await cut(2)).status).toBe(200)
   })
 })

@@ -52,6 +52,8 @@ export type SessionRecord = {
   pendingPrompt?: PendingPrompt
   startFailed?: StartFailure
   closedAt?: number
+  // Set once the first engine was handed its start: a record without it never ran.
+  startedAt?: number
   createdAt: number
 }
 
@@ -222,6 +224,13 @@ export class SessionRecords {
     return cleared
   }
 
+  markStarted(id: string): Promise<SessionRecord> {
+    return this.transactDurable(id, (current) => {
+      const base = current ?? freshRecord(id)
+      return base.startedAt === undefined ? { ...base, startedAt: Date.now() } : base
+    })
+  }
+
   // A record opened for a create that did not go through: removed only while it still holds nothing.
   async discard(id: string): Promise<void> {
     await this.transact(id, (current) => (current && current.runtime === undefined && disposable(current) ? null : undefined))
@@ -305,6 +314,11 @@ function checkConversation(id: string, current: SessionRecord | null, conversati
 }
 
 // Owner, scope and config are the session's own: they go with it. Anything a cut or a close wrote keeps the record.
+// Opened by a create whose engine was never started: holds nothing a list or a wake could use.
+export function neverStarted(record: SessionRecord): boolean {
+  return record.startedAt === undefined && record.runtime === undefined && disposable(record)
+}
+
 export function disposable(record: SessionRecord): boolean {
   return (
     record.conversation === 1 &&

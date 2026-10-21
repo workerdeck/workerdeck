@@ -125,6 +125,8 @@ export interface Runner {
   setEffort?(effort?: string): Promise<void>
   // An owner rename on the gateway, never a transfer: the session keeps everything else.
   setOwner?(owner: string | undefined): void
+  // Messages the engine took in and has not consumed yet: a conversation cut waits until this is 0.
+  pendingInput?(): number
   settleExecution?(executionId: string, result: ToolExecutionResult): boolean
   park?(): RunnerSnapshot | undefined
   snapshot?(): RunnerSnapshot | undefined
