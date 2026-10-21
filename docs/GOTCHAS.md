@@ -1249,6 +1249,12 @@ handover wrong.
   re-checks `#closed`, so a snapshot forced at the seam without `flush()` is silently skipped. Two
   managers in one process also share the file store's `${path}.${pid}.tmp`, so their writes to one
   id must never overlap: the sequence is the whole protection.
+- **A closed generation never finishes a cut.** The reload does not wait for lifecycle locks, so a
+  cut can still be awaiting a record write, the factory or the successor's startup when its
+  generation closes. After every such await it re-checks: a `prepared` intent whose runner was
+  carried away rolls back, a runner built after the close is disposed of unstarted, and settling
+  writes run only while the intent is still committed. The next generation's recovery then owns
+  the intent; a carried successor is resumed, never started twice (`cut-recovery.test.ts`).
 - **A provider session is never carried; a reload is a restart for it.** Its executors close over
   the generation's `BridgeHub`, so a carried one fails every later bridged call with `no_client`
   while a client is attached, not merely the call in flight, and the manager's execution bookkeeping

@@ -1009,7 +1009,10 @@ commits in one transaction: history entry with frozen `auth`, `conversation + 1`
 fresh start uses that epoch as is, and the intent stays until the successor is durable (startup awaited up to `agentStartupTimeoutMs`, then a runtime for n+1 read back that names the engine conversation,
 or a live snapshot for an engine without resume); a start that fails, early or late, is a durable `startFailed` for
 Retry start. Recovery before listen rolls `prepared` back, resumes an existing successor or starts `committed` once,
-and turns a `sending` prompt into `uncertain`, never resending it. The write token is required: an untokened runtime
+and turns a `sending` prompt into `uncertain`, never resending it. A closed generation (a hot reload) never stops, builds,
+registers, starts or settles a cut's runner: past every await it re-checks that it is open and, for a settling write,
+that the intent is still the committed one, so the intent stays for the next generation (503 `GENERATION_ENDED`);
+a successor carried with the pending prompt settles only once it names its engine conversation. The write token is required: an untokened runtime
 write is refused (`MissingConversationError`); seeding goes through `bootstrapRuntime`, a hot-reload carry primes the
 token before the runner writes, and the cache only ever moves forward. Every mutating session route requires
 `x-workerdeck-generation`, DELETE included, and every WS command except `shell_attach` / `shell_detach` requires
