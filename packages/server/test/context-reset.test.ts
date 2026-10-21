@@ -352,7 +352,7 @@ describe('context_reset through the gateway', () => {
     expect(harnesses[1]!.captured.options?.resume).toBeUndefined()
     await vi.waitFor(() => expect(inputTexts(harnesses[1]!)).toEqual([REQUEST.prompt]))
     const after = ((await (await get(base, `/agents/${agent.id}`)).json()) as AgentResponse).agent as AgentInfo
-    expect(after).toMatchObject({ id: agent.id, name: 'Wren', sessionId: agent.id })
+    expect(after).toMatchObject({ id: agent.id, name: 'Wren' })
     expect(await info(base, agent.id)).toMatchObject({
       id: agent.id,
       conversation: 2,

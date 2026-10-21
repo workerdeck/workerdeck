@@ -33,8 +33,6 @@ import {
   usePeerSessions,
   useProfileUsage,
   useToolCallHost,
-  stashHandedFiles,
-  successorOf,
   type ClientToolHandler,
   type ConnectionState,
   type TranscriptState,
@@ -96,6 +94,8 @@ export type { ApprovalPromptProps }
 export interface SessionPanelProps {
   client: WorkerDeckClient
   sessionId: string | undefined
+  // A past conversation of `sessionId`: attached read-only, with its banner.
+  conversation?: number
   header?: ReactNode | ((slots: { actions: ReactNode }) => ReactNode)
   panelSurface?: 'internal' | 'external'
   statusSurface?: 'internal' | 'external'
@@ -139,13 +139,8 @@ export interface SessionPanelProps {
   emptyState?: ReactNode
   onLinkClick?: (href: string) => boolean | void
   clientTools?: Record<string, ClientToolHandler>
-  // The agent moved this conversation to `successor` (live, or read off an archived attach). The host decides whether the view follows.
-  onSuperseded?: (successor: string) => void
-  // This view followed its agent here from `carryFrom`: the unsent draft and staged files come along, and a brief
-  // starting line shows until the first frame.
-  carryFrom?: string
   // "Go to current" on a past conversation's banner; without it the banner offers no way back.
-  onGoToCurrent?: (sessionId: string) => void
+  onGoToCurrent?: (conversation: number) => void
   fontSize?: number
   className?: string
 }
@@ -218,6 +213,7 @@ export type SessionVitals = {
 export function SessionPanel({
   client,
   sessionId,
+  conversation,
   header,
   panelSurface = 'internal',
   statusSurface = 'internal',
@@ -254,12 +250,14 @@ export function SessionPanel({
   emptyState,
   onLinkClick,
   onOpenFile,
-  onSuperseded,
-  carryFrom,
   onGoToCurrent,
   fontSize,
   className,
 }: SessionPanelProps) {
+  const address = useMemo(
+    () => (sessionId === undefined ? undefined : { id: sessionId, ...(conversation === undefined ? {} : { conversation }) }),
+    [sessionId, conversation],
+  )
   const cell = {
     fontSize: terminalMetrics?.fontSize ?? fontSize,
     lineHeight: terminalMetrics?.lineHeight ?? (fontSize !== undefined ? Math.round(fontSize * (18 / 13)) : undefined),
@@ -297,7 +295,7 @@ export function SessionPanel({
     verifyShell,
     killShell,
     setShellAgentWrite,
-  } = useClaudeSession(client, sessionId, { onProtocolError: setProtocolError, cacheTranscript })
+  } = useClaudeSession(client, address, { onProtocolError: setProtocolError, cacheTranscript })
   const {
     shellId: framedShellId,
     enterShell,
@@ -470,8 +468,8 @@ export function SessionPanel({
     [bookmarkSet, onToggleBookmark],
   )
 
-  const archive = useArchivedView(client, state.session, state.status)
-  const readOnly = conversationReadOnly(hostReadOnly, archive.session)
+  const archive = useArchivedView(client, address, state.session)
+  const readOnly = conversationReadOnly(hostReadOnly, address)
   const canBackgroundTasks = !readOnly && capabilities.backgroundTasks === true
   const taskControl = useMemo<TaskControlHandle | undefined>(
     () => (canBackgroundTasks ? { background: backgroundTask } : undefined),
@@ -483,24 +481,12 @@ export function SessionPanel({
   const attachments = useAttachments(client, sessionId, {
     capabilities,
     engine: state.engine,
-    carryFrom,
   })
   const hostFiles = useHostFileSearch(client, state.cwd)
   // Read here rather than taken as a prop, the way file search is: every embedding that has a
   // gateway has the sessions list, and a host that has to wire it would be a host that forgets to.
   const peers = usePeerSessions(client, sessionId, peerMentions)
-  const draft = useDraft(client, sessionId, carryFrom)
-  const successor = successorOf(state)
-  const handOver = useRef({ attachments, onSuperseded })
-  handOver.current = { attachments, onSuperseded }
-  useEffect(() => {
-    if (!sessionId || successor === undefined) {
-      return
-    }
-    stashHandedFiles(client, sessionId, handOver.current.attachments.files())
-    handOver.current.onSuperseded?.(successor)
-  }, [client, sessionId, successor])
-  const startingHandover = carryFrom !== undefined && state.session === undefined
+  const draft = useDraft(client, sessionId)
   // Stable identity: an inline arrow here would bust the Composer's `triggers`
   // memo on every streaming re-render, and with it every prompt-area callback
   // keyed on the triggers.
@@ -539,9 +525,9 @@ export function SessionPanel({
     context: capabilities.contextUsage,
     usage: capabilities.rateLimits,
     info: true,
-    mcp: capabilities.mcpStatus && archive.view === undefined,
-    skills: capabilities.skillsList && archive.view === undefined,
-    files: hostFiles.available && archive.view === undefined,
+    mcp: capabilities.mcpStatus && archive === undefined,
+    skills: capabilities.skillsList && archive === undefined,
+    files: hostFiles.available && archive === undefined,
   }
   const actionsMenu = (
     <Menu>
@@ -682,12 +668,7 @@ export function SessionPanel({
               Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some events may not render.
             </Notice>
           ) : null}
-          {archive.view ? <ArchivedBanner view={archive.view} onGoToCurrent={onGoToCurrent} /> : null}
-          {startingHandover ? (
-            <div role="status" className="px-3 pt-2 text-center text-body-sm text-fg-3">
-              Starting a new conversation…
-            </div>
-          ) : null}
+          {archive ? <ArchivedBanner view={archive} onGoToCurrent={onGoToCurrent} /> : null}
           {protocolError ? (
             <Notice level="error" onDismiss={() => setProtocolError(undefined)}>
               {protocolError}

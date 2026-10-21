@@ -532,7 +532,7 @@ const SESSION_LIST: VmCase[] = [
 ]
 
 function agentInfo(id: string, over: Partial<AgentInfo> = {}): AgentInfo {
-  return { id, name: id.toUpperCase(), createdAt: T0, updatedAt: T0, pastSessions: [], config: {}, ...over }
+  return { id, name: id.toUpperCase(), createdAt: T0, updatedAt: T0, config: {}, ...over }
 }
 
 const REFS: Record<string, AgentRef | undefined> = {
@@ -579,7 +579,7 @@ const AGENTS: VmCase[] = [
     name: 'agent-ref',
     fn: 'agentRef',
     calls: [
-      [agentInfo('ag-1', { avatar: 'monkey:3', sharing: 'shared', pastSessions: ['s1', 's2'], order: 4 }), {}],
+      [agentInfo('ag-1', { avatar: 'monkey:3', sharing: 'shared', order: 4 }), {}],
       [agentInfo('ag-2', { lead: 'ag-1', sharing: 'shared', order: 0 }), { leadName: 'Lead', leadGateway: 'mini' }],
       [agentInfo('ag-3', { lead: 'ag-1' }), { leadName: 'Lead' }],
       [agentInfo('ag-4', { sharing: 'private', owner: 'dan' }), { leads: true, leadName: 'ignored' }],
@@ -1125,54 +1125,18 @@ const PROMPT: VmCase[] = [
 
 const FOLLOWER: AgentRef = { id: 'ag', name: 'WD-Test' }
 
-const CONVERSATION_ROWS = [
-  row('mac', info('a', { agent: FOLLOWER, archived: true, supersededBy: 'b' })),
-  row('box', info('x', { agent: FOLLOWER })),
-  row('mac', info('p')),
-  row('mac', info('c', { agent: FOLLOWER })),
-]
-
 const CONVERSATIONS: VmCase[] = [
-  {
-    module: 'conversations',
-    name: 'session-listed',
-    fn: 'sessionListed',
-    calls: [[info('a')], [info('b', { archived: true })], [info('c', { agent: FOLLOWER, supersededBy: 'd' })]],
-  },
-  {
-    module: 'conversations',
-    name: 'selection-of',
-    fn: 'selectionOf',
-    calls: [
-      ['mac', info('a', { agent: FOLLOWER })],
-      ['mac', info('a', { agent: FOLLOWER, archived: true, supersededBy: 'b' })],
-      ['box', info('p')],
-    ],
-  },
-  {
-    module: 'conversations',
-    name: 'follow-target',
-    fn: 'followTarget',
-    calls: [
-      [{ kind: 'agent', gateway: 'mac', agentId: 'ag' }, CONVERSATION_ROWS],
-      [{ kind: 'agent', gateway: 'box', agentId: 'ag' }, CONVERSATION_ROWS],
-      [{ kind: 'agent', gateway: 'mac', agentId: 'gone' }, CONVERSATION_ROWS],
-      [{ kind: 'agent', gateway: 'mac', agentId: 'ag' }, CONVERSATION_ROWS.slice(0, 3)],
-      [{ kind: 'session', gateway: 'mac', sessionId: 'a' }, CONVERSATION_ROWS],
-      [{ kind: 'session', gateway: 'mac', sessionId: 'zzz' }, []],
-    ],
-  },
   {
     module: 'conversations',
     name: 'archived-view',
     fn: 'archivedView',
     calls: [
-      [info('a', { agent: FOLLOWER }), [{ id: 'ag', sessionId: 'a' }]],
-      [info('a', { agent: FOLLOWER, archived: true, supersededBy: 'b', lastActivityAt: 5000 }), [{ id: 'ag', sessionId: 'c' }]],
-      [info('a', { agent: FOLLOWER, archived: true }), [{ id: 'ag', sessionId: 'a' }]],
-      [info('a', { agent: FOLLOWER, archived: true }), []],
-      [info('a', { agent: FOLLOWER, archived: true, transcript: 'unavailable' })],
-      [info('p', { archived: true }), []],
+      [{ id: 'a' }, info('a', { agent: FOLLOWER }), { conversation: 2 }],
+      [{ id: 'a', conversation: 1 }, info('a', { agent: FOLLOWER, lastActivityAt: 5000 }), { conversation: 3 }],
+      [{ id: 'a', conversation: 3 }, info('a', { agent: FOLLOWER }), { conversation: 3 }],
+      [{ id: 'a', conversation: 1 }, info('a', { agent: FOLLOWER }), { retired: true }],
+      [{ id: 'a', conversation: 1 }, info('a', { agent: FOLLOWER, transcript: 'unavailable' })],
+      [{ id: 'p', conversation: 2 }, info('p')],
     ],
   },
   {
@@ -1185,7 +1149,6 @@ const CONVERSATIONS: VmCase[] = [
       [info('a', { status: 'starting' })],
       [info('a', { status: 'awaiting_approval' })],
       [info('a', { status: 'parked' })],
-      [info('a', { status: 'running', archived: true })],
       [info('a', { status: 'idle', sdkSessionId: 'sdk' })],
       [info('a', { status: 'idle', numTurns: 2 })],
     ],
@@ -1206,7 +1169,7 @@ const CONVERSATIONS: VmCase[] = [
     module: 'conversations',
     name: 'clear-context-offered',
     fn: 'clearContextOffered',
-    calls: [[info('p')], [info('a', { agent: FOLLOWER })], [info('b', { archived: true })]],
+    calls: [[info('p')], [info('a', { agent: FOLLOWER })], [info('b', { status: 'closed' })]],
   },
 ]
 

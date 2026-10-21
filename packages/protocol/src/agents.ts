@@ -1,4 +1,3 @@
-import type { AgentConversation } from './conversations.ts'
 import type { GatewayAgentDefaults, PermissionMode, ProfileInfo, SessionInfo } from './index.ts'
 
 export type AgentRef = {
@@ -73,9 +72,6 @@ export type AgentInfo = {
   createdAt: number
   updatedAt: number
   avatar?: string
-  sessionId?: string
-  pastSessions: string[]
-  conversations?: AgentConversation[]
   // The first message of a conversation a crash may have kept from the engine; the user sends it again or dismisses it.
   undelivered?: string
   // The new conversation was committed but did not start; Retry start (`POST /agents/:id/retry-start`) starts it.
@@ -106,7 +102,6 @@ export type CreateAgentRequest = {
   config?: AgentConfig
   prompt?: string
   lead?: string
-  adopt?: string
   owner?: string
   sharing?: Sharing
   // Confirms a join whose lead belongs to another owner on this gateway.
@@ -153,9 +148,6 @@ export function agentRef(agent: AgentInfo, team: { leadName?: string; leadGatewa
   }
   if (agent.sharing === 'shared' && agent.lead === undefined) {
     ref.shared = true
-  }
-  if (agent.pastSessions.length > 0) {
-    ref.conversation = agent.pastSessions.length + 1
   }
   if (agent.order !== undefined) {
     ref.order = agent.order

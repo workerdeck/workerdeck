@@ -807,10 +807,6 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
   }
 }
 
-export function successorOf(state: Pick<TranscriptState, 'session'>): string | undefined {
-  return state.session?.archived === true ? state.session.supersededBy : undefined
-}
-
 function agentResetNotice(reason: string): string {
   return `The agent cleared its context: ${reason}`
 }

@@ -1,76 +1,38 @@
-import type { AgentInfo } from './agents.ts'
 import type { SessionInfo } from './index.ts'
 
+// One conversation of a session, newest first in a list. `n` counts from 1 and is never reused.
 export type AgentConversation = {
-  sessionId: string
+  n: number
   startedAt?: number
   endedAt?: number
   title?: string
   transcript?: 'unavailable'
 }
 
-export type ConversationSelection =
-  | { kind: 'agent'; gateway: string; agentId: string }
-  | { kind: 'session'; gateway: string; sessionId: string }
+// Where a view points: a session by its stable id, and a past conversation of it by `n`. Absent `conversation` is
+// the current one, which a cut moves on under the same address.
+export type SessionAddress = { id: string; conversation?: number }
+
+export function addressKey(address: SessionAddress): string {
+  return address.conversation === undefined ? address.id : `${address.id}#${address.conversation}`
+}
+
+export function sameAddress(a: SessionAddress | undefined, b: SessionAddress | undefined): boolean {
+  return a?.id === b?.id && a?.conversation === b?.conversation
+}
+
+// The current conversation's own number reads as the current address, so a row for it never opens a read-only view.
+export function addressOf(id: string, conversation?: number, current?: number): SessionAddress {
+  return conversation === undefined || conversation === current ? { id } : { id, conversation }
+}
+
+export function isHistorical(address: SessionAddress | undefined): boolean {
+  return address?.conversation !== undefined
+}
 
 export type ConversationRow = AgentConversation & { current: boolean }
 
 export type AgentConversationsResponse = { conversations: (ConversationRow & { session?: SessionInfo })[] }
-
-export function sessionListed(info: Pick<SessionInfo, 'archived'>): boolean {
-  return info.archived !== true
-}
-
-export function selectionOf(gateway: string, info: Pick<SessionInfo, 'id' | 'archived' | 'agent'>): ConversationSelection {
-  return info.agent && !info.archived
-    ? { kind: 'agent', gateway, agentId: info.agent.id }
-    : { kind: 'session', gateway, sessionId: info.id }
-}
-
-// An agent selection lands on the agent's current conversation; a session selection never moves.
-export function followTarget(
-  selection: ConversationSelection,
-  rows: readonly { hostId: string; info: Pick<SessionInfo, 'id' | 'archived' | 'agent'> }[],
-): string | undefined {
-  if (selection.kind === 'session') {
-    return selection.sessionId
-  }
-  return rows.find((row) => row.hostId === selection.gateway && !row.info.archived && row.info.agent?.id === selection.agentId)?.info.id
-}
-
-export type FollowRow = { hostId: string; info: Pick<SessionInfo, 'id' | 'archived' | 'agent'> }
-
-export type FollowInput = {
-  selection: ConversationSelection | undefined
-  shown: string
-  rows?: readonly FollowRow[]
-  successor?: string
-  // Sessions this view already followed away from: a list polled before the rotation must not pull it back.
-  left: ReadonlySet<string>
-}
-
-// Where a view showing `shown` moves next, if anywhere. The list wins because it resolves every rotation the view
-// missed; the one-hop successor covers a list that lags.
-export function followStep({ selection, shown, rows, successor, left }: FollowInput): string | undefined {
-  if (selection?.kind !== 'agent') {
-    return undefined
-  }
-  const listed = rows ? followTarget(selection, rows) : undefined
-  return [listed, successor].find((id) => id !== undefined && id !== shown && !left.has(id))
-}
-
-export function conversationsOf(agent: Pick<AgentInfo, 'sessionId' | 'pastSessions' | 'conversations'>): ConversationRow[] {
-  const known = agent.conversations ?? []
-  const listed = new Set(known.map((entry) => entry.sessionId))
-  const legacy = [...agent.pastSessions, ...(agent.sessionId === undefined ? [] : [agent.sessionId])]
-    .filter((id) => !listed.has(id))
-    .map((sessionId): AgentConversation => ({ sessionId }))
-  const ordered = [...legacy, ...known]
-  return ordered.map((_, index) => {
-    const entry = ordered[ordered.length - 1 - index]!
-    return { ...entry, current: entry.sessionId === agent.sessionId }
-  })
-}
 
 export type RetiredAgentInfo = {
   id: string
@@ -78,45 +40,41 @@ export type RetiredAgentInfo = {
   owner?: string
   avatar?: string
   retiredAt: number
-  pastSessions: string[]
   conversations: AgentConversation[]
 }
 
 export type RetiredAgentsResponse = { retired: RetiredAgentInfo[] }
 
-// What a read-only conversation says above its transcript. `agents` is the gateway's live agent list; until it has
-// loaded, a missing agent is not yet a deleted one.
+// What a read-only conversation says above its transcript. `current` is the session's current conversation, absent
+// once the session is closed or retired (`kind: 'deleted'` for a retired agent).
 export type ArchivedView = {
   kind: 'past' | 'deleted'
   at: number
-  current?: string
+  current?: number
   unavailable: boolean
 }
 
 export function archivedView(
-  info: Pick<SessionInfo, 'id' | 'archived' | 'agent' | 'transcript' | 'createdAt'>,
-  agents?: readonly Pick<AgentInfo, 'id' | 'sessionId'>[],
+  address: SessionAddress,
+  info: Pick<SessionInfo, 'transcript' | 'createdAt'> | undefined,
+  current?: { conversation?: number; retired?: boolean },
 ): ArchivedView | undefined {
-  if (info.archived !== true) {
+  if (address.conversation === undefined || !info) {
     return undefined
   }
-  const agent = info.agent && agents?.find((entry) => entry.id === info.agent!.id)
-  const deleted = info.agent !== undefined && agents !== undefined && !agent
-  const current = agent && agent.sessionId !== info.id ? agent.sessionId : undefined
+  const now = current?.retired ? undefined : current?.conversation
   return {
-    kind: deleted ? 'deleted' : 'past',
+    kind: current?.retired ? 'deleted' : 'past',
     at: info.createdAt,
-    ...(current === undefined ? {} : { current }),
+    ...(now === undefined || now === address.conversation ? {} : { current: now }),
     unavailable: info.transcript === 'unavailable',
   }
 }
 
 export type NewConversationGate = { enabled: true } | { enabled: false; reason: string }
 
-export function newConversationGate(
-  info: Pick<SessionInfo, 'status' | 'archived' | 'sdkSessionId' | 'numTurns'> | undefined,
-): NewConversationGate {
-  if (info === undefined || info.archived === true) {
+export function newConversationGate(info: Pick<SessionInfo, 'status' | 'sdkSessionId' | 'numTurns'> | undefined): NewConversationGate {
+  if (info === undefined) {
     return { enabled: true }
   }
   switch (info.status) {
@@ -141,9 +99,9 @@ export function newConversationGate(
 
 export const NEW_CONVERSATION_HINT = 'Previous chat context is not carried over'
 
-// An agent rotates instead (New conversation); a typed `/clear` still clears within the current conversation.
-export function clearContextOffered(info: Pick<SessionInfo, 'agent' | 'archived'>): boolean {
-  return info.agent === undefined && info.archived !== true
+// Clear context is a cut on a gateway, named or not; a past conversation's view (status `closed`) has nothing to clear.
+export function clearContextOffered(info: Pick<SessionInfo, 'status'>): boolean {
+  return info.status !== 'closed' && info.status !== 'failed'
 }
 
 // Sleep stops an engine that holds a conversation; one that never started has nothing to resume, and the gateway refuses.

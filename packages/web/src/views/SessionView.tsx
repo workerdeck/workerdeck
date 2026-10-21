@@ -25,7 +25,6 @@ import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { nudgeSessions, useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useAgentAvatars } from '@/hooks/useAgentAvatars.ts'
-import { useAgentFollow, type AgentFollow } from '@/hooks/useAgentFollow.ts'
 import { DeleteAgentDialog, type DeleteAgentTarget } from '@/components/DeleteAgentDialog.tsx'
 
 // Split in two so the inner view takes a *defined* client: a link can outlive the gateway it named, and hooks cannot
@@ -34,9 +33,8 @@ export function SessionView() {
   const { hostId, sessionId } = useParams({ from: '/sessions/$hostId/$sessionId' })
   const { ready } = useHosts()
   const navigate = useNavigate()
-  const { agent } = useSearch({ from: '/sessions/$hostId/$sessionId' })
+  const { conversation } = useSearch({ from: '/sessions/$hostId/$sessionId' })
   const client = clientFor(hostId)
-  const follow = useAgentFollow(hostId, sessionId, agent)
 
   useEffect(() => {
     // Not until the probe has answered: the implicit gateway does not exist at first paint, and bouncing off it here
@@ -51,12 +49,20 @@ export function SessionView() {
   if (!client) {
     return null
   }
-  return <SessionViewInner key={`${hostId}:${sessionId}`} hostId={hostId} sessionId={sessionId} client={client} follow={follow} />
+  return (
+    <SessionViewInner
+      key={`${hostId}:${sessionId}:${conversation ?? ''}`}
+      hostId={hostId}
+      sessionId={sessionId}
+      conversation={conversation}
+      client={client}
+    />
+  )
 }
 
-type SessionViewInnerProps = { hostId: string; sessionId: string; client: WorkerDeckClient; follow: AgentFollow }
+type SessionViewInnerProps = { hostId: string; sessionId: string; conversation?: number; client: WorkerDeckClient }
 
-function SessionViewInner({ hostId, sessionId, client, follow }: SessionViewInnerProps) {
+function SessionViewInner({ hostId, sessionId, conversation, client }: SessionViewInnerProps) {
   const navigate = useNavigate()
   const { subagent, sn, reveal, rn, shell, shn, agent } = useSearch({ from: '/sessions/$hostId/$sessionId' })
   // The workspace asks for this record too and nothing de-dupes, but one small GET beats threading the panel's
@@ -178,15 +184,14 @@ function SessionViewInner({ hostId, sessionId, client, follow }: SessionViewInne
         defaultRailWidth={rail.width}
         defaultRailCollapsed={rail.collapsed}
         onRailChange={setRail}
-        onSuperseded={follow.superseded}
-        onGoToCurrent={(current) =>
+        conversation={conversation}
+        onGoToCurrent={() =>
           void navigate({
             to: '/sessions/$hostId/$sessionId',
-            params: { hostId, sessionId: current },
+            params: { hostId, sessionId },
             search: info?.agent || agent ? { agent: info?.agent?.id ?? agent } : {},
           })
         }
-        carryFrom={follow.carryFrom}
         unseen={unseen}
         onVitals={(vitals) => {
           // Only `itemCount`: the socket is its sole source, and `activity`/`turns` ride the effect above instead.
@@ -212,7 +217,7 @@ function SessionViewInner({ hostId, sessionId, client, follow }: SessionViewInne
             ) : null}
             <span className="flex-1" />
             <CopyButton value={sessionId} aria-label="Copy session id" />
-            {info?.archived ? null : info?.agent ? (
+            {conversation !== undefined ? null : info?.agent ? (
               <Button
                 variant="ghost"
                 size="icon-sm"

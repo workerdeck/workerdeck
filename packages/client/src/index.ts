@@ -7,8 +7,13 @@ import type {
   RenameOwnerRequest,
   RenameOwnerResponse,
   ConnectAccountResponse,
+  ConversationHistoryResponse,
+  ConversationsResponse,
   CreateAgentRequest,
+  NewConversationRequest,
+  NewConversationResponse,
   RetireAgentRequest,
+  SessionAgentRequest,
   RetiredAgentInfo,
   UpdateAgentRequest,
   CreateJobRequest,
@@ -59,7 +64,7 @@ export type FetchBody = NonNullable<NonNullable<Parameters<typeof fetch>[1]>['bo
 export type ClientOptions = {
   baseUrl: string
   headers?: Record<string, string>
-  buildWsUrl?: (sessionId: string, afterSeq: number, truncateResults?: boolean, imageRefs?: boolean) => string
+  buildWsUrl?: (sessionId: string, afterSeq: number, truncateResults?: boolean, imageRefs?: boolean, conversation?: number) => string
   buildQueueWsUrl?: () => string
   WebSocketImpl?: typeof WebSocket
   fetchImpl?: typeof fetch
@@ -106,6 +111,37 @@ export class WorkerDeckClient {
 
   async updateSession(id: string, patch: UpdateSessionRequest): Promise<SessionInfo> {
     return await this.#pick('PATCH', this.#sess(id), 'session', patch)
+  }
+
+  // Names the session (what the UI calls an agent) under the same id; operator only.
+  async nameSession(id: string, agent: SessionAgentRequest): Promise<SessionInfo> {
+    return await this.updateSession(id, { agent })
+  }
+
+  // Refused (409) while the session leads or belongs to a team.
+  async unnameSession(id: string): Promise<SessionInfo> {
+    return await this.updateSession(id, { agent: null })
+  }
+
+  async conversations(id: string): Promise<ConversationsResponse> {
+    return await this.#call('GET', this.#sess(id, '/conversations'))
+  }
+
+  async conversationHistory(id: string, conversation: number): Promise<ConversationHistoryResponse> {
+    return await this.#call('GET', this.#sess(id, `/conversations/${conversation}`))
+  }
+
+  // The cut: conversation n+1 under the same id. `expectedGeneration` is the conversation the caller is looking at.
+  async newConversation(id: string, request: NewConversationRequest): Promise<NewConversationResponse> {
+    return await this.#call('POST', this.#sess(id, '/conversations'), request)
+  }
+
+  async retryConversationStart(id: string, expectedGeneration: number): Promise<NewConversationResponse> {
+    return await this.#call('POST', this.#sess(id, '/conversations/retry'), { expectedGeneration })
+  }
+
+  async settlePendingPrompt(id: string, send: boolean, expectedGeneration: number): Promise<void> {
+    await this.#call('POST', this.#sess(id, '/conversations/pending'), { expectedGeneration, send })
   }
 
   async sleepSession(id: string): Promise<SessionInfo> {
@@ -462,10 +498,10 @@ export class WorkerDeckClient {
     return new QueueHandle(this, options)
   }
 
-  openSocket(sessionId: string, afterSeq: number, truncateResults = false, imageRefs = false): WebSocket {
+  openSocket(sessionId: string, afterSeq: number, truncateResults = false, imageRefs = false, conversation?: number): WebSocket {
     const url =
-      this.#options.buildWsUrl?.(sessionId, afterSeq, truncateResults, imageRefs) ??
-      sessionWsUrl(this.#options.baseUrl, sessionId, afterSeq, truncateResults, imageRefs)
+      this.#options.buildWsUrl?.(sessionId, afterSeq, truncateResults, imageRefs, conversation) ??
+      sessionWsUrl(this.#options.baseUrl, sessionId, afterSeq, truncateResults, imageRefs, conversation)
     return new this.#WebSocketImpl(url)
   }
 

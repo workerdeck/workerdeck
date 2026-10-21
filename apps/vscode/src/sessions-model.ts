@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { sessionListed, type SessionInfo } from '@workerdeck/protocol'
+import type { SessionInfo } from '@workerdeck/protocol'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
 import { forgetLocality, isLocalHostCached, refreshLocality, relayOfCached } from './machine.ts'
@@ -151,7 +151,7 @@ export class SessionsModel implements vscode.Disposable {
           return { probe: 'unreachable' }
         }
         try {
-          const sessions = (await client.listSessions()).filter(sessionListed)
+          const sessions = await client.listSessions()
           sessions.sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
           // Warms the cache the sidebar reads synchronously; a reachable gateway is the only one
           // that can answer, and a failure just leaves the previous answer standing.

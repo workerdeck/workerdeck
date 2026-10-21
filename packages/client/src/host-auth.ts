@@ -12,8 +12,8 @@ export function hostAuth(options: { baseUrl: string; key: string }): Pick<Client
 
   return {
     headers: { authorization: `Bearer ${key}` },
-    buildWsUrl: (sessionId, afterSeq, truncateResults, imageRefs) =>
-      withKey(sessionWsUrl(baseUrl, sessionId, afterSeq, truncateResults, imageRefs)),
+    buildWsUrl: (sessionId, afterSeq, truncateResults, imageRefs, conversation) =>
+      withKey(sessionWsUrl(baseUrl, sessionId, afterSeq, truncateResults, imageRefs, conversation)),
     buildQueueWsUrl: () => withKey(`${wsRoot}/queue/ws`),
   }
 }

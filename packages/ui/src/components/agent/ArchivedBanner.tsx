@@ -5,7 +5,7 @@ import { Button } from '../ui/Button.tsx'
 
 export type ArchivedBannerProps = {
   view: ArchivedView
-  onGoToCurrent?: (sessionId: string) => void
+  onGoToCurrent?: (conversation: number) => void
   locale?: string
 }
 

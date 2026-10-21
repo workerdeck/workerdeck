@@ -943,8 +943,6 @@ export type SessionInfo = {
   // Whom the session answers to: its agent's owner, or the owner stamped at create.
   owner?: string
   statusLabel?: StatusLabel
-  archived?: true
-  supersededBy?: string
   transcript?: 'unavailable'
 }
 

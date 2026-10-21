@@ -17,6 +17,8 @@ export type AttachOptions = {
   reconnect?: boolean
   truncateResults?: boolean
   imageRefs?: boolean
+  // A past conversation of the session: a read-only socket that never moves the client's conversation token.
+  conversation?: number
 }
 
 export type SessionHandleEvents = {
@@ -61,7 +63,7 @@ export class SessionHandle {
     this.sessionId = sessionId
     this.#options = { reconnect: true, ...options }
     this.#lastSeq = options.afterSeq ?? 0
-    this.#conversation = client.conversationOf(sessionId)
+    this.#conversation = options.conversation ?? client.conversationOf(sessionId)
     // Deferred a tick so a same-tick detach (React StrictMode's dev mount) never closes a WebSocket mid-upgrade, which breaks proxies.
     this.#connectTimer = setTimeout(() => this.#connect(), 0)
   }
@@ -220,7 +222,13 @@ export class SessionHandle {
     if (this.#closed) {
       return
     }
-    const ws = this.#client.openSocket(this.sessionId, this.#lastSeq, this.#options.truncateResults, this.#options.imageRefs)
+    const ws = this.#client.openSocket(
+      this.sessionId,
+      this.#lastSeq,
+      this.#options.truncateResults,
+      this.#options.imageRefs,
+      this.#options.conversation,
+    )
     this.#ws = ws
     let opened = false
     ws.onopen = () => {
@@ -245,7 +253,7 @@ export class SessionHandle {
         this.#acks = frame.acks === true
         this.#attachedHere = true
         const conversation = (frame.session as Partial<AttachedFrame['session']> | undefined)?.conversation
-        if (conversation !== undefined) {
+        if (conversation !== undefined && this.#options.conversation === undefined) {
           this.#conversation = conversation
           this.#client.noteConversation(this.sessionId, conversation)
         }

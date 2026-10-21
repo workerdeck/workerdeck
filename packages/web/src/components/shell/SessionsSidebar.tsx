@@ -128,14 +128,14 @@ export function SessionsSidebar() {
       search: agentSearch(row),
     })
 
-  // The current conversation opens as the agent (it follows the next rotation), a past one as itself, read-only.
-  const openConversation = (agent: ConversationsTarget, sessionId: string, current: boolean) => {
+  // The current conversation opens the session itself, a past one by its number, read-only.
+  const openConversation = (agent: ConversationsTarget, n: number, current: boolean) => {
     setConversationsOf(undefined)
     setPastAgents(false)
     void navigate({
       to: '/sessions/$hostId/$sessionId',
-      params: { hostId: agent.hostId, sessionId },
-      search: current && !agent.deleted ? { agent: agent.agentId } : {},
+      params: { hostId: agent.hostId, sessionId: agent.agentId },
+      search: current && !agent.deleted ? { agent: agent.agentId } : { conversation: n },
     })
   }
 
@@ -331,7 +331,7 @@ export function SessionsSidebar() {
         break
       }
       case 'adopt': {
-        agentCall(row, 'Could not make an agent', (client) => client.createAgent({ adopt: row.info.id }))
+        agentCall(row, 'Could not make an agent', (client) => client.nameSession(row.info.id, {}))
         break
       }
       case 'join': {
@@ -611,7 +611,7 @@ export function SessionsSidebar() {
       <ConversationsDialog
         target={conversationsOf}
         onClose={() => setConversationsOf(undefined)}
-        onOpen={(agent, row) => openConversation(agent, row.sessionId, row.current)}
+        onOpen={(agent, row) => openConversation(agent, row.n, row.current)}
       />
 
       <PastAgentsDialog

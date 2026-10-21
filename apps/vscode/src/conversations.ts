@@ -50,7 +50,7 @@ export async function showConversations(deps: ConversationsDeps, agent: Conversa
   if (!picked) {
     return
   }
-  await deps.selectSession(agent.hostId, picked.row.sessionId, picked.current ? {} : { target: 'editor' })
+  await deps.selectSession(agent.hostId, agent.agentId, picked.current ? {} : { target: 'editor' })
 }
 
 export async function showPastAgents(deps: ConversationsDeps): Promise<void> {
@@ -60,7 +60,7 @@ export async function showPastAgents(deps: ConversationsDeps): Promise<void> {
   const many = hosts.length > 1
   const picked = await vscode.window.showQuickPick(
     rows.map(({ host, agent }) => {
-      const count = Math.max(agent.conversations.length, agent.pastSessions.length)
+      const count = agent.conversations.length
       return {
         label: `$(person) ${agent.name}`,
         description: many ? host.name : undefined,

@@ -143,7 +143,7 @@ describe('a named session', () => {
     expect(session.agent).toMatchObject({ id: session.id, name: 'Atlas' })
     expect(started.built[0]!.config.instructions).toContain('Keep it short.')
     const agents = (await call(started.base, '/agents')).body.agents as AgentInfo[]
-    expect(agents).toEqual([expect.objectContaining({ id: session.id, sessionId: session.id, pastSessions: [], config: expect.objectContaining({ cwd: '/tmp' }) })])
+    expect(agents).toEqual([expect.objectContaining({ id: session.id, config: expect.objectContaining({ cwd: '/tmp' }) })])
   })
 
   it('leaves nothing behind when the index write fails between the two writes', async () => {
@@ -196,7 +196,7 @@ describe('a named session', () => {
     await idle(server, session.id)
     const restarted = await call(base, `/agents/${session.id}/restart`, 'POST', { prompt: 'again', expectedGeneration: 1 })
     expect(restarted.status).toBe(200)
-    expect(restarted.body.agent).toMatchObject({ id: session.id, name: 'Wren', sessionId: session.id })
+    expect(restarted.body.agent).toMatchObject({ id: session.id, name: 'Wren' })
     expect(restarted.body.session).toMatchObject({ id: session.id, conversation: 2, agent: { id: session.id, name: 'Wren', conversation: 2 } })
     expect(built).toHaveLength(2)
     expect(built[1]!.sent).toEqual(['again'])
@@ -219,7 +219,7 @@ describe('retiring a named session', () => {
     const agents = (await call(base, '/agents')).body.agents as AgentInfo[]
     expect(agents).toEqual([expect.not.objectContaining({ lead: expect.anything() })])
     const retired = (await call(base, '/agents?retired=1')).body.retired
-    expect(retired).toEqual([expect.objectContaining({ id: lead.id, conversations: [expect.objectContaining({ sessionId: lead.id })] })])
+    expect(retired).toEqual([expect.objectContaining({ id: lead.id, conversations: [expect.objectContaining({ n: 1 })] })])
   })
 
   it('retires its members with it under one lock over every id, and refuses when the team changed meanwhile', async () => {

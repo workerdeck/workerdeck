@@ -11,7 +11,7 @@ function fakeClient(calls: string[], name: string, fail: Failures = {}, inviteSt
   }
   return {
     updateAgent: (id: string, patch: unknown) => record(`update ${id} ${JSON.stringify(patch)}`, 'update'),
-    createAgent: (request: unknown) => record(`create ${JSON.stringify(request)}`, 'create'),
+    nameSession: (id: string, agent: unknown) => record(`name ${id} ${JSON.stringify(agent)}`, 'create'),
     inviteRemoteMember: (id: string, agent: string, owner?: string) =>
       record(`invite ${id} ${agent}${owner ? ` as ${owner}` : ''}`, 'invite', {
         id,
@@ -58,7 +58,7 @@ describe('runTeamMove', () => {
       () => mac,
     )
     await runTeamMove({ mover: { hostId: 'mac', sessionId: 's2' }, lead: { hostId: 'mac', agentId: 'A' }, crossOwner: true }, () => mac)
-    expect(calls).toEqual(['mac update P {"lead":"A","crossOwner":true}', 'mac create {"adopt":"s2","lead":"A","crossOwner":true}'])
+    expect(calls).toEqual(['mac update P {"lead":"A","crossOwner":true}', 'mac name s2 {"lead":"A","crossOwner":true}'])
   })
 
   it('invites on the lead gateway with the mover owner before the mover joins with the qualified lead', async () => {
@@ -73,11 +73,11 @@ describe('runTeamMove', () => {
       pair(calls),
       (id) => relays[id],
     )
-    expect(outcome).toEqual({ committed: 'yes', adopted: { hostId: 'desk', agentId: 'adopted' } })
+    expect(outcome).toEqual({ committed: 'yes', adopted: { hostId: 'desk', agentId: 's9' } })
     expect(calls).toEqual([
-      'desk create {"adopt":"s9"}',
-      'mac invite A sw-desk:adopted as ruli',
-      'desk update adopted {"lead":"sw-mac:A","order":1}',
+      'desk name s9 {}',
+      'mac invite A sw-desk:s9 as ruli',
+      'desk update s9 {"lead":"sw-mac:A","order":1}',
       'mac update J {"order":0}',
     ])
   })
@@ -100,10 +100,10 @@ describe('runTeamMove', () => {
     expect(outcome).toEqual({
       committed: 'no',
       error: 'AC-Lead has not invited this agent',
-      adopted: { hostId: 'desk', agentId: 'adopted' },
-      invitation: { hostId: 'mac', leadAgentId: 'A', member: 'sw-desk:adopted', invite: 'inv-1', state: 'withdrawn' },
+      adopted: { hostId: 'desk', agentId: 's9' },
+      invitation: { hostId: 'mac', leadAgentId: 'A', member: 'sw-desk:s9', invite: 'inv-1', state: 'withdrawn' },
     })
-    expect(calls.at(-1)).toBe('mac withdraw A sw-desk:adopted inv-1')
+    expect(calls.at(-1)).toBe('mac withdraw A sw-desk:s9 inv-1')
     expect(teamMoveMessage(outcome)).toBe('AC-Lead has not invited this agent. The session stays an agent. The invitation was withdrawn.')
   })
 
@@ -162,9 +162,9 @@ describe('runTeamMove', () => {
     expect(outcome).toEqual({
       committed: 'no',
       error: 'a team holds at most 8 members from other gateways',
-      adopted: { hostId: 'desk', agentId: 'adopted' },
+      adopted: { hostId: 'desk', agentId: 's9' },
     })
-    expect(calls).toEqual(['desk create {"adopt":"s9"}', 'mac invite A sw-desk:adopted'])
+    expect(calls).toEqual(['desk name s9 {}', 'mac invite A sw-desk:s9'])
   })
 
   it('reports an invitation of unknown state when the invite got no answer, and offers no withdrawal without an id', async () => {

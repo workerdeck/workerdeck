@@ -1488,8 +1488,8 @@ id. Its conversations are the record's history entries; the cut (`services/conve
 - **Naming is a PATCH.** `PATCH /sessions/:id { agent }` names an unnamed session (operator only,
   owner resolved as for a create) or updates a named one; `{ agent: null }` un-names it and is
   refused while it leads, belongs to, or is joining a team. Un-naming touches only the index.
-  `POST /agents { adopt }` is gone (400); the client's cross-gateway team move still calls it and
-  needs PATCH naming instead.
+  `POST /agents { adopt }` is gone (400); `runTeamMove` names an unnamed mover with PATCH, and the
+  member's id is then the session's own.
 - **Retire: hold, tombstone, then close.** `DELETE /agents/:id { expectedGeneration }` and `DELETE
   /sessions/:id` on a named session take the lifecycle locks of the agent and every member (sorted,
   one acquisition), re-check that the team did not change and the conversation is the one named,

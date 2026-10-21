@@ -1,58 +1,41 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
-import { archivedView, type AgentInfo, type ArchivedView, type SessionInfo, type SessionStatus } from '@workerdeck/protocol'
-import { needsArchiveCheck, shownSession } from '../lib/conversation-follow.ts'
+import { archivedView, isHistorical, type ArchivedView, type SessionAddress, type SessionInfo } from '@workerdeck/protocol'
 
-export type ArchivedConversation = {
-  session: SessionInfo | undefined
-  view: ArchivedView | undefined
-}
+type Current = { conversation?: number; retired?: boolean }
 
-// `agents` stays undefined for a caller that may not list agents (a scoped key): the banner then never says "deleted".
+// A past conversation's banner: when it ran, and the session's current conversation to go back to, read once per address.
 export function useArchivedView(
   client: WorkerDeckClient,
-  live: SessionInfo | undefined,
-  status: SessionStatus | undefined,
-): ArchivedConversation {
-  const [reread, setReread] = useState<SessionInfo | undefined>()
-  const [agents, setAgents] = useState<AgentInfo[] | undefined>()
-  const sessionId = live?.id
-  const check = needsArchiveCheck(live, status)
+  address: SessionAddress | undefined,
+  info: Pick<SessionInfo, 'transcript' | 'createdAt'> | undefined,
+): ArchivedView | undefined {
+  const [current, setCurrent] = useState<Current | undefined>()
+  const id = address?.id
+  const conversation = address?.conversation
+  const historical = isHistorical(address)
 
   useEffect(() => {
-    setReread(undefined)
-  }, [client, sessionId])
-
-  useEffect(() => {
-    if (!check || sessionId === undefined) {
+    setCurrent(undefined)
+    if (!historical || id === undefined) {
       return
     }
-    let current = true
+    let live = true
     client
-      .getSession(sessionId)
-      .then((info) => current && info.archived === true && setReread(info))
+      .conversations(id)
+      .then((list) => live && setCurrent(list.conversation === undefined ? { retired: true } : { conversation: list.conversation }))
       .catch(() => {})
     return () => {
-      current = false
+      live = false
     }
-  }, [client, sessionId, check])
+  }, [client, id, historical])
 
-  const session = shownSession(live, reread)
-  const archived = session?.archived === true
-  useEffect(() => {
-    if (!archived) {
-      return
-    }
-    let current = true
-    client
-      .listAgents()
-      .then((list) => current && setAgents(list))
-      .catch(() => {})
-    return () => {
-      current = false
-    }
-  }, [client, archived, session?.id])
+  return useMemo(
+    () => (id === undefined ? undefined : archivedView({ id, ...(conversation === undefined ? {} : { conversation }) }, info, current)),
+    [id, conversation, info, current],
+  )
+}
 
-  const view = useMemo(() => (session ? archivedView(session, agents) : undefined), [session, agents])
-  return { session, view }
+export function conversationReadOnly(readOnly: boolean, address: SessionAddress | undefined): boolean {
+  return readOnly || isHistorical(address)
 }

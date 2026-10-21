@@ -357,7 +357,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       items.push({
         label: '$(person) Make agent',
         detail: 'Keep this session as a named agent with an avatar',
-        run: () => this.#agentCall(hostId, 'could not make an agent', (client) => client.createAgent({ adopt: info.id })),
+        run: () => this.#agentCall(hostId, 'could not make an agent', (client) => client.nameSession(info.id, {})),
       })
     }
     if (agent?.lead !== undefined) {

@@ -452,7 +452,7 @@ export async function conversationRows(ctx: ServerContext, id: string, auth: Aut
   const current = live && record?.closedAt === undefined ? await sessionInfoOf(ctx, id) : undefined
   if (current && ctx.auth.canSee(auth, current)) {
     rows.push({
-      sessionId: id,
+      n: record?.conversation ?? current.conversation ?? 1,
       current: true,
       startedAt: record?.conversations.at(-1)?.endedAt ?? record?.createdAt ?? current.createdAt,
       ...(current.title ? { title: current.title } : {}),
@@ -466,7 +466,7 @@ export async function conversationRows(ctx: ServerContext, id: string, auth: Aut
       continue
     }
     rows.push({
-      sessionId: id,
+      n: entry.n,
       current: false,
       startedAt: entry.startedAt,
       endedAt: entry.endedAt,

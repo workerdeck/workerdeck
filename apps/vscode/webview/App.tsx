@@ -184,9 +184,7 @@ export function App({
         controlsSurface="external"
         focusComposerOnClick
         unseen={catchUp ? shown.unseen : undefined}
-        carryFrom={shown.carryFrom}
-        onSuperseded={(successor) => bridge.post({ kind: 'wd-superseded', sessionId: shown.sessionId, successor })}
-        onGoToCurrent={(current) => bridge.post({ kind: 'wd-go-to-current', sessionId: current })}
+        onGoToCurrent={() => bridge.post({ kind: 'wd-go-to-current', sessionId: shown.sessionId })}
         onControls={(c) => {
           controls.current = c
           tryFocus()

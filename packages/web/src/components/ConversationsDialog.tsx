@@ -62,7 +62,7 @@ function ConversationList({ target, onOpen }: { target: ConversationsTarget; onO
       {loaded.value.map((row) => {
         const text = conversationRowText({ ...row, title: row.title ?? row.session?.title })
         return (
-          <li key={row.sessionId}>
+          <li key={row.n}>
             <button
               type="button"
               onClick={() => onOpen(target, row)}
@@ -137,7 +137,7 @@ function PastAgentList({ onPick }: { onPick: (target: ConversationsTarget) => vo
   return (
     <ul className="-mx-2 flex max-h-[60vh] flex-col overflow-y-auto">
       {loaded.value.map(({ hostId, hostName, agent }) => {
-        const count = Math.max(agent.conversations.length, agent.pastSessions.length)
+        const count = agent.conversations.length
         return (
           <li key={`${hostId}:${agent.id}`}>
             <button

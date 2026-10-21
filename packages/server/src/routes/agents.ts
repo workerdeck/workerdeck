@@ -174,7 +174,7 @@ async function createAgent(ctx: ServerContext, req: IncomingMessage, res: Server
   if (!isRecord(body)) {
     fail(400, 'request body must be a JSON object')
   }
-  if (body.adopt !== undefined) {
+  if ((body as { adopt?: unknown }).adopt !== undefined) {
     fail(400, ADOPT_GONE)
   }
   const config = isRecord(body.config) ? body.config : {}

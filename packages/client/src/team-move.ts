@@ -1,8 +1,8 @@
-import type { AgentResponse, GatewayRelayMeta } from '@workerdeck/protocol'
+import type { GatewayRelayMeta } from '@workerdeck/protocol'
 import type { WorkerDeckClient } from './index.ts'
 
 // A drop in a session list, as the gateways see it. `lead: null` leaves the team; a mover without an agent is
-// adopted first. `hostId` is the client's own name for a gateway, never its relay name. `crossOwner` carries the
+// named first (a PATCH, under the same id). `hostId` is the client's own name for a gateway, never its relay name. `crossOwner` carries the
 // person's confirmation that the mover and the lead belong to different owners.
 export type TeamMovePlan = {
   mover: { hostId: string; sessionId: string; agentId?: string; owner?: string }
@@ -30,7 +30,7 @@ export type TeamMoveOutcome = {
   unordered?: Array<{ hostId: string; agentId: string }>
 }
 
-type Step = { ok: true; response: AgentResponse } | { ok: false; definite: boolean; error: string }
+type Step<T = unknown> = { ok: true; response: T } | { ok: false; definite: boolean; error: string }
 
 // Across gateways a join takes two operator calls, one per side: the lead's gateway invites, then the mover's gateway
 // joins through the relay. Holding a key for both gateways is the consent. Throws only before its first change.
@@ -83,11 +83,11 @@ async function sameGateway(move: TeamMovePlan, gateway: WorkerDeckClient, leadId
   if (move.mover.agentId) {
     return settle(await step(gateway.updateAgent(move.mover.agentId, { lead: leadId, ...order, ...crossOwner })))
   }
-  const adopted = await step(gateway.createAgent({ adopt: move.mover.sessionId, lead: leadId, ...crossOwner }))
-  if (!adopted.ok || move.order === undefined) {
-    return settle(adopted)
+  const named = await step(gateway.nameSession(move.mover.sessionId, { lead: leadId, ...crossOwner }))
+  if (!named.ok || move.order === undefined) {
+    return settle(named)
   }
-  const agentId = adopted.response.agent.id
+  const agentId = move.mover.sessionId
   const ordered = await step(gateway.updateAgent(agentId, order))
   return ordered.ok ? { committed: 'yes' } : { committed: 'yes', unordered: [{ hostId: move.mover.hostId, agentId }] }
 }
@@ -103,11 +103,11 @@ async function acrossGateways(
   let agentId = move.mover.agentId
   let adopted: TeamMoveOutcome['adopted']
   if (!agentId) {
-    const created = await step(gateway.createAgent({ adopt: move.mover.sessionId }))
-    if (!created.ok) {
-      return settle(created)
+    const named = await step(gateway.nameSession(move.mover.sessionId, {}))
+    if (!named.ok) {
+      return settle(named)
     }
-    agentId = created.response.agent.id
+    agentId = move.mover.sessionId
     adopted = { hostId: move.mover.hostId, agentId }
   }
   const kept = adopted ? { adopted } : {}
@@ -174,7 +174,7 @@ export function teamMoveMessage(outcome: TeamMoveOutcome): string | undefined {
   return parts.length ? parts.join(' ') : undefined
 }
 
-async function step(call: Promise<AgentResponse> | undefined): Promise<Step> {
+async function step<T>(call: Promise<T> | undefined): Promise<Step<T>> {
   if (!call) {
     return { ok: false, definite: true, error: 'that gateway is not configured here' }
   }

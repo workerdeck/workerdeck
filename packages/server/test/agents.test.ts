@@ -128,7 +128,7 @@ describe('agents', () => {
     const created = await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })
     expect(created.status).toBe(201)
     const { agent, session } = created.body
-    expect(agent).toMatchObject({ name: 'Atlas', sessionId: session!.id, pastSessions: [], avatar: `/v1/agents/${agent.id}/avatar.png` })
+    expect(agent).toMatchObject({ name: 'Atlas', id: session!.id, avatar: `/v1/agents/${agent.id}/avatar.png` })
     expect(agent).not.toHaveProperty('avatarSeed')
     expect(session!.agent).toEqual({ id: agent.id, name: 'Atlas', avatar: agent.avatar })
 
@@ -345,7 +345,7 @@ describe('agents', () => {
     ).body
     const restarted = await call<AgentResponse>(base, `/agents/${member.agent.id}/restart`, 'POST', { expectedGeneration: 1 })
     expect(restarted.status).toBe(200)
-    expect(restarted.body.agent).toMatchObject({ id: member.agent.id, name: 'Pip', lead: lead.agent.id, sessionId: member.agent.id })
+    expect(restarted.body.agent).toMatchObject({ id: member.agent.id, name: 'Pip', lead: lead.agent.id })
     expect(restarted.body.session!.id).toBe(member.session!.id)
     const fresh = server.registry.get(member.agent.id) as unknown as { config: SessionRunnerConfig }
     expect(fresh.config.engineHome).toEqual({ claudeConfigDir: expect.any(String) })
@@ -361,7 +361,7 @@ describe('agents', () => {
     expect(named.status).toBe(200)
     expect(named.body.session.agent).toMatchObject({ id: session.id, name: 'Quill' })
     const agent = (await call<AgentResponse>(base, `/agents/${session.id}`)).body.agent
-    expect(agent).toMatchObject({ id: session.id, name: 'Quill', sessionId: session.id, config: { cwd: '/tmp/project' } })
+    expect(agent).toMatchObject({ id: session.id, name: 'Quill', config: { cwd: '/tmp/project' } })
   })
 
   it('serves a stable avatar rolled once and persisted, with a cache validator', async () => {

@@ -40,8 +40,7 @@ export interface SessionWorkspaceProps {
   unseen?: SessionPanelProps['unseen']
   readOnly?: SessionPanelProps['readOnly']
   onVitals?: SessionPanelProps['onVitals']
-  onSuperseded?: SessionPanelProps['onSuperseded']
-  carryFrom?: SessionPanelProps['carryFrom']
+  conversation?: SessionPanelProps['conversation']
   onGoToCurrent?: SessionPanelProps['onGoToCurrent']
   defaultRailWidth?: number
   defaultRailCollapsed?: boolean
@@ -82,8 +81,7 @@ export function SessionWorkspace({
   unseen,
   readOnly,
   onVitals,
-  onSuperseded,
-  carryFrom,
+  conversation,
   onGoToCurrent,
   defaultRailWidth = 260,
   defaultRailCollapsed,
@@ -250,8 +248,7 @@ export function SessionWorkspace({
             unseen={unseen}
             readOnly={readOnly}
             onVitals={onVitals}
-            onSuperseded={onSuperseded}
-            carryFrom={carryFrom}
+            conversation={conversation}
             onGoToCurrent={onGoToCurrent}
             className="min-h-0 flex-1"
           />

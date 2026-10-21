@@ -502,12 +502,70 @@ describe('error mapping', () => {
 describe('agent conversations', () => {
   it('lists deleted agents from the retired view', async () => {
     const calls: string[] = []
-    const retired = [{ id: 'ag', name: 'WD-Test', retiredAt: 5, pastSessions: ['a'], conversations: [{ sessionId: 'a' }] }]
+    const retired = [{ id: 'ag', name: 'WD-Test', retiredAt: 5, conversations: [{ n: 1 }] }]
     const client = makeClient((url, init) => {
       calls.push(`${init?.method} ${String(url)}`)
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ retired }) } as unknown as Response)
     })
     await expect(client.retiredAgents()).resolves.toEqual(retired)
     expect(calls).toEqual(['GET http://host/v1/agents?retired=1'])
+  })
+})
+
+describe('stable session address', () => {
+  function recording(calls: { method?: string; url: string; body?: unknown; generation?: string }[], answer: unknown = {}) {
+    return makeClient((url, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      calls.push({
+        method: init?.method,
+        url: String(url),
+        ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+        ...(headers['x-workerdeck-generation'] ? { generation: headers['x-workerdeck-generation'] } : {}),
+      })
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(answer) } as unknown as Response)
+    })
+  }
+
+  it('names and un-names a session through PATCH under its own id', async () => {
+    const calls: { method?: string; url: string; body?: unknown; generation?: string }[] = []
+    const client = recording(calls, { session: { id: 's1', conversation: 2 } })
+    await client.nameSession('s1', { name: 'Atlas' })
+    await client.unnameSession('s1')
+    expect(calls).toEqual([
+      { method: 'PATCH', url: 'http://host/v1/sessions/s1', body: { agent: { name: 'Atlas' } } },
+      { method: 'PATCH', url: 'http://host/v1/sessions/s1', body: { agent: null }, generation: '2' },
+    ])
+  })
+
+  it('cuts with the conversation in the body, never the header, and reads the history by n', async () => {
+    const calls: { method?: string; url: string; body?: unknown; generation?: string }[] = []
+    const client = recording(calls, { session: { id: 's1', conversation: 3 }, conversation: 3 })
+    client.noteConversation('s1', 2)
+    await client.newConversation('s1', { expectedGeneration: 2, prompt: 'next' })
+    await client.retryConversationStart('s1', 3)
+    await client.settlePendingPrompt('s1', false, 3)
+    await client.conversations('s1')
+    await client.conversationHistory('s1', 1)
+    expect(calls).toEqual([
+      { method: 'POST', url: 'http://host/v1/sessions/s1/conversations', body: { expectedGeneration: 2, prompt: 'next' } },
+      { method: 'POST', url: 'http://host/v1/sessions/s1/conversations/retry', body: { expectedGeneration: 3 } },
+      { method: 'POST', url: 'http://host/v1/sessions/s1/conversations/pending', body: { expectedGeneration: 3, send: false } },
+      { method: 'GET', url: 'http://host/v1/sessions/s1/conversations' },
+      { method: 'GET', url: 'http://host/v1/sessions/s1/conversations/1' },
+    ])
+    expect(client.conversationOf('s1')).toBe(3)
+  })
+
+  it('attaches a past conversation read-only without moving the current token', () => {
+    const client = makeClient()
+    client.noteConversation('s1', 3)
+    const handle = client.attach('s1', { conversation: 1 })
+    settle()
+    expect(latest().url).toBe('ws://host/v1/sessions/s1/ws?afterSeq=0&conversation=1')
+    latest().accept()
+    latest().deliver({ type: 'attached', session: { id: 's1', conversation: 1, lastSeq: 0 }, replayingFrom: 0, protocolVersion: 2 })
+    expect(handle.conversation).toBe(1)
+    expect(client.conversationOf('s1')).toBe(3)
+    handle.detach()
   })
 })

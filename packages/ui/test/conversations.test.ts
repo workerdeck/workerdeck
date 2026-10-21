@@ -13,18 +13,18 @@ describe('conversation rows', () => {
   })
 
   it('runs the current conversation to now and leaves an unknown span out', () => {
-    const current = conversationRowText({ sessionId: 'c', startedAt: at, current: true }, at + 10 * 60_000, 'en-US')
+    const current = conversationRowText({ n: 3, startedAt: at, current: true }, at + 10 * 60_000, 'en-US')
     expect(current).toMatchObject({ title: 'Untitled conversation', duration: '10m', current: true })
     expect(current.date).toContain('Oct 18, 2026')
-    const legacy = conversationRowText({ sessionId: 'a', current: false })
+    const legacy = conversationRowText({ n: 1, current: false })
     expect(legacy).toEqual({ date: 'Date unknown', title: 'Untitled conversation', current: false })
-    expect(conversationRowText({ sessionId: 'b', transcript: 'unavailable', current: false }).title).toBe('Transcript unavailable')
+    expect(conversationRowText({ n: 2, transcript: 'unavailable', current: false }).title).toBe('Transcript unavailable')
   })
 })
 
 describe('archived banner', () => {
   it('names a past conversation and says when its agent or transcript is gone', () => {
-    expect(archivedBannerText({ kind: 'past', at, current: 'c', unavailable: false }, 'en-US').headline).toMatch(
+    expect(archivedBannerText({ kind: 'past', at, current: 3, unavailable: false }, 'en-US').headline).toMatch(
       /^Past conversation · Oct 18, 2026/,
     )
     expect(archivedBannerText({ kind: 'past', at, unavailable: false }).note).toBeUndefined()

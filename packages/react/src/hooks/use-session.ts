@@ -2,7 +2,16 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { WorkerDeckError } from '@workerdeck/client'
 import type { WorkerDeckClient, SessionHandle } from '@workerdeck/client'
 import { DEFAULT_PRICING, PROTOCOL_VERSION, mergePricing } from '@workerdeck/protocol'
-import type { AttachedFrame, ModelOption, PermissionMode, PricingTable, SessionEvent, ShellInfo } from '@workerdeck/protocol'
+import { addressKey } from '@workerdeck/protocol'
+import type {
+  AttachedFrame,
+  ModelOption,
+  PermissionMode,
+  PricingTable,
+  SessionAddress,
+  SessionEvent,
+  ShellInfo,
+} from '@workerdeck/protocol'
 import {
   applyEvent,
   blockText,
@@ -54,9 +63,6 @@ export function staleAttach(frame: AttachedFrame, held: TranscriptState): boolea
     return false
   }
   if (frame.session.lastSeq < held.lastSeq) {
-    return true
-  }
-  if (frame.session.archived === true && held.session?.archived !== true) {
     return true
   }
   if (frame.session.epoch !== undefined && held.session?.epoch !== undefined && frame.session.epoch !== held.session.epoch) {
@@ -114,15 +120,20 @@ export type UseClaudeSessionResult = {
 
 export function useClaudeSession(
   client: WorkerDeckClient,
-  sessionId: string | undefined,
+  target: string | SessionAddress | undefined,
   options?: UseClaudeSessionOptions,
 ): UseClaudeSessionResult {
+  // A bare id is the current conversation; an address with `conversation` attaches that past one, read-only.
+  const sessionId = typeof target === 'string' ? target : target?.id
+  const conversation = typeof target === 'string' ? undefined : target?.conversation
+  const cacheId =
+    sessionId === undefined ? undefined : addressKey({ id: sessionId, ...(conversation === undefined ? {} : { conversation }) })
   const [state, dispatch] = useReducer(
     reduce,
     undefined,
     (): TranscriptState =>
-      (options?.cacheTranscript !== false && sessionId !== undefined
-        ? readTranscriptCache(transcriptCacheKey(client, sessionId))
+      (options?.cacheTranscript !== false && cacheId !== undefined
+        ? readTranscriptCache(transcriptCacheKey(client, cacheId))
         : undefined) ?? initialTranscriptState,
   )
   const [connection, setConnection] = useState<ConnectionState>('connecting')
@@ -140,15 +151,15 @@ export function useClaudeSession(
   optionsRef.current = options
   const stateRef = useRef(state)
   stateRef.current = state
-  const seededForRef = useRef(attachSeedToken(0, sessionId === undefined ? '' : transcriptCacheKey(client, sessionId)))
+  const seededForRef = useRef(attachSeedToken(0, cacheId === undefined ? '' : transcriptCacheKey(client, cacheId)))
   const skipCacheRef = useRef(false)
 
   useEffect(() => {
-    if (!sessionId) {
+    if (!sessionId || cacheId === undefined) {
       return
     }
     const cache = optionsRef.current?.cacheTranscript !== false
-    const key = transcriptCacheKey(client, sessionId)
+    const key = transcriptCacheKey(client, cacheId)
     const plan = planAttach({
       resyncSeq,
       key,
@@ -167,6 +178,7 @@ export function useClaudeSession(
       truncateResults: true,
       imageRefs: true,
       ...(plan.afterSeq === undefined ? {} : { afterSeq: plan.afterSeq }),
+      ...(conversation === undefined ? {} : { conversation }),
     })
     handleRef.current = handle
     setHandleState(handle)
@@ -218,7 +230,7 @@ export function useClaudeSession(
         writeTranscriptCache(key, parting)
       }
     }
-  }, [client, sessionId, resyncSeq])
+  }, [client, sessionId, conversation, resyncSeq])
 
   useEffect(() => {
     if (replayTarget === undefined) {

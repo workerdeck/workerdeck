@@ -1212,6 +1212,11 @@ transports and needs none of it. Should a gateway ever mint short-lived WS ticke
 of `buildWsUrl` changes and callers do not. Its `buildWsUrl` builds the query through the same
 `sessionWsUrl` (`src/ws-url.ts`) that `openSocket` uses and only appends the key: it once dropped
 `truncateResults` and `imageRefs`, so every keyed gateway the dashboard added replayed in full.
+Protocol 2 calls: `nameSession(id, agent)` / `unnameSession(id)` (PATCH naming), `newConversation(id,
+{ expectedGeneration, prompt?, target? })` (the cut), `retryConversationStart`, `settlePendingPrompt`,
+`conversations(id)` and `conversationHistory(id, n)`; `attach(id, { conversation: n })` opens a past
+conversation's read-only socket and never moves the client's conversation token (`buildWsUrl` gets it as a 5th
+argument, which `hostAuth` forwards).
 `runTeamMove` (`src/team-move.ts`) is the one drop-to-join for every host. It throws only before
 its first change; after that it returns a `TeamMoveOutcome`: `committed` (`yes`, `no`, or `unknown`
 when the join got no answer and may still commit), a kept adoption (never undone: retiring would
@@ -1367,11 +1372,13 @@ would otherwise re-render the transcript at the shell's output rate. Only `statu
 record and the detach reason are state, and the invariants around the three frames are in
 `docs/GOTCHAS.md` § Shell sessions.
 
-- **Agent conversations.** `session_superseded` is gone (a cut keeps the id); `successorOf` reads only an
-  archived attach's `supersededBy`, until the follow machinery goes. `useDraft`/`useAttachments` carry an unsent draft and staged files to
-  the successor and never send them. `useArchivedView` re-reads a session whose live view ended (an agent deleted
-  under it comes back archived) and pairs it with the agent list through protocol `archivedView`; a caller that
-  cannot list agents never sees "deleted".
+- **Agent conversations.** There is no follow machine: a cut keeps the id, the old socket gets
+  `conversation_started` and close 4011, and the reattach lands on n+1 (a new epoch, so `staleAttach` resyncs).
+  `useClaudeSession` takes a bare id (the current conversation) or a protocol `SessionAddress`; one with
+  `conversation` attaches that past conversation read-only and caches it under `addressKey`, apart from the
+  current one. Drafts and staged files are keyed by the id, so they stay put across a cut. `useArchivedView(client,
+  address, info)` builds the past conversation's banner (protocol `archivedView`) from `GET .../conversations`:
+  no current conversation there reads as deleted. `conversationReadOnly(readOnly, address)` is true for any past one.
 
 ## `packages/ui`
 
@@ -2004,7 +2011,7 @@ refusal: `crossOwnerDrop(dragged, lead, relays)` (owner from `info.owner`, else 
 `owner`, `rowOwner`) tells the host to confirm before it moves. A shared top-level agent
 (`AgentRef.shared`) draws a globe after its name; the owner shows only in the name's tooltip. `AgentHeading` is the panel title
 for an agent (avatar, name, LEAD or team, `conversation n` from `AgentRef.conversation`, the
-gateway's `pastSessions.length + 1`, sent from the second on). A card whose own state is
+record's current conversation, sent from the second on). A card whose own state is
 `attention`, or a lead whose team's is, fills with `--row-attention` (the warning hue at the
 selection's weight; the VS Code webview mixes the theme's warning colour into the sidebar), so the
 card that asks for an action is the loudest one. Custom groups draw a badge (`GroupBadge`: the
@@ -2223,11 +2230,10 @@ cursor-addressed screen under the writer - and resets the screen before writing 
 
 `terminal/live-tool.ts` holds the pure rules for running rows (elapsed after 5 s with non-breaking spaces, the last five tail lines, which rows may be backgrounded) and `height.ts` budgets for them, so the estimate counts the widest elapsed label and the tail. The background action needs `TaskControlProvider`, which `SessionPanel` mounts only when `capabilities.backgroundTasks` and not read-only; the composer's `onSendNow` (⌥↵) appears only while such a call runs.
 
-- **Agent conversations in `SessionPanel`.** An archived session is read-only whatever `readOnly` the host
-  passes (`conversationReadOnly`): no composer, approvals, model/mode controls, MCP/Skills/Files entries. It
-  draws `ArchivedBanner` (Past conversation / Agent deleted / Transcript unavailable) with Go to current when the
-  host passes `onGoToCurrent`. `onSuperseded` reports a rotation; `carryFrom` takes the draft over and shows
-  "Starting a new conversation" until the first frame. Conversation row strings live in `lib/conversations.ts`
+- **Agent conversations in `SessionPanel`.** `conversation` (beside `sessionId`) shows that past
+  conversation, read-only whatever `readOnly` the host passes (`conversationReadOnly`): no composer, approvals,
+  model/mode controls, MCP/Skills/Files entries. It draws `ArchivedBanner` (Past conversation / Agent deleted /
+  Transcript unavailable) with Go to current (the current conversation's n) when the host passes `onGoToCurrent`. Conversation row strings live in `lib/conversations.ts`
   (`@workerdeck/ui/format`), shared with VS Code.
 
 ## `packages/web`

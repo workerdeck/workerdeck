@@ -225,7 +225,6 @@ export class AgentService {
       ...(agent.owner === undefined ? {} : { owner: agent.owner }),
       ...(avatar === undefined ? {} : { avatar }),
       retiredAt: agent.retiredAt ?? agent.updatedAt,
-      pastSessions: [],
       conversations,
     }
   }
@@ -367,7 +366,7 @@ export class AgentService {
     } = agent as StoredAgent & { pending?: unknown; sessionId?: string; pastSessions?: string[]; conversations?: unknown; undelivered?: unknown }
     const { pending: _handover, sessionId: _session, pastSessions: _past, conversations: _conversations, undelivered: _undelivered, ...identity } =
       rest
-    const info: AgentInfo = { ...identity, sessionId: agent.id, pastSessions: [] }
+    const info: AgentInfo = identity
     if (!this.#avatars) {
       return info
     }

@@ -19,10 +19,10 @@ export default meta
 
 type Story = StoryObj<typeof ArchivedBanner>
 
-export const PastWithCurrent: Story = { args: { view: { kind: 'past', at: AT, current: 'next', unavailable: false } } }
+export const PastWithCurrent: Story = { args: { view: { kind: 'past', at: AT, current: 3, unavailable: false } } }
 
 export const PastNoAgentList: Story = { args: { view: { kind: 'past', at: AT, unavailable: false } } }
 
 export const AgentDeleted: Story = { args: { view: { kind: 'deleted', at: AT, unavailable: false } } }
 
-export const TranscriptUnavailable: Story = { args: { view: { kind: 'past', at: AT, current: 'next', unavailable: true } } }
+export const TranscriptUnavailable: Story = { args: { view: { kind: 'past', at: AT, current: 3, unavailable: true } } }

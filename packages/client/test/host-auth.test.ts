@@ -31,6 +31,12 @@ describe('hostAuth', () => {
     expect(plain).toBe('wss://gw.example:8080/sessions/a%2Fb/ws?afterSeq=0&key=s3cr%26t')
   })
 
+  it('carries a past conversation into the keyed session socket url', () => {
+    RecordingSocket.urls = []
+    clientFor('k').openSocket('s1', 0, false, false, 2)
+    expect(RecordingSocket.urls).toEqual(['wss://gw.example:8080/sessions/s1/ws?afterSeq=0&conversation=2&key=k'])
+  })
+
   it('keys the queue socket and the bearer header', () => {
     const auth = hostAuth({ baseUrl: 'http://gw', key: 'k' })
     expect(auth.headers).toEqual({ authorization: 'Bearer k' })

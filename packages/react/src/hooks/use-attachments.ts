@@ -1,7 +1,6 @@
 import { errorMessage } from '@workerdeck/protocol'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
-import { takeHandedFiles } from '../lib/conversation-follow.ts'
 import type { EngineCapabilities, ProfileEngine } from '@workerdeck/protocol'
 
 export type StagedAttachment = {
@@ -51,8 +50,6 @@ export function attachmentKind(mediaType: string): AttachmentKind | undefined {
 export type UseAttachmentsOptions = {
   capabilities: EngineCapabilities
   engine?: ProfileEngine
-  // The conversation this view followed away from: the files staged there are uploaded again here, never sent.
-  carryFrom?: string
 }
 
 export type UseAttachmentsResult = {
@@ -66,8 +63,6 @@ export type UseAttachmentsResult = {
   retry: (key: string) => void
   remove: (key: string) => void
   clear: () => void
-  // The staged files themselves, so a view that follows its agent can hand them over.
-  files: () => File[]
   error?: string
   dismissError: () => void
 }
@@ -75,7 +70,7 @@ export type UseAttachmentsResult = {
 export function useAttachments(
   client: WorkerDeckClient,
   sessionId: string | undefined,
-  { capabilities, engine, carryFrom }: UseAttachmentsOptions,
+  { capabilities, engine }: UseAttachmentsOptions,
 ): UseAttachmentsResult {
   const [items, setItems] = useState<StagedAttachment[]>([])
   const [error, setError] = useState<string | undefined>()
@@ -184,20 +179,6 @@ export function useAttachments(
     fileByKey.current.clear()
   }, [])
 
-  const carried = useRef(false)
-  useEffect(() => {
-    if (carried.current || carryFrom === undefined || !sessionId) {
-      return
-    }
-    carried.current = true
-    const files = takeHandedFiles(client, carryFrom)
-    if (files.length > 0) {
-      add(files)
-    }
-  }, [client, carryFrom, sessionId, add])
-
-  const files = useCallback(() => [...fileByKey.current.values()], [])
-
   const retry = useCallback(
     (key: string) => {
       const file = fileByKey.current.get(key)
@@ -220,11 +201,10 @@ export function useAttachments(
       retry,
       remove,
       clear,
-      files,
       error,
       dismissError: () => setError(undefined),
     }),
-    [items, accepts, sessionId, add, retry, remove, clear, files, error],
+    [items, accepts, sessionId, add, retry, remove, clear, error],
   )
 }
 
