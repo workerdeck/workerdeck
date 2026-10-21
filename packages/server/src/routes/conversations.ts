@@ -35,10 +35,9 @@ export function entryInfo(id: string, entry: ConversationEntry): SessionInfo {
   }
 }
 
-// Decorated for display with the frozen owner kept: the index's current owner must not reach a reader of an old conversation.
+// Never decorated from the live session: its current name, avatar, team, shells and owner are not a past reader's business.
 export function shownEntryInfo(ctx: ServerContext, info: SessionInfo): SessionInfo {
-  const shown = ctx.projects.withProject(info)
-  return info.owner === undefined || shown.owner === info.owner ? shown : { ...shown, owner: info.owner }
+  return ctx.projects.withProjectOnly(info)
 }
 
 export function entrySummary(entry: ConversationEntry): ConversationSummary {

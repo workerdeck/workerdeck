@@ -67,7 +67,14 @@ class Engine extends EngineRunner {
   }
 }
 
-type Hooks = { building?: (runner: Engine) => void; options?: Partial<WorkerServerOptions>; owners?: boolean; diagnostics?: unknown[] }
+type Hooks = {
+  building?: (runner: Engine) => void
+  options?: Partial<WorkerServerOptions>
+  owners?: boolean
+  owner?: string
+  profiles?: ProfileInfo[]
+  diagnostics?: unknown[]
+}
 
 async function gateway(dir: string, hooks: Hooks = {}) {
   const built: Engine[] = []
@@ -86,14 +93,14 @@ async function gateway(dir: string, hooks: Hooks = {}) {
   const server: WorkerServer = createWorkerServer({
     ...(hooks.owners
       ? {
-          owner: 'alice',
+          ...('owner' in hooks ? (hooks.owner === undefined ? {} : { owner: hooks.owner }) : { owner: 'alice' }),
           authenticate: (req) => PRINCIPALS[(req.headers.authorization ?? '').replace(/^Bearer /, '')] ?? null,
           authorizeSession: (principal, session) =>
             (principal as { operator?: boolean }).operator === true || session.owner === (principal as { owner?: string }).owner,
         }
       : { allowUnauthenticated: true }),
     allowedCwdRoots: ['/tmp'],
-    profiles: PROFILES,
+    profiles: hooks.profiles ?? PROFILES,
     engines: { claude: adapter('claude'), codex: adapter('codex') },
     sessions: { store: createFileSessionRecordStore({ dir: join(dir, 'sessions') }) },
     agentStore: createFileAgentStore(join(dir, 'agents.json')),
@@ -377,6 +384,7 @@ describe('history under its frozen auth across an owner move', () => {
     })
     const old = await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'alice' })
     expect(old).toMatchObject({ status: 200, body: { info: { conversation: 1, owner: 'alice' } } })
+    expect(old.body.info.agent).toBeUndefined()
     expect((await call(base, `/sessions/${id}/conversations/2`, 'GET', undefined, { token: 'alice' })).status).toBe(404)
     expect((await cut(base, id, 3, {}, 'alice')).status).toBe(404)
 
@@ -397,6 +405,44 @@ describe('history under its frozen auth across an owner move', () => {
     const frames = frameCollector(history)
     expect(await frames.waitFor((frame) => frame.type === 'attached')).toMatchObject({ session: { conversation: 1, owner: 'alice' } })
     history.close()
+  })
+
+  it('shows a past conversation with no owner as ownerless and unnamed after an owner, a rename and a reteam', async () => {
+    const dir = await fixture.stateDir()
+    const unowned = PROFILES.filter((profile) => profile.owner === undefined)
+    const first = await gateway(dir, { owners: true, owner: undefined, profiles: unowned })
+    const session = await createNamed(first.base, 'Atlas', {}, {}, 'operator')
+    const id = session.id
+    expect(session.owner).toBeUndefined()
+    await idle(first.server, id)
+    expect((await cut(first.base, id, 1, {}, 'operator')).status).toBe(200)
+    await idle(first.server, id)
+    await stop(first.server)
+
+    const { server, base, wsBase } = await gateway(dir, { owners: true, owner: undefined })
+    const lead = await createNamed(base, 'Lead', { owner: 'bob' }, { profile: 'claude-bob' }, 'operator')
+    expect((await call(base, `/agents/${id}`, 'PATCH', { owner: 'bob' }, { token: 'operator' })).status).toBe(200)
+    expect((await call(base, `/agents/${id}`, 'PATCH', { name: 'Renamed', lead: lead.id }, { token: 'operator' })).status).toBe(200)
+    const current = await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'bob' })
+    expect(current.body.session).toMatchObject({
+      owner: 'bob',
+      agent: { name: 'Renamed', lead: lead.id },
+    })
+
+    const read = await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'operator' })
+    expect(read.status).toBe(200)
+    expect(read.body.info).toMatchObject({ id, conversation: 1 })
+    expect(read.body.info).not.toHaveProperty('owner')
+    expect(read.body.info).not.toHaveProperty('agent')
+    expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'bob' })).status).toBe(404)
+
+    const ws = new WebSocket(`${wsBase}/sessions/${id}/ws?conversation=1`, { headers: { authorization: 'Bearer operator' } })
+    const frames = frameCollector(ws)
+    const attached = (await frames.waitFor((frame) => frame.type === 'attached')) as { session: SessionInfo }
+    ws.close()
+    expect(attached.session).toMatchObject({ id, conversation: 1 })
+    expect(attached.session).not.toHaveProperty('owner')
+    expect(attached.session).not.toHaveProperty('agent')
   })
 
   it.todo('erases a conversation (DELETE /sessions/:id/conversations/:n, operator) by marking its entry unavailable, n never reused')

@@ -296,7 +296,9 @@ async function updateAgentLocked(ctx: ServerContext, id: string, patch: UpdateAg
   if (refused) {
     return refused
   }
-  const owner = patch.owner !== undefined && patch.owner !== current.owner ? patch.owner : undefined
+  // Against the record too: a startup stamp can give the index an owner the record (the authority) never got.
+  const recordOwner = patch.owner === undefined ? undefined : (await ctx.records.get(id))?.owner
+  const owner = patch.owner !== undefined && (patch.owner !== current.owner || patch.owner !== recordOwner) ? patch.owner : undefined
   let requested: SessionRunnerConfig | undefined
   if (patch.config !== undefined && auth && REQUESTED_KEYS.some((key) => key in patch.config!)) {
     const record = await ctx.records.get(id)
