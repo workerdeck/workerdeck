@@ -53,6 +53,9 @@ import type {
   UpdateProfileRequest,
   ToolResultBlock,
   UnconfirmedInputRefusal,
+  EraseConversationResponse,
+  SessionSettingsPatch,
+  UpdateSessionResponse,
 } from '@workerdeck/protocol'
 import { GENERATION_HEADER, INPUT_CHANGED_CODE, UNCONFIRMED_INPUT_CODE } from '@workerdeck/protocol'
 import { SessionHandle, type AttachOptions } from './session-handle.ts'
@@ -154,12 +157,22 @@ export class WorkerDeckClient {
     return await this.updateSession(id, { agent: null })
   }
 
+  // What the next conversation starts from; it applies at the next cut, never to the running one. `null` clears a setting.
+  async updateSessionSettings(id: string, config: SessionSettingsPatch): Promise<UpdateSessionResponse> {
+    return await this.#call('PATCH', this.#sess(id), { config })
+  }
+
   async conversations(id: string): Promise<ConversationsResponse> {
     return await this.#call('GET', this.#sess(id, '/conversations'))
   }
 
   async conversationHistory(id: string, conversation: number): Promise<ConversationHistoryResponse> {
     return await this.#call('GET', this.#sess(id, `/conversations/${conversation}`))
+  }
+
+  // Operator only. Forgets the gateway's copy of a past conversation; n stays, marked unavailable. Refused (409) for the current one.
+  async eraseConversation(id: string, conversation: number): Promise<EraseConversationResponse> {
+    return await this.#call('DELETE', this.#sess(id, `/conversations/${conversation}`))
   }
 
   // The cut: conversation n+1 under the same id. `expectedGeneration` is the conversation the caller is looking at.

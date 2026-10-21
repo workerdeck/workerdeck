@@ -1,12 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
   GENERATION_HEADER,
+  isJobRun,
   readStatusLabelInput,
   type PeerSessionsResponse,
   type ResolvePermissionRequest,
   type SessionAgentRequest,
   type SessionInfo,
   type UpdateSessionRequest,
+  type UpdateSessionResponse,
 } from '@workerdeck/protocol'
 import { contentTypeFor, fail, json, readJsonBody, requireMethod, sendUntrusted } from '../lib/http.ts'
 import type { SessionItemRoute, SessionRoute } from '../lib/parse-route.ts'
@@ -22,7 +24,7 @@ import { handleConversations } from './conversations.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
 import { handleProjectIcon } from './project-icon.ts'
-import { createNamedSession, endSession, identityOf, nameSession, retireAgent, unnameSession } from './named-sessions.ts'
+import { createNamedSession, editSettings, endSession, identityOf, nameSession, retireAgent, unnameSession } from './named-sessions.ts'
 import { listSessions, requireLive, resolveSession, type ResolvedSession } from './session-lookup.ts'
 import { handleShells } from './shells.ts'
 import { handleToolResult } from './tool-results.ts'
@@ -192,12 +194,19 @@ async function handleSession({ ctx, req, res, auth, route, runner, parked, info 
     if (typeof label === 'string') {
       fail(400, label)
     }
+    const config = body?.config === undefined ? undefined : readSettingsPatch(body.config)
+    if (config && isJobRun(info)) {
+      fail(409, 'a job run has no next conversation to configure')
+    }
+    const settings = config ? await editSettings(ctx, info, config, auth) : undefined
+    const reply = (session: SessionInfo): void =>
+      json(res, 200, { session: projects.withProject(session), ...(settings ? { settings } : {}) } satisfies UpdateSessionResponse)
     if (body?.agent !== undefined) {
       await renameIdentity(ctx, auth, info, body.agent)
-      if (body.title === undefined && label === undefined) {
-        json(res, 200, { session: projects.withProject(runner?.info() ?? info) })
-        return
-      }
+    }
+    if (body?.title === undefined && label === undefined) {
+      reply(ctx.registry.get(route.id)?.info() ?? info)
+      return
     }
     if (!runner && parked) {
       let renamed: SessionInfo | undefined = parked.info
@@ -211,7 +220,7 @@ async function handleSession({ ctx, req, res, auth, route, runner, parked, info 
         }
         renamed = relabeled
       }
-      json(res, 200, { session: projects.withProject(requireRenamed(renamed)) })
+      reply(requireRenamed(renamed))
       return
     }
     const live = requireLive(runner, 'wake it before renaming')
@@ -225,7 +234,7 @@ async function handleSession({ ctx, req, res, auth, route, runner, parked, info 
       }
       live.setStatusLabel(label)
     }
-    json(res, 200, { session: projects.withProject(live.info()) })
+    reply(live.info())
     return
   }
   await endSession(ctx, route.id)
@@ -248,6 +257,31 @@ async function renameIdentity(ctx: ServerContext, auth: AuthContext, info: Sessi
     fail(400, 'agent must be an object or null')
   }
   await nameSession(ctx, info, agent as SessionAgentRequest)
+}
+
+const SETTING_TYPES = {
+  cwd: 'string',
+  profile: 'string',
+  model: 'string',
+  reasoningEffort: 'string',
+  permissionMode: 'string',
+  agentContextReset: 'boolean',
+} as const
+
+function readSettingsPatch(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) {
+    fail(400, 'config must be an object')
+  }
+  for (const [key, setting] of Object.entries(value)) {
+    const type = (SETTING_TYPES as Record<string, string>)[key]
+    if (type === undefined) {
+      fail(400, `config.${key} is not a session setting; settings are ${Object.keys(SETTING_TYPES).join(', ')}`)
+    }
+    if (setting !== null && typeof setting !== type) {
+      fail(400, `config.${key} must be a ${type} or null`)
+    }
+  }
+  return value
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
   ConversationSummary,
   ConversationsResponse,
+  EraseConversationResponse,
   NewConversationRequest,
   SessionEvent,
   SessionInfo,
@@ -35,10 +36,9 @@ export function entryInfo(id: string, entry: ConversationEntry): SessionInfo {
   }
 }
 
-// Decorated for display with the frozen owner kept: the index's current owner must not reach a reader of an old conversation.
+// Never decorated from the live session: its current name, avatar, team, shells and owner are not a past reader's business.
 export function shownEntryInfo(ctx: ServerContext, info: SessionInfo): SessionInfo {
-  const shown = ctx.projects.withProject(info)
-  return info.owner === undefined || shown.owner === info.owner ? shown : { ...shown, owner: info.owner }
+  return ctx.projects.withProjectOnly(info)
 }
 
 export function entrySummary(entry: ConversationEntry): ConversationSummary {
@@ -98,6 +98,17 @@ export async function handleConversations(
       info: shownEntryInfo(ctx, history.transcript ? { ...info, transcript: history.transcript } : info),
       events: history.events,
     })
+    return
+  }
+  if (req.method === 'DELETE') {
+    const n = conversation !== undefined && /^\d+$/.test(conversation) ? Number(conversation) : undefined
+    if (n === undefined || (!seesCurrent && !visible.some((entry) => entry.n === n))) {
+      fail(404, 'conversation not found')
+    }
+    if (!ctx.auth.isOperator(auth)) {
+      fail(403, 'only an operator can erase a conversation')
+    }
+    json(res, 200, await eraseConversation(ctx, id, n))
     return
   }
   requireMethod(req, 'POST')
@@ -163,6 +174,28 @@ export async function handleConversations(
       guard,
     ),
   )
+}
+
+// Only the gateway's copy goes: the engine's own store is never read or touched, so `claude --resume` and the CLI's
+// stats keep working. The entry keeps n, its times, its executions and its frozen auth.
+function eraseConversation(ctx: ServerContext, id: string, n: number): Promise<EraseConversationResponse> {
+  return ctx.locks.run([id], async () => {
+    const record = await ctx.records.get(id)
+    const entry = record?.conversations.find((candidate) => candidate.n === n)
+    if (!record || (!entry && n !== record.conversation)) {
+      fail(404, 'conversation not found')
+    }
+    if (!entry) {
+      fail(409, 'the current conversation cannot be erased; start a new conversation first')
+    }
+    const { engine, startedAt, endedAt, executions, auth } = entry
+    const erased: ConversationEntry = { n, engine, cwd: '', startedAt, endedAt, executions, auth, transcript: 'unavailable' }
+    await ctx.records.transactDurable(id, (latest) => ({
+      ...latest!,
+      conversations: latest!.conversations.map((candidate) => (candidate.n === n ? erased : candidate)),
+    }))
+    return { erased: entrySummary(erased) }
+  })
 }
 
 // Re-run under the lifecycle lock: the body may arrive long after the caller's checks, across a cut or a scope change.

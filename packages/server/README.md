@@ -54,7 +54,9 @@ Routes (default `basePath: '/v1'`):
 | --- | --- |
 | `GET/POST /v1/sessions` | List sessions / create one (`CreateSessionRequest`, `cwd` required) |
 | `GET/DELETE /v1/sessions/:id` | Session info / close and remove |
-| `PATCH /v1/sessions/:id` | Rename (`{ title }`; `null` restores the derived title) |
+| `PATCH /v1/sessions/:id` | Rename (`{ title }`; `null` restores the derived title), name (`{ agent }`), or set what the next conversation starts from (`{ config }`, applied at the next cut) |
+| `GET/POST /v1/sessions/:id/conversations` | The history (`ConversationsResponse`) / start a new conversation under the same id |
+| `GET/DELETE /v1/sessions/:id/conversations/:n` | Read a past conversation / erase the gateway's copy of it (operator; the engine's own store is untouched, n stays as `unavailable`) |
 | `WS /v1/sessions/:id/ws?afterSeq=n` | Attach: `attached` frame, replay past `n`, then live events |
 | `POST /v1/sessions/:id/permissions/:requestId` | Resolve a pending approval over REST |
 | `GET /v1/sdk-sessions?dir=…` | List the Agent SDK's on-disk sessions to offer resume |

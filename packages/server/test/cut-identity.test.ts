@@ -67,7 +67,14 @@ class Engine extends EngineRunner {
   }
 }
 
-type Hooks = { building?: (runner: Engine) => void; options?: Partial<WorkerServerOptions>; owners?: boolean; diagnostics?: unknown[] }
+type Hooks = {
+  building?: (runner: Engine) => void
+  options?: Partial<WorkerServerOptions>
+  owners?: boolean
+  owner?: string
+  profiles?: ProfileInfo[]
+  diagnostics?: unknown[]
+}
 
 async function gateway(dir: string, hooks: Hooks = {}) {
   const built: Engine[] = []
@@ -86,14 +93,14 @@ async function gateway(dir: string, hooks: Hooks = {}) {
   const server: WorkerServer = createWorkerServer({
     ...(hooks.owners
       ? {
-          owner: 'alice',
+          ...('owner' in hooks ? (hooks.owner === undefined ? {} : { owner: hooks.owner }) : { owner: 'alice' }),
           authenticate: (req) => PRINCIPALS[(req.headers.authorization ?? '').replace(/^Bearer /, '')] ?? null,
           authorizeSession: (principal, session) =>
             (principal as { operator?: boolean }).operator === true || session.owner === (principal as { owner?: string }).owner,
         }
       : { allowUnauthenticated: true }),
     allowedCwdRoots: ['/tmp'],
-    profiles: PROFILES,
+    profiles: hooks.profiles ?? PROFILES,
     engines: { claude: adapter('claude'), codex: adapter('codex') },
     sessions: { store: createFileSessionRecordStore({ dir: join(dir, 'sessions') }) },
     agentStore: createFileAgentStore(join(dir, 'agents.json')),
@@ -377,6 +384,7 @@ describe('history under its frozen auth across an owner move', () => {
     })
     const old = await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'alice' })
     expect(old).toMatchObject({ status: 200, body: { info: { conversation: 1, owner: 'alice' } } })
+    expect(old.body.info.agent).toBeUndefined()
     expect((await call(base, `/sessions/${id}/conversations/2`, 'GET', undefined, { token: 'alice' })).status).toBe(404)
     expect((await cut(base, id, 3, {}, 'alice')).status).toBe(404)
 
@@ -399,7 +407,108 @@ describe('history under its frozen auth across an owner move', () => {
     history.close()
   })
 
-  it.todo('erases a conversation (DELETE /sessions/:id/conversations/:n, operator) by marking its entry unavailable, n never reused')
+  it('shows a past conversation with no owner as ownerless and unnamed after an owner, a rename and a reteam', async () => {
+    const dir = await fixture.stateDir()
+    const unowned = PROFILES.filter((profile) => profile.owner === undefined)
+    const first = await gateway(dir, { owners: true, owner: undefined, profiles: unowned })
+    const session = await createNamed(first.base, 'Atlas', {}, {}, 'operator')
+    const id = session.id
+    expect(session.owner).toBeUndefined()
+    await idle(first.server, id)
+    expect((await cut(first.base, id, 1, {}, 'operator')).status).toBe(200)
+    await idle(first.server, id)
+    await stop(first.server)
+
+    const { base, wsBase } = await gateway(dir, { owners: true, owner: undefined })
+    const lead = await createNamed(base, 'Lead', { owner: 'bob' }, { profile: 'claude-bob' }, 'operator')
+    expect((await call(base, `/agents/${id}`, 'PATCH', { owner: 'bob' }, { token: 'operator' })).status).toBe(200)
+    expect((await call(base, `/agents/${id}`, 'PATCH', { name: 'Renamed', lead: lead.id }, { token: 'operator' })).status).toBe(200)
+    const current = await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'bob' })
+    expect(current.body.session).toMatchObject({
+      owner: 'bob',
+      agent: { name: 'Renamed', lead: lead.id },
+    })
+
+    const read = await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'operator' })
+    expect(read.status).toBe(200)
+    expect(read.body.info).toMatchObject({ id, conversation: 1 })
+    expect(read.body.info).not.toHaveProperty('owner')
+    expect(read.body.info).not.toHaveProperty('agent')
+    expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'bob' })).status).toBe(404)
+
+    const ws = new WebSocket(`${wsBase}/sessions/${id}/ws?conversation=1`, { headers: { authorization: 'Bearer operator' } })
+    const frames = frameCollector(ws)
+    const attached = (await frames.waitFor((frame) => frame.type === 'attached')) as { session: SessionInfo }
+    ws.close()
+    expect(attached.session).toMatchObject({ id, conversation: 1 })
+    expect(attached.session).not.toHaveProperty('owner')
+    expect(attached.session).not.toHaveProperty('agent')
+  })
+
+  it('erases a past conversation for an operator: n kept as unavailable, the engine store never read again, n never reused', async () => {
+    const dir = await fixture.stateDir()
+    const reads: string[] = []
+    const { server, base } = await gateway(dir, {
+      options: {
+        historyReader: {
+          read: async (target) => {
+            reads.push(target.engineSessionId ?? '')
+            return { kind: 'ok', events: [{ type: 'user_message', text: 'old' }] as never }
+          },
+        },
+      },
+    })
+    const id = await createPlain(base)
+    await idle(server, id)
+    expect((await cut(base, id, 1)).status).toBe(200)
+    await idle(server, id)
+    expect((await call(base, `/sessions/${id}/conversations/1`)).body.events).toHaveLength(1)
+    expect(reads).toHaveLength(1)
+    const before = (await server.records.get(id))!.conversations[0]!
+
+    expect((await call(base, `/sessions/${id}/conversations/2`, 'DELETE')).status).toBe(409)
+    expect((await call(base, `/sessions/${id}/conversations/9`, 'DELETE')).status).toBe(404)
+    const erased = await call(base, `/sessions/${id}/conversations/1`, 'DELETE')
+    expect(erased).toMatchObject({ status: 200, body: { erased: { n: 1, transcript: 'unavailable' } } })
+    expect(erased.body.erased).not.toHaveProperty('engineSessionId')
+    expect(erased.body.erased).not.toHaveProperty('title')
+
+    const record = (await server.records.get(id))!
+    expect(record.conversation).toBe(2)
+    const entry = record.conversations[0]!
+    expect(entry).toMatchObject({ n: 1, transcript: 'unavailable', auth: before.auth, startedAt: before.startedAt, endedAt: before.endedAt })
+    for (const key of ['engineSessionId', 'engineHome', 'snapshot', 'running', 'title', 'costUsd', 'profile']) {
+      expect(entry).not.toHaveProperty(key)
+    }
+    const read = await call(base, `/sessions/${id}/conversations/1`)
+    expect(read).toMatchObject({ status: 200, body: { events: [], info: { conversation: 1, transcript: 'unavailable' } } })
+    expect(reads).toHaveLength(1)
+    expect((await call(base, `/sessions/${id}/conversations/1`, 'DELETE')).status).toBe(200)
+
+    expect((await cut(base, id, 2)).status).toBe(200)
+    await idle(server, id)
+    expect((await server.records.get(id))?.conversations.map((candidate) => candidate.n)).toEqual([1, 2])
+    expect((await fetch(`${base}/sessions/${id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '3' } })).status).toBe(200)
+    expect((await call(base, `/sessions/${id}/conversations/3`, 'DELETE')).status).toBe(200)
+    expect((await call(base, `/sessions/${id}/conversations`)).body.history.map((row: { transcript?: string }) => row.transcript)).toEqual([
+      'unavailable',
+      undefined,
+      'unavailable',
+    ])
+  })
+
+  it('refuses an erase to anyone but an operator, with 404 for a reader who cannot see the conversation', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir, { owners: true })
+    const session = await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')
+    await idle(server, session.id)
+    expect((await cut(base, session.id, 1, {}, 'operator')).status).toBe(200)
+    await idle(server, session.id)
+    expect((await call(base, `/sessions/${session.id}/conversations/1`, 'DELETE', undefined, { token: 'bob' })).status).toBe(404)
+    expect((await call(base, `/sessions/${session.id}/conversations/1`, 'DELETE', undefined, { token: 'alice' })).status).toBe(403)
+    expect((await server.records.get(session.id))?.conversations[0]?.transcript).toBeUndefined()
+    expect((await call(base, `/sessions/${session.id}/conversations/1`, 'DELETE', undefined, { token: 'operator' })).status).toBe(200)
+  })
 })
 
 describe('the list from records: runtime absent is not a status', () => {
@@ -556,5 +665,92 @@ describe('a job run refuses every cut door', () => {
 
     expect(built).toHaveLength(1)
     expect((await server.records.get(job))?.conversation).toBe(1)
+  })
+})
+
+describe('settings of the next conversation on every session', () => {
+  it('writes requested for an unnamed session under its PATCH, applied at the next cut and never to the running one', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const id = await createPlain(base, { model: 'm1', permissionMode: 'plan' })
+    await idle(server, id)
+    const edited = await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2', permissionMode: null } }, { generation: 1 })
+    expect(edited.status).toBe(200)
+    expect(edited.body.settings).toEqual({ cwd: '/tmp', profile: 'claude-a', model: 'm2' })
+    expect(edited.body.session).toMatchObject({ id, model: 'm1' })
+    const record = (await server.records.get(id))!
+    expect(record.requested).toMatchObject({ model: 'm2' })
+    expect(record.requested).not.toHaveProperty('permissionMode')
+    expect(record.requested).not.toHaveProperty('agentContextReset')
+    expect(record.running).toMatchObject({ model: 'm1', permissionMode: 'plan' })
+    expect(built[0]!.config.model).toBe('m1')
+
+    expect((await cut(base, id, 1)).status).toBe(200)
+    await idle(server, id)
+    expect(built.at(-1)!.config).toMatchObject({ model: 'm2' })
+    expect(built.at(-1)!.config.permissionMode).toBeUndefined()
+    expect(built.at(-1)!.config.contextReset).toBeUndefined()
+    expect((await server.records.get(id))?.running).toMatchObject({ model: 'm2' })
+  })
+
+  it('validates the whole patch first and changes nothing on a refusal', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir)
+    const id = await createPlain(base, { model: 'm1' })
+    await idle(server, id)
+    const before = await server.records.get(id)
+    for (const [config, status] of [
+      [{ brief: 'x' }, 400],
+      [{ model: 5 }, 400],
+      ['model', 400],
+      [{ model: 'm2', profile: 'nope' }, 400],
+      [{ model: 'm2', cwd: '/etc' }, 403],
+    ] as const) {
+      const refused = await call(base, `/sessions/${id}`, 'PATCH', { config }, { generation: 1 })
+      expect({ config, status: refused.status }).toEqual({ config, status })
+    }
+    expect(await server.records.get(id)).toEqual(before)
+  })
+
+  it('edits a named session through its agent, so the agent shows the same settings', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const { id } = await createNamed(base, 'Wren', {}, { model: 'm1' })
+    await idle(server, id)
+    const edited = await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2' } }, { generation: 1 })
+    expect(edited.body.settings).toMatchObject({ model: 'm2', agentContextReset: true })
+    expect((await call(base, `/agents/${id}`)).body.agent.config.model).toBe('m2')
+    expect((await server.records.get(id))?.requested?.model).toBe('m2')
+    expect((await cut(base, id, 1)).status).toBe(200)
+    await idle(server, id)
+    expect(runnersOf(built, id).at(-1)!.config.model).toBe('m2')
+  })
+
+  it('refuses an edit while a cut is starting the next conversation, and one for a job run', async () => {
+    const dir = await fixture.stateDir()
+    const held = deferred()
+    let id = ''
+    const { server, base, built } = await gateway(dir, {
+      building: (runner) => {
+        if (runner.id === id && runnersOf(built, id).length === 2) {
+          runner.hold = held.promise
+        }
+      },
+    })
+    id = await createPlain(base, { model: 'm1' })
+    await idle(server, id)
+    const cutting = cut(base, id, 1)
+    await vi.waitFor(() => expect(runnersOf(built, id)).toHaveLength(2))
+    const during = await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2' } }, { generation: 1 })
+    expect(during.status).toBe(409)
+    held.resolve()
+    expect((await cutting).status).toBe(200)
+    await idle(server, id)
+    expect((await server.records.get(id))?.requested?.model).toBe('m1')
+    expect((await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2' } }, { generation: 2 })).status).toBe(200)
+
+    const job = await createPlain(base, { meta: { jobId: 'j1' } })
+    await idle(server, job)
+    expect((await call(base, `/sessions/${job}`, 'PATCH', { config: { model: 'm2' } }, { generation: 1 })).status).toBe(409)
   })
 })

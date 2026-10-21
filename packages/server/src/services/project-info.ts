@@ -44,6 +44,12 @@ export class ProjectInfoService {
     return this.#decorate(project ? { ...info, project } : info)
   }
 
+  // The project lookup alone, for a past conversation: no decoration from the live session (agent, shells, owner).
+  withProjectOnly(info: SessionInfo): SessionInfo {
+    const project = info.cwd ? this.#resolve(info.cwd).project : undefined
+    return project ? { ...info, project } : info
+  }
+
   iconFor(cwd: string): ResolvedProjectIcon | undefined {
     if (!cwd) {
       return undefined
