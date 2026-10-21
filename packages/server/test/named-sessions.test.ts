@@ -708,10 +708,10 @@ describe('recheck probes', () => {
     await idle(server, id)
     const runner = built[0]!
     runner.confirmable = false
-    expect(() => server.cuts.clearOnIdle(runner, 'context_reset', 'next')).toThrow(/cannot confirm/)
+    await expect(server.cuts.clearOnIdle(runner, 'context_reset', 'next')).rejects.toThrow(/cannot confirm/)
     runner.emit({ type: 'status_changed', status: 'running' })
     runner.confirmable = true
-    expect(server.cuts.clearOnIdle(runner, 'context_reset', 'next')).toBeUndefined()
+    expect(await server.cuts.clearOnIdle(runner, 'context_reset', 'next')).toBeUndefined()
     runner.confirmable = false
     runner.emit({ type: 'status_changed', status: 'idle' })
     await vi.waitFor(() => expect(diagnostics.map(String).join()).toContain('dropped'))

@@ -1029,7 +1029,7 @@ interrupt included) gets 409 `unconfirmed_input` carrying `conversation`, `input
 confirmation, `POST .../conversations/discard { expectedGeneration, inputRevision, prompt? }`, cuts past it: under
 the lock it re-checks the conversation, then compares the revision synchronously right before the gate, so any
 input since is 409 `input_changed` (with the new set to confirm) and a match abandons exactly that set. There is
-no force flag, and `context_reset`, typed `/clear` and `clear_context` never discard.
+no force flag, and `context_reset`, typed `/clear` and `clear_context` never discard. An `uncertain` pending prompt holds every cut door (REST, `/discard`, restart, typed `/clear`, `clear_context`, `context_reset`) with 409 `uncertain_prompt` (`UNCERTAIN_PROMPT_CODE`, `UncertainPromptRefusal`) until a person picks Send again or Dismiss (`/pending`), because a cut would overwrite or strip its only durable copy; a cut queued for the next idle that meets one is dropped with a diagnostic. A typed `/clear` sent with a `clientId` is acked with its cut's outcome: just before the announce closes its socket when the cut ran, `notDelivered` when it was refused or a queued one was dropped, never before the outcome is known; a resend whose outcome a restart lost reads `uncertain` once the session moved on.
 Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`, `/discard`), typed exact
 `/clear` and WS `clear_context` (queued until idle), `context_reset`, and `POST /agents/:id/restart`, named or not.
 Named sessions (create record then index row then start, naming by `PATCH /sessions/:id { agent }`, retire as

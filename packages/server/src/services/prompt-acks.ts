@@ -6,6 +6,7 @@ export type PromptOutcome = 'executed' | 'notDelivered'
 export class PromptAcks {
   readonly #seen = new Map<string, Promise<void>>()
   readonly #outcomes = new Map<string, PromptOutcome>()
+  readonly #open = new Set<string>()
   readonly #max: number
 
   constructor(max = 4096) {
@@ -32,6 +33,19 @@ export class PromptAcks {
     return run
   }
 
+  // For a prompt whose outcome is recorded later rather than by `run`: false when this id is already open or settled.
+  open(sessionId: string, clientId: string): boolean {
+    const key = `${sessionId}\u0000${clientId}`
+    if (this.#open.has(key) || this.#outcomes.has(key)) {
+      return false
+    }
+    this.#open.add(key)
+    if (this.#open.size > this.#max) {
+      this.#open.delete(this.#open.keys().next().value!)
+    }
+    return true
+  }
+
   // Undefined once evicted, or for an id this process never saw: the caller must not guess.
   outcome(sessionId: string, clientId: string): PromptOutcome | undefined {
     return this.#outcomes.get(`${sessionId}\u0000${clientId}`)
@@ -39,6 +53,7 @@ export class PromptAcks {
 
   record(sessionId: string, clientId: string, outcome: PromptOutcome): void {
     const key = `${sessionId}\u0000${clientId}`
+    this.#open.delete(key)
     if (this.#outcomes.get(key) === 'executed') {
       return
     }

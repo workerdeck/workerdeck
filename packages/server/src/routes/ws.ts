@@ -17,6 +17,7 @@ import { engineOf } from '../lib/profile-env.ts'
 import { CUT_IN_PROGRESS } from '../services/lifecycle-locks.ts'
 import { CONVERSATION_ENDED } from '../services/conversation-cuts.ts'
 import { mentionsFor } from '../services/peers.ts'
+import type { PromptOutcome } from '../services/prompt-acks.ts'
 import { shownEntryInfo } from './conversations.ts'
 import { sleepRunner } from './sleep.ts'
 import { takesLocalCommands } from '../services/shell-directory.ts'
@@ -74,6 +75,8 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
   )
   live = true
   const detachBridge = bridge.attach(runner.id, send)
+  // Typed `/clear` prompts whose outcome is still to come; the announce settles them before this socket closes.
+  const clears = new Map<string, (outcome: PromptOutcome) => void>()
   const leaveCut = ctx.cuts.socket(runner.id, {
     conversation,
     detach: () => {
@@ -82,6 +85,9 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
       detachShells(client)
     },
     announce: (next, epoch) => {
+      for (const settle of clears.values()) {
+        settle('executed')
+      }
       send({ type: 'conversation_started', conversation: next, epoch })
       ws.close(CONVERSATION_ENDED_CLOSE_CODE, 'conversation started')
     },
@@ -137,8 +143,12 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
         await handleCommand(ctx, frame, bound).catch(report)
         return
       }
-      let unrun = false
       const key = `${runner.id}:${conversation}`
+      if (isClearRequest(frame)) {
+        await clearWithAck(ctx, frame, bound, key, clientId, clears, report)
+        return
+      }
+      let unrun = false
       await ctx.promptAcks
         .run(key, clientId, () => handleCommand(ctx, frame, bound))
         .catch((error: unknown) => {
@@ -215,7 +225,49 @@ export function attachArchive(
 // A socket is bound to the runner and the conversation it attached to; the stable id never routes it into the next one.
 type Bound = { runner: Runner; access: AttachAccess; client: Client; conversation: number }
 
-async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Bound): Promise<void> {
+// A typed `/clear` is acked once its cut is known to have happened or not: a queued one waits for the next idle, and one
+// whose cut closes this socket is acked just before the announce. A gateway restart before then leaves it uncertain.
+async function clearWithAck(
+  ctx: ServerContext,
+  frame: ClientFrame,
+  bound: Bound,
+  key: string,
+  clientId: string,
+  clears: Map<string, (outcome: PromptOutcome) => void>,
+  report: (error: unknown) => void,
+): Promise<void> {
+  const { client, conversation, runner } = bound
+  if (!ctx.promptAcks.open(key, clientId)) {
+    const known = ctx.promptAcks.outcome(key, clientId)
+    if (known) {
+      client.send(outcomeAck(clientId, known))
+    }
+    return
+  }
+  let settled = false
+  const settle = (outcome: PromptOutcome): void => {
+    if (settled) {
+      return
+    }
+    settled = true
+    clears.delete(clientId)
+    ctx.promptAcks.record(key, clientId, outcome)
+    client.send(outcomeAck(clientId, outcome))
+  }
+  clears.set(clientId, settle)
+  try {
+    await handleCommand(ctx, frame, bound, (cut) => settle(cut ? 'executed' : 'notDelivered'))
+  } catch (error) {
+    report(error)
+    settle((ctx.records.conversationOf(runner.id) ?? 1) > conversation ? 'executed' : 'notDelivered')
+  }
+}
+
+function outcomeAck(clientId: string, outcome: PromptOutcome): ServerFrame {
+  return outcome === 'executed' ? { type: 'ack', clientId } : { type: 'ack', clientId, notDelivered: true }
+}
+
+async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Bound, onClear?: (cut: boolean) => void): Promise<void> {
   const { attachmentStore, bridge } = ctx
   const { runner, access, client } = bound
   if (ctx.registry.get(runner.id) !== runner && !ctx.locks.gated(runner.id)) {
@@ -228,7 +280,9 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
     throw new NotDelivered(CUT_IN_PROGRESS)
   }
   if (isClearRequest(frame)) {
-    await ctx.cuts.clearOnIdle(runner, 'clear')
+    if (await ctx.cuts.clearOnIdle(runner, 'clear', undefined, onClear)) {
+      onClear?.(true)
+    }
     return
   }
   switch (frame.type) {
