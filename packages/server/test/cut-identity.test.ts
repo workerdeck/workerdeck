@@ -353,6 +353,55 @@ describe('cross-store identity', () => {
   })
 })
 
+describe('history under its frozen auth across an owner move', () => {
+  it('lets the old owner read its old conversation only, and the new owner the current one and its own past only', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, wsBase } = await gateway(dir, { owners: true })
+    const session = await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')
+    const id = session.id
+    await idle(server, id)
+    expect((await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'alice' })).status).toBe(200)
+    expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
+    await idle(server, id)
+    expect((await call(base, `/agents/${id}`, 'PATCH', { owner: 'bob' }, { token: 'operator' })).status).toBe(200)
+    expect((await cut(base, id, 2, {}, 'operator')).status).toBe(200)
+    await idle(server, id)
+    expect((await server.records.get(id))?.conversations.map((entry) => [entry.n, entry.auth.owner])).toEqual([
+      [1, 'alice'],
+      [2, 'bob'],
+    ])
+
+    expect((await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'alice' })).status).toBe(404)
+    expect((await call(base, `/sessions/${id}/conversations`, 'GET', undefined, { token: 'alice' })).body).toEqual({
+      history: [expect.objectContaining({ n: 1 })],
+    })
+    const old = await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'alice' })
+    expect(old).toMatchObject({ status: 200, body: { info: { conversation: 1, owner: 'alice' } } })
+    expect((await call(base, `/sessions/${id}/conversations/2`, 'GET', undefined, { token: 'alice' })).status).toBe(404)
+    expect((await cut(base, id, 3, {}, 'alice')).status).toBe(404)
+
+    expect((await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'bob' })).status).toBe(200)
+    const forBob = await call(base, `/sessions/${id}/conversations`, 'GET', undefined, { token: 'bob' })
+    expect(forBob.body).toMatchObject({ conversation: 3, history: [expect.objectContaining({ n: 2 })] })
+    expect(forBob.body.history).toHaveLength(1)
+    expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'bob' })).status).toBe(404)
+    expect((await call(base, `/sessions/${id}/conversations/2`, 'GET', undefined, { token: 'bob' })).status).toBe(200)
+
+    const refusedUpgrade = await new Promise<number>((resolve) => {
+      const ws = new WebSocket(`${wsBase}/sessions/${id}/ws?conversation=1`, { headers: { authorization: 'Bearer bob' } })
+      ws.on('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0))
+      ws.on('open', () => resolve(101))
+    })
+    expect(refusedUpgrade).toBe(404)
+    const history = new WebSocket(`${wsBase}/sessions/${id}/ws?conversation=1`, { headers: { authorization: 'Bearer alice' } })
+    const frames = frameCollector(history)
+    expect(await frames.waitFor((frame) => frame.type === 'attached')).toMatchObject({ session: { conversation: 1, owner: 'alice' } })
+    history.close()
+  })
+
+  it.todo('erases a conversation (DELETE /sessions/:id/conversations/:n, operator) by marking its entry unavailable, n never reused')
+})
+
 describe('the list from records: runtime absent is not a status', () => {
   it('gives closed for closedAt, the runtime kind without a runner, the runner status without a runtime, and failed with neither', async () => {
     const dir = await fixture.stateDir()

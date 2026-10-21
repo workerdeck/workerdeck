@@ -17,6 +17,7 @@ import { engineOf } from '../lib/profile-env.ts'
 import { CUT_IN_PROGRESS } from '../services/lifecycle-locks.ts'
 import { CONVERSATION_ENDED } from '../services/conversation-cuts.ts'
 import { mentionsFor } from '../services/peers.ts'
+import { shownEntryInfo } from './conversations.ts'
 import { sleepRunner } from './sleep.ts'
 import { takesLocalCommands } from '../services/shell-directory.ts'
 import { shellPermitted, SHELL_REFUSAL, startShell, type ShellRegistry, type ShellSink, type ShellSize } from '../services/shells.ts'
@@ -182,7 +183,7 @@ export function attachArchive(
   send({
     type: 'attached',
     protocolVersion: PROTOCOL_VERSION,
-    session: ctx.projects.withProject(info),
+    session: shownEntryInfo(ctx, info),
     replayingFrom: afterSeq,
     acks: true,
   })
