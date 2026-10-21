@@ -18,6 +18,7 @@ import {
   type WorkerServer,
   type WorkerServerOptions,
 } from '../src/index.ts'
+import { WOKE_DURING_CUT } from '../src/services/conversation-cuts.ts'
 import { CUT_IN_PROGRESS } from '../src/services/lifecycle-locks.ts'
 import { EngineRunner } from './engine-runner.ts'
 import { frameCollector, gatewayFixture } from './helpers.ts'
@@ -757,6 +758,45 @@ describe('peer messages at the cut', () => {
     socket.ws.close()
   })
 
+  it.each([0, 1, 3, 8, 16])('never lets a peer wake that raced a cut by %i ticks become n+1', async (ticks) => {
+    const dir = await fixture.stateDir()
+    const before = await gateway(dir)
+    const sender = await create(before.base)
+    const target = await create(before.base)
+    await idle(before.server, target)
+    await before.server.parking.flush()
+    await before.server.close()
+    fixture.servers.splice(fixture.servers.indexOf(before.server), 1)
+
+    const { server, built } = await gateway(dir)
+    const peers = ((await server.parking.ensureLive(sender)) as Engine).config.peers!
+    const woken = peers.send(sender, target, 'wake up')
+    for (let i = 0; i < ticks; i++) {
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+    const moved = server.cuts.cut(target, { expectedGeneration: 1, reason: 'user' }).catch((error: unknown) => error)
+    const [delivery, result] = await Promise.all([woken, moved])
+    await vi.waitFor(() => expect(server.registry.get(target)?.info().status).toBe('idle'))
+    const live = server.registry.get(target) as Engine
+    const record = await server.records.get(target)
+    const others = built.filter((runner) => runner !== live && runner.id === target)
+    expect(others.every((runner) => runner.info().status === 'closed')).toBe(true)
+    if (result instanceof Error) {
+      expect(result.message).toBe(WOKE_DURING_CUT)
+      expect(record).toMatchObject({ conversation: 1 })
+      expect(record?.cut).toBeUndefined()
+      expect(live.config.resume).toBe(`engine-${target}`)
+      expect(delivery).toMatchObject({ delivered: true })
+      expect(live.sent).toEqual(['wake up'])
+      return
+    }
+    expect(result).toMatchObject({ conversation: 2 })
+    expect(record).toMatchObject({ conversation: 2 })
+    expect(record?.startFailed).toBeUndefined()
+    expect(live.config.resume).toBeUndefined()
+    expect(live.sent).toEqual([])
+    expect(others.flatMap((runner) => runner.sent).length).toBeLessThanOrEqual(1)
+  })
 })
 
 describe('the cut stops its runner quietly', () => {

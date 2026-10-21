@@ -46,6 +46,7 @@ export const NO_LONGER_CONFIRMABLE = 'the session stopped since the discard was 
 export const NOTHING_TO_DISCARD = 'this engine has no pending input a discard can bind'
 export const STILL_STARTING = 'the session is still starting; try again once it has started'
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
+export const WOKE_DURING_CUT = 'the session woke while the new conversation was being prepared; try again'
 
 export class ConversationCuts {
   #context: ServerContext | undefined
@@ -224,6 +225,10 @@ export class ConversationCuts {
     ctx.locks.gate(id)
     try {
       await ctx.parking.fence(id)
+      // A wake already under way when the checks ran registers before the fence settles: that runner was never vetted.
+      if (ctx.registry.get(id) !== live) {
+        fail(409, WOKE_DURING_CUT)
+      }
       const entry = await this.#capture(id, record, conversation)
       for (const executionId of entry.executions) {
         this.#leaving.set(executionId, id)
