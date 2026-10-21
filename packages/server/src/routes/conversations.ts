@@ -35,6 +35,12 @@ export function entryInfo(id: string, entry: ConversationEntry): SessionInfo {
   }
 }
 
+// Decorated for display with the frozen owner kept: the index's current owner must not reach a reader of an old conversation.
+export function shownEntryInfo(ctx: ServerContext, info: SessionInfo): SessionInfo {
+  const shown = ctx.projects.withProject(info)
+  return info.owner === undefined || shown.owner === info.owner ? shown : { ...shown, owner: info.owner }
+}
+
 export function entrySummary(entry: ConversationEntry): ConversationSummary {
   return {
     n: entry.n,
@@ -89,7 +95,7 @@ export async function handleConversations(
     }
     const info = entryInfo(id, entry)
     json(res, 200, {
-      info: ctx.projects.withProject(history.transcript ? { ...info, transcript: history.transcript } : info),
+      info: shownEntryInfo(ctx, history.transcript ? { ...info, transcript: history.transcript } : info),
       events: history.events,
     })
     return
