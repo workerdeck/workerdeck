@@ -67,10 +67,13 @@ export function staleAttach(frame: AttachedFrame, held: TranscriptState): boolea
 
 export const REPLAY_HOLD_MAX_MS = 1500
 
+// `uncertain`: the gateway no longer knows whether an earlier attempt ran; the person decides before sending again.
+export type UnsentPrompt = { text: string; uncertain?: true }
+
 export type UseClaudeSessionOptions = {
   onProtocolError?: (message: string) => void
   // A prompt the gateway refused before the engine saw it: the text, for the composer to offer again.
-  onUndeliveredPrompt?: (text: string) => void
+  onUndeliveredPrompt?: (prompt: UnsentPrompt) => void
   cacheTranscript?: boolean
 }
 
@@ -125,7 +128,7 @@ export function useClaudeSession(
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [protocolMismatch, setProtocolMismatch] = useState<number | undefined>()
   const [shell, setShell] = useState(false)
-  const [unsentPrompts, setUnsentPrompts] = useState<string[]>([])
+  const [unsentPrompts, setUnsentPrompts] = useState<UnsentPrompt[]>([])
   const dismissUnsent = useCallback(() => setUnsentPrompts([]), [])
   const [pricing, setPricing] = useState<PricingTable>(DEFAULT_PRICING)
   const [replayTarget, setReplayTarget] = useState<number | undefined>()
@@ -190,9 +193,10 @@ export function useClaudeSession(
     const offProtocolError = handle.on('protocolError', (message: string) => {
       optionsRef.current?.onProtocolError?.(message)
     })
-    const offStale = handle.on('undeliveredPrompt', ({ text }) => {
-      setUnsentPrompts((held) => [...held, text])
-      optionsRef.current?.onUndeliveredPrompt?.(text)
+    const offStale = handle.on('undeliveredPrompt', ({ text, uncertain }) => {
+      const prompt: UnsentPrompt = uncertain ? { text, uncertain } : { text }
+      setUnsentPrompts((held) => [...held, prompt])
+      optionsRef.current?.onUndeliveredPrompt?.(prompt)
     })
     return () => {
       offEvent()

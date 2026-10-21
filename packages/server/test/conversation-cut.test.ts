@@ -733,7 +733,7 @@ describe('a mutation names its conversation and is re-checked under the lock', (
     expect((await server.records.get(id))?.closedAt).toBeUndefined()
   })
 
-  it('refuses an untokened or stale command, and acks a refused prompt as stale without running it', async () => {
+  it('refuses an untokened or stale command, and answers a lost-ack resend across the cut with what became of it in n', async () => {
     const dir = await fixture.stateDir()
     const { server, base, wsBase, built } = await gateway(dir)
     const id = await create(base)
@@ -747,18 +747,25 @@ describe('a mutation names its conversation and is re-checked under the lock', (
     await frames.waitFor((frame) => frame.type === 'attached')
     ws.send(JSON.stringify({ type: 'user_message', text: 'untokened', clientId: 'u-1' }))
     expect(await frames.waitFor((frame) => frame.type === 'ack')).toEqual({ type: 'ack', clientId: 'u-1', notDelivered: true })
-    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'kept', clientId: 'u-2' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'ran', clientId: 'u-2' }))
     await frames.waitFor((frame) => frame.type === 'ack' && frame.clientId === 'u-2')
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'refused', clientId: 'u-3', attachmentIds: ['nope'] }))
+    expect(await frames.waitFor((frame) => frame.type === 'ack' && frame.clientId === 'u-3')).toMatchObject({ notDelivered: true })
     await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
     await idle(server, id)
 
     const again = new WebSocket(`${wsBase}/sessions/${id}/ws`)
     const next = frameCollector(again)
     await next.waitFor((frame) => frame.type === 'attached')
-    again.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'kept', clientId: 'u-2' }))
-    expect(await next.waitFor((frame) => frame.type === 'ack')).toEqual({ type: 'ack', clientId: 'u-2', notDelivered: true })
+    const resend = async (clientId: string, text: string) => {
+      again.send(JSON.stringify({ generation: 1, type: 'user_message', text, clientId }))
+      return await next.waitFor((frame) => frame.type === 'ack' && frame.clientId === clientId)
+    }
+    expect(await resend('u-2', 'ran')).toEqual({ type: 'ack', clientId: 'u-2' })
+    expect(await resend('u-3', 'refused')).toEqual({ type: 'ack', clientId: 'u-3', notDelivered: true })
+    expect(await resend('u-4', 'forgotten')).toEqual({ type: 'ack', clientId: 'u-4', uncertain: true })
     again.close()
-    expect(built[0]!.sent).toEqual(['work', 'kept'])
+    expect(built[0]!.sent).toEqual(['work', 'ran'])
     expect(built.at(-1)!.sent).toEqual([])
   })
 

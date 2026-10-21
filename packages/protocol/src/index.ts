@@ -521,8 +521,9 @@ export type ServerFrame =
   | { type: 'protocol_error'; message: string }
   // The prompt reached the gateway and was handled, run or refused; a refusal arrives as a `protocol_error` first.
   // `notDelivered`: refused before the engine saw it (an ended or missing conversation, a rotation in flight, a refusal);
-  // the text is the sender's to resubmit. Absent, the prompt may have run.
-  | { type: 'ack'; clientId: string; notDelivered?: true }
+  // the text is the sender's to resubmit. `uncertain`: this resend was refused and whether an earlier attempt ran is
+  // no longer known; the sender decides. Neither: it ran (now or on an earlier attempt).
+  | { type: 'ack'; clientId: string; notDelivered?: true; uncertain?: true }
   | ConversationStartedFrame
 
 export type ConversationStartedFrame = { type: 'conversation_started'; conversation: number; epoch: number }

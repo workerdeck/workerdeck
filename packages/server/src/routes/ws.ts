@@ -126,7 +126,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     if (refused) {
       report(new Error(refused))
       if (clientId) {
-        send({ type: 'ack', clientId, notDelivered: true })
+        send(staleAck(ctx, runner.id, frame as Extract<ClientFrame, { type: 'user_message' }>, clientId))
       }
       return
     }
@@ -145,10 +145,14 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
         return
       }
       let unrun = false
+      const key = `${runner.id}:${conversation}`
       await ctx.promptAcks
-        .run(`${runner.id}:${conversation}`, clientId, () => handleCommand(ctx, frame, bound))
+        .run(key, clientId, () => handleCommand(ctx, frame, bound))
         .catch((error: unknown) => {
           unrun = error instanceof NotDelivered
+          if (unrun) {
+            ctx.promptAcks.record(key, clientId, 'notDelivered')
+          }
           report(error)
         })
       send({ type: 'ack', clientId, ...(unrun ? { notDelivered: true as const } : {}) })
@@ -370,6 +374,24 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
   }
 }
 
+// This attempt is refused and never runs; the ack reports what became of the prompt in the conversation it named.
+// Ran there: a plain ack. Known refused there (or it named none): `notDelivered`. Forgotten: `uncertain`.
+function staleAck(
+  ctx: ServerContext,
+  runnerId: string,
+  frame: Extract<ClientFrame, { type: 'user_message' }>,
+  clientId: string,
+): ServerFrame {
+  if (typeof frame.generation !== 'number') {
+    return { type: 'ack', clientId, notDelivered: true }
+  }
+  const outcome = ctx.promptAcks.outcome(`${runnerId}:${frame.generation}`, clientId)
+  if (outcome === 'executed') {
+    return { type: 'ack', clientId }
+  }
+  return outcome === 'notDelivered' ? { type: 'ack', clientId, notDelivered: true } : { type: 'ack', clientId, uncertain: true }
+}
+
 // Refused before the engine saw it: a prompt refused this way is acked `notDelivered` and its text stays the sender's.
 // Anything thrown once `sendMessage` may have run is a plain Error, so a possibly delivered prompt is never called unrun.
 class NotDelivered extends Error {}
@@ -403,7 +425,13 @@ function permittedShells(ctx: ServerContext, runner: Runner, access: AttachAcces
   return ctx.shells
 }
 
-async function attachShell(shells: ShellRegistry, client: Client, sessionId: string, shellId: string, size: ShellSize | undefined): Promise<void> {
+async function attachShell(
+  shells: ShellRegistry,
+  client: Client,
+  sessionId: string,
+  shellId: string,
+  size: ShellSize | undefined,
+): Promise<void> {
   if (size) {
     shells.resize(sessionId, shellId, size)
   }

@@ -341,6 +341,12 @@ describe('SessionHandle prompt acks', () => {
     expect(resent).toMatchObject({ generation: 1, clientId: written!.clientId })
     latest().deliver({ type: 'ack', clientId: written!.clientId, notDelivered: true })
     expect(stale).toEqual(['for one'])
+    const uncertain: boolean[] = []
+    handle.on('undeliveredPrompt', (prompt) => uncertain.push(prompt.uncertain === true))
+    handle.send('maybe')
+    const maybe = JSON.parse(latest().sent.at(-1)!) as { clientId: string }
+    latest().deliver({ type: 'ack', clientId: maybe.clientId, uncertain: true })
+    expect(uncertain).toEqual([true])
     handle.send('for two')
     expect(JSON.parse(latest().sent.at(-1)!)).toMatchObject({ text: 'for two', generation: 2 })
     handle.detach()

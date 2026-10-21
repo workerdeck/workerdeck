@@ -31,7 +31,8 @@ export type SessionHandleEvents = {
   shellOutput: { shellId: string; data: string }
   shellDetached: { shellId: string; reason: string }
   // A prompt the gateway refused before the engine saw it (its conversation ended, a rotation was in flight): the sender's to resubmit.
-  undeliveredPrompt: { clientId: string; text: string; attachmentIds?: string[] }
+  // `uncertain`: refused now, but whether an earlier attempt ran is no longer known.
+  undeliveredPrompt: { clientId: string; text: string; attachmentIds?: string[]; uncertain?: true }
 }
 
 export class SessionHandle {
@@ -278,12 +279,13 @@ export class SessionHandle {
       } else if (frame.type === 'ack') {
         const payload = this.#unacked.get(frame.clientId)
         this.#unacked.delete(frame.clientId)
-        if (frame.notDelivered && payload !== undefined) {
+        if ((frame.notDelivered || frame.uncertain) && payload !== undefined) {
           const sent = JSON.parse(payload) as Extract<ClientFrame, { type: 'user_message' }>
           this.#events.emit('undeliveredPrompt', {
             clientId: frame.clientId,
             text: sent.text,
             ...(sent.attachmentIds ? { attachmentIds: sent.attachmentIds } : {}),
+            ...(frame.uncertain ? { uncertain: true as const } : {}),
           })
         }
       } else if (frame.type === 'protocol_error') {

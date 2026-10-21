@@ -1018,7 +1018,9 @@ token before the runner writes, and the cache only ever moves forward. Every mut
 lock. `POST .../conversations`, `/retry` and `/pending` take `expectedGeneration` in the body and re-authorize the
 caller on the current projection inside the same lock that cuts, retries or sends. A prompt refused before the
 engine saw it (ended or missing conversation, a rotation in flight, a refusal) is acked `notDelivered: true`; one
-that may have run never is. `packages/client` stamps the token a command was created with and never rewrites it on a
+that may have run never is. A stale resend is refused and never runs, and its ack reports the prompt's retained
+outcome in the conversation it named (`PromptAcks`, keyed by session, n and clientId): ran = a plain ack, refused there
+= `notDelivered`, forgotten (evicted, restarted) = `uncertain`, which react keeps as an `UnsentPrompt` marked uncertain. `packages/client` stamps the token a command was created with and never rewrites it on a
 resend; `useClaudeSession` keeps an undelivered prompt as `unsentPrompts`. Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`), typed exact
 `/clear` and WS `clear_context` (queued until idle), and `context_reset` of a non-agent session. History reads
 (`GET .../conversations[/n]`, WS `?conversation=n`) bypass `resolveSession` and authorize on the entry's frozen
