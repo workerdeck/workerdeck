@@ -662,6 +662,27 @@ describe('execution results across the cut', () => {
     runner.emit({ type: 'execution_failed', executionId, reason: 'timeout', error: 'late' })
   }
 
+  it('refuses a result while the cut is under way, then refuses it for the ended conversation with its own error', async () => {
+    const dir = await fixture.stateDir()
+    const { store, reached, release } = holdingStore(dir, (record) => record.cut?.phase === 'committed' && record.cut.from > 0)
+    const { server, base, built } = await gateway(dir, { store })
+    const id = await create(base)
+    await idle(server, id)
+    built[0]!.emit({ type: 'execution_dispatched', executionId: 'x-1', toolName: 'tool', backend: 'server', deferred: true })
+    const pending = cut(base, id, 1)
+    await reached
+    const during = await call(base, '/executions/x-1/result', 'POST', { status: 'ok', output: { value: 1 } })
+    expect(during).toMatchObject({ status: 409, body: { error: CUT_IN_PROGRESS } })
+    release()
+    expect((await pending).status).toBe(200)
+    await idle(server, id)
+    const late = await call(base, '/executions/x-1/result', 'POST', { status: 'failed', reason: 'timeout', error: 'late' })
+    expect(late).toMatchObject({ status: 409, body: { error: 'execution belongs to conversation 1, which has ended' } })
+    const unknown = await call(base, '/executions/x-unknown/result', 'POST', { status: 'ok', output: { value: 1 } })
+    expect(unknown.status).toBe(404)
+    expect(built[1]!.calls).toEqual([])
+  })
+
   it('answers a scoped caller who could see the ended conversation with 409, and anyone else with 404', async () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir, { scoped: true })

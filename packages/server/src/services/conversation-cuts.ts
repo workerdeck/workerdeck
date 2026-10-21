@@ -51,6 +51,7 @@ export class ConversationCuts {
   #context: ServerContext | undefined
   #sockets = new Map<string, Set<CutSocket>>()
   #ended = new Map<string, EndedExecution>()
+  #leaving = new Map<string, string>()
   #queued = new Map<string, () => void>()
   #failedStarts = new Set<string>()
   #firstStarts = new Map<string, Promise<void>>()
@@ -83,6 +84,11 @@ export class ConversationCuts {
 
   endedExecution(executionId: string): EndedExecution | undefined {
     return this.#ended.get(executionId)
+  }
+
+  // The session of an execution whose conversation is being cut: parking forgot it at the stop, the history has not got it yet.
+  leavingExecution(executionId: string): string | undefined {
+    return this.#leaving.get(executionId)
   }
 
   // `guard` runs inside the lifecycle lock on the record as it is then: the caller's own check of the current
@@ -219,6 +225,9 @@ export class ConversationCuts {
     try {
       await ctx.parking.fence(id)
       const entry = await this.#capture(id, record, conversation)
+      for (const executionId of entry.executions) {
+        this.#leaving.set(executionId, id)
+      }
       const cut: SessionCut = { from: conversation, to: conversation + 1, phase: 'prepared', epoch: (info.epoch ?? 0) + 1, target }
       await ctx.records.transactDurable(id, (current) => ({ ...(current ?? freshRecord(id)), cut }))
 
@@ -238,6 +247,11 @@ export class ConversationCuts {
       this.#fault('after-commit')
       return await this.#startCommitted(committed)
     } finally {
+      for (const [executionId, owner] of this.#leaving) {
+        if (owner === id) {
+          this.#leaving.delete(executionId)
+        }
+      }
       ctx.locks.ungate(id)
       if (!this.#failedStarts.has(id)) {
         ctx.parking.unfence(id)
