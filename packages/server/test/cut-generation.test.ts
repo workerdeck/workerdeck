@@ -345,6 +345,44 @@ describe('a socket is bound to the conversation it attached to', () => {
     expect(built[0]!.sent).toEqual(['work'])
   })
 
+  it('binds a socket opened while n+1 starts to n+1: its commands wait for the start, and the announce leaves it open', async () => {
+    const dir = await fixture.stateDir()
+    const start = deferred()
+    const { server, base, wsBase, built } = await gateway(dir, {
+      building: (runner) => {
+        if (runner.config.epoch !== undefined && runner.config.epoch > 0) {
+          runner.hold = start.promise
+        }
+      },
+    })
+    const id = await create(base)
+    await idle(server, id)
+    const pending = cut(base, id, 1)
+    await vi.waitFor(() => expect(built).toHaveLength(2))
+    const late = await attach(wsBase, id)
+    const attached = late.frames.frames.find((frame) => frame.type === 'attached') as Extract<ServerFrame, { type: 'attached' }>
+    expect(attached.session.epoch).toBe(built[1]!.config.epoch)
+    late.send({ generation: 1, type: 'user_message', text: 'for n', clientId: 'n-1' })
+    expect(await ackOf(late.frames, 'n-1')).toMatchObject({ uncertain: true })
+    late.send({ generation: 2, type: 'user_message', text: 'too early', clientId: 'n-2' })
+    expect(await ackOf(late.frames, 'n-2')).toMatchObject({ notDelivered: true })
+    start.resolve()
+    expect((await pending).status).toBe(200)
+    await idle(server, id)
+    expect(built[0]!.sent).toEqual(['work'])
+    expect(built[1]!.sent).toEqual([])
+    const fresh = await attach(wsBase, id)
+    fresh.send({ generation: 2, type: 'user_message', text: 'now', clientId: 'n-3' })
+    expect(await ackOf(fresh.frames, 'n-3')).toEqual({ type: 'ack', clientId: 'n-3' })
+    expect(built[1]!.sent).toEqual(['now'])
+    late.send({ generation: 2, type: 'user_message', text: 'late socket', clientId: 'n-4' })
+    expect(await ackOf(late.frames, 'n-4')).toEqual({ type: 'ack', clientId: 'n-4' })
+    expect(late.frames.frames.some((frame) => (frame.type as string) === 'conversation_started')).toBe(false)
+    expect(built[1]!.sent).toEqual(['now', 'late socket'])
+    fresh.ws.close()
+    late.ws.close()
+  })
+
   it('lets an untokened shell_attach only subscribe: it never resizes, and every other untokened shell command is refused', async () => {
     const dir = await fixture.stateDir()
     const { server, base, wsBase, built } = await gateway(dir, { options: { shell: { enabled: true } } })

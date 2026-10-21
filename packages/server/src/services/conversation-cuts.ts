@@ -29,7 +29,7 @@ export type CutRequest = {
 export type CutResult = { session: SessionInfo; conversation: number }
 
 // A socket attached to one conversation: detached quietly at the stop, told and closed once the commit is durable.
-export type CutSocket = { detach: () => void; announce: (conversation: number, epoch: number) => void; drop: () => void }
+export type CutSocket = { conversation: number; detach: () => void; announce: (conversation: number, epoch: number) => void; drop: () => void }
 
 export type EndedExecution = { id: string; entry: ConversationEntry }
 
@@ -584,11 +584,18 @@ export class ConversationCuts {
     this.#sockets.delete(id)
   }
 
+  // A socket that attached while n+1 started is already on it: it stays, and the next cut finds it.
   #announce(id: string, conversation: number, epoch: number): void {
-    for (const socket of this.#sockets.get(id) ?? []) {
-      socket.announce(conversation, epoch)
+    const sockets = this.#sockets.get(id)
+    for (const socket of sockets ?? []) {
+      if (socket.conversation < conversation) {
+        sockets!.delete(socket)
+        socket.announce(conversation, epoch)
+      }
     }
-    this.#sockets.delete(id)
+    if (sockets?.size === 0) {
+      this.#sockets.delete(id)
+    }
   }
 
   // An explicit fresh constructor: no resume, no fork, no restore, the target's own engine home, the committed epoch.
