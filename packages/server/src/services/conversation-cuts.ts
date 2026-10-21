@@ -42,6 +42,7 @@ export const UNANSWERED_REFUSAL = 'the session has a message it has not answered
 export const UNCONFIRMED_INPUT = 'the engine cannot confirm queued input was consumed; send a message and wait for its reply, then try again'
 export { UNCONFIRMED_INPUT_CODE }
 export const INPUT_CHANGED = 'new input arrived since the discard was confirmed; review it and confirm again'
+export const NO_LONGER_CONFIRMABLE = 'the session stopped since the discard was confirmed and its pending input went with it; start a new conversation'
 export const NOTHING_TO_DISCARD = 'this engine has no pending input a discard can bind'
 export const STILL_STARTING = 'the session is still starting; try again once it has started'
 export const JOB_CUT_REFUSAL = 'a job run cannot start a new conversation'
@@ -200,13 +201,14 @@ export class ConversationCuts {
     if (live && info.status !== 'idle') {
       fail(409, 'the session is busy; start a new conversation once it is idle')
     }
-    if (live && request.discard) {
-      refuseChangedInput(live, conversation, request.discard.revision)
-    } else if (live) {
-      refuseUnconfirmed(live, conversation)
-      if (unanswered(live)) {
-        fail(409, UNANSWERED_REFUSAL)
+    if (request.discard) {
+      if (!live) {
+        fail(409, NO_LONGER_CONFIRMABLE)
       }
+      refuseChangedInput(live, conversation, request.discard.revision)
+    } else if (live && unanswered(live)) {
+      const message = live.inputConfirmable?.() === false ? UNCONFIRMED_INPUT : UNANSWERED_REFUSAL
+      fail(409, message, UNCONFIRMED_INPUT_CODE, unconfirmedDetails(live, conversation))
     }
     if (stored && !isDormant(stored)) {
       fail(409, 'the session is parked mid-turn')

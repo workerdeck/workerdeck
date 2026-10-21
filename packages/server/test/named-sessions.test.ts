@@ -26,6 +26,7 @@ class Engine extends EngineRunner {
   #pending = 0
   #inputs = 0
   #peer = false
+  #nonce = Math.random().toString(36).slice(2)
 
   override info(): SessionInfo {
     return { ...super.info(), engine: 'claude', capabilities: { ...ENGINE_CAPABILITIES.claude, resume: true } }
@@ -61,7 +62,7 @@ class Engine extends EngineRunner {
   }
 
   inputSnapshot(): { revision: string; pending: number; peer: boolean } {
-    return { revision: `${this.id}.${this.#inputs}`, pending: this.#pending, peer: this.#peer }
+    return { revision: `${this.#nonce}.${this.#inputs}`, pending: this.#pending, peer: this.#peer }
   }
 }
 
@@ -627,6 +628,47 @@ describe('recheck probes', () => {
       inputRevision: stale.body.inputRevision,
     })
     expect(again.status).toBe(200)
+  })
+
+  it('offers a discard for a message an engine that can confirm consumption has not answered yet', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir)
+    const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
+    await idle(server, id)
+    const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    expect(refused).toMatchObject({
+      status: 409,
+      body: { code: 'unconfirmed_input', error: expect.stringContaining('not answered yet'), conversation: 1, pendingInput: 1 },
+    })
+    const discarded = await call(base, `/sessions/${id}/conversations/discard`, 'POST', { expectedGeneration: 1, inputRevision: refused.body.inputRevision })
+    expect(discarded.status).toBe(200)
+    expect(built).toHaveLength(2)
+  })
+
+  it('never turns a confirmation into a plain cut once the runner it was bound to is gone', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir)
+    const id = (await call(first.base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
+    await idle(first.server, id)
+    first.built[0]!.confirmable = false
+    const refused = await call(first.base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    expect(refused.body.code).toBe('unconfirmed_input')
+    await stop(first.server)
+
+    const second = await gateway(dir)
+    const dormant = await call(second.base, `/sessions/${id}/conversations/discard`, 'POST', { expectedGeneration: 1, inputRevision: refused.body.inputRevision })
+    expect(dormant).toMatchObject({ status: 409, body: { error: expect.stringContaining('stopped since') } })
+    expect((await second.server.records.get(id))?.conversation).toBe(1)
+    expect(second.built).toHaveLength(0)
+
+    await second.server.parking.ensureLive(id)
+    await idle(second.server, id)
+    second.built[0]!.confirmable = false
+    second.built[0]!.sendMessage('again')
+    const rebuilt = await call(second.base, `/sessions/${id}/conversations/discard`, 'POST', { expectedGeneration: 1, inputRevision: refused.body.inputRevision })
+    expect(rebuilt).toMatchObject({ status: 409, body: { code: 'input_changed', conversation: 1 } })
+    expect((await second.server.records.get(id))?.conversation).toBe(1)
+    expect(second.built).toHaveLength(1)
   })
 
   it('refuses a discard bound to another conversation, and one with no revision', async () => {

@@ -29,6 +29,7 @@ export type ConversationSummary = {
 
 export type ConversationsResponse = {
   conversation?: number
+  closed?: true
   history: ConversationSummary[]
   pendingPrompt?: PendingPromptInfo
   startFailed?: ConversationStartFailure

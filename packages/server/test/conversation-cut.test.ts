@@ -396,7 +396,7 @@ describe('conversation cut under a stable id', () => {
     expect((await deleteSession(base, id, 2)).status).toBe(200)
     expect((await call(base, `/sessions/${id}`)).status).toBe(404)
     const list = await call(base, `/sessions/${id}/conversations`)
-    expect(list.body).toEqual({ history: [expect.objectContaining({ n: 1 }), expect.objectContaining({ n: 2 })] })
+    expect(list.body).toEqual({ closed: true, history: [expect.objectContaining({ n: 1 }), expect.objectContaining({ n: 2 })] })
     expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 2 })).status).toBe(404)
   })
 })

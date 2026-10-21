@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { WorkerDeckClient } from '@workerdeck/client'
 import {
   addressKey,
   addressOf,
@@ -8,7 +9,8 @@ import {
   newConversationGate,
   sameAddress,
 } from '@workerdeck/protocol'
-import { conversationReadOnly } from '../src/hooks/use-archived-view.ts'
+import { conversationReadOnly, useArchivedView } from '../src/hooks/use-archived-view.ts'
+import { renderHook } from './hook-runner.ts'
 
 describe('session address', () => {
   it('keys the current conversation by the bare id and a past one by id and n', () => {
@@ -59,5 +61,30 @@ describe('conversation gates', () => {
     expect(newConversationGate({ status: 'idle', sdkSessionId: 'x' }).enabled).toBe(true)
     expect(newConversationGate({ status: 'idle' }).enabled).toBe(false)
     expect(newConversationGate({ status: 'running', sdkSessionId: 'x' }).enabled).toBe(false)
+  })
+})
+
+describe('useArchivedView', () => {
+  const info = { createdAt: 1 }
+  const client = (body: Record<string, unknown>) =>
+    ({ conversations: vi.fn(async () => body) }) as unknown as WorkerDeckClient & { conversations: ReturnType<typeof vi.fn> }
+
+  it('reads a hidden current conversation as past, not deleted, and only a closed session as deleted', async () => {
+    const hiddenApi = client({ history: [] })
+    const closedApi = client({ closed: true, history: [] })
+    const hidden = renderHook(() => useArchivedView(hiddenApi, { id: 'a', conversation: 1 }, info))
+    await vi.waitFor(() => expect(hidden.current).toEqual({ kind: 'past', at: 1, unavailable: false }))
+    const closed = renderHook(() => useArchivedView(closedApi, { id: 'a', conversation: 1 }, info))
+    await vi.waitFor(() => expect(closed.current?.kind).toBe('deleted'))
+  })
+
+  it('reads the current conversation again for every past conversation it shows', async () => {
+    const api = client({ conversation: 3, history: [] })
+    let address = { id: 'a', conversation: 1 }
+    const view = renderHook(() => useArchivedView(api, address, info))
+    await vi.waitFor(() => expect(view.current?.current).toBe(3))
+    address = { id: 'a', conversation: 2 }
+    view.rerender()
+    await vi.waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(2))
   })
 })

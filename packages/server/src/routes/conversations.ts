@@ -71,6 +71,7 @@ export async function handleConversations(
       }
       const body: ConversationsResponse = {
         ...(seesCurrent ? { conversation: record?.conversation ?? 1 } : {}),
+        ...(record?.closedAt === undefined ? {} : { closed: true as const }),
         history: visible.map(entrySummary),
         ...(seesCurrent && record?.pendingPrompt ? { pendingPrompt: record.pendingPrompt } : {}),
         ...(seesCurrent && record?.startFailed ? { startFailed: record.startFailed } : {}),

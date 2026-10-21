@@ -23,12 +23,15 @@ export function useArchivedView(
     let live = true
     client
       .conversations(id)
-      .then((list) => live && setCurrent(list.conversation === undefined ? { retired: true } : { conversation: list.conversation }))
+      .then(
+        (list) =>
+          live && setCurrent(list.closed ? { retired: true } : list.conversation === undefined ? {} : { conversation: list.conversation }),
+      )
       .catch(() => {})
     return () => {
       live = false
     }
-  }, [client, id, historical])
+  }, [client, id, conversation, historical])
 
   return useMemo(
     () => (id === undefined ? undefined : archivedView({ id, ...(conversation === undefined ? {} : { conversation }) }, info, current)),
