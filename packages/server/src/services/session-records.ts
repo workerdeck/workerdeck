@@ -391,7 +391,13 @@ export function createFileSessionRecordStore(options: FileSessionRecordStoreOpti
       return null
     }
     try {
-      return parseSessionRecord(JSON.parse(raw))
+      const parsed: unknown = JSON.parse(raw)
+      const record = parseSessionRecord(parsed)
+      // Another format version is the migration's to read; a current one that does not parse would vanish with its cut.
+      if (!record && (parsed as { version?: unknown } | null)?.version === FORMAT_VERSION) {
+        options.onError?.(new Error(`session record ${path} is incomplete and was skipped`), { path, op: 'read' })
+      }
+      return record
     } catch (error) {
       options.onError?.(error, { path, op: 'read' })
       return null

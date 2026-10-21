@@ -201,7 +201,8 @@ describe('createFileSessionRecordStore', () => {
     await writeFile(join(dir, 'truncated.json'), '{"version":2,"record":{"id":"tru')
 
     expect((await store.list()).map((record) => record.id)).toEqual(['good'])
-    expect(onError).toHaveBeenCalledTimes(1)
-    expect(onError.mock.calls[0]![1]).toMatchObject({ op: 'read' })
+    expect(onError).toHaveBeenCalledTimes(5)
+    expect(onError.mock.calls.map((call) => call[1].op)).toEqual(['read', 'read', 'read', 'read', 'read'])
+    expect(onError.mock.calls.map((call) => String(call[0])).filter((message) => message.includes('incomplete'))).toHaveLength(4)
   })
 })

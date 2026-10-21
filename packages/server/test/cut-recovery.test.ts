@@ -381,6 +381,23 @@ describe('recovery is idempotent', () => {
 })
 
 describe('recovery over records it cannot read or finish', () => {
+  it('reports an unreadable and a partial file, and still finishes every other record', async () => {
+    const { dir, id } = await crashAt('after-commit')
+    await writeFile(join(dir, 'sessions', 'truncated.json'), '{"version":2,"record":{"id":"trunc')
+    await writeFile(
+      join(dir, 'sessions', 'partial.json'),
+      JSON.stringify({ version: 2, record: { id: 'partial', conversation: 2, createdAt: 1, cut: { from: 1, to: 2, phase: 'committed' } } }),
+    )
+
+    const second = await gateway(dir)
+    const reported = [...new Set(second.storeErrors.map(String))]
+    expect(reported).toHaveLength(2)
+    expect(reported.some((message) => message.includes('partial.json') && message.includes('incomplete'))).toBe(true)
+    expect(second.built.map((runner) => runner.id)).toEqual([id])
+    await idle(second.server, id)
+    expect((await onDisk(dir, id)).cut).toBeUndefined()
+  })
+
   it('reports a record whose recovery fails through onError and carries on with the others', async () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir)

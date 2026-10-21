@@ -117,8 +117,9 @@ describe('the runtime view over the file record store', () => {
     await writeFile(join(dir, 'notes.txt'), 'ignored entirely')
 
     expect((await store.list()).map((r) => r.id)).toEqual(['good'])
-    expect(onError).toHaveBeenCalledTimes(1)
-    expect(onError.mock.calls[0]![1]).toMatchObject({ op: 'read' })
+    expect(onError).toHaveBeenCalledTimes(2)
+    expect(onError.mock.calls.map((call) => call[1].op)).toEqual(['read', 'read'])
+    expect(onError.mock.calls.some((call) => String(call[0]).includes('shapeless.json'))).toBe(true)
   })
 
   it('returns null for a session nothing parked', async () => {
