@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AttachmentInput, EngineAdapter, SendMessageOptions } from '@workerdeck/core'
+import type { AttachmentInput, EngineAdapter, SendMessageOptions, SessionRunnerConfig } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type AgentInfo, type ProfileInfo, type SessionInfo } from '@workerdeck/protocol'
 import {
   createFileAgentStore,
@@ -99,6 +99,7 @@ async function createNamed(base: string, name: string, extra: Record<string, unk
 
 async function idle(server: WorkerServer, id: string): Promise<void> {
   await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'))
+  await vi.waitFor(async () => expect((await server.records.get(id))?.cut?.from).not.toBe(0))
 }
 
 async function stop(server: WorkerServer): Promise<void> {
@@ -423,31 +424,96 @@ describe('review probes', () => {
     expect(healed.config).not.toHaveProperty('model')
   })
 
-  it('tells an abandoned create, a named one never started, and a session that ran without state apart', async () => {
+  it('recovers a create that crashed after its intent and before its start, sending its first message once', async () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir)
-    const named = await createNamed(first.base, 'Atlas')
-    const ran = (await call(first.base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a' })).body.session.id as string
-    const abandoned = (await call(first.base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a' })).body.session.id as string
-    await idle(first.server, ran)
+    const plain = (await call(first.base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'do the thing' })).body.session.id as string
+    await idle(first.server, plain)
     await stop(first.server)
     const records = createFileSessionRecordStore({ dir: join(dir, 'sessions') })
-    for (const id of [named.id, ran, abandoned]) {
-      const { runtime: _runtime, startedAt, ...bare } = (await records.get(id))!
-      await records.save(id === ran ? { ...bare, startedAt } : bare)
-    }
+    const { runtime: _runtime, ...bare } = (await records.get(plain))!
+    await records.save({
+      ...bare,
+      cut: { from: 0, to: 1, phase: 'committed', epoch: 0, target: bare.requested! },
+      pendingPrompt: { text: 'do the thing', n: 1, state: 'pending' },
+    })
 
     const second = await gateway(dir)
-    await idle(second.server, named.id)
-    expect(second.built.map((runner) => runner.id)).toEqual([named.id])
-    expect((await second.server.records.get(named.id))?.startedAt).toEqual(expect.any(Number))
-    const listed = (await call(second.base, '/sessions')).body.sessions as SessionInfo[]
-    expect(listed.map((info) => [info.id, info.status]).sort()).toEqual(
-      [
-        [named.id, 'idle'],
-        [ran, 'failed'],
-      ].sort(),
-    )
+    expect(second.built.map((runner) => [runner.id, runner.sent])).toEqual([[plain, ['do the thing']]])
+    await vi.waitFor(async () => expect((await second.server.records.get(plain))?.cut).toBeUndefined())
+    expect((await second.server.records.get(plain))?.pendingPrompt).toBeUndefined()
+  })
+
+  it('recovers a named create whose first message was already handed off as uncertain, never resent', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir)
+    const named = (await call(first.base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp', profile: 'claude-a' }, prompt: 'plan it' })).body
+      .agent.id as string
+    await idle(first.server, named)
+    await stop(first.server)
+    const records = createFileSessionRecordStore({ dir: join(dir, 'sessions') })
+    const { runtime: _runtime, ...bare } = (await records.get(named))!
+    await records.save({
+      ...bare,
+      cut: { from: 0, to: 1, phase: 'committed', epoch: 0, target: bare.requested! },
+      pendingPrompt: { text: 'plan it', n: 1, state: 'sending' },
+    })
+
+    const second = await gateway(dir)
+    expect(second.built.map((runner) => [runner.id, runner.sent])).toEqual([[named, []]])
+    await vi.waitFor(async () => expect((await second.server.records.get(named))?.cut).toBeUndefined())
+    const agent = (await call(second.base, `/agents/${named}`)).body.agent as AgentInfo
+    expect(agent).toMatchObject({ id: named, name: 'Atlas', undelivered: 'plan it' })
+    expect((await call(second.base, `/agents/${named}/undelivered`, 'POST', { send: true, expectedGeneration: 1 })).status).toBe(200)
+    expect(second.built.at(-1)!.sent).toEqual(['plan it'])
+  })
+
+  it('merges settings from the record even after an index write threw', async () => {
+    const dir = await fixture.stateDir()
+    const store = createFileAgentStore(join(dir, 'agents.json'))
+    let throwOnce = false
+    const flaky: AgentStore = {
+      list: () => store.list(),
+      apply: (changes) => {
+        if (throwOnce) {
+          throwOnce = false
+          throw new Error('disk full')
+        }
+        return store.apply(changes)
+      },
+    }
+    const { server, base } = await gateway(dir, { agentStore: flaky })
+    const res = await call(base, '/agents', 'POST', { name: 'Wren', config: { cwd: '/tmp', profile: 'claude-a', model: 'old' } })
+    const id = res.body.agent.id as string
+    throwOnce = true
+    expect((await call(base, `/agents/${id}`, 'PATCH', { config: { model: 'new' } })).status).toBe(500)
+    expect((await server.records.get(id))?.requested?.model).toBe('new')
+    expect((await call(base, `/agents/${id}`, 'PATCH', { config: { brief: 'Be brief.' } })).status).toBe(200)
+    expect((await server.records.get(id))?.requested?.model).toBe('new')
+    expect((await call(base, `/agents/${id}`)).body.agent.config).toMatchObject({ model: 'new', brief: 'Be brief.' })
+    expect((JSON.parse(await readFile(join(dir, 'agents.json'), 'utf8')) as StoredAgent[]).find((row) => row.id === id)?.config.model).toBe('new')
+  })
+
+  it('moves an owner into every config a rebuild or a cut reads, kept through un-name, wake, cut and restart', async () => {
+    const dir = await fixture.stateDir()
+    const owned = { profiles: [...PROFILES.map((profile) => ({ ...profile, owner: 'alice' })), { name: 'claude-b', engine: 'claude' as const, configDir: '/tmp', owner: 'bob' }] }
+    const first = await gateway(dir, { options: owned })
+    const session = await createNamed(first.base, 'Wren')
+    await idle(first.server, session.id)
+    expect((await call(first.base, `/agents/${session.id}`, 'PATCH', { owner: 'bob' })).status).toBe(200)
+    const record = (await first.server.records.get(session.id))!
+    expect([record.owner, record.requested?.owner, record.running?.owner]).toEqual(['bob', 'bob', 'bob'])
+    expect((await call(first.base, `/sessions/${session.id}`, 'PATCH', { agent: null }, 1)).status).toBe(200)
+    await stop(first.server)
+
+    const second = await gateway(dir, { options: owned })
+    const woken = await second.server.parking.ensureLive(session.id)
+    expect((woken as unknown as { config: SessionRunnerConfig }).config.owner).toBe('bob')
+    await idle(second.server, session.id)
+    expect((await call(second.base, `/sessions/${session.id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
+    await idle(second.server, session.id)
+    expect(second.built.at(-1)!.config.owner).toBe('bob')
+    expect((await second.server.records.get(session.id))?.owner).toBe('bob')
   })
 })
 

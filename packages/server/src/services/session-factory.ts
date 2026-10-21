@@ -52,7 +52,9 @@ export type SessionFactoryDeps = {
   bridge: BridgeHub
   // Persisted and read back before the runner is registered or started: a session never works without its record.
   openRecord?: (runner: Runner, config: SessionRunnerConfig) => Promise<void>
-  recordStarted?: (id: string) => Promise<unknown>
+  // The first message is about to reach the engine (`sending`), and the start has been handed over.
+  handingOff?: (id: string) => Promise<unknown>
+  started?: (runner: Runner) => void
   agentBrief?: (sessionId: string | undefined) => string | undefined
   agentInstructionScope?: (sessionId: string | undefined) => InstructionScope | undefined
   avatar?: { directory: AvatarDirectory; isAgent: (sessionId: string | undefined) => boolean }
@@ -345,7 +347,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     try {
       await deps.openRecord?.(built, config)
       await options?.beforeStart?.(built)
-      await deps.recordStarted?.(built.id)
+      await deps.handingOff?.(built.id)
     } catch (error) {
       built.close('error')
       throw error
@@ -355,6 +357,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     parking.remember(runner.id, config)
     parking.watch(runner)
     void runner.start()
+    deps.started?.(runner)
     return runner
   }
 

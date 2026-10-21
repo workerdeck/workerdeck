@@ -22,8 +22,6 @@ import {
   conversationRows,
   createNamedSession,
   finishRetired,
-  startNeverStarted,
-  waitsForStart,
   requestFromConfig,
   retireAgent,
   rollAvatar,
@@ -104,14 +102,6 @@ export async function handleAgents(
     requireMethod(req, 'POST')
     const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { expectedGeneration?: unknown }
     const guard = conversationGuard(ctx, agent.id, auth, expectedGenerationOf(body))
-    if (waitsForStart(await ctx.records.get(agent.id), ctx)) {
-      const session = await ctx.locks.run([agent.id], async () => {
-        await guard(await ctx.records.get(agent.id))
-        return startNeverStarted(ctx, agent.id)
-      })
-      await respond(ctx, res, 200, agent, session)
-      return
-    }
     const retried = await ctx.cuts.retryStart(agent.id, guard)
     await respond(ctx, res, 200, agent, retried.session)
     return

@@ -108,6 +108,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   // Sends the CLI took and has not answered yet, oldest first; a turn's assistant frames name the send they answer.
   #unanswered: string[] = []
   #stampedSinceResult = false
+  // A producer that never stamps (older CLIs): each turn then consumes every send made before it started.
+  #stamps = false
+  #turnBase = 0
   // The row a compaction is drawing on, from the first 'compacting' status to the boundary that
   // settles it. The boundary has a uuid of its own, but it is the *end* of the compaction, so
   // correlating here is what lets one row settle rather than two rows appear.
@@ -597,17 +600,27 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       const stamp = msg as { user_message_uuid?: string; user_message_uuids?: string[] }
       const answered = stamp.user_message_uuids ?? (stamp.user_message_uuid === undefined ? [] : [stamp.user_message_uuid])
       const at = Math.max(-1, ...answered.map((uuid) => this.#unanswered.indexOf(uuid)))
+      if (answered.length > 0) {
+        this.#stamps = true
+      }
       if (at >= 0) {
         this.#unanswered.splice(0, at + 1)
         this.#stampedSinceResult = true
       }
       return
     }
+    if (msg.type === 'system' && msg.subtype === 'session_state_changed' && msg.state === 'running') {
+      this.#turnBase = this.#unanswered.length
+      return
+    }
     if (msg.type === 'result') {
-      // A turn that ended before any frame named its send (an interrupt, an early error) still consumed it.
-      if (!this.#stampedSinceResult && msg.subtype !== 'success') {
+      if (!this.#stamps) {
+        this.#unanswered.splice(0, Math.max(this.#turnBase, 1))
+      } else if (!this.#stampedSinceResult && msg.subtype !== 'success') {
+        // A turn that ended before any frame named its send (an interrupt, an early error) still consumed it.
         this.#unanswered.shift()
       }
+      this.#turnBase = 0
       this.#stampedSinceResult = false
     }
   }

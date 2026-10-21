@@ -4,7 +4,7 @@ import type { ServerContext } from '../context.ts'
 import { fail } from '../lib/http.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { neverStarted, type SessionRecord } from '../services/session-records.ts'
+import type { SessionRecord } from '../services/session-records.ts'
 import type { StoredSessionRecord } from '../services/session-store.ts'
 
 export type ResolvedSession = { runner: Runner | undefined; parked: StoredSessionRecord | null; info: SessionInfo }
@@ -29,8 +29,8 @@ export async function resolveSession(ctx: ServerContext, id: string, auth: AuthC
   return { runner, parked, info }
 }
 
-// Runtime absent is not a status: a record with neither runner nor runtime ran and left nothing to wake, so it is
-// listed as failed; an unnamed create that never started is not listed at all. Closed records only on request.
+// Runtime absent is not a status: a record with neither runner nor runtime is listed `starting` while its first start
+// is still owed (recovery starts it), else `failed` (it ran and left nothing to wake). Closed records only on request.
 export async function listSessions(ctx: ServerContext, closed: boolean): Promise<SessionInfo[]> {
   const sessions = [...ctx.registry.list(), ...(await ctx.parking.listInfo())].filter((info) => !ctx.agents.tombstone(info.id))
   const shown = new Set(sessions.map((info) => info.id))
@@ -44,8 +44,8 @@ export async function listSessions(ctx: ServerContext, closed: boolean): Promise
       }
       continue
     }
-    if (record.runtime === undefined && !hidden(ctx, record)) {
-      sessions.push(recordInfo(ctx, record, 'failed'))
+    if (record.runtime === undefined) {
+      sessions.push(recordInfo(ctx, record, absentStatus(record)))
     }
   }
   return sessions
@@ -53,15 +53,14 @@ export async function listSessions(ctx: ServerContext, closed: boolean): Promise
 
 async function endedInfo(ctx: ServerContext, id: string): Promise<SessionInfo | undefined> {
   const record = await ctx.records.get(id)
-  if (!record || record.closedAt !== undefined || record.runtime !== undefined || hidden(ctx, record) || ctx.registry.get(id)) {
+  if (!record || record.closedAt !== undefined || record.runtime !== undefined || ctx.registry.get(id)) {
     return undefined
   }
-  return recordInfo(ctx, record, 'failed')
+  return recordInfo(ctx, record, absentStatus(record))
 }
 
-// A create that never started its engine: unnamed it is nothing, named it waits for its start (startup or Retry start).
-function hidden(ctx: ServerContext, record: SessionRecord): boolean {
-  return neverStarted(record) && !ctx.agents.get(record.id)
+function absentStatus(record: SessionRecord): SessionStatus {
+  return record.cut?.from === 0 && record.startFailed === undefined ? 'starting' : 'failed'
 }
 
 function recordInfo(ctx: ServerContext, record: SessionRecord, status: SessionStatus): SessionInfo {

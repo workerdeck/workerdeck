@@ -15,7 +15,7 @@ import { fail } from '../lib/http.ts'
 import type { StoredAgent } from '../services/agent-store.ts'
 import { SHARING_OFF, isAgentRefusal, type AgentRefusal, type RemoteJoin, type RetireOutcome } from '../services/agents.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { neverStarted, requestedConfig, type SessionRecord } from '../services/session-records.ts'
+import { requestedConfig, type SessionRecord } from '../services/session-records.ts'
 import { entryInfo } from './conversations.ts'
 import { vetCreateRequest } from './create-vet.ts'
 import { sessionInfoOf } from './session-lookup.ts'
@@ -221,29 +221,6 @@ export async function endSession(ctx: ServerContext, id: string): Promise<void> 
   ctx.producedFiles.drop(id)
 }
 
-// A named session whose create wrote its record and index row but never started the engine: started now, under its
-// id, from the record's `requested`. The caller holds its lifecycle lock.
-export async function startNeverStarted(ctx: ServerContext, id: string): Promise<SessionInfo> {
-  const record = await ctx.records.get(id)
-  const agent = ctx.agents.get(id)
-  const base = record?.requested ?? record?.running
-  if (!record || !agent || !neverStarted(record) || ctx.registry.get(id) || !base) {
-    fail(409, 'no new conversation is waiting to start')
-  }
-  const config = ctx.factory.buildRunnerConfig({ ...base, prompt: undefined, resume: undefined, forkSession: undefined })
-  const runner = await ctx.factory.createRunner(config, {
-    id,
-    brief: agent.config.brief?.trim() || undefined,
-    instructionScope: agent.config.instructionScope,
-    agent: true,
-  })
-  return runner.info()
-}
-
-export function waitsForStart(record: SessionRecord | null, ctx: ServerContext): boolean {
-  return record !== null && neverStarted(record) && ctx.agents.get(record.id) !== undefined && !ctx.registry.get(record.id)
-}
-
 export async function reconcileIdentity(ctx: ServerContext, onError: (error: unknown) => void, dropOrphans: boolean): Promise<void> {
   for (const tombstone of ctx.agents.tombstones()) {
     const record = await ctx.records.get(tombstone.id).catch((error: unknown) => {
@@ -265,9 +242,6 @@ export async function reconcileIdentity(ctx: ServerContext, onError: (error: unk
       const record = await ctx.records.get(agent.id)
       if (record) {
         await syncSettingsCache(ctx, agent.id)
-        if (waitsForStart(record, ctx)) {
-          await ctx.locks.run([agent.id], () => startNeverStarted(ctx, agent.id))
-        }
       } else {
         orphans.push(agent)
       }
@@ -300,6 +274,7 @@ export function updateAgent(
 // The whole patch is validated before anything is written; the record (settings, owner) is written first, then the
 // index. An index write that still refuses leaves the record as the authority and the cache reconciled from it.
 async function updateAgentLocked(ctx: ServerContext, id: string, patch: UpdateAgentRequest, auth?: AuthContext): Promise<StoredAgent | AgentRefusal> {
+  await syncSettingsCache(ctx, id)
   const current = ctx.agents.get(id)
   if (!current) {
     return { status: 404, error: `no such agent: ${id}` }
@@ -318,8 +293,10 @@ async function updateAgentLocked(ctx: ServerContext, id: string, patch: UpdateAg
   }
   const owner = patch.owner !== undefined && patch.owner !== current.owner ? patch.owner : undefined
   let requested: SessionRunnerConfig | undefined
-  if (patch.config !== undefined && auth) {
-    const merged: Record<string, unknown> = { ...current.config, ...patch.config }
+  if (patch.config !== undefined && auth && REQUESTED_KEYS.some((key) => key in patch.config!)) {
+    const record = await ctx.records.get(id)
+    const canonical = record?.requested ?? record?.running
+    const merged: Record<string, unknown> = { ...(canonical ? settingsFrom(current.config, canonical) : current.config), ...patch.config }
     for (const key of Object.keys(merged)) {
       if (merged[key] === null) {
         delete merged[key]
@@ -335,7 +312,13 @@ async function updateAgentLocked(ctx: ServerContext, id: string, patch: UpdateAg
     )
   }
   await writeRecordAuthority(ctx, id, requested, owner)
-  const outcome = await patchAgent(ctx, current, patch)
+  let outcome: StoredAgent | AgentRefusal
+  try {
+    outcome = await patchAgent(ctx, current, patch)
+  } catch (error) {
+    await syncSettingsCache(ctx, id).catch(() => {})
+    throw error
+  }
   if (isAgentRefusal(outcome)) {
     await syncSettingsCache(ctx, id)
   } else if (patch.sharing !== undefined) {
@@ -361,14 +344,23 @@ async function writeRecordAuthority(ctx: ServerContext, id: string, settings: Se
     }
     if (owner !== undefined) {
       next.owner = owner
+      for (const key of ['requested', 'running'] as const) {
+        if (next[key]) {
+          next[key] = { ...next[key], owner }
+        }
+      }
       if (latest!.runtime) {
-        next.runtime = { ...latest!.runtime, info: { ...latest!.runtime.info, owner } }
+        next.runtime = { ...latest!.runtime, info: { ...latest!.runtime.info, owner }, config: { ...latest!.runtime.config, owner } }
       }
     }
     return next
   })
   if (owner !== undefined) {
     ctx.registry.get(id)?.setOwner?.(owner)
+    const live = ctx.parking.configOf(id)
+    if (live) {
+      ctx.parking.remember(id, { ...live, owner })
+    }
   }
 }
 
@@ -382,7 +374,8 @@ export async function syncSettingsCache(ctx: ServerContext, id: string): Promise
   }
   await ctx.agents.patch(id, (agent) => {
     const config = settingsFrom(agent.config, requested)
-    return config === agent.config ? agent : { ...agent, config }
+    const owner = record?.owner ?? agent.owner
+    return config === agent.config && owner === agent.owner ? agent : { ...agent, config, ...(owner === undefined ? {} : { owner }) }
   })
 }
 

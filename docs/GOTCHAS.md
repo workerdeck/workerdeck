@@ -1459,18 +1459,26 @@ id. Its conversations are the record's history entries; the cut (`services/conve
   brief, sharing, lead, order, remote team state and roster. `PATCH /agents/:id` takes the
   lifecycle lock, validates the whole patch (`previewUpdate` plus the settings' create ladder)
   before any write, writes the record (`requested`, `owner` and the runtime's copy) first, then the
-  index. The index keeps a cache of the engine settings for the synchronous readers (owner
-  stamping, the permission-mode check of a team across owners); `syncSettingsCache` brings it back
-  from the record after an index write that still refused and at startup. `AgentInfo.config`
+  index. Engine settings are always merged from the record's `requested`, never from the index,
+  which keeps only a cache for the synchronous readers (owner stamping, the permission-mode check
+  of a team across owners); `syncSettingsCache` reconciles settings and owner from the record
+  before every update, after an index write that refused or threw, and at startup. An owner
+  transfer rewrites `owner` in the record, `requested`, `running`, the runtime's info and config,
+  parking's remembered config and the live runner, so a wake, a cut or a restart keep it, also
+  after an un-name. `AgentInfo.config`
   reads set and cleared engine settings from `requested`, so it shows the profile the create pinned.
 - **Create named: record, index row, start.** `POST /agents` and `POST /sessions { agent }` open
   the record (read back), write the index row in `createRunner`'s `beforeStart`, then start the
-  engine, so a team member never runs a turn unnamed. `startedAt` is written (read back) just
-  before the start, so a record tells three cases apart: no `startedAt` and no index row is an
-  abandoned create (never listed); no `startedAt` with an index row is a named session that never
-  started, which startup reconciliation starts from `requested` (or Retry start does); `startedAt`
-  without runtime or runner ran and left nothing to wake (listed `failed`). A failed index write
-  closes the runner and discards the still-empty record.
+  engine, so a team member never runs a turn unnamed. Every non-job create opens its record with
+  a first-start intent (the cut's committed intent from 0 to 1, target = `requested`) and its
+  first message as `pendingPrompt` `pending`, in the same write; the prompt becomes `sending`
+  before the engine's start. The intent stays until the first conversation is durable (the cut's
+  startup and readback rules, settled in the background; a later cut waits for it), so a crash
+  anywhere is recovered by `cuts.recover` under the same id: a fresh start with a `pending`
+  prompt, never a resend of a `sending` one (it surfaces as `uncertain`, `AgentInfo.undelivered`).
+  A failed start is Retry start. A crash before the index row recovers an unnamed session. While
+  the intent is owed a record with no runner lists as `starting`. A failed index write closes the
+  runner and discards the record. Shutdown leaves in-flight intents for the next generation.
 - **Naming is a PATCH.** `PATCH /sessions/:id { agent }` names an unnamed session (operator only,
   owner resolved as for a create) or updates a named one; `{ agent: null }` un-names it and is
   refused while it leads, belongs to, or is joining a team. Un-naming touches only the index.
@@ -1505,7 +1513,10 @@ id. Its conversations are the record's history entries; the cut (`services/conve
   waits. Such a message is answered in n: never dropped with n's engine, never carried into n+1.
   While a cut runs, peer sends are refused (`delivered: false`, "a new conversation is starting")
   so the sender resends to n+1. A runner without `pendingInput` is not checked. The claude stamps
-  are read from SDK 0.3.293's documented fields; no real CLI run has confirmed them yet.
+  are read from SDK 0.3.293's documented fields (the supported producer; no version check exists to
+  pin it); no real CLI run has confirmed them yet. A producer that has stamped nothing this session
+  falls back: each turn result consumes every send made before that turn started (at least one),
+  so the count can never stay stuck.
 - **Runtime absent is not a status.** `GET /sessions` lists from the records: a runner or runtime
   says what a session is; a record with neither (it ran and left nothing to wake) is listed
   `failed` and refuses a wake, unless it never held anything; closed records only with `?closed=1`.

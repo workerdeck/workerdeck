@@ -52,8 +52,6 @@ export type SessionRecord = {
   pendingPrompt?: PendingPrompt
   startFailed?: StartFailure
   closedAt?: number
-  // Set once the first engine was handed its start: a record without it never ran.
-  startedAt?: number
   createdAt: number
 }
 
@@ -110,7 +108,10 @@ export class MemorySessionRecordStore implements SessionRecordStore {
   }
 }
 
-export type SessionOpening = Pick<SessionRecord, 'owner' | 'scope' | 'requested'>
+// `firstStart`: the create's start intent (and its first message) land with the record, so no crash loses either.
+export type SessionOpening = Pick<SessionRecord, 'owner' | 'scope' | 'requested'> & {
+  firstStart?: { epoch: number; target: SessionRunnerConfig; prompt?: string }
+}
 
 export class SessionRecords {
   #store: SessionRecordStore
@@ -186,6 +187,13 @@ export class SessionRecords {
           ;(next as Record<string, unknown>)[key] = opening[key]
         }
       }
+      const first = opening.firstStart
+      if (first && next.conversation === 1 && next.conversations.length === 0 && next.runtime === undefined) {
+        next.cut = { from: 0, to: 1, phase: 'committed', epoch: first.epoch, target: first.target }
+        if (first.prompt) {
+          next.pendingPrompt = { text: first.prompt, n: 1, state: 'pending' }
+        }
+      }
       return next
     })
   }
@@ -224,16 +232,13 @@ export class SessionRecords {
     return cleared
   }
 
-  markStarted(id: string): Promise<SessionRecord> {
-    return this.transactDurable(id, (current) => {
-      const base = current ?? freshRecord(id)
-      return base.startedAt === undefined ? { ...base, startedAt: Date.now() } : base
-    })
-  }
-
   // A record opened for a create that did not go through: removed only while it still holds nothing.
   async discard(id: string): Promise<void> {
-    await this.transact(id, (current) => (current && current.runtime === undefined && disposable(current) ? null : undefined))
+    await this.transact(id, (current) =>
+      current && current.runtime === undefined && disposable({ ...current, cut: current.cut?.from === 0 ? undefined : current.cut, pendingPrompt: undefined })
+        ? null
+        : undefined,
+    )
   }
 
   // Seeding only (tests, the P2 migration): a runtime for a record still on its first conversation, no token asked.
@@ -314,9 +319,9 @@ function checkConversation(id: string, current: SessionRecord | null, conversati
 }
 
 // Owner, scope and config are the session's own: they go with it. Anything a cut or a close wrote keeps the record.
-// Opened by a create whose engine was never started: holds nothing a list or a wake could use.
-export function neverStarted(record: SessionRecord): boolean {
-  return record.startedAt === undefined && record.runtime === undefined && disposable(record)
+// The first conversation's start, still owed: the cut's committed intent from 0 to 1.
+export function firstStartOwed(record: SessionRecord): boolean {
+  return record.cut?.from === 0
 }
 
 export function disposable(record: SessionRecord): boolean {

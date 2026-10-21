@@ -15,7 +15,7 @@ import {
 } from '@workerdeck/core'
 import type { AvatarDirectory, EngineAdapter, PeerDirectory, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
-import { isSharing, mergePricing, type CreateSessionRequest, type ProfileEngine, type SessionInfo } from '@workerdeck/protocol'
+import { isJobRun, isSharing, mergePricing, type CreateSessionRequest, type ProfileEngine, type SessionInfo } from '@workerdeck/protocol'
 import type { ServerContext } from './context.ts'
 import { createServerLifecycle } from './lifecycle.ts'
 import { httpErrorStatus, json } from './lib/http.ts'
@@ -394,13 +394,18 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     bridge,
     openRecord: async (runner, config) => {
       const info = runner.info()
+      const requested = requestedConfig(config)
       await records.open(runner.id, {
         ...((info.owner ?? config.owner) ? { owner: info.owner ?? config.owner } : {}),
         ...(config.scope ? { scope: config.scope } : {}),
-        requested: requestedConfig(config),
+        requested,
+        ...(isJobRun(info)
+          ? {}
+          : { firstStart: { epoch: info.epoch ?? config.epoch ?? 0, target: requested, ...(config.prompt ? { prompt: config.prompt } : {}) } }),
       })
     },
-    recordStarted: (id) => records.markStarted(id),
+    handingOff: (id) => cuts.handingOff(id),
+    started: (runner) => cuts.firstStarted(runner),
     agentBrief: (sessionId) => agents.briefFor(sessionId),
     agentInstructionScope: (sessionId) => agents.instructionScopeFor(sessionId),
     avatar: avatarChanges
@@ -549,6 +554,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       ownPeers = undefined
       ownShells = undefined
       contextResets?.close()
+      cuts.close()
       ownContextResets = undefined
       ownAvatarChanges = undefined
       return agentWrites

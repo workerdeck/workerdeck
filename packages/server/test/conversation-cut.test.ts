@@ -127,8 +127,10 @@ async function create(base: string, extra: Record<string, unknown> = {}, token?:
   return (res.body.session as SessionInfo).id
 }
 
+// Idle, and the create's first-start intent settled, so a test counting store calls starts from a quiet record.
 async function idle(server: WorkerServer, id: string): Promise<void> {
   await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'))
+  await vi.waitFor(async () => expect((await server.records.get(id))?.cut?.from).not.toBe(0))
 }
 
 async function stop(server: WorkerServer): Promise<void> {
@@ -411,7 +413,7 @@ describe('conversation cut on the one session record', () => {
     const store: SessionRecordStore = {
       ...inner,
       save: async (record) => {
-        if (record.cut?.phase === 'committed' && release === undefined) {
+        if (record.cut?.phase === 'committed' && record.cut.from > 0 && release === undefined) {
           committing!()
           await new Promise<void>((resolve) => {
             release = resolve

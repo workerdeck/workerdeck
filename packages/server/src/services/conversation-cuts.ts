@@ -31,11 +31,19 @@ export class ConversationCuts {
   #ended = new Map<string, EndedExecution>()
   #queued = new Map<string, () => void>()
   #failedStarts = new Set<string>()
+  #firstStarts = new Map<string, Promise<void>>()
+  #closed = false
   // Test seam: a step named here throws, standing in for a crash or a refused write at that boundary.
   readonly faults = new Set<CutFault>()
 
   bind(ctx: ServerContext): void {
     this.#context = ctx
+  }
+
+  // The generation is ending: a start still settling in the background is left as its intent for the next one to recover,
+  // never failed because shutdown closed its runner.
+  close(): void {
+    this.#closed = true
   }
 
   get #ctx(): ServerContext {
@@ -57,8 +65,44 @@ export class ConversationCuts {
 
   // `guard` runs inside the lifecycle lock on the record as it is then: the caller's own check of the current
   // conversation and of its sight of the session, so nothing it decided before the lock can be acted on after it.
-  cut(id: string, request: CutRequest, guard?: CutGuard): Promise<CutResult> {
-    return this.#ctx.locks.run([id], () => this.#cut(id, request, guard))
+  async cut(id: string, request: CutRequest, guard?: CutGuard): Promise<CutResult> {
+    await this.#firstStarts.get(id)
+    return await this.#ctx.locks.run([id], () => this.#cut(id, request, guard))
+  }
+
+  // A create's first message is handed to the engine at its start: from here a crash leaves it `uncertain`, never resent.
+  async handingOff(id: string): Promise<void> {
+    await this.#ctx.records.transactDurable(id, (current) => {
+      const prompt = current?.pendingPrompt
+      return prompt?.n === 1 && prompt.state === 'pending' && current!.cut?.from === 0
+        ? { ...current!, pendingPrompt: { ...prompt, state: 'sending' } }
+        : current!
+    })
+  }
+
+  // The create's start intent stays until the first conversation is durable, as a cut's does; it settles in the
+  // background, so the create answers at once and a later cut waits for it.
+  firstStarted(runner: Runner): void {
+    const ctx = this.#ctx
+    const id = runner.id
+    const settled = (async () => {
+      const record = await ctx.records.get(id)
+      if (record?.cut?.from !== 0) {
+        return
+      }
+      const startup = await startupOf(ctx, runner, record.pendingPrompt?.n === 1)
+      if (this.#closed) {
+        return
+      }
+      await ctx.locks.run([id], () => this.#settle(id, 1, false, runner, startup, false))
+    })()
+      .catch((error: unknown) => ctx.locks.onError(error))
+      .finally(() => {
+        if (this.#firstStarts.get(id) === settled) {
+          this.#firstStarts.delete(id)
+        }
+      })
+    this.#firstStarts.set(id, settled)
   }
 
   // The one rule for every door that asks while a turn runs: the cut waits for the next idle.
@@ -399,7 +443,7 @@ export class ConversationCuts {
       return { session: ctx.projects.withProject(started.info()), conversation: cut.to }
     }
     void startup
-      .then((late) => ctx.locks.run([id], () => this.#settle(id, cut.to, uncertain, started, late, false)))
+      .then((late) => (this.#closed ? undefined : ctx.locks.run([id], () => this.#settle(id, cut.to, uncertain, started, late, false))))
       .catch((error: unknown) => ctx.locks.onError(error))
     this.#announce(id, cut.to, cut.epoch)
     return { session: ctx.projects.withProject(started.info()), conversation: cut.to }
