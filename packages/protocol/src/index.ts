@@ -1,4 +1,4 @@
-import type { AgentRef, SessionAgentRequest, Sharing } from './agents.ts'
+import type { AgentConfig, AgentRef, SessionAgentRequest, Sharing } from './agents.ts'
 import type { StatusLabel, StatusLabelInput } from './status-label.ts'
 import type { ByModel, PricingOverrides, ProfileSpend } from './pricing.ts'
 
@@ -1118,8 +1118,17 @@ export type CreateSessionResponse = { session: SessionInfo }
 export type GetSessionResponse = { session: SessionInfo }
 
 // `agent` names an unnamed session (operator only), updates a named one's identity, and `null` un-names it.
-export type UpdateSessionRequest = { title?: string | null; statusLabel?: StatusLabelInput | null; agent?: SessionAgentRequest | null }
-export type UpdateSessionResponse = { session: SessionInfo }
+// What the session's next conversation starts from (the record's `requested`); an edit applies at the next cut.
+export type SessionSettings = Pick<AgentConfig, 'cwd' | 'profile' | 'model' | 'reasoningEffort' | 'permissionMode' | 'agentContextReset'>
+export type SessionSettingsPatch = { [K in keyof SessionSettings]?: SessionSettings[K] | null }
+
+export type UpdateSessionRequest = {
+  title?: string | null
+  statusLabel?: StatusLabelInput | null
+  agent?: SessionAgentRequest | null
+  config?: SessionSettingsPatch
+}
+export type UpdateSessionResponse = { session: SessionInfo; settings?: SessionSettings }
 
 export type ResolvePermissionRequest =
   | { behavior: 'allow'; updatedInput?: Record<string, unknown> }

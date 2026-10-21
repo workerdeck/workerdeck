@@ -7,6 +7,7 @@ import {
   type AgentInfo,
   type SessionAgentRequest,
   type SessionInfo,
+  type SessionSettings,
   type Sharing,
   type UpdateAgentRequest,
 } from '@workerdeck/protocol'
@@ -301,22 +302,11 @@ async function updateAgentLocked(ctx: ServerContext, id: string, patch: UpdateAg
   const owner = patch.owner !== undefined && (patch.owner !== current.owner || patch.owner !== recordOwner) ? patch.owner : undefined
   let requested: SessionRunnerConfig | undefined
   if (patch.config !== undefined && auth && REQUESTED_KEYS.some((key) => key in patch.config!)) {
-    const record = await ctx.records.get(id)
-    const canonical = record?.requested ?? record?.running
-    const merged: Record<string, unknown> = { ...(canonical ? settingsFrom(current.config, canonical) : current.config), ...patch.config }
-    for (const key of Object.keys(merged)) {
-      if (merged[key] === null) {
-        delete merged[key]
-      }
+    const vetted = await requestedFrom(ctx, id, current.config, patch.config, auth, owner ?? current.owner, true)
+    if (isAgentRefusal(vetted)) {
+      return vetted
     }
-    const principalOwner = owner ?? current.owner
-    const vetted = vetCreateRequest(ctx, requestFromConfig(merged as AgentConfig, undefined), auth, principalOwner)
-    if (!vetted.ok) {
-      return { status: vetted.status, error: vetted.error }
-    }
-    requested = requestedConfig(
-      ctx.factory.buildRunnerConfig(vetted.request, { operator: ctx.auth.isOperator(auth), ...(principalOwner ? { owner: principalOwner } : {}) }),
-    )
+    requested = vetted
   }
   await writeRecordAuthority(ctx, id, requested, owner)
   let outcome: StoredAgent | AgentRefusal
@@ -332,6 +322,63 @@ async function updateAgentLocked(ctx: ServerContext, id: string, patch: UpdateAg
     ctx.teams?.republish()
   }
   return outcome
+}
+
+// Shared by `PATCH /agents/:id` and `PATCH /sessions/:id { config }`: the next conversation's settings, vetted as a create
+// would be. They apply at the next cut, never to the running conversation.
+async function requestedFrom(
+  ctx: ServerContext,
+  id: string,
+  base: AgentConfig,
+  patch: Record<string, unknown>,
+  auth: AuthContext,
+  owner: string | undefined,
+  named: boolean,
+): Promise<SessionRunnerConfig | AgentRefusal> {
+  const record = await ctx.records.get(id)
+  const canonical = record?.requested ?? record?.running
+  const merged: Record<string, unknown> = { ...(canonical ? settingsFrom(base, canonical) : base), ...patch }
+  for (const key of Object.keys(merged)) {
+    if (merged[key] === null) {
+      delete merged[key]
+    }
+  }
+  const request = requestFromConfig(merged as AgentConfig, undefined)
+  if (!named && merged.agentContextReset === undefined) {
+    delete request.agentContextReset
+  }
+  const vetted = vetCreateRequest(ctx, request, auth, owner)
+  if (!vetted.ok) {
+    return { status: vetted.status, error: vetted.error }
+  }
+  return requestedConfig(ctx.factory.buildRunnerConfig(vetted.request, { operator: ctx.auth.isOperator(auth), ...(owner ? { owner } : {}) }))
+}
+
+// `PATCH /sessions/:id { config }`, for every session; a named one goes through its agent's edit. The caller holds the
+// session's lifecycle lock.
+export async function editSettings(ctx: ServerContext, info: SessionInfo, patch: Record<string, unknown>, auth: AuthContext): Promise<SessionSettings> {
+  if (ctx.agents.get(info.id)) {
+    settled(await updateAgentLocked(ctx, info.id, { config: patch as AgentConfig }, auth))
+  } else {
+    const record = await ctx.records.get(info.id)
+    if (!record || record.closedAt !== undefined) {
+      fail(404, 'session not found')
+    }
+    const canonical = record.requested ?? record.running
+    const base: AgentConfig = typeof canonical?.agentContextReset === 'boolean' ? { agentContextReset: canonical.agentContextReset } : {}
+    const vetted = await requestedFrom(ctx, info.id, base, patch, auth, record.owner, false)
+    if (isAgentRefusal(vetted)) {
+      fail(vetted.status, vetted.error)
+    }
+    await writeRecordAuthority(ctx, info.id, vetted, undefined)
+  }
+  const latest = await ctx.records.get(info.id)
+  return settingsOf(latest?.requested ?? latest?.running)
+}
+
+function settingsOf(config: SessionRunnerConfig | undefined): SessionSettings {
+  const shown = settingsFrom({}, config ?? {}) as SessionSettings
+  return typeof config?.agentContextReset === 'boolean' ? { ...shown, agentContextReset: config.agentContextReset } : shown
 }
 
 // The record's own fields: `requested` (what the next conversation starts from) and `owner`, the runtime's copy and the

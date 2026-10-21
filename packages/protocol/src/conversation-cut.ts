@@ -37,6 +37,9 @@ export type ConversationsResponse = {
 
 export type ConversationHistoryResponse = { info: SessionInfo; events: SessionEvent[] }
 
+// `DELETE /sessions/:id/conversations/:n` (operator): the gateway's copy is forgotten, n stays, the engine store is untouched.
+export type EraseConversationResponse = { erased: ConversationSummary }
+
 export type SettlePendingPromptRequest = { expectedGeneration: number; send: boolean }
 
 export type RetryStartRequest = { expectedGeneration: number }

@@ -556,6 +556,18 @@ describe('stable session address', () => {
     expect(client.conversationOf('s1')).toBe(3)
   })
 
+  it('edits the next conversation settings by PATCH and erases a past conversation by DELETE, both under the one id', async () => {
+    const calls: { method?: string; url: string; body?: unknown; generation?: string }[] = []
+    const client = recording(calls, { session: { id: 's1', conversation: 2 }, settings: { model: 'm2' } })
+    client.noteConversation('s1', 2)
+    expect((await client.updateSessionSettings('s1', { model: 'm2', permissionMode: null })).settings).toEqual({ model: 'm2' })
+    await client.eraseConversation('s1', 1)
+    expect(calls).toEqual([
+      { method: 'PATCH', url: 'http://host/v1/sessions/s1', body: { config: { model: 'm2', permissionMode: null } }, generation: '2' },
+      { method: 'DELETE', url: 'http://host/v1/sessions/s1/conversations/1' },
+    ])
+  })
+
   it('attaches a past conversation read-only without moving the current token', () => {
     const client = makeClient()
     client.noteConversation('s1', 3)

@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {
   ConversationSummary,
   ConversationsResponse,
+  EraseConversationResponse,
   NewConversationRequest,
   SessionEvent,
   SessionInfo,
@@ -99,6 +100,17 @@ export async function handleConversations(
     })
     return
   }
+  if (req.method === 'DELETE') {
+    const n = conversation !== undefined && /^\d+$/.test(conversation) ? Number(conversation) : undefined
+    if (n === undefined || (!seesCurrent && !visible.some((entry) => entry.n === n))) {
+      fail(404, 'conversation not found')
+    }
+    if (!ctx.auth.isOperator(auth)) {
+      fail(403, 'only an operator can erase a conversation')
+    }
+    json(res, 200, await eraseConversation(ctx, id, n))
+    return
+  }
   requireMethod(req, 'POST')
   if (!seesCurrent) {
     fail(404, 'session not found')
@@ -162,6 +174,28 @@ export async function handleConversations(
       guard,
     ),
   )
+}
+
+// Only the gateway's copy goes: the engine's own store is never read or touched, so `claude --resume` and the CLI's
+// stats keep working. The entry keeps n, its times, its executions and its frozen auth.
+function eraseConversation(ctx: ServerContext, id: string, n: number): Promise<EraseConversationResponse> {
+  return ctx.locks.run([id], async () => {
+    const record = await ctx.records.get(id)
+    const entry = record?.conversations.find((candidate) => candidate.n === n)
+    if (!record || (!entry && n !== record.conversation)) {
+      fail(404, 'conversation not found')
+    }
+    if (!entry) {
+      fail(409, 'the current conversation cannot be erased; start a new conversation first')
+    }
+    const { engine, startedAt, endedAt, executions, auth } = entry
+    const erased: ConversationEntry = { n, engine, cwd: '', startedAt, endedAt, executions, auth, transcript: 'unavailable' }
+    await ctx.records.transactDurable(id, (latest) => ({
+      ...latest!,
+      conversations: latest!.conversations.map((candidate) => (candidate.n === n ? erased : candidate)),
+    }))
+    return { erased: entrySummary(erased) }
+  })
 }
 
 // Re-run under the lifecycle lock: the body may arrive long after the caller's checks, across a cut or a scope change.

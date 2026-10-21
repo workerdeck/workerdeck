@@ -1033,7 +1033,13 @@ Named sessions (create record then index row then start, naming by `PATCH /sessi
 tombstone then close under the members' multi-lock, startup reconciliation, the session list from records) are in
 `docs/GOTCHAS.md` § Agent conversations. History reads
 (`GET .../conversations[/n]`, WS `?conversation=n`) bypass `resolveSession` and authorize on the entry's frozen
-`auth`; an execution of an ended conversation answers 409, authorized on that entry too. A socket is bound to its
+`auth`, and their info is never decorated from the live session (no current agent name, team, shells or owner; an
+absent owner stays absent). `DELETE .../conversations/:n` (operator, lifecycle lock) erases a past entry: n, its
+times, executions and frozen `auth` stay, everything else (engine pointer, snapshot, home, title, cost) goes and it
+reads as `unavailable`; the engine store is never touched and the current conversation is refused (409).
+`PATCH /sessions/:id { config }` edits `requested` for every session under the route's lifecycle lock, vetted as a
+create (`requestedFrom` in `routes/named-sessions.ts`, shared with `PATCH /agents/:id`); it applies at the next cut,
+answers `settings`, and is refused while a cut is in flight and on a job run; an execution of an ended conversation answers 409, authorized on that entry too. A socket is bound to its
 runner and conversation: a command from a replaced runner or with a stale `generation` is refused, and the old
 socket gets `conversation_started` then close 4011 once the commit is durable (a socket that attached while n+1 started is already on it and stays open). A wake that registers a runner while the cut validates refuses the cut (409, try again), so an unvetted runner of n never becomes n+1; an execution result between the stop and the commit answers 409 `a new conversation is starting`, as one during the rest of the cut does. An unnamed `DELETE` appends the
 current conversation to the history and sets `closedAt`. **Parking** is deferred execution's other half and needs `Runner.park()` - which only
@@ -1223,7 +1229,7 @@ Protocol 2 calls: `nameSession(id, agent)` / `unnameSession(id)` (PATCH naming),
 { expectedGeneration, prompt?, target? })` (the cut), `discardAndCut(id, { expectedGeneration, inputRevision,
 prompt? })` after `unconfirmedInputOf(error)` read a refusal (`WorkerDeckError` keeps `code` and the JSON `body`),
 `retryConversationStart`, `settlePendingPrompt`,
-`conversations(id)` and `conversationHistory(id, n)`; `attach(id, { conversation: n })` opens a past
+`conversations(id)` and `conversationHistory(id, n)`, `eraseConversation(id, n)`, `updateSessionSettings(id, config)`; `attach(id, { conversation: n })` opens a past
 conversation's read-only socket and never moves the client's conversation token (`buildWsUrl` gets it as a 5th
 argument, which `hostAuth` forwards).
 `runTeamMove` (`src/team-move.ts`) is the one drop-to-join for every host. It throws only before
