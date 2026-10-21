@@ -53,7 +53,7 @@ async function gateway(dir: string, hooks: Hooks = {}) {
 async function call(base: string, path: string, method = 'GET', body?: unknown, headers: Record<string, string> = {}): Promise<Response> {
   return await fetch(`${base}${path}`, {
     method,
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: { 'content-type': 'application/json', 'x-workerdeck-generation': '1', ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
 }

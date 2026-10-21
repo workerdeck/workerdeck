@@ -42,9 +42,9 @@ async function startGateway(dir: string) {
 }
 
 async function call<T>(base: string, path: string, method = 'GET', body?: unknown): Promise<{ status: number; body: T }> {
-  const init: RequestInit = { method }
+  const init: RequestInit = { method, headers: { 'x-workerdeck-generation': '1' } }
   if (body !== undefined) {
-    init.headers = { 'content-type': 'application/json' }
+    init.headers = { 'content-type': 'application/json', 'x-workerdeck-generation': '1' }
     init.body = JSON.stringify(body)
   }
   const res = await fetch(`${base}${path}`, init)

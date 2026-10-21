@@ -597,14 +597,16 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       }
       const config = parking.release(id)
       registry.evict(id)
-      return { runner, config }
+      const conversation = records.conversationOf(id)
+      return { runner, config, ...(conversation === undefined ? {} : { conversation }) }
     },
-    adoptSession: ({ runner, config }) => {
+    adoptSession: ({ runner, config, conversation }) => {
       // Re-checked here, not only at release: a runner held across a failed generation may have ended in the
       // meantime, and adopting a dead one would list a session nothing can answer.
       if (reloadPlan(runner) !== 'carry') {
         return false
       }
+      records.prime(runner.id, conversation ?? 1)
       parking.adopt(runner, config)
       return true
     },

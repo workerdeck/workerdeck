@@ -81,7 +81,15 @@ export async function handleConversations(
     if (!entry) {
       fail(404, 'conversation not found')
     }
-    json(res, 200, { info: ctx.projects.withProject(entryInfo(id, entry)), events: await historyEvents(ctx, id, entry) })
+    const history = await historyEvents(ctx, id, entry)
+    if (!history) {
+      fail(502, 'this conversation could not be read from the engine store; try again')
+    }
+    const info = entryInfo(id, entry)
+    json(res, 200, {
+      info: ctx.projects.withProject(history.transcript ? { ...info, transcript: history.transcript } : info),
+      events: history.events,
+    })
     return
   }
   requireMethod(req, 'POST')
@@ -138,12 +146,15 @@ function pickTarget(target: NonNullable<NewConversationRequest['target']>): NonN
   }
 }
 
-export async function historyEvents(ctx: ServerContext, id: string, entry: ConversationEntry): Promise<SessionEvent[] | undefined> {
+export type HistoryView = { events: SessionEvent[]; transcript?: 'unavailable' }
+
+// Undefined is a failed read, worth retrying; an empty transcript the engine no longer has says so as `unavailable`.
+export async function historyEvents(ctx: ServerContext, id: string, entry: ConversationEntry): Promise<HistoryView | undefined> {
   if (entry.snapshot) {
-    return entry.snapshot.events
+    return { events: entry.snapshot.events }
   }
   if (entry.transcript === 'unavailable') {
-    return []
+    return { events: [], transcript: 'unavailable' }
   }
   const read = await ctx.history.read({
     sessionId: id,
@@ -155,10 +166,10 @@ export async function historyEvents(ctx: ServerContext, id: string, entry: Conve
   })
   switch (read.kind) {
     case 'ok': {
-      return read.events.map((event, index) => ({ ...event, seq: index + 1, ts: entry.endedAt }) as SessionEvent)
+      return { events: read.events.map((event, index) => ({ ...event, seq: index + 1, ts: entry.endedAt }) as SessionEvent) }
     }
     case 'missing': {
-      return []
+      return { events: [], transcript: 'unavailable' }
     }
     default: {
       return undefined

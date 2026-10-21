@@ -1006,8 +1006,17 @@ no job, no agent: agents still rotate until they move onto one id), writes a `pr
 the runner quietly (registry watchers evicted first, so no `session_closed` webhook or push; shells killed), and
 commits in one transaction: history entry with frozen `auth`, `conversation + 1`, `running` = the exact target,
 `runtime` = a dormant record with no engine id and the committed epoch, `pendingPrompt`, `cut.phase = committed`. The
-fresh start uses that epoch as is. Recovery before listen rolls `prepared` back, starts `committed` once, and turns
-a `sending` prompt into `uncertain`. Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`), typed exact
+fresh start uses that epoch as is, and the intent stays until the successor is durable (the agent handover's rule:
+startup awaited up to `agentStartupTimeoutMs`, then a runtime for n+1 read back that names the engine conversation,
+or a live snapshot for an engine without resume); a start that fails, early or late, is a durable `startFailed` for
+Retry start. Recovery before listen rolls `prepared` back, resumes an existing successor or starts `committed` once,
+and turns a `sending` prompt into `uncertain`, never resending it. The write token is required: an untokened runtime
+write is refused (`MissingConversationError`); seeding goes through `bootstrapRuntime`, a hot-reload carry primes the
+token before the runner writes, and the cache only ever moves forward. Every mutating session route requires
+`x-workerdeck-generation` (a DELETE may omit it and is pinned on arrival) and every WS command except
+`shell_attach` / `shell_detach` requires `generation`; both are re-checked under the session's lifecycle lock, and a
+refused prompt is acked `stale: true`, unrun. `packages/client` stamps the token a command was created with and
+never rewrites it on a resend; `useClaudeSession` turns a stale prompt into `unsentPrompts`. Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`), typed exact
 `/clear` and WS `clear_context` (queued until idle), and `context_reset` of a non-agent session. History reads
 (`GET .../conversations[/n]`, WS `?conversation=n`) bypass `resolveSession` and authorize on the entry's frozen
 `auth`; an execution of an ended conversation answers 409, authorized on that entry too. A socket is bound to its

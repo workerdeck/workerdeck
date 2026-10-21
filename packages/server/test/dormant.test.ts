@@ -187,7 +187,7 @@ async function create(base: string, profileName = 'resumable', prompt?: string):
 async function rename(base: string, id: string, title: string): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions/${id}`, {
     method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'x-workerdeck-generation': '1', 'content-type': 'application/json' },
     body: JSON.stringify({ title }),
   })
   return ((await res.json()) as { session: SessionInfo }).session

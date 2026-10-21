@@ -7,8 +7,10 @@ import {
   createFileSessionRecordStore,
   MemorySessionRecordStore,
   SessionRecords,
+  MissingConversationError,
   StaleConversationError,
   type SessionRecord,
+  type SessionRecordStore,
 } from '../src/index.ts'
 import type { DormantSessionRecord } from '../src/services/session-store.ts'
 import type { ConversationEntry } from '../src/services/session-records.ts'
@@ -45,17 +47,17 @@ describe('SessionRecords', () => {
     const records = new SessionRecords(new MemorySessionRecordStore())
     await records.transact('s1', () => ledger('s1'))
 
-    await records.saveRuntime(dormant('s1', { model: 'opus' }))
+    await records.saveRuntime(dormant('s1', { model: 'opus' }), 1)
     const saved = await records.get('s1')
     expect(saved).toMatchObject({ owner: 'tobias', conversation: 1, conversations: [{ n: 1, endedAt: 5 }], createdAt: 1 })
     expect(saved?.runtime?.kind).toBe('dormant')
     expect(saved?.running).toEqual({ cwd: '/tmp/project', model: 'opus' })
 
-    expect(await records.clearRuntime('s1')).toBe(true)
+    expect(await records.clearRuntime('s1', 1, 'resumed')).toBe(true)
     const cleared = await records.get('s1')
     expect(cleared?.runtime).toBeUndefined()
     expect(cleared).toMatchObject({ owner: 'tobias', conversations: [{ n: 1, endedAt: 5 }] })
-    expect(await records.clearRuntime('s1')).toBe(false)
+    expect(await records.clearRuntime('s1', 1, 'resumed')).toBe(false)
   })
 
   it('refuses a runtime save or clear taken for another conversation', async () => {
@@ -66,6 +68,8 @@ describe('SessionRecords', () => {
     await expect(records.saveRuntime({ ...dormant('s1'), sdkSessionId: 'stale' }, 1)).rejects.toBeInstanceOf(StaleConversationError)
     await expect(records.clearRuntime('s1', 1)).rejects.toBeInstanceOf(StaleConversationError)
     await expect(records.runtimeStore().delete('s1', 3)).rejects.toBeInstanceOf(StaleConversationError)
+    await expect(records.runtimeStore().save(dormant('s1'))).rejects.toBeInstanceOf(MissingConversationError)
+    await expect(records.runtimeStore().delete('s1', undefined)).rejects.toBeInstanceOf(MissingConversationError)
     expect((await records.get('s1'))?.runtime).toMatchObject({ sdkSessionId: 'sdk-1' })
 
     expect(await records.runtimeStore().delete('s1', 2)).toBe(true)
@@ -104,19 +108,47 @@ describe('SessionRecords', () => {
   })
 })
 
+describe('the conversation cache', () => {
+  it('never lets a slow list that read n undo a commit of n+1 that landed meanwhile', async () => {
+    const inner = new MemorySessionRecordStore()
+    let release: (() => void) | undefined
+    const store: SessionRecordStore = {
+      ...inner,
+      save: (record) => inner.save(record),
+      get: (id) => inner.get(id),
+      delete: (id) => inner.delete(id),
+      list: async () => {
+        const seen = (await inner.list()).map((record) => ({ ...record }))
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return seen
+      },
+    }
+    const records = new SessionRecords(store)
+    await records.transact('s1', () => ledger('s1'))
+    const listing = records.list()
+    await vi.waitFor(() => expect(release).toBeDefined())
+    await records.transact('s1', (current) => ({ ...current!, conversation: 2 }))
+    release!()
+    await listing
+    expect(records.conversationOf('s1')).toBe(2)
+  })
+})
+
 describe('the runtime adapter', () => {
   it('removes the file only when the record holds nothing but its runtime', async () => {
     const records = new SessionRecords(createFileSessionRecordStore({ dir }))
     const runtime = records.runtimeStore()
 
-    await runtime.save(dormant('bare'))
+    await records.bootstrapRuntime(dormant('bare'))
     expect(await readdir(dir)).toEqual(['bare.json'])
-    expect(await runtime.delete('bare')).toBe(true)
+    expect(await runtime.delete('bare', 1)).toBe(true)
     expect(await readdir(dir)).toEqual([])
 
     await records.transact('kept', () => ledger('kept'))
-    await runtime.save(dormant('kept'))
-    expect(await runtime.delete('kept')).toBe(true)
+    await records.bootstrapRuntime(dormant('kept'))
+    expect(await runtime.delete('kept', 1)).toBe(true)
     expect(await readdir(dir)).toEqual(['kept.json'])
     expect(await runtime.get('kept')).toBeNull()
     expect(await runtime.list()).toEqual([])
@@ -126,7 +158,7 @@ describe('the runtime adapter', () => {
   it('lists runtimes only, skipping records without one', async () => {
     const records = new SessionRecords(new MemorySessionRecordStore())
     await records.transact('ledger-only', () => ledger('ledger-only'))
-    await records.runtimeStore().save(dormant('s1'))
+    await records.bootstrapRuntime(dormant('s1'))
     expect((await records.runtimeStore().list()).map((record) => record.id)).toEqual(['s1'])
   })
 })

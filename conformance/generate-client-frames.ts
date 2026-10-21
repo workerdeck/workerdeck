@@ -51,10 +51,21 @@ const CALLS: Call[] = [
 
 async function framesFor([name, ...args]: Call): Promise<unknown[]> {
   const sent: string[] = []
-  const socket = { readyState: 1, send: (payload: string) => sent.push(payload), close: () => {} }
-  const client = { openSocket: () => socket } as unknown as WorkerDeckClient
+  const socket: {
+    readyState: number
+    send: (payload: string) => void
+    close: () => void
+    onmessage?: (message: { data: string }) => void
+  } = {
+    readyState: 1,
+    send: (payload: string) => sent.push(payload),
+    close: () => {},
+  }
+  const client = { openSocket: () => socket, conversationOf: () => undefined, noteConversation: () => {} } as unknown as WorkerDeckClient
   const handle = new SessionHandle(client, 's1', { reconnect: false })
   await new Promise((resolve) => setTimeout(resolve, 0))
+  // The native clients do not stamp a conversation yet (protocol 2 native work): the goldens pin the untokened frames.
+  socket.onmessage?.({ data: JSON.stringify({ type: 'attached', protocolVersion: 2, session: { id: 's1' }, replayingFrom: 0 }) })
   const method = (handle as unknown as Record<string, (...rest: unknown[]) => void>)[name]
   method.apply(handle, args)
   handle.detach()

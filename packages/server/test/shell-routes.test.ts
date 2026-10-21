@@ -27,7 +27,7 @@ describe('shell_command over WS', () => {
     const { ws, collector, attached } = await attachSocket(wsBase, id, 'operator')
     expect('shell' in attached).toBe(false)
 
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'echo hi' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'echo hi' }))
     const error = await collector.waitFor(isError)
     expect(isError(error) && error.message).toBe('shell commands are not available on this session')
     expect(collector.frames.some((f) => localOutput(f) !== undefined)).toBe(false)
@@ -40,7 +40,7 @@ describe('shell_command over WS', () => {
     const id = await createSession(base, 'alice-a', { cwd: tempDir() })
     const { ws, collector, attached } = await attachSocket(wsBase, id, 'alice-a')
     expect('shell' in attached).toBe(false)
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'echo hi' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'echo hi' }))
     const error = await collector.waitFor(isError)
     expect(isError(error) && error.message).toBe('shell commands are not available on this session')
     ws.close()
@@ -63,7 +63,7 @@ describe('shell_command over WS', () => {
     const id = await createSession(base, 'operator', { profile: 'sandboxed' })
     const { ws, collector, attached } = await attachSocket(wsBase, id, 'operator')
     expect('shell' in attached).toBe(false)
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'echo hi' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'echo hi' }))
     const error = await collector.waitFor(isError)
     expect(isError(error) && error.message).toBe('shell commands are not available on this session')
     expect(queueLocalCommand).not.toHaveBeenCalled()
@@ -76,11 +76,11 @@ describe('shell_command over WS', () => {
     const id = await createSession(base, 'operator', { cwd: tempDir() })
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
 
-    ws.send(JSON.stringify({ type: 'shell_command', command: '   ' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: '   ' }))
     const empty = await collector.waitFor(isError)
     expect(isError(empty) && empty.message).toBe('shell command is empty')
 
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'echo ' + 'x'.repeat(SHELL_COMMAND_MAX) }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'echo ' + 'x'.repeat(SHELL_COMMAND_MAX) }))
     const long = await collector.waitFor((f) => isError(f) && f.message !== 'shell command is empty')
     expect(isError(long) && long.message).toBe(`shell command exceeds ${SHELL_COMMAND_MAX} characters`)
     expect(collector.frames.some((f) => localOutput(f) !== undefined)).toBe(false)
@@ -92,9 +92,9 @@ describe('shell_command over WS', () => {
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
-    ws.send(JSON.stringify({ type: 'shell_attach', shellId: 'nope', cols: 80, rows: 24 }))
-    ws.send(JSON.stringify({ type: 'shell_input', shellId: 'nope', data: 'x' }))
-    ws.send(JSON.stringify({ type: 'shell_resize', shellId: 'nope', cols: 80, rows: 24 }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_attach', shellId: 'nope', cols: 80, rows: 24 }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_input', shellId: 'nope', data: 'x' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_resize', shellId: 'nope', cols: 80, rows: 24 }))
     await vi.waitFor(() => expect(collector.frames.filter(isError)).toHaveLength(3))
     expect(collector.frames.filter(isError).map((f) => f.message)).toEqual(['unknown shell', 'unknown shell', 'unknown shell'])
     expect(collector.frames.some((f) => f.type === 'shell_attached')).toBe(false)
@@ -111,7 +111,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const { ws, collector, attached } = await attachSocket(wsBase, id, 'operator')
     expect(attached.shell).toBe(true)
 
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'pwd; echo done' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'pwd; echo done' }))
     const row = await waitForExit(collector, 'pwd; echo done')
     expect(row.text).toBe(`<local-command-stdout>$ pwd; echo done\n${cwd}\ndone</local-command-stdout>`)
     expect(row.shell).toMatchObject({ ordinal: 1, owner: 'user', status: 'exited', exitCode: 0, endReason: 'exit', sessionId: id })
@@ -120,7 +120,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const rows = collector.frames.map(shellRow).filter((seen) => seen !== undefined)
     expect(new Set(rows.map((seen) => seen.shell.id)).size).toBe(1)
 
-    ws.send(JSON.stringify({ type: 'user_message', text: 'what did it print?' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'what did it print?' }))
     await vi.waitFor(() => expect(harness.captured.inputs).toHaveLength(1))
     const content = harness.captured.inputs[0]!.message.content as Array<{ type: string; text: string }>
     expect(content).toHaveLength(2)
@@ -135,7 +135,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'echo bad >&2; exit 2' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'echo bad >&2; exit 2' }))
     const row = await waitForExit(collector, 'echo bad >&2; exit 2')
     expect(row.text).toBe('<local-command-stderr>$ echo bad >&2; exit 2\nbad\n[exit 2]</local-command-stderr>')
     ws.close()
@@ -147,7 +147,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const id = await createSession(base, 'operator', { cwd: tempDir() })
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
     const command = 'i=1; while [ $i -le 200 ]; do echo line$i; i=$((i+1)); done'
-    ws.send(JSON.stringify({ type: 'shell_command', command }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command }))
     const row = await waitForExit(collector, command)
     const lines = row.text.split('\n')
     expect(lines[1]).toBe('line1')
@@ -171,9 +171,9 @@ withPty('shell_command spawns a tracked PTY', () => {
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'echo first' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'echo first' }))
     await waitForExit(collector, 'echo first')
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'sleep 30' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'sleep 30' }))
     const started = await collector.waitFor((f) => shellRow(f)?.shell.command === 'sleep 30')
     const sleeping = shellRow(started)!.shell
 
@@ -187,7 +187,7 @@ withPty('shell_command spawns a tracked PTY', () => {
 
     const killed = await fetch(`${base}/sessions/${id}/shells/${sleeping.id}/kill`, {
       method: 'POST',
-      headers: { authorization: 'Bearer operator' },
+      headers: { 'x-workerdeck-generation': '1', authorization: 'Bearer operator' },
     })
     expect(killed.status).toBe(200)
     expect(((await killed.json()) as { shell: ShellInfo }).shell).toMatchObject({ status: 'exited', endReason: 'killed' })
@@ -205,13 +205,13 @@ withPty('shell_command spawns a tracked PTY', () => {
     const session = (await (await get(base, `/sessions/${id}`)).json()) as { session: { shellAgentWrite?: string } }
     expect(session.session.shellAgentWrite).toBe('gated')
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'sleep 30' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'sleep 30' }))
     const started = await collector.waitFor((f) => shellRow(f)?.shell.command === 'sleep 30')
     const shellId = shellRow(started)!.shell.id
     const post = (enabled: unknown, token = 'operator') =>
       fetch(`${base}/sessions/${id}/shells/${shellId}/agent-write`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        headers: { 'x-workerdeck-generation': '1', authorization: `Bearer ${token}`, 'content-type': 'application/json' },
         body: JSON.stringify({ enabled }),
       })
 
@@ -232,11 +232,11 @@ withPty('shell_command spawns a tracked PTY', () => {
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'sleep 30' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'sleep 30' }))
     const started = await collector.waitFor((f) => shellRow(f)?.shell.command === 'sleep 30')
     const res = await fetch(`${base}/sessions/${id}/shells/${shellRow(started)!.shell.id}/agent-write`, {
       method: 'POST',
-      headers: { authorization: 'Bearer operator', 'content-type': 'application/json' },
+      headers: { 'x-workerdeck-generation': '1', authorization: 'Bearer operator', 'content-type': 'application/json' },
       body: JSON.stringify({ enabled: true }),
     })
     expect(res.status).toBe(409)
@@ -251,7 +251,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const { ws } = await attachSocket(wsBase, id, 'alice-a')
     const res = await fetch(`${base}/sessions/${id}/shells/anything/kill`, {
       method: 'POST',
-      headers: { authorization: 'Bearer alice-a' },
+      headers: { 'x-workerdeck-generation': '1', authorization: 'Bearer alice-a' },
     })
     expect(res.status).toBe(403)
     expect(((await res.json()) as { error: string }).error).toBe('shell commands are not available on this session')
@@ -290,7 +290,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     })
     const id = await createSession(base, 'operator', { profile: 'hosted', cwd: tempDir() })
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
-    ws.send(JSON.stringify({ type: 'shell_command', command: 'sleep 30' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'sleep 30' }))
     const error = await collector.waitFor(isError)
     expect(isError(error) && error.message).toBe('session is closed')
     await vi.waitFor(async () => {

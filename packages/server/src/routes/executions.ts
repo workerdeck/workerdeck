@@ -1,17 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ToolExecutionResult } from '@workerdeck/core'
-import type { SessionInfo, SubmitExecutionResultRequest } from '@workerdeck/protocol'
+import type { SubmitExecutionResultRequest } from '@workerdeck/protocol'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 import { ROTATING } from '../services/handovers.ts'
 import { SessionFenced } from '../services/parking.ts'
-import type { FrozenAuth } from '../services/session-records.ts'
+import { entryInfo } from './conversations.ts'
 import { sessionInfoOf } from './session-lookup.ts'
-
-function frozenInfo(id: string, auth: FrozenAuth): SessionInfo {
-  return { id, status: 'closed', cwd: '', createdAt: 0, lastSeq: 0, pendingPermissionCount: 0, owner: auth.owner, scope: auth.scope }
-}
 
 export async function handleExecutionResult(
   ctx: ServerContext,
@@ -44,11 +40,18 @@ export async function handleExecutionResult(
   }
   const ended = ctx.cuts.endedExecution(executionId)
   if (ended) {
+    // Authorized on the ended conversation's own frozen projection, exactly as its history is.
+    const info = entryInfo(ended.id, ended.entry)
+    const profile = ended.entry.profile
     const scoped = auth.allowedProfiles || auth.scope || ctx.options.authorizeSession
-    if (scoped && !authSvc.canSee(auth, { ...(await sessionInfoOf(ctx, ended.id)), ...frozenInfo(ended.id, ended.auth) })) {
+    if (
+      scoped &&
+      ((auth.allowedProfiles !== undefined && profile !== undefined && !auth.allowedProfiles.includes(profile)) ||
+        !authSvc.canSee(auth, info))
+    ) {
       fail(404, 'execution not found')
     }
-    fail(409, `execution belongs to conversation ${ended.n}, which has ended`)
+    fail(409, `execution belongs to conversation ${ended.entry.n}, which has ended`)
   }
   if (auth.allowedProfiles || auth.scope || ctx.options.authorizeSession) {
     const owner = parking.sessionFor(executionId)

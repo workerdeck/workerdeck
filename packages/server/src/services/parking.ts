@@ -423,7 +423,7 @@ export class SessionParkManager {
       kind: 'archived',
       id: sessionId,
       info: {
-        ...info,
+        ...this.#stamped(info),
         status: 'closed',
         pendingPermissionCount: 0,
         archived: true,

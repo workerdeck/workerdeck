@@ -81,20 +81,56 @@ export async function handleSessions(
     await handleConversations(ctx, req, res, route.id, route.conversation, auth)
     return
   }
-  const resolved = await resolveSession(ctx, route.id, auth)
-  requireWritable(resolved, req.method, route.kind === 'session' && req.method === 'DELETE')
   const mutating = req.method !== 'GET' && req.method !== 'HEAD'
-  if (mutating && ctx.handovers.gated(route.id)) {
+  if (!mutating) {
+    const resolved = await resolveSession(ctx, route.id, auth)
+    await dispatchItem(ctx, req, res, auth, route, resolved)
+    return
+  }
+  const erase = route.kind === 'session' && req.method === 'DELETE'
+  requireWritable(await resolveSession(ctx, route.id, auth), req.method, erase)
+  if (ctx.handovers.gated(route.id)) {
     fail(409, ROTATING)
   }
-  // A mutating call names the conversation it was meant for; a stale one never reaches the next.
-  const generation = req.headers[GENERATION_HEADER]
-  if (mutating && typeof generation === 'string') {
+  // Protocol 2: a mutating call names the conversation it was meant for, and a stale or missing one is refused. A
+  // DELETE may omit it; it is then pinned to the conversation current on arrival. Both are re-checked under the
+  // session's lifecycle lock, so a call queued behind a cut never lands on the next conversation.
+  const expected = expectedConversation(ctx, req, route.id, req.method === 'DELETE')
+  await ctx.handovers.run([route.id], async () => {
+    const resolved = await resolveSession(ctx, route.id, auth)
+    requireWritable(resolved, req.method, erase)
     const current = ctx.records.conversationOf(route.id) ?? 1
-    if (Number(generation) !== current) {
+    if (current !== expected) {
       fail(409, `the session moved on to conversation ${current}`)
     }
+    await dispatchItem(ctx, req, res, auth, route, resolved)
+  })
+}
+
+function expectedConversation(ctx: ServerContext, req: IncomingMessage, id: string, optional: boolean): number {
+  const header = req.headers[GENERATION_HEADER]
+  const current = ctx.records.conversationOf(id) ?? 1
+  if (typeof header !== 'string') {
+    if (optional) {
+      return current
+    }
+    fail(409, `this call must name its conversation (${GENERATION_HEADER}); the session is on conversation ${current}`)
   }
+  const named = Number(header)
+  if (!Number.isInteger(named) || named !== current) {
+    fail(409, `the session moved on to conversation ${current}`)
+  }
+  return named
+}
+
+async function dispatchItem(
+  ctx: ServerContext,
+  req: IncomingMessage,
+  res: ServerResponse,
+  auth: AuthContext,
+  route: SessionItemRoute,
+  resolved: ResolvedSession,
+): Promise<void> {
   const handler = ITEM_HANDLERS[route.kind] as (call: SessionCall<ItemKind>) => Promise<void> | void
   await handler({ ...resolved, ctx, req, res, auth, route })
 }
@@ -173,7 +209,7 @@ async function handleSession({ ctx, req, res, auth, route, runner, parked, info 
     }
     await retireAgent(ctx, agent, 'release', route.id)
   } else if (!(parked && isArchived(parked))) {
-    await ctx.cuts.close(route.id)
+    await ctx.cuts.closeLocked(route.id)
   }
   registry.remove(route.id)
   bridge.remove(route.id)

@@ -14,8 +14,10 @@ import {
   SessionRecords,
   type SessionRecordStore,
   type SessionStore,
+  type StoredSessionRecord,
   type WorkerServer,
 } from '../src/index.ts'
+import type { RuntimeClear } from '../src/services/session-store.ts'
 
 // Controllable stand-in for the Claude Agent SDK. `models` makes the fake query answer
 // `supportedModels`, which is what makes a runner emit `capabilities`.
@@ -267,8 +269,15 @@ export class ScriptedRunner implements Runner {
 // A parking-shaped view over a record store, for seeding and inspecting the runtime records a gateway reads.
 export type RuntimeStore = SessionStore & { records: SessionRecordStore }
 
+// Seeds through the bootstrap path: a fixture record names no conversation, and is taken to be on the first one.
 export function runtimeStore(records: SessionRecordStore = new MemorySessionRecordStore()): RuntimeStore {
-  return Object.assign(new SessionRecords(records).runtimeStore(), { records })
+  const sessions = new SessionRecords(records)
+  const runtime = sessions.runtimeStore()
+  return Object.assign(runtime, {
+    save: (record: StoredSessionRecord) => sessions.bootstrapRuntime(record),
+    delete: (id: string, conversation?: number, reason?: RuntimeClear) => sessions.clearRuntime(id, conversation ?? 1, reason),
+    records,
+  })
 }
 
 export function fileRuntimeStore(dir: string): RuntimeStore {

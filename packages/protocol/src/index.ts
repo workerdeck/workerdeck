@@ -520,7 +520,8 @@ export type ServerFrame =
   | { type: 'shell_detached'; shellId: string; reason: string }
   | { type: 'protocol_error'; message: string }
   // The prompt reached the gateway and was handled, run or refused; a refusal arrives as a `protocol_error` first.
-  | { type: 'ack'; clientId: string }
+  // `stale`: refused unrun because it named an ended conversation (or none); the text is the sender's to resubmit.
+  | { type: 'ack'; clientId: string; stale?: true }
   | ConversationStartedFrame
 
 export type ConversationStartedFrame = { type: 'conversation_started'; conversation: number; epoch: number }

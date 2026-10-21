@@ -51,7 +51,7 @@ describe('prompt acks', () => {
     const { wsBase, session, runner } = await start()
     const { ws, collector, attached } = await attach(wsBase, session.id)
     expect(attached).toMatchObject({ acks: true })
-    ws.send(JSON.stringify({ type: 'user_message', text: 'hello', clientId: 'c.1' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'hello', clientId: 'c.1' }))
     await collector.waitFor((f) => f.type === 'ack' && f.clientId === 'c.1')
     expect(runner.sent.map((sent) => sent.text)).toEqual(['hello'])
     ws.close()
@@ -60,12 +60,12 @@ describe('prompt acks', () => {
   it('runs a prompt resent on a new socket once, and acks both', async () => {
     const { wsBase, session, runner } = await start()
     const first = await attach(wsBase, session.id)
-    first.ws.send(JSON.stringify({ type: 'user_message', text: 'once', clientId: 'c.1' }))
+    first.ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'once', clientId: 'c.1' }))
     await first.collector.waitFor((f) => f.type === 'ack')
     first.ws.close()
     const second = await attach(wsBase, session.id)
-    second.ws.send(JSON.stringify({ type: 'user_message', text: 'once', clientId: 'c.1' }))
-    second.ws.send(JSON.stringify({ type: 'user_message', text: 'next', clientId: 'c.2' }))
+    second.ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'once', clientId: 'c.1' }))
+    second.ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'next', clientId: 'c.2' }))
     await second.collector.waitFor((f) => f.type === 'ack' && f.clientId === 'c.2')
     expect(runner.sent.map((sent) => sent.text)).toEqual(['once', 'next'])
     second.ws.close()
@@ -74,7 +74,7 @@ describe('prompt acks', () => {
   it('acks a refused prompt after its protocol error', async () => {
     const { wsBase, session } = await start()
     const { ws, collector } = await attach(wsBase, session.id)
-    ws.send(JSON.stringify({ type: 'user_message', text: 'x', attachmentIds: ['missing'], clientId: 'c.9' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'x', attachmentIds: ['missing'], clientId: 'c.9' }))
     await collector.waitFor((f) => f.type === 'ack')
     const kinds = collector.frames.filter((f) => f.type === 'protocol_error' || f.type === 'ack').map((f) => f.type)
     expect(kinds).toEqual(['protocol_error', 'ack'])
@@ -84,8 +84,8 @@ describe('prompt acks', () => {
   it('handles a close only after the prompts sent before it', async () => {
     const { wsBase, session, runner } = await start()
     const { ws, collector } = await attach(wsBase, session.id)
-    ws.send(JSON.stringify({ type: 'user_message', text: 'last words', clientId: 'c.1' }))
-    ws.send(JSON.stringify({ type: 'close' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'last words', clientId: 'c.1' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'close' }))
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'session_closed')
     expect(runner.sent.map((sent) => sent.text)).toEqual(['last words'])
     ws.close()
@@ -95,7 +95,7 @@ describe('prompt acks', () => {
     const { wsBase, session, runner } = await start()
     const { ws, collector } = await attach(wsBase, session.id)
     for (const text of ['a', 'b', 'c']) {
-      ws.send(JSON.stringify({ type: 'user_message', text }))
+      ws.send(JSON.stringify({ generation: 1, type: 'user_message', text }))
     }
     await vi.waitFor(() => expect(runner.sent.map((sent) => sent.text)).toEqual(['a', 'b', 'c']))
     expect(collector.frames.some((f) => f.type === 'ack')).toBe(false)

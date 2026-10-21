@@ -104,7 +104,7 @@ describe('archived conversations', () => {
     expect(got.session).toMatchObject({ archived: true, supersededBy: 'next', status: 'closed' })
     const rename = await fetch(`${base}/sessions/${session.id}`, {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'x-workerdeck-generation': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'nope' }),
     })
     expect(rename.status).toBe(409)
@@ -134,7 +134,7 @@ describe('archived conversations', () => {
     expect(one.frames.filter((frame) => frame.type === 'event').map((frame) => (frame.event as SessionEvent).seq)).toEqual([1, 2])
     expect(history.reads[0]).toMatchObject({ sessionId: session.id, engineSessionId: `engine-${session.id}`, cwd: '/tmp/project' })
 
-    one.ws.send(JSON.stringify({ type: 'user_message', text: 'hi', clientId: 'c1' }))
+    one.ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'hi', clientId: 'c1' }))
     await vi.waitFor(() => expect(one.frames.some((frame) => frame.type === 'ack')).toBe(true))
     expect(one.frames.some((frame) => frame.type === 'protocol_error' && frame.message === 'conversation is archived')).toBe(true)
     one.ws.close()

@@ -34,7 +34,7 @@ async function createSession(base: string): Promise<string> {
 async function upload(base: string, id: string, name: string, mediaType: string, body: Buffer | string): Promise<Response> {
   return await fetch(`${base}/sessions/${id}/attachments?name=${encodeURIComponent(name)}`, {
     method: 'POST',
-    headers: { 'content-type': mediaType },
+    headers: { 'x-workerdeck-generation': '1', 'content-type': mediaType },
     body,
   })
 }
@@ -88,6 +88,7 @@ describe('session attachments', () => {
     await withSocket(wsBase, id, async (ws, events) => {
       ws.send(
         JSON.stringify({
+          generation: 1,
           type: 'user_message',
           text: 'what is this?',
           attachmentIds: [uploaded.attachment.id],
@@ -126,7 +127,7 @@ describe('session attachments', () => {
     }
 
     await withSocket(wsBase, id, async (ws) => {
-      ws.send(JSON.stringify({ type: 'user_message', text: '', attachmentIds: [uploaded.attachment.id] }))
+      ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: '', attachmentIds: [uploaded.attachment.id] }))
       await awaitTurn(harness)
       expect(harness.captured.inputs.at(-1)!.message.content).toEqual([
         {
@@ -147,7 +148,7 @@ describe('session attachments', () => {
     expect(uploaded.attachment.mediaType).toBe('text/plain')
 
     await withSocket(wsBase, id, async (ws) => {
-      ws.send(JSON.stringify({ type: 'user_message', text: 'read it', attachmentIds: [uploaded.attachment.id] }))
+      ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'read it', attachmentIds: [uploaded.attachment.id] }))
       await awaitTurn(harness)
       expect(harness.captured.inputs.at(-1)!.message.content).toEqual([
         {
@@ -209,7 +210,7 @@ describe('session attachments', () => {
           errors.push(frame.message)
         }
       })
-      ws.send(JSON.stringify({ type: 'user_message', text: 'look', attachmentIds: ['nope'] }))
+      ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'look', attachmentIds: ['nope'] }))
       // The rejection *is* the signal, so this waits for it rather than for a duration.
       await until(() => errors.length > 0)
       expect(errors.join()).toMatch(/unknown attachment\(s\): nope/)
@@ -331,7 +332,7 @@ describe('session MCP routes', () => {
     const post = (action: string) =>
       fetch(`${base}/sessions/${id}/mcp/gtm`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'x-workerdeck-generation': '1', 'content-type': 'application/json' },
         body: JSON.stringify({ action }),
       })
 

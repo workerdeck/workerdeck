@@ -1,17 +1,10 @@
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import { errorMessage, isJobRun, type ConversationTarget, type SessionInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, errorMessage, isJobRun, type ConversationTarget, type SessionInfo } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { fail } from '../lib/http.ts'
 import { engineOf } from '../lib/profile-env.ts'
-import {
-  freshRecord,
-  requestedConfig,
-  type ConversationEntry,
-  type FrozenAuth,
-  type SessionCut,
-  type SessionRecord,
-} from './session-records.ts'
-import { durableConfig, isArchived, isDormant, type DormantSessionRecord } from './session-store.ts'
+import { freshRecord, requestedConfig, type ConversationEntry, type SessionCut, type SessionRecord } from './session-records.ts'
+import { durableConfig, isArchived, isDormant, type DormantSessionRecord, type StoredSessionRecord } from './session-store.ts'
 
 export type CutReason = 'user' | 'clear' | 'context_reset'
 
@@ -22,7 +15,7 @@ export type CutResult = { session: SessionInfo; conversation: number }
 // A socket attached to one conversation: detached quietly at the stop, told and closed once the commit is durable.
 export type CutSocket = { detach: () => void; announce: (conversation: number, epoch: number) => void; drop: () => void }
 
-export type EndedExecution = { id: string; n: number; auth: FrozenAuth }
+export type EndedExecution = { id: string; entry: ConversationEntry }
 
 export type CutFault = 'commit' | 'start' | 'after-stop' | 'after-commit'
 
@@ -199,6 +192,12 @@ export class ConversationCuts {
         fail(409, 'no new conversation is waiting to start')
       }
       this.#failedStarts.delete(id)
+      const stuck = ctx.registry.get(id)
+      if (stuck) {
+        ctx.registry.evict(id)
+        stuck.close('server')
+      }
+      ctx.parking.unfence(id)
       return await this.#startCommitted(record)
     })
   }
@@ -224,28 +223,27 @@ export class ConversationCuts {
   }
 
   // An unnamed close: the current conversation joins the history, which stays readable on the closed record.
-  close(id: string): Promise<void> {
+  // The caller holds the session's lifecycle lock and has re-checked the conversation and the caller's sight of it.
+  async closeLocked(id: string): Promise<void> {
     const ctx = this.#ctx
-    return ctx.handovers.run([id], async () => {
-      await ctx.parking.fence(id)
-      try {
-        const record = await ctx.records.get(id)
-        if (record?.closedAt !== undefined) {
-          return
-        }
-        const entry = await this.#capture(id, record, record?.conversation ?? 1).catch(() => undefined)
-        if (!entry) {
-          return
-        }
-        await ctx.records.transactDurable(id, (current) => {
-          const { runtime: _runtime, cut: _cut, pendingPrompt: _prompt, startFailed: _failed, ...rest } = current ?? freshRecord(id)
-          return { ...rest, conversations: [...rest.conversations, entry], closedAt: Date.now() }
-        })
-        this.#remember(id, entry)
-      } finally {
-        ctx.parking.unfence(id)
+    await ctx.parking.fence(id)
+    try {
+      const record = await ctx.records.get(id)
+      if (record?.closedAt !== undefined) {
+        return
       }
-    })
+      const entry = await this.#capture(id, record, record?.conversation ?? 1).catch(() => undefined)
+      if (!entry) {
+        return
+      }
+      await ctx.records.transactDurable(id, (current) => {
+        const { runtime: _runtime, cut: _cut, pendingPrompt: _prompt, startFailed: _failed, ...rest } = current ?? freshRecord(id)
+        return { ...rest, conversations: [...rest.conversations, entry], closedAt: Date.now() }
+      })
+      this.#remember(id, entry)
+    } finally {
+      ctx.parking.unfence(id)
+    }
   }
 
   #commit(current: SessionRecord, entry: ConversationEntry, cut: SessionCut, request: CutRequest, info: SessionInfo): SessionRecord {
@@ -256,6 +254,7 @@ export class ConversationCuts {
       conversations: [...current.conversations, entry],
       running: cut.target,
       ...(request.target ? { requested: cut.target } : {}),
+      ...(request.target?.scope ? { scope: cut.target.scope } : {}),
       runtime: this.#freshRuntime(current.id, cut, info),
       cut: { ...cut, phase: 'committed' },
       ...(request.prompt ? { pendingPrompt: { text: request.prompt, n: next, state: 'pending' as const } } : {}),
@@ -341,34 +340,120 @@ export class ConversationCuts {
     ctx.parking.dropExecutions(id)
   }
 
+  // The intent stays until the successor is durable: a runtime for n+1 that names its engine conversation (or a live
+  // snapshot, for an engine without resume). One that already exists is resumed, never replaced, and a prompt whose
+  // delivery is not known is never resent.
   async #startCommitted(record: SessionRecord): Promise<CutResult> {
     const ctx = this.#ctx
     const id = record.id
     const cut = record.cut!
-    let runner: Runner
-    try {
-      this.#fault('start')
-      runner = await this.#startFresh(id, cut)
-    } catch (error) {
-      this.#failedStarts.add(id)
-      await ctx.records.transactDurable(id, (current) => ({ ...current!, startFailed: { n: cut.to, error: errorMessage(error) } }))
-      this.#announce(id, record.conversation, cut.epoch)
-      fail(502, `the new conversation did not start: ${errorMessage(error)}`)
+    const intent = record.pendingPrompt?.n === cut.to ? record.pendingPrompt : undefined
+    const live = ctx.registry.get(id)
+    if (!live && record.runtime && successorKept(record.runtime, cut.to)) {
+      await this.#confirm(id, cut.to, intent !== undefined)
+      this.#announce(id, cut.to, cut.epoch)
+      return { session: ctx.projects.withProject(record.runtime.info), conversation: cut.to }
     }
-    this.#failedStarts.delete(id)
-    const started = await ctx.records.transactDurable(id, (current) => {
-      const { cut: _done, startFailed: _failed, ...rest } = current!
-      const prompt = rest.pendingPrompt
-      return prompt?.state === 'pending' ? { ...rest, pendingPrompt: { ...prompt, state: 'sending' } } : rest
-    })
-    if (started.pendingPrompt?.state === 'sending') {
-      if (started.pendingPrompt.n === started.conversation) {
-        runner.sendMessage(started.pendingPrompt.text)
+    const prompt = !live && intent?.state === 'pending' ? intent.text : undefined
+    const uncertain = intent !== undefined && prompt === undefined
+    let runner = live
+    if (!runner) {
+      if (prompt !== undefined) {
+        await ctx.records.transactDurable(id, (current) => ({ ...current!, pendingPrompt: { ...intent!, state: 'sending' } }))
       }
-      await ctx.records.transactDurable(id, (current) => withoutPendingPrompt(current!))
+      try {
+        this.#fault('start')
+        runner = await this.#startFresh(id, cut, prompt)
+      } catch (error) {
+        await this.#failStart(id, cut.to, errorMessage(error), prompt !== undefined)
+        this.#announce(id, cut.to, cut.epoch)
+        fail(502, `the new conversation did not start: ${errorMessage(error)}`)
+      }
     }
-    this.#announce(id, started.conversation, cut.epoch)
-    return { session: ctx.projects.withProject(runner.info()), conversation: started.conversation }
+    const started = runner
+    const startup = startupOf(ctx, started, prompt !== undefined)
+    const early = await within(startup, ctx.handovers.startupTimeoutMs)
+    if (early) {
+      try {
+        await this.#settle(id, cut.to, uncertain, started, early, true)
+      } finally {
+        this.#announce(id, cut.to, cut.epoch)
+      }
+      return { session: ctx.projects.withProject(started.info()), conversation: cut.to }
+    }
+    void startup
+      .then((late) => ctx.handovers.run([id], () => this.#settle(id, cut.to, uncertain, started, late, false)))
+      .catch((error: unknown) => ctx.handovers.onError(error))
+    this.#announce(id, cut.to, cut.epoch)
+    return { session: ctx.projects.withProject(started.info()), conversation: cut.to }
+  }
+
+  // `strict` answers the caller, so a failure throws; otherwise it settles in the background for nobody.
+  async #settle(id: string, to: number, uncertain: boolean, runner: Runner, startup: Startup, strict: boolean): Promise<void> {
+    const record = await this.#ctx.records.get(id)
+    if (record?.cut?.phase !== 'committed' || record.cut.to !== to || (!strict && record.startFailed !== undefined)) {
+      return
+    }
+    const failure = startup.kind === 'failed' ? startup.error : await this.#durability(id, to, runner)
+    if (failure === undefined) {
+      await this.#confirm(id, to, uncertain)
+      return
+    }
+    await this.#failStart(id, to, failure, false)
+    if (strict) {
+      fail(502, `the new conversation did not start: ${failure}`)
+    }
+  }
+
+  // Read back, never assumed from a flush. An engine with neither resume nor a live snapshot has nothing to keep.
+  async #durability(id: string, to: number, runner: Runner): Promise<string | undefined> {
+    const ctx = this.#ctx
+    const info = runner.info()
+    const resumable = (info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume
+    if (!resumable && !ctx.parking.persistsLive(runner)) {
+      return undefined
+    }
+    if (await this.#recorded(id, to, runner, resumable)) {
+      return undefined
+    }
+    ctx.parking.touch(runner)
+    await ctx.parking.flush(id)
+    return (await this.#recorded(id, to, runner, resumable)) ? undefined : 'the new conversation could not be saved'
+  }
+
+  async #recorded(id: string, to: number, runner: Runner, resumable: boolean): Promise<boolean> {
+    const runtime = (await this.#ctx.records.get(id))?.runtime
+    if (!runtime || isArchived(runtime) || runtime.info.conversation !== to) {
+      return false
+    }
+    if (!resumable) {
+      return runtime.kind === 'live'
+    }
+    const named = runner.info().sdkSessionId
+    return !isDormant(runtime) || named === undefined || runtime.sdkSessionId === named
+  }
+
+  async #confirm(id: string, to: number, uncertain: boolean): Promise<void> {
+    this.#failedStarts.delete(id)
+    await this.#ctx.records.transactDurable(id, (current) => {
+      const { cut: _done, startFailed: _failed, pendingPrompt, ...rest } = current!
+      const lost = uncertain && pendingPrompt?.n === to
+      return lost ? { ...rest, pendingPrompt: { ...pendingPrompt, state: 'uncertain' } } : rest
+    })
+  }
+
+  async #failStart(id: string, to: number, error: string, unsent: boolean): Promise<void> {
+    const ctx = this.#ctx
+    this.#failedStarts.add(id)
+    void ctx.parking.fence(id)
+    await ctx.records.transactDurable(id, (current) => {
+      const prompt = current!.pendingPrompt
+      return {
+        ...current!,
+        startFailed: { n: to, error },
+        ...(unsent && prompt?.n === to ? { pendingPrompt: { ...prompt, state: 'pending' as const } } : {}),
+      }
+    })
   }
 
   #drop(id: string): void {
@@ -386,9 +471,9 @@ export class ConversationCuts {
   }
 
   // An explicit fresh constructor: no resume, no fork, no restore, the target's own engine home, the committed epoch.
-  async #startFresh(id: string, cut: SessionCut): Promise<Runner> {
+  async #startFresh(id: string, cut: SessionCut, prompt: string | undefined): Promise<Runner> {
     const ctx = this.#ctx
-    const built = ctx.factory.buildRunnerConfig({ ...cut.target, prompt: undefined, resume: undefined, forkSession: undefined })
+    const built = ctx.factory.buildRunnerConfig({ ...cut.target, prompt, resume: undefined, forkSession: undefined })
     const config: SessionRunnerConfig = { ...built, epoch: cut.epoch }
     const runner = await ctx.factory.buildRunner(config, undefined, id)
     if (runner.id !== id) {
@@ -442,7 +527,7 @@ export class ConversationCuts {
 
   #remember(id: string, entry: ConversationEntry): void {
     for (const executionId of entry.executions) {
-      this.#ended.set(executionId, { id, n: entry.n, auth: entry.auth })
+      this.#ended.set(executionId, { id, entry: withoutSnapshot(entry) })
     }
   }
 
@@ -453,7 +538,75 @@ export class ConversationCuts {
   }
 }
 
+function withoutSnapshot(entry: ConversationEntry): ConversationEntry {
+  const { snapshot: _snapshot, ...rest } = entry
+  return rest
+}
+
 function withoutPendingPrompt(record: SessionRecord): SessionRecord {
   const { pendingPrompt: _gone, ...rest } = record
   return rest
+}
+
+type Startup = { kind: 'ready' } | { kind: 'failed'; error: string }
+
+// A runtime for n+1 that the engine has named (or a live snapshot): the successor exists and is resumed, not replaced.
+function successorKept(runtime: StoredSessionRecord, to: number): boolean {
+  return !isArchived(runtime) && runtime.info.conversation === to && !(isDormant(runtime) && runtime.sdkSessionId === undefined)
+}
+
+// Ready once the engine named a conversation the gateway saved (a first message went out), or left `starting` when
+// there is nothing to resume yet; failed when it fails or closes first. The agent handover's rule, per session id.
+function startupOf(ctx: ServerContext, runner: Runner, wantsIdentity: boolean): Promise<Startup> {
+  return new Promise((resolve) => {
+    let reason: string | undefined
+    let done = false
+    let unsubscribe: (() => void) | undefined
+    const finish = (startup: Startup): void => {
+      done = true
+      unsubscribe?.()
+      if (startup.kind === 'failed') {
+        resolve(startup)
+        return
+      }
+      void ctx.parking.flush(runner.id).then(() => resolve(startup))
+    }
+    const check = (): void => {
+      if (done) {
+        return
+      }
+      const info = runner.info()
+      if (info.status === 'failed' || info.status === 'closed') {
+        finish({ kind: 'failed', error: reason ?? 'the new conversation stopped while starting' })
+        return
+      }
+      const resumable = (info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume
+      if (!(wantsIdentity && resumable ? info.sdkSessionId === undefined : info.status === 'starting')) {
+        finish({ kind: 'ready' })
+      }
+    }
+    unsubscribe = runner.subscribe((event) => {
+      if (event.type === 'session_error') {
+        reason = event.message
+      }
+      check()
+    })
+    if (done) {
+      unsubscribe()
+    }
+    check()
+  })
+}
+
+async function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), ms)
+    timer.unref?.()
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
 }

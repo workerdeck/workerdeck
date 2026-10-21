@@ -38,8 +38,14 @@ export async function upgradeSession(
       refuseUpgrade(socket, '404 Not Found')
       return
     }
-    const events = await historyEvents(ctx, route.id, entry)
-    const info = { ...entryInfo(route.id, entry), epoch: entry.n, lastSeq: events?.at(-1)?.seq ?? 0 }
+    const history = await historyEvents(ctx, route.id, entry)
+    const events = history?.events
+    const info = {
+      ...entryInfo(route.id, entry),
+      epoch: entry.n,
+      lastSeq: events?.at(-1)?.seq ?? 0,
+      ...(history?.transcript ? { transcript: history.transcript } : {}),
+    }
     wss.handleUpgrade(req, socket, head, (ws) => attachArchive(ctx, ws, info, events, req))
     return
   }

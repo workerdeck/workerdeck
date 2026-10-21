@@ -34,6 +34,6 @@ export type ConversationsResponse = {
   startFailed?: ConversationStartFailure
 }
 
-export type ConversationHistoryResponse = { info: SessionInfo; events: SessionEvent[] | undefined }
+export type ConversationHistoryResponse = { info: SessionInfo; events: SessionEvent[] }
 
 export type SettlePendingPromptRequest = { send: boolean }

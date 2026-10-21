@@ -211,7 +211,7 @@ describe('live sessions that survive a restart', () => {
     first.built[0]!.turn('hello', 'hi')
     await fetch(`${first.base}/sessions/${session.id}`, {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'x-workerdeck-generation': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'renamed by hand' }),
     })
 

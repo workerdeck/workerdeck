@@ -47,6 +47,7 @@ import type {
   UpdateProfileRequest,
   ToolResultBlock,
 } from '@workerdeck/protocol'
+import { GENERATION_HEADER } from '@workerdeck/protocol'
 import { SessionHandle, type AttachOptions } from './session-handle.ts'
 import { QueueHandle } from './queue-handle.ts'
 import { sessionWsUrl } from './ws-url.ts'
@@ -75,6 +76,7 @@ export class WorkerDeckError extends Error {
 
 export class WorkerDeckClient {
   #options: ClientOptions
+  #conversations = new Map<string, number>()
   #fetch: typeof fetch
   #WebSocketImpl: typeof WebSocket
 
@@ -127,7 +129,15 @@ export class WorkerDeckClient {
     const url = `${this.#options.baseUrl}${this.#sess(sessionId, '/attachments')}?name=${encodeURIComponent(file.name)}`
     const res = await this.#callRaw(
       url,
-      { method: 'POST', headers: { ...this.#options.headers, 'content-type': file.mediaType }, body: file.data },
+      {
+        method: 'POST',
+        headers: {
+          ...this.#generationHeader('POST', this.#sess(sessionId, '/attachments')),
+          ...this.#options.headers,
+          'content-type': file.mediaType,
+        },
+        body: file.data,
+      },
       'upload failed',
     )
     return ((await res.json()) as UploadAttachmentResponse).attachment
@@ -419,6 +429,34 @@ export class WorkerDeckClient {
     return await this.#pick('POST', this.#shell(sessionId, shellId, '/agent-write'), 'shell', { enabled })
   }
 
+  // The last conversation this client saw a session on: the token every mutating call for it carries.
+  conversationOf(sessionId: string): number | undefined {
+    return this.#conversations.get(sessionId)
+  }
+
+  noteConversation(sessionId: string, conversation: number): void {
+    this.#conversations.set(sessionId, conversation)
+  }
+
+  #noteSessions(payload: unknown): void {
+    const body = payload as { session?: SessionInfo; sessions?: SessionInfo[] } | null
+    for (const info of [...(body?.session ? [body.session] : []), ...(Array.isArray(body?.sessions) ? body.sessions : [])]) {
+      if (typeof info?.id === 'string' && typeof info.conversation === 'number') {
+        this.noteConversation(info.id, info.conversation)
+      }
+    }
+  }
+
+  // Protocol 2: a mutating session route names the conversation it is for. The history routes carry their own.
+  #generationHeader(method: string, path: string): Record<string, string> {
+    const match = /^\/sessions\/([^/?]+)(\/[^?]*)?/.exec(path)
+    if (method === 'GET' || !match || match[2]?.startsWith('/conversations')) {
+      return {}
+    }
+    const conversation = this.#conversations.get(decodeURIComponent(match[1]!))
+    return conversation === undefined ? {} : { [GENERATION_HEADER]: String(conversation) }
+  }
+
   attach(sessionId: string, options?: AttachOptions): SessionHandle {
     return new SessionHandle(this, sessionId, options)
   }
@@ -488,6 +526,7 @@ export class WorkerDeckClient {
       method,
       headers: {
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...this.#generationHeader(method, path),
         ...this.#options.headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -496,6 +535,7 @@ export class WorkerDeckClient {
     if (!res.ok) {
       throw new WorkerDeckError(payload.error ?? `${method} ${path} failed with ${res.status}`, res.status)
     }
+    this.#noteSessions(payload)
     return payload as T
   }
 }

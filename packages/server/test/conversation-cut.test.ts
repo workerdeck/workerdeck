@@ -294,7 +294,7 @@ describe('conversation cut under a stable id', () => {
     const ws = new WebSocket(`${wsBase}/sessions/${id}/ws`)
     const frames = frameCollector(ws)
     await frames.waitFor((frame) => frame.type === 'attached')
-    ws.send(JSON.stringify({ type: 'user_message', text: ' /clear ' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: ' /clear ' }))
     await vi.waitFor(async () => expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(2))
     expect(built[0]!.sent).not.toContain(' /clear ')
     await idle(server, id)
@@ -303,7 +303,7 @@ describe('conversation cut under a stable id', () => {
     const frames2 = frameCollector(ws2)
     await frames2.waitFor((frame) => frame.type === 'attached')
     built.at(-1)!.busy()
-    ws2.send(JSON.stringify({ type: 'clear_context' }))
+    ws2.send(JSON.stringify({ generation: 2, type: 'clear_context' }))
     await new Promise((resolve) => setTimeout(resolve, 30))
     expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(2)
     built.at(-1)!.settle()
@@ -484,7 +484,7 @@ describe('conversation cut on the one session record', () => {
     const ws = new WebSocket(`${wsBase}/sessions/${id}/ws`)
     const frames = frameCollector(ws)
     await frames.waitFor((frame) => frame.type === 'attached')
-    ws.send(JSON.stringify({ type: 'user_message', text: 'once', clientId: 'c-1' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'once', clientId: 'c-1' }))
     await frames.waitFor((frame) => frame.type === 'ack')
     expect(built[0]!.sent).toEqual(['work', 'once'])
     await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
@@ -532,7 +532,7 @@ describe('conversation cut on the one session record', () => {
     const ws = new WebSocket(`${wsBase}/sessions/${job}/ws`)
     const frames = frameCollector(ws)
     await frames.waitFor((frame) => frame.type === 'attached')
-    ws.send(JSON.stringify({ type: 'clear_context' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'clear_context' }))
     expect(await frames.waitFor((frame) => frame.type === 'protocol_error')).toMatchObject({ message: expect.stringContaining('job') })
     ws.close()
     expect(built).toHaveLength(1)
@@ -562,6 +562,234 @@ describe('conversation cut on the one session record', () => {
     expect((await call(base, `/sessions/${id}`)).body.session.conversation).toBe(1)
     await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
     expect((await call(base, '/sessions')).body.sessions[0]).toMatchObject({ id, conversation: 2 })
+  })
+})
+
+describe('the successor is durable before the intent goes', () => {
+  it('keeps the intent and the prompt while the successor is still starting, and settles once it named its conversation', async () => {
+    const dir = await fixture.stateDir()
+    let release: (() => void) | undefined
+    const { server, base, built } = await gateway(dir, {
+      options: { agentStartupTimeoutMs: 50 },
+      building: (runner) => {
+        if (built.length > 1) {
+          runner.hold = new Promise((resolve) => {
+            release = resolve
+          })
+        }
+      },
+    })
+    const id = await create(base)
+    await idle(server, id)
+    const res = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1, prompt: 'next' })
+    expect(res.status).toBe(200)
+    expect(server.registry.get(id)?.info().status).toBe('starting')
+    expect(await server.records.get(id)).toMatchObject({ cut: { phase: 'committed' }, pendingPrompt: { state: 'sending' } })
+
+    release!()
+    await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined())
+    const record = await server.records.get(id)
+    expect(record?.pendingPrompt).toBeUndefined()
+    expect(record?.runtime).toMatchObject({ kind: 'dormant', sdkSessionId: `engine-${id}`, info: { conversation: 2 } })
+    expect(built.at(-1)!.sent).toEqual(['next'])
+  })
+
+  it('never resends a prompt whose successor died unnamed: the restart starts n+1 again and leaves it uncertain', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir, {
+      options: { agentStartupTimeoutMs: 20 },
+      building: (runner) => {
+        if ((first?.built.length ?? 0) > 1) {
+          runner.hold = new Promise(() => {})
+        }
+      },
+    })
+    const id = await create(first.base)
+    await idle(first.server, id)
+    expect((await call(first.base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1, prompt: 'next' })).status).toBe(200)
+    await stop(first.server)
+
+    const second = await gateway(dir)
+    expect(second.built).toHaveLength(1)
+    expect(second.built[0]!.config.resume).toBeUndefined()
+    await idle(second.server, id)
+    expect(second.built[0]!.sent).toEqual([])
+    const listed = (await call(second.base, `/sessions/${id}/conversations`)).body
+    expect(listed).toMatchObject({ conversation: 2, pendingPrompt: { text: 'next', state: 'uncertain' } })
+    expect((await second.server.records.get(id))?.cut).toBeUndefined()
+  })
+
+  it('records a start that fails after it was accepted as startFailed, and Retry start brings up the same n', async () => {
+    const dir = await fixture.stateDir()
+    let release: (() => void) | undefined
+    const { server, base, built } = await gateway(dir, {
+      options: { agentStartupTimeoutMs: 20 },
+      building: (runner) => {
+        if (built.length === 2) {
+          runner.failStart = 'engine fell over'
+          runner.hold = new Promise((resolve) => {
+            release = resolve
+          })
+        }
+      },
+    })
+    const id = await create(base)
+    await idle(server, id)
+    expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
+    release!()
+    await vi.waitFor(async () => expect((await server.records.get(id))?.startFailed).toEqual({ n: 2, error: 'engine fell over' }))
+    expect((await server.records.get(id))?.cut?.phase).toBe('committed')
+
+    const retried = await call(base, `/sessions/${id}/conversations/retry`, 'POST', {})
+    expect(retried.status).toBe(200)
+    expect(built).toHaveLength(3)
+    expect(await server.records.get(id)).toMatchObject({ conversation: 2 })
+    expect((await server.records.get(id))?.cut).toBeUndefined()
+  })
+
+  it('resumes a successor that already exists on recovery instead of replacing it', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir)
+    const id = await create(first.base)
+    await idle(first.server, id)
+    await call(first.base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1, prompt: 'next' })
+    await idle(first.server, id)
+    const cut = { from: 1, to: 2, phase: 'committed' as const, epoch: 1, target: { cwd: '/tmp/project', profile: 'claude-a' } }
+    await first.server.records.transact(id, (current) => ({ ...current!, cut, pendingPrompt: { text: 'next', n: 2, state: 'sending' } }))
+    await stop(first.server)
+
+    const second = await gateway(dir)
+    expect(second.built).toHaveLength(0)
+    expect(await second.server.records.get(id)).toMatchObject({ conversation: 2, pendingPrompt: { state: 'uncertain' } })
+    expect((await second.server.records.get(id))?.cut).toBeUndefined()
+    await second.server.parking.ensureLive(id)
+    expect(second.built[0]!.config.resume).toBe(`engine-${id}`)
+    expect(second.built[0]!.sent).toEqual([])
+  })
+})
+
+describe('a mutation names its conversation and is re-checked under the lock', () => {
+  function blockingStore(dir: string) {
+    const inner = createFileSessionRecordStore({ dir: join(dir, 'sessions') })
+    // The cut's own read under the lock is the second one: the route reads the record once before it.
+    const gate: { armed: number; release?: () => void; reached?: Promise<void>; hit?: () => void } = { armed: 0 }
+    const store: SessionRecordStore = {
+      ...inner,
+      get: async (id) => {
+        if (gate.armed > 0 && --gate.armed === 0) {
+          gate.hit!()
+          await new Promise<void>((resolve) => {
+            gate.release = resolve
+          })
+        }
+        return inner.get(id)
+      },
+    }
+    const arm = (): void => {
+      gate.armed = 2
+      gate.reached = new Promise((resolve) => {
+        gate.hit = resolve
+      })
+    }
+    return { store, gate, arm }
+  }
+
+  it.each([
+    ['DELETE', undefined, {}],
+    ['PATCH', { title: 'late' }, { 'x-workerdeck-generation': '1' }],
+  ])('refuses a %s queued behind a cut instead of applying it to n+1', async (method, body, headers) => {
+    const dir = await fixture.stateDir()
+    const { store, gate, arm } = blockingStore(dir)
+    const { server, base } = await gateway(dir, { store })
+    const id = await create(base)
+    await idle(server, id)
+    arm()
+    const cut = call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    await gate.reached
+    const late = fetch(`${base}/sessions/${id}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...headers },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    gate.release!()
+    expect((await cut).status).toBe(200)
+    const refused = await late
+    expect(refused.status).toBe(409)
+    expect(((await refused.json()) as { error: string }).error).toContain('conversation 2')
+    await idle(server, id)
+    expect((await call(base, `/sessions/${id}`)).body.session).toMatchObject({ id, conversation: 2 })
+    expect((await server.records.get(id))?.closedAt).toBeUndefined()
+  })
+
+  it('refuses an untokened or stale command, and acks a refused prompt as stale without running it', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, wsBase, built } = await gateway(dir)
+    const id = await create(base)
+    await idle(server, id)
+    const missing = await fetch(`${base}/sessions/${id}/sleep`, { method: 'POST' })
+    expect(missing.status).toBe(409)
+    expect(((await missing.json()) as { error: string }).error).toContain('must name its conversation')
+
+    const ws = new WebSocket(`${wsBase}/sessions/${id}/ws`)
+    const frames = frameCollector(ws)
+    await frames.waitFor((frame) => frame.type === 'attached')
+    ws.send(JSON.stringify({ type: 'user_message', text: 'untokened', clientId: 'u-1' }))
+    expect(await frames.waitFor((frame) => frame.type === 'ack')).toEqual({ type: 'ack', clientId: 'u-1', stale: true })
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'kept', clientId: 'u-2' }))
+    await frames.waitFor((frame) => frame.type === 'ack' && frame.clientId === 'u-2')
+    await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    await idle(server, id)
+
+    const again = new WebSocket(`${wsBase}/sessions/${id}/ws`)
+    const next = frameCollector(again)
+    await next.waitFor((frame) => frame.type === 'attached')
+    again.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'kept', clientId: 'u-2' }))
+    expect(await next.waitFor((frame) => frame.type === 'ack')).toEqual({ type: 'ack', clientId: 'u-2', stale: true })
+    again.close()
+    expect(built[0]!.sent).toEqual(['work', 'kept'])
+    expect(built.at(-1)!.sent).toEqual([])
+  })
+
+  it('moves the canonical scope with a scope-changing cut, and keeps it across a restart', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir, { scoped: true })
+    const id = await create(first.base, { profile: 'claude-a' }, 'tenant-a')
+    await idle(first.server, id)
+    const moved = await call(
+      first.base,
+      `/sessions/${id}/conversations`,
+      'POST',
+      { expectedGeneration: 1, target: { scope: { tenant: 'b' } } },
+      'operator',
+    )
+    expect(moved.status).toBe(200)
+    await idle(first.server, id)
+    expect((await first.server.records.get(id))?.scope).toEqual({ tenant: 'b' })
+    await stop(first.server)
+
+    const second = await gateway(dir, { scoped: true })
+    expect((await second.server.records.get(id))?.scope).toEqual({ tenant: 'b' })
+    expect((await call(second.base, `/sessions/${id}`, 'GET', undefined, 'tenant-b')).status).toBe(200)
+    expect((await call(second.base, `/sessions/${id}`, 'GET', undefined, 'tenant-a')).status).toBe(404)
+  })
+
+  it('tells a transcript the engine no longer has from a read that failed', async () => {
+    const dir = await fixture.stateDir()
+    let answer: 'missing' | 'failed' = 'missing'
+    const { server, base } = await gateway(dir, {
+      options: {
+        historyReader: { read: async () => (answer === 'missing' ? { kind: 'missing' } : { kind: 'failed', error: 'timed out' }) },
+      },
+    })
+    const id = await create(base)
+    await idle(server, id)
+    await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    const gone = await call(base, `/sessions/${id}/conversations/1`)
+    expect(gone.status).toBe(200)
+    expect(gone.body).toMatchObject({ info: { transcript: 'unavailable' }, events: [] })
+    answer = 'failed'
+    expect((await call(base, `/sessions/${id}/conversations/1`)).status).toBe(502)
   })
 })
 
@@ -625,9 +853,13 @@ describe('conversation cut on the real claude runner', () => {
     harnesses[0]!.emit(RESULT)
     await idle(server, id)
 
-    const res = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1, prompt: 'next' })
-    expect(res.status).toBe(200)
+    const pending = call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1, prompt: 'next' })
     await vi.waitFor(() => expect(harnesses).toHaveLength(2))
+    harnesses[1]!.emit({ ...INIT, session_id: 'sdk-2' } as SDKMessage)
+    const res = await pending
+    expect(res.status).toBe(200)
+    expect(res.body.session.sdkSessionId).toBe('sdk-2')
+    expect((await server.records.get(id))?.cut).toBeUndefined()
     const [first, second] = harnesses.map((harness) => harness.captured.options!)
     expect(second!.resume).toBeUndefined()
     expect(second!.forkSession).toBeUndefined()

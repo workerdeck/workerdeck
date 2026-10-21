@@ -184,7 +184,8 @@ export type QueueServerOptions = {
 // A live session handed from one server to another inside one process, which is what `--hot-reload` does: the
 // runner object keeps its engine child alive, and `config` is the one fact the next server cannot rederive (a
 // durable record strips `env`, `queryFn`, `historyFn` and `extraOptions`, and does not exist before `system_init`).
-export type CarriedSession = { runner: Runner; config?: SessionRunnerConfig }
+// `conversation`: the write token the old generation held, primed before the new one lets the carried runner write.
+export type CarriedSession = { runner: Runner; config?: SessionRunnerConfig; conversation?: number }
 
 export type DrainReport = {
   // Sessions mid-turn. These resolve on their own, so the drain waits for them.

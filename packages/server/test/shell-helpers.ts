@@ -127,17 +127,17 @@ export async function waitForExit(collector: Collector, command: string) {
 }
 
 export async function spawnShell(ws: WebSocket, collector: Collector, command: string): Promise<ShellInfo> {
-  ws.send(JSON.stringify({ type: 'shell_command', command }))
+  ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command }))
   const frame = await collector.waitFor((f) => shellRow(f)?.shell.command === command, 8000)
   return shellRow(frame)!.shell
 }
 
 export function sendAttach(ws: WebSocket, shellId: string, cols: number, rows: number): void {
-  ws.send(JSON.stringify({ type: 'shell_attach', shellId, cols, rows }))
+  ws.send(JSON.stringify({ generation: 1, type: 'shell_attach', shellId, cols, rows }))
 }
 
 export function sendInput(ws: WebSocket, shellId: string, data: string): void {
-  ws.send(JSON.stringify({ type: 'shell_input', shellId, data }))
+  ws.send(JSON.stringify({ generation: 1, type: 'shell_input', shellId, data }))
 }
 
 export function shellFrames(collector: Collector, shellId: string): ServerFrame[] {

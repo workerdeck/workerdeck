@@ -8,7 +8,7 @@ const fx = shellFixture('wd-task-routes-')
 afterEach(fx.cleanup)
 
 function post(base: string, path: string, token = 'operator') {
-  return fetch(`${base}${path}`, { method: 'POST', headers: { authorization: `Bearer ${token}` } })
+  return fetch(`${base}${path}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'x-workerdeck-generation': '1' } })
 }
 
 async function waitForStoppable(base: string, id: string): Promise<SessionInfo> {

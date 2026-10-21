@@ -105,8 +105,8 @@ describe('set_permission_mode from a non-operator', () => {
       }
     })
     await new Promise((resolve) => ws.once('open', resolve))
-    ws.send(JSON.stringify({ type: 'set_permission_mode', mode: 'bypassPermissions' }))
-    ws.send(JSON.stringify({ type: 'set_permission_mode', mode: 'dontAsk' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'set_permission_mode', mode: 'bypassPermissions' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'set_permission_mode', mode: 'dontAsk' }))
     await expect.poll(() => errors).toHaveLength(2)
     expect(errors.every((message) => /reserved to operators/.test(message))).toBe(true)
     ws.close()

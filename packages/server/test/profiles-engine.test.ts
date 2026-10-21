@@ -144,6 +144,7 @@ describe('provider profiles and engine selection', () => {
       if (frame.type === 'tool_call_request') {
         ws.send(
           JSON.stringify({
+            generation: 1,
             type: 'tool_call_result',
             executionId: frame.executionId,
             output: { type: 'json', value: 42 },

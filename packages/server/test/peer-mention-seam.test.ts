@@ -46,7 +46,7 @@ async function send(wsBase: string, sessionId: string, text: string) {
   const ws = new WebSocket(`${wsBase}/sessions/${sessionId}/ws`)
   const collector = frameCollector(ws)
   await collector.waitFor((f) => f.type === 'attached')
-  ws.send(JSON.stringify({ type: 'user_message', text }))
+  ws.send(JSON.stringify({ generation: 1, type: 'user_message', text }))
   return { ws, collector }
 }
 

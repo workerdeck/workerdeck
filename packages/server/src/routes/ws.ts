@@ -117,6 +117,19 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
         message: error instanceof Error ? error.message : 'command failed',
       })
     }
+    const clientId =
+      frame?.type === 'user_message' && typeof frame.clientId === 'string' && frame.clientId.length <= CLIENT_ID_MAX
+        ? frame.clientId
+        : undefined
+    // Never defaulted: a frame with no conversation, or another one, is refused before anything runs or is acked as run.
+    const refused = tokenRefusal(ctx, frame, bound)
+    if (refused) {
+      report(new Error(refused))
+      if (clientId) {
+        send({ type: 'ack', clientId, stale: true })
+      }
+      return
+    }
     // Prompts run in arrival order, and a close waits behind them: resolving mentions is async.
     if (frame?.type === 'close') {
       prompts = prompts.then(() => handleCommand(ctx, frame, bound).catch(report))
@@ -126,14 +139,19 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
       handleCommand(ctx, frame, bound).catch(report)
       return
     }
-    const clientId = typeof frame.clientId === 'string' && frame.clientId.length <= CLIENT_ID_MAX ? frame.clientId : undefined
     prompts = prompts.then(async () => {
       if (!clientId) {
         await handleCommand(ctx, frame, bound).catch(report)
         return
       }
-      await ctx.promptAcks.run(`${runner.id}:${conversation}`, clientId, () => handleCommand(ctx, frame, bound)).catch(report)
-      send({ type: 'ack', clientId })
+      let stale = false
+      await ctx.promptAcks
+        .run(`${runner.id}:${conversation}`, clientId, () => handleCommand(ctx, frame, bound))
+        .catch((error: unknown) => {
+          stale = error instanceof Error && error.message === CONVERSATION_ENDED
+          report(error)
+        })
+      send({ type: 'ack', clientId, ...(stale ? { stale: true as const } : {}) })
     })
   })
   ws.on('close', () => {
@@ -202,14 +220,11 @@ type Bound = { runner: Runner; access: AttachAccess; client: Client; conversatio
 
 async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Bound): Promise<void> {
   const { attachmentStore, bridge } = ctx
-  const { runner, access, client, conversation } = bound
+  const { runner, access, client } = bound
   if (ctx.registry.get(runner.id) !== runner && !ctx.handovers.gated(runner.id)) {
     throw new Error(CONVERSATION_ENDED)
   }
-  if (
-    (typeof frame.generation === 'number' && frame.generation !== conversation) ||
-    (ctx.records.conversationOf(runner.id) ?? 1) !== conversation
-  ) {
+  if (tokenRefusal(ctx, frame, bound)) {
     throw new Error(CONVERSATION_ENDED)
   }
   if (ctx.handovers.gated(runner.id)) {
@@ -231,6 +246,9 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
       const mentions = ctx.peers && !isSlashCommand(frame.text) ? await mentionsFor(ctx.peers, runner.id, frame.text).catch(() => []) : []
       if (ctx.handovers.gated(runner.id) || ctx.registry.get(runner.id) !== runner) {
         throw new Error(ROTATING)
+      }
+      if (tokenRefusal(ctx, frame, bound)) {
+        throw new Error(CONVERSATION_ENDED)
       }
       const options = mentions.length > 0 ? { mentions } : undefined
       if (!frame.attachmentIds?.length) {
@@ -348,6 +366,22 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
       throw new Error(`unknown command: ${(frame as { type?: string }).type}`)
     }
   }
+}
+
+// Subscriptions to a shell's output change nothing; every other command must name the socket's own conversation.
+const UNTOKENED: ReadonlySet<string> = new Set(['shell_attach', 'shell_detach'])
+
+function tokenRefusal(ctx: ServerContext, frame: ClientFrame, bound: Bound): string | undefined {
+  if (UNTOKENED.has(frame?.type)) {
+    return undefined
+  }
+  if (typeof frame?.generation !== 'number') {
+    return `this command must name its conversation (generation); the socket is on conversation ${bound.conversation}`
+  }
+  if (frame.generation !== bound.conversation || (ctx.records.conversationOf(bound.runner.id) ?? 1) !== bound.conversation) {
+    return CONVERSATION_ENDED
+  }
+  return undefined
 }
 
 // Exact: a typed `/clear` alone, nothing attached. Anything longer is ordinary text for the engine.

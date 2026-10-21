@@ -30,6 +30,8 @@ export type SessionHandleEvents = {
   shellAttached: { shellId: string; shell: ShellInfo; cols: number; rows: number; scrollback: string }
   shellOutput: { shellId: string; data: string }
   shellDetached: { shellId: string; reason: string }
+  // A prompt the gateway refused unrun because the conversation it was written for has ended: the sender's to resubmit.
+  stalePrompt: { clientId: string; text: string; attachmentIds?: string[] }
 }
 
 export class SessionHandle {
@@ -41,12 +43,15 @@ export class SessionHandle {
   #lastSeq: number
   #closed = false
   #retries = 0
-  #outbox: Array<{ payload: string; clientId?: string }> = []
+  #outbox: Array<{ frame: ClientFrame; clientId?: string }> = []
   #unacked = new Map<string, string>()
   #acks = false
   #everConnected = false
   #attachedHere = false
   #prompts = 0
+  // The conversation new commands are written for. Stamped onto a command when it is created and never rewritten, so a
+  // resend after a reconnect still names the conversation it was meant for and is refused if that one has ended.
+  #conversation: number | undefined
   readonly #nonce = Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
   #connectTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -55,6 +60,7 @@ export class SessionHandle {
     this.sessionId = sessionId
     this.#options = { reconnect: true, ...options }
     this.#lastSeq = options.afterSeq ?? 0
+    this.#conversation = client.conversationOf(sessionId)
     // Deferred a tick so a same-tick detach (React StrictMode's dev mount) never closes a WebSocket mid-upgrade, which breaks proxies.
     this.#connectTimer = setTimeout(() => this.#connect(), 0)
   }
@@ -178,13 +184,26 @@ export class SessionHandle {
     this.#ws = undefined
   }
 
+  get conversation(): number | undefined {
+    return this.#conversation
+  }
+
   #sendFrame(frame: ClientFrame, clientId?: string): void {
-    const payload = JSON.stringify(frame)
-    // readyState 1 === OPEN (avoid touching the WebSocket global; impl may be injected)
-    if (this.#ws && this.#ws.readyState === 1) {
-      this.#transmit(this.#ws, payload, clientId)
+    const stamped = this.#conversation === undefined ? frame : { ...frame, generation: this.#conversation }
+    // readyState 1 === OPEN (avoid touching the WebSocket global; impl may be injected). A frame with no conversation
+    // yet waits for the attach that names one.
+    if (this.#ws && this.#ws.readyState === 1 && (this.#attachedHere || stamped.generation !== undefined)) {
+      this.#transmit(this.#ws, JSON.stringify(stamped), clientId)
     } else {
-      this.#outbox.push({ payload, clientId })
+      this.#outbox.push({ frame: stamped, clientId })
+    }
+  }
+
+  #flushOutbox(ws: WebSocket): void {
+    for (const { frame, clientId } of this.#outbox.splice(0)) {
+      const stamped =
+        frame.generation === undefined && this.#conversation !== undefined ? { ...frame, generation: this.#conversation } : frame
+      this.#transmit(ws, JSON.stringify(stamped), clientId)
     }
   }
 
@@ -210,10 +229,13 @@ export class SessionHandle {
       this.#events.emit('connectionChange', true)
       // Only a gateway known to ack runs a resent prompt once; without that knowledge a sent prompt counts as delivered.
       this.#attachedHere = false
-      const resend = this.#acks ? [...this.#unacked].map(([clientId, payload]) => ({ payload, clientId })) : []
+      const resend = this.#acks ? [...this.#unacked] : []
       this.#unacked.clear()
-      for (const { payload, clientId } of [...resend, ...this.#outbox.splice(0)]) {
+      for (const [clientId, payload] of resend) {
         this.#transmit(ws, payload, clientId)
+      }
+      if (this.#outbox.every(({ frame }) => frame.generation !== undefined)) {
+        this.#flushOutbox(ws)
       }
     }
     ws.onmessage = (msg: MessageEvent) => {
@@ -221,9 +243,15 @@ export class SessionHandle {
       if (frame.type === 'attached') {
         this.#acks = frame.acks === true
         this.#attachedHere = true
+        const conversation = (frame.session as Partial<AttachedFrame['session']> | undefined)?.conversation
+        if (conversation !== undefined) {
+          this.#conversation = conversation
+          this.#client.noteConversation(this.sessionId, conversation)
+        }
         if (!this.#acks) {
           this.#unacked.clear()
         }
+        this.#flushOutbox(ws)
         this.#events.emit('attached', frame)
       } else if (frame.type === 'event') {
         if (frame.event.seq <= this.#lastSeq) {
@@ -248,7 +276,16 @@ export class SessionHandle {
       } else if (frame.type === 'shell_detached') {
         this.#events.emit('shellDetached', { shellId: frame.shellId, reason: frame.reason })
       } else if (frame.type === 'ack') {
+        const payload = this.#unacked.get(frame.clientId)
         this.#unacked.delete(frame.clientId)
+        if (frame.stale && payload !== undefined) {
+          const sent = JSON.parse(payload) as Extract<ClientFrame, { type: 'user_message' }>
+          this.#events.emit('stalePrompt', {
+            clientId: frame.clientId,
+            text: sent.text,
+            ...(sent.attachmentIds ? { attachmentIds: sent.attachmentIds } : {}),
+          })
+        }
       } else if (frame.type === 'protocol_error') {
         this.#events.emit('protocolError', frame.message)
       }

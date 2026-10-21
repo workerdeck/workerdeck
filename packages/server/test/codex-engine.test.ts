@@ -265,7 +265,7 @@ describe('codex engine over the gateway', () => {
     for (const action of ['reconnect', 'enable', 'disable'] as const) {
       const res = await fetch(`${base}/sessions/${session.id}/mcp/scratch`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'x-workerdeck-generation': '1', 'content-type': 'application/json' },
         body: JSON.stringify({ action }),
       })
       expect(res.status).toBe(501)
@@ -374,7 +374,7 @@ describe('codex engine over the gateway', () => {
     const upload = (name: string, mediaType: string) =>
       fetch(`${base}/sessions/${session.id}/attachments?name=${name}`, {
         method: 'POST',
-        headers: { 'content-type': mediaType },
+        headers: { 'x-workerdeck-generation': '1', 'content-type': mediaType },
         body: 'payload',
       })
 

@@ -69,6 +69,8 @@ export const REPLAY_HOLD_MAX_MS = 1500
 
 export type UseClaudeSessionOptions = {
   onProtocolError?: (message: string) => void
+  // A prompt the gateway refused because its conversation ended under it: the text, for the composer to offer again.
+  onStalePrompt?: (text: string) => void
   cacheTranscript?: boolean
 }
 
@@ -123,6 +125,8 @@ export function useClaudeSession(
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [protocolMismatch, setProtocolMismatch] = useState<number | undefined>()
   const [shell, setShell] = useState(false)
+  const [unsentPrompts, setUnsentPrompts] = useState<string[]>([])
+  const dismissUnsent = useCallback(() => setUnsentPrompts([]), [])
   const [pricing, setPricing] = useState<PricingTable>(DEFAULT_PRICING)
   const [replayTarget, setReplayTarget] = useState<number | undefined>()
   const [resyncSeq, setResyncSeq] = useState(0)
@@ -186,18 +190,24 @@ export function useClaudeSession(
     const offProtocolError = handle.on('protocolError', (message: string) => {
       optionsRef.current?.onProtocolError?.(message)
     })
+    const offStale = handle.on('stalePrompt', ({ text }) => {
+      setUnsentPrompts((held) => [...held, text])
+      optionsRef.current?.onStalePrompt?.(text)
+    })
     return () => {
       offEvent()
       offAttached()
       offConn()
       offRetry()
       offProtocolError()
+      offStale()
       handle.detach()
       handleRef.current = null
       setHandleState(undefined)
       setConnection('connecting')
       setProtocolMismatch(undefined)
       setShell(false)
+      setUnsentPrompts([])
       setReplayTarget(undefined)
       const parting = stateRef.current
       if (shouldWriteParting({ cacheEnabled: cache, skipCache: skipCacheRef.current, parting })) {
@@ -350,6 +360,8 @@ export function useClaudeSession(
       connection,
       replaying,
       protocolMismatch,
+      unsentPrompts,
+      dismissUnsent,
       shell,
       pricing,
       models,
@@ -369,6 +381,8 @@ export function useClaudeSession(
       connection,
       replaying,
       protocolMismatch,
+      unsentPrompts,
+      dismissUnsent,
       shell,
       pricing,
       models,

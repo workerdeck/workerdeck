@@ -43,7 +43,11 @@ async function call(base: string, path: string, method?: string, body?: unknown)
   if (body === undefined || method === undefined) {
     return await fetch(`${base}${path}`, { method: method ?? 'GET' })
   }
-  return await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  return await fetch(`${base}${path}`, {
+    method,
+    headers: { 'content-type': 'application/json', 'x-workerdeck-generation': '1' },
+    body: JSON.stringify(body),
+  })
 }
 
 async function createAgent(base: string, name: string, lead?: string): Promise<AgentResponse> {

@@ -223,8 +223,13 @@ describe('SessionHandle framing', () => {
     expect(latest().sent).toEqual([])
 
     latest().accept()
-    const texts = latest().sent.map((raw) => (JSON.parse(raw) as { text: string }).text)
-    expect(texts).toEqual(['first', 'second'])
+    expect(latest().sent).toEqual([])
+    latest().deliver({ type: 'attached', protocolVersion: 2, session: { conversation: 3 }, replayingFrom: 0 })
+    const sent = latest().sent.map((raw) => JSON.parse(raw) as { text: string; generation: number })
+    expect(sent.map((frame) => [frame.text, frame.generation])).toEqual([
+      ['first', 3],
+      ['second', 3],
+    ])
 
     handle.send('third')
     expect(latest().sent).toHaveLength(3)
@@ -285,7 +290,13 @@ describe('SessionHandle prompt acks', () => {
     const handle = makeClient().attach('s1')
     settle()
     latest().accept()
-    latest().deliver({ type: 'attached', protocolVersion: 1, session: {}, replayingFrom: 0, ...(acks ? { acks: true } : {}) })
+    latest().deliver({
+      type: 'attached',
+      protocolVersion: 2,
+      session: { conversation: 1 },
+      replayingFrom: 0,
+      ...(acks ? { acks: true } : {}),
+    })
     return handle
   }
 
@@ -313,6 +324,25 @@ describe('SessionHandle prompt acks', () => {
       ['lost', lost!.clientId],
       ['while down', expect.any(String)],
     ])
+    handle.detach()
+  })
+
+  it('keeps the conversation a prompt was written for across a reconnect, and hands a stale refusal back as unsent text', () => {
+    const handle = connected(true)
+    const stale: string[] = []
+    handle.on('stalePrompt', ({ text }) => stale.push(text))
+    handle.send('for one')
+    const [written] = prompts(latest())
+    latest().drop()
+    vi.advanceTimersByTime(500)
+    latest().accept()
+    latest().deliver({ type: 'attached', protocolVersion: 2, session: { conversation: 2 }, replayingFrom: 0, acks: true })
+    const [resent] = latest().sent.map((raw) => JSON.parse(raw) as { generation: number; clientId: string })
+    expect(resent).toMatchObject({ generation: 1, clientId: written!.clientId })
+    latest().deliver({ type: 'ack', clientId: written!.clientId, stale: true })
+    expect(stale).toEqual(['for one'])
+    handle.send('for two')
+    expect(JSON.parse(latest().sent.at(-1)!)).toMatchObject({ text: 'for two', generation: 2 })
     handle.detach()
   })
 
@@ -377,6 +407,7 @@ describe('shell input chunking', () => {
     const handle = makeClient().attach('s1')
     settle()
     latest().accept()
+    latest().deliver({ type: 'attached', protocolVersion: 2, session: { conversation: 1 }, replayingFrom: 0 })
     const paste = 'x'.repeat(SHELL_INPUT_MAX * 2 + 10)
     handle.writeShell('sh1', paste)
     const frames = latest().sent.map((raw) => JSON.parse(raw) as { type: string; shellId: string; data: string })

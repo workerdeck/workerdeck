@@ -53,14 +53,14 @@ describe('reasoning effort', () => {
     const ws = new WebSocket(`${wsBase}/sessions/${session.id}/ws`)
     const collector = frameCollector(ws)
     await collector.waitFor((f) => f.type === 'attached')
-    ws.send(JSON.stringify({ type: 'set_effort', effort: 'max' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'set_effort', effort: 'max' }))
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'effort_changed' && f.event.effort === 'max')
     expect(engine.applyFlagSettings).toHaveBeenCalledWith({ effortLevel: 'max' })
 
     const current = (await (await fetch(`${base}/sessions/${session.id}`)).json()) as { session: SessionInfo }
     expect(current.session.effort).toBe('max')
 
-    ws.send(JSON.stringify({ type: 'set_effort', effort: 'turbo' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'set_effort', effort: 'turbo' }))
     const refused = await collector.waitFor((f) => f.type === 'protocol_error')
     expect(refused).toMatchObject({ message: expect.stringMatching(/unsupported reasoning effort 'turbo'/) })
     ws.close()

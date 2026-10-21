@@ -43,7 +43,7 @@ const RESULT = {
 } as unknown as SDKMessage
 
 function post(base: string, path: string) {
-  return fetch(`${base}${path}`, { method: 'POST', headers: { authorization: 'Bearer operator' } })
+  return fetch(`${base}${path}`, { method: 'POST', headers: { authorization: 'Bearer operator', 'x-workerdeck-generation': '1' } })
 }
 
 async function info(base: string, id: string): Promise<SessionInfo> {
@@ -89,7 +89,7 @@ describe('POST /sessions/:id/sleep', () => {
     harness.emit(RESULT)
     await waitFor(async () => (await info(base, id)).sdkSessionId === 'sdk-1' && (await info(base, id)).status === 'idle')
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
-    ws.send(JSON.stringify({ type: 'sleep' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'sleep' }))
     await collector.waitFor((frame) => frame.type === 'event' && frame.event.type === 'engine_sleep' && frame.event.asleep)
     ws.close()
   })

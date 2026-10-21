@@ -70,6 +70,7 @@ describe('browser-bridged tool execution over the wire', () => {
 
     ws.send(
       JSON.stringify({
+        generation: 1,
         type: 'tool_call_result',
         executionId: 'exec-1',
         output: { type: 'json', value: { answer: 2 } },
@@ -95,6 +96,7 @@ describe('browser-bridged tool execution over the wire', () => {
     await collector.waitFor((f) => f.type === 'tool_call_request')
     ws.send(
       JSON.stringify({
+        generation: 1,
         type: 'tool_call_error',
         executionId: 'exec-1',
         reason: 'timeout',
@@ -148,6 +150,7 @@ describe('browser-bridged tool execution over the wire', () => {
 
     ws.send(
       JSON.stringify({
+        generation: 1,
         type: 'tool_call_result',
         executionId: 'exec-1',
         output: { type: 'text', value: 'too late' },

@@ -126,12 +126,12 @@ describe('createWorkerServer', () => {
     harness.emit(initMessage)
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'system_init')
 
-    ws.send(JSON.stringify({ type: 'user_message', text: 'follow-up' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'follow-up' }))
     await vi.waitFor(() => {
       expect(harness.captured.inputs.map((m) => m.message.content)).toContain('follow-up')
     })
 
-    ws.send(JSON.stringify({ type: 'set_model', model: 'claude-opus-4-8' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'set_model', model: 'claude-opus-4-8' }))
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'model_changed' && f.event.model === 'claude-opus-4-8')
     expect(harness.setModel).toHaveBeenCalledWith('claude-opus-4-8')
 
@@ -142,7 +142,7 @@ describe('createWorkerServer', () => {
     )
     const requested = await collector.waitFor((f) => f.type === 'event' && f.event.type === 'permission_requested')
     const requestId = requested.type === 'event' && requested.event.type === 'permission_requested' ? requested.event.request.id : ''
-    ws.send(JSON.stringify({ type: 'permission_decision', requestId, behavior: 'allow' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'permission_decision', requestId, behavior: 'allow' }))
     await expect(resultPromise).resolves.toMatchObject({ behavior: 'allow' })
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'permission_resolved')
 
@@ -177,7 +177,7 @@ describe('createWorkerServer', () => {
     const patch = async (body: unknown) =>
       fetch(`${base}/sessions/${session.id}`, {
         method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'x-workerdeck-generation': '1', 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
 
@@ -238,7 +238,7 @@ describe('createWorkerServer', () => {
 
     const bogus = await fetch(`${base}/sessions/${session.id}/permissions/nope`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'x-workerdeck-generation': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ behavior: 'allow' }),
     })
     expect(bogus.status).toBe(404)
@@ -247,7 +247,7 @@ describe('createWorkerServer', () => {
     const answers = { 'Proceed?': 'Yes' }
     const resolveRes = await fetch(`${base}/sessions/${session.id}/permissions/${requestId}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'x-workerdeck-generation': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ behavior: 'allow', updatedInput: { ...input, answers } }),
     })
     expect(resolveRes.status).toBe(200)
@@ -260,7 +260,7 @@ describe('createWorkerServer', () => {
 
     const again = await fetch(`${base}/sessions/${session.id}/permissions/${requestId}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'x-workerdeck-generation': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ behavior: 'deny' }),
     })
     expect(again.status).toBe(404)
@@ -794,10 +794,10 @@ describe('createWorkerServer', () => {
     const ws = new WebSocket(`${wsBase}/sessions/${sessionId}/ws`)
     const collector = frameCollector(ws)
     await collector.waitFor((f) => f.type === 'attached')
-    ws.send(JSON.stringify({ type: 'user_message', text: 'and also' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'and also' }))
     const refused = await collector.waitFor((f) => f.type === 'protocol_error')
     expect(refused).toMatchObject({ message: expect.stringContaining('takes no input') })
-    ws.send(JSON.stringify({ type: 'set_permission_mode', mode: 'bypassPermissions' }))
+    ws.send(JSON.stringify({ generation: 1, type: 'set_permission_mode', mode: 'bypassPermissions' }))
     await collector.waitFor((f) => f.type === 'protocol_error' && /disableBypassPermissions/.test(f.message))
     expect(harness.captured.inputs.map((m) => m.message.content)).not.toContain('and also')
     ws.close()

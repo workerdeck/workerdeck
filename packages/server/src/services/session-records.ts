@@ -82,6 +82,12 @@ export class StaleConversationError extends Error {
   }
 }
 
+export class MissingConversationError extends Error {
+  constructor(readonly sessionId: string) {
+    super(`a runtime write for session ${sessionId} names no conversation`)
+  }
+}
+
 export class MemorySessionRecordStore implements SessionRecordStore {
   #records = new Map<string, SessionRecord>()
 
@@ -121,7 +127,7 @@ export class SessionRecords {
   async list(): Promise<SessionRecord[]> {
     const records = await this.#store.list()
     for (const record of records) {
-      this.#conversations.set(record.id, record.conversation)
+      this.#observe(record.id, record.conversation)
     }
     return records
   }
@@ -129,6 +135,11 @@ export class SessionRecords {
   // The committed conversation, as far as this process has read or written it; undefined for an id it has not seen.
   conversationOf(id: string): number | undefined {
     return this.#conversations.get(id)
+  }
+
+  // A hot-reload carry: the conversation the previous generation knew, before this one has read the record.
+  prime(id: string, conversation: number): void {
+    this.#observe(id, conversation)
   }
 
   // `merge` is synchronous on purpose: a transaction must never await parking, a runner, or another queued op.
@@ -178,7 +189,7 @@ export class SessionRecords {
     })
   }
 
-  async saveRuntime(runtime: StoredSessionRecord, conversation?: number): Promise<void> {
+  async saveRuntime(runtime: StoredSessionRecord, conversation: number | undefined): Promise<void> {
     await this.transact(runtime.id, (current) => {
       checkConversation(runtime.id, current, conversation)
       if (current?.closedAt !== undefined) {
@@ -191,7 +202,7 @@ export class SessionRecords {
 
   // `resumed`: the runtime moved into a live runner and the session goes on. `ended`: the session is over, and a
   // record with nothing beyond its first conversation goes with it.
-  async clearRuntime(id: string, conversation?: number, reason: RuntimeClear = 'ended'): Promise<boolean> {
+  async clearRuntime(id: string, conversation: number | undefined, reason: RuntimeClear = 'ended'): Promise<boolean> {
     let cleared = false
     await this.transact(id, (current) => {
       if (!current) {
@@ -212,6 +223,11 @@ export class SessionRecords {
     return cleared
   }
 
+  // Seeding only (tests, the P2 migration): a runtime for a record still on its first conversation, no token asked.
+  bootstrapRuntime(runtime: StoredSessionRecord): Promise<void> {
+    return this.saveRuntime(runtime, conversationOf(runtime) ?? 1)
+  }
+
   runtimeStore(): SessionStore {
     return {
       save: (record) => this.saveRuntime(record, conversationOf(record)),
@@ -230,6 +246,13 @@ export class SessionRecords {
       this.#conversations.set(id, record.conversation)
     }
     return record
+  }
+
+  // Unserialized reads (`list`, a carry) only ever raise n: one that started before a commit must not undo it.
+  #observe(id: string, conversation: number): void {
+    if ((this.#conversations.get(id) ?? 0) < conversation) {
+      this.#conversations.set(id, conversation)
+    }
   }
 
   #serial<T>(id: string, op: () => Promise<T>): Promise<T> {
@@ -269,7 +292,10 @@ export function freshRecord(id: string): SessionRecord {
 
 function checkConversation(id: string, current: SessionRecord | null, conversation: number | undefined): void {
   const actual = current?.conversation ?? 1
-  if (conversation !== undefined && conversation !== actual) {
+  if (conversation === undefined) {
+    throw new MissingConversationError(id)
+  }
+  if (conversation !== actual) {
     throw new StaleConversationError(id, conversation, actual)
   }
 }
