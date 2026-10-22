@@ -21,6 +21,7 @@ use crate::vm::pickers::{ModePicker, ModelPicker, PickerSource, mode_picker, mod
 use crate::vm::prompt::{Prompt, PromptBody, Selection, answered_input, prompt_for};
 use crate::vm::session_chrome::{SessionChrome, session_chrome};
 use crate::vm::session_list::subagent_label;
+use crate::vm::watermarks::catch_up_items;
 use crate::vt::VtKey;
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
@@ -71,6 +72,13 @@ enum Pending {
     Catalog(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ReadMark {
+    items: usize,
+    conversation: Option<u32>,
+    since_ms: Option<f64>,
+}
+
 pub struct LiveSession {
     conn: SessionConnection,
     state: TranscriptState,
@@ -91,6 +99,7 @@ pub struct LiveSession {
     shells: HashMap<String, ShellSession>,
     frames: HashMap<String, TranscriptView>,
     hide_thinking: bool,
+    read_mark: Option<ReadMark>,
     navigation: Navigation,
     metrics: Metrics,
     dirty: bool,
@@ -135,6 +144,7 @@ impl LiveSession {
             shells: HashMap::new(),
             frames: HashMap::new(),
             hide_thinking: false,
+            read_mark: None,
             navigation: Navigation::default(),
             metrics,
             dirty: false,
@@ -464,8 +474,13 @@ impl LiveSession {
         self.navigation = navigation;
     }
 
-    pub fn set_recap(&mut self, boundary: Option<usize>, since_ms: Option<f64>) {
-        self.view.set_recap(boundary, since_ms);
+    // `conversation` is the one the mark's item count was taken in: the boundary only holds in that conversation, so
+    // against any other attached one the recap starts from the top.
+    pub fn set_recap(&mut self, boundary: Option<usize>, conversation: Option<u32>, since_ms: Option<f64>) {
+        self.read_mark = boundary.map(|items| ReadMark { items, conversation, since_ms });
+        if self.read_mark.is_none() {
+            self.view.set_recap(None, since_ms);
+        }
         self.dirty = true;
     }
 
@@ -938,6 +953,11 @@ impl LiveSession {
     }
 
     fn update_view(&mut self) {
+        if let Some(mark) = self.read_mark {
+            let attached = self.session_info().and_then(|info| info.conversation).map(|n| n as f64);
+            let items = catch_up_items(mark.items as f64, mark.conversation.map(f64::from), attached);
+            self.view.set_recap(Some(items as usize), mark.since_ms);
+        }
         let changed = self.view.update(Update {
             items: &self.state.items,
             metrics: self.metrics,

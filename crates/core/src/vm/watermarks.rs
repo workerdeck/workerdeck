@@ -8,9 +8,10 @@ const TOUCH_MS: f64 = 60_000.0;
 #[serde(rename_all = "camelCase")]
 pub struct Watermark {
     pub item_count: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<f64>,
     pub activity: f64,
     pub prose: f64,
-    pub turns: f64,
     pub seen_at: f64,
 }
 
@@ -20,11 +21,11 @@ pub struct Seen {
     #[serde(default)]
     pub item_count: Option<f64>,
     #[serde(default)]
+    pub conversation: Option<f64>,
+    #[serde(default)]
     pub activity: Option<f64>,
     #[serde(default)]
     pub prose: Option<f64>,
-    #[serde(default)]
-    pub turns: Option<f64>,
 }
 
 pub fn watermark_key(host_id: &str, session_id: &str) -> String {
@@ -65,18 +66,19 @@ impl Watermarks {
         let id = watermark_key(host_id, session_id);
         let previous = self.marks.get(&id);
         let held = |pick: fn(&Watermark) -> f64| previous.map(pick).unwrap_or(0.0);
+        let (item_count, conversation) = marked_items(previous, seen);
         let next = Watermark {
-            item_count: held(|m| m.item_count).max(seen.item_count.unwrap_or(0.0)),
+            item_count,
+            conversation,
             activity: held(|m| m.activity).max(seen.activity.unwrap_or(0.0)),
             prose: held(|m| m.prose).max(seen.prose.unwrap_or(0.0)),
-            turns: held(|m| m.turns).max(seen.turns.unwrap_or(0.0)),
             seen_at: now,
         };
         if let Some(previous) = previous
             && previous.item_count == next.item_count
+            && previous.conversation == next.conversation
             && previous.activity == next.activity
             && previous.prose == next.prose
-            && previous.turns == next.turns
             && next.seen_at - previous.seen_at < TOUCH_MS
         {
             return false;
@@ -102,6 +104,32 @@ impl Watermarks {
         let before = self.marks.len();
         self.marks.0.retain(|(key, _)| !key.starts_with(&prefix));
         self.marks.len() != before
+    }
+}
+
+// A newer conversation's reading replaces the item count, an older one's (a late mark from a view that has not seen the
+// cut yet) never raises it, and only a reading of the same conversation takes the max.
+fn marked_items(previous: Option<&Watermark>, seen: &Seen) -> (f64, Option<f64>) {
+    let held = (previous.map_or(0.0, |m| m.item_count), previous.and_then(|m| m.conversation));
+    let Some(count) = seen.item_count else { return held };
+    if previous.is_none() {
+        return (count, seen.conversation);
+    }
+    if seen.conversation == held.1 {
+        return (held.0.max(count), held.1);
+    }
+    match (seen.conversation, held.1) {
+        (Some(c), None) => (count, Some(c)),
+        (Some(c), Some(h)) if c > h => (count, Some(c)),
+        _ => held,
+    }
+}
+
+// A mark taken in another conversation is no position in this one, so the recap covers it from the top.
+pub fn catch_up_items(item_count: f64, mark_conversation: Option<f64>, conversation: Option<f64>) -> f64 {
+    match (mark_conversation, conversation) {
+        (Some(a), Some(b)) if a != b => 0.0,
+        _ => item_count,
     }
 }
 

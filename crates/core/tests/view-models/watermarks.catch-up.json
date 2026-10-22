@@ -1,0 +1,48 @@
+{
+  "input": {
+    "fn": "catchUpItems",
+    "calls": [
+      [
+        {
+          "itemCount": 200,
+          "conversation": 1
+        },
+        1
+      ],
+      [
+        {
+          "itemCount": 200,
+          "conversation": 1
+        },
+        2
+      ],
+      [
+        {
+          "itemCount": 200,
+          "conversation": 3
+        },
+        2
+      ],
+      [
+        {
+          "itemCount": 200
+        },
+        2
+      ],
+      [
+        {
+          "itemCount": 200,
+          "conversation": 1
+        },
+        null
+      ]
+    ]
+  },
+  "output": [
+    200,
+    0,
+    0,
+    200,
+    200
+  ]
+}

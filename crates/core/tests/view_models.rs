@@ -245,6 +245,10 @@ fn watermarks_fn(fn_name: &str, a: &Args) -> Value {
             }
             json!({ "results": results, "writes": writes, "marks": out(marks.all()) })
         }
+        "catchUpItems" => {
+            let mark = a.raw(0);
+            out(watermarks::catch_up_items(mark["itemCount"].as_f64().unwrap(), mark["conversation"].as_f64(), a.raw(1).as_f64()))
+        }
         "unseenCount" => out(watermarks::unseen_count(a.opt::<Watermark>(0).as_ref(), a.raw(1)["proseCount"].as_f64())),
         _ => panic!("watermarks.{fn_name} has no Rust binding"),
     }

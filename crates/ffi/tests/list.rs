@@ -190,10 +190,21 @@ fn a_member_whose_lead_is_behind_a_relay_draws_under_it() {
 fn a_session_screen_mark_keeps_rows_for_the_catch_up_seam() {
     let list = SessionList::new(None, None);
     assert!(list.since("h1".into(), "s1".into()).is_none());
-    assert!(list.mark("h1".into(), "s1".into(), Some(40), Some(40), Some(5), Some(2), 1_000.0));
+    assert!(list.mark("h1".into(), "s1".into(), Some(40), Some(1), Some(5), Some(2), 1_000.0));
     let mark = list.since("h1".into(), "s1".into()).unwrap();
-    assert_eq!((mark.item_count, mark.seen_at), (40, 1_000.0));
-    assert!(!list.mark("h1".into(), "s1".into(), Some(30), Some(30), Some(5), Some(2), 2_000.0));
+    assert_eq!((mark.item_count, mark.conversation, mark.seen_at), (40, Some(1), 1_000.0));
+    assert!(!list.mark("h1".into(), "s1".into(), Some(30), Some(1), Some(5), Some(2), 2_000.0));
+}
+
+#[test]
+fn a_mark_after_a_cut_keeps_the_new_conversations_count() {
+    let list = SessionList::new(None, None);
+    assert!(list.mark("h1".into(), "s1".into(), Some(200), Some(1), Some(400), Some(100), 1_000.0));
+    assert!(list.mark("h1".into(), "s1".into(), Some(5), Some(2), Some(410), Some(102), 2_000.0));
+    let late = format!(r#"{{"session":{}}}"#, idle("s1", r#","conversation":2,"activityCount":411,"proseCount":103"#));
+    assert!(list.mark_session("h1".into(), "s1".into(), Some(200), Some(1), late, 3_000.0));
+    let mark = list.since("h1".into(), "s1".into()).unwrap();
+    assert_eq!((mark.item_count, mark.conversation), (5, Some(2)));
 }
 
 #[test]

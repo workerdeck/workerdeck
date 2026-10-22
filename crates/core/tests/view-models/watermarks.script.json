@@ -8,13 +8,11 @@
             "itemCount": 1,
             "activity": 1,
             "prose": 1,
-            "turns": 1,
             "seenAt": 1756544000000
           },
           "mac:legacy": {
             "itemCount": 4,
             "activity": 9,
-            "turns": 2,
             "seenAt": 1759999999000
           }
         },
@@ -25,9 +23,9 @@
             "s1",
             {
               "itemCount": 3,
+              "conversation": 1,
               "activity": 5,
-              "prose": 2,
-              "turns": 1
+              "prose": 2
             },
             1760000000000
           ],
@@ -37,9 +35,9 @@
             "s1",
             {
               "itemCount": 3,
+              "conversation": 1,
               "activity": 5,
-              "prose": 2,
-              "turns": 1
+              "prose": 2
             },
             1760000030000
           ],
@@ -49,6 +47,7 @@
             "s1",
             {
               "itemCount": 1,
+              "conversation": 1,
               "activity": 2
             },
             1760000030000
@@ -74,8 +73,7 @@
             "mac",
             "s1",
             {
-              "prose": 4,
-              "turns": 3
+              "prose": 4
             },
             1760000062500
           ],
@@ -96,6 +94,16 @@
               "prose": 0
             },
             1760000000010
+          ],
+          [
+            "mark",
+            "mac",
+            "legacy",
+            {
+              "itemCount": 2,
+              "conversation": 3
+            },
+            1760000000020
           ],
           [
             "forget",
@@ -131,6 +139,7 @@
         true,
         true,
         false,
+        true,
         false,
         true,
         true
@@ -139,53 +148,68 @@
         {
           "mac:s1": {
             "itemCount": 3,
+            "conversation": 1,
             "activity": 5,
             "prose": 2,
-            "turns": 1,
             "seenAt": 1760000000000
           }
         },
         {
           "mac:s1": {
             "itemCount": 3,
+            "conversation": 1,
             "activity": 5,
             "prose": 2,
-            "turns": 1,
             "seenAt": 1760000061000
           }
         },
         {
           "mac:s1": {
             "itemCount": 3,
+            "conversation": 1,
             "activity": 5,
             "prose": 4,
-            "turns": 3,
             "seenAt": 1760000062500
           }
         },
         {
           "mac:s1": {
             "itemCount": 3,
+            "conversation": 1,
             "activity": 5,
             "prose": 4,
-            "turns": 3,
             "seenAt": 1760000062500
           },
           "mac:legacy": {
             "itemCount": 0,
             "activity": 9,
             "prose": 0,
-            "turns": 0,
             "seenAt": 1760000000000
           }
         },
         {
+          "mac:s1": {
+            "itemCount": 3,
+            "conversation": 1,
+            "activity": 5,
+            "prose": 4,
+            "seenAt": 1760000062500
+          },
           "mac:legacy": {
-            "itemCount": 0,
+            "itemCount": 2,
+            "conversation": 3,
             "activity": 9,
             "prose": 0,
-            "turns": 0,
-            "seenAt": 1760000000000
+            "seenAt": 1760000000020
+          }
+        },
+        {
+          "mac:legacy": {
+            "itemCount": 2,
+            "conversation": 3,
+            "activity": 9,
+            "prose": 0,
+            "seenAt": 1760000000020
           }
         },
         {
@@ -193,7 +217,6 @@
             "itemCount": 0,
             "activity": 0,
             "prose": 7,
-            "turns": 0,
             "seenAt": 1762678400000
           }
         }
@@ -203,7 +226,6 @@
           "itemCount": 0,
           "activity": 0,
           "prose": 7,
-          "turns": 0,
           "seenAt": 1762678400000
         }
       }

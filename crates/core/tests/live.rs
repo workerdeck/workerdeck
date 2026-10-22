@@ -204,6 +204,26 @@ fn live_events_after_the_hold_reach_the_state_and_the_view_at_once() {
 }
 
 #[test]
+fn a_read_mark_from_another_conversation_recaps_from_the_top() {
+    let mut host = Host::new();
+    host.open();
+    host.frame(
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0,
+            "session": {"id": "s1", "status": "running", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "conversation": 2}}),
+        0.0,
+    );
+    host.events("basic-turn", 1.0);
+    host.live.set_recap(Some(1), Some(2), None);
+    host.live.tick(2.0);
+    host.drain();
+    assert!(host.live.view().recap_row().is_some());
+    host.live.set_recap(Some(1), Some(1), None);
+    host.live.tick(3.0);
+    host.drain();
+    assert_eq!(host.live.view().recap_row(), None);
+}
+
+#[test]
 fn an_attach_from_another_log_drops_the_transcript_and_replays_from_zero() {
     let mut host = Host::new();
     host.open();

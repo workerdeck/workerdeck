@@ -1,0 +1,166 @@
+{
+  "input": {
+    "fn": "watermarkScript",
+    "calls": [
+      [
+        {},
+        [
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 200,
+              "conversation": 1,
+              "activity": 400,
+              "prose": 100
+            },
+            1760000000000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 5,
+              "conversation": 2,
+              "activity": 410,
+              "prose": 102
+            },
+            1760000001000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 200,
+              "conversation": 1,
+              "activity": 400,
+              "prose": 100
+            },
+            1760000002000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 3,
+              "conversation": 2
+            },
+            1760000070000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 9,
+              "conversation": 2,
+              "prose": 104
+            },
+            1760000071000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 90
+            },
+            1760000140000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 1,
+              "conversation": 3
+            },
+            1760000141000
+          ]
+        ]
+      ]
+    ]
+  },
+  "output": [
+    {
+      "results": [
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true
+      ],
+      "writes": [
+        {
+          "mac:s1": {
+            "itemCount": 200,
+            "conversation": 1,
+            "activity": 400,
+            "prose": 100,
+            "seenAt": 1760000000000
+          }
+        },
+        {
+          "mac:s1": {
+            "itemCount": 5,
+            "conversation": 2,
+            "activity": 410,
+            "prose": 102,
+            "seenAt": 1760000001000
+          }
+        },
+        {
+          "mac:s1": {
+            "itemCount": 5,
+            "conversation": 2,
+            "activity": 410,
+            "prose": 102,
+            "seenAt": 1760000070000
+          }
+        },
+        {
+          "mac:s1": {
+            "itemCount": 9,
+            "conversation": 2,
+            "activity": 410,
+            "prose": 104,
+            "seenAt": 1760000071000
+          }
+        },
+        {
+          "mac:s1": {
+            "itemCount": 9,
+            "conversation": 2,
+            "activity": 410,
+            "prose": 104,
+            "seenAt": 1760000140000
+          }
+        },
+        {
+          "mac:s1": {
+            "itemCount": 1,
+            "conversation": 3,
+            "activity": 410,
+            "prose": 104,
+            "seenAt": 1760000141000
+          }
+        }
+      ],
+      "marks": {
+        "mac:s1": {
+          "itemCount": 1,
+          "conversation": 3,
+          "activity": 410,
+          "prose": 104,
+          "seenAt": 1760000141000
+        }
+      }
+    }
+  ]
+}

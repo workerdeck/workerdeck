@@ -244,6 +244,7 @@ pub struct TeamLead {
 #[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
 pub struct ReadMark {
     pub item_count: u32,
+    pub conversation: Option<u32>,
     pub seen_at: f64,
 }
 
@@ -917,23 +918,32 @@ impl SessionList {
         let Some(info) = state.find(&host_id, &session_id) else { return false };
         let seen = Seen {
             item_count: None,
+            conversation: None,
             activity: info.activity_count.map(|n| n as f64),
             prose: info.prose_count.map(|n| n as f64),
-            turns: info.num_turns.map(f64::from),
         };
         state.marks.mark(&host_id, &session_id, &seen, now_ms)
     }
 
     // Leaving a session trues its mark up once from a fresh `GET /v1/sessions/:id` body: the in-view marks ran off the
     // attach snapshot's counters, so anything counted since would read unread although it was on screen.
-    pub fn mark_session(&self, host_id: String, session_id: String, item_count: Option<u32>, body: String, now_ms: f64) -> bool {
+    // `conversation` is the one the screen rendered `item_count` in, never the body's: after a cut the body names n+1.
+    pub fn mark_session(
+        &self,
+        host_id: String,
+        session_id: String,
+        item_count: Option<u32>,
+        conversation: Option<u32>,
+        body: String,
+        now_ms: f64,
+    ) -> bool {
         let Ok(answer) = serde_json::from_str::<SessionAnswer>(&body) else { return false };
         let info = answer.session;
         let seen = Seen {
             item_count: item_count.map(f64::from),
+            conversation: conversation.map(f64::from),
             activity: info.activity_count.map(|n| n as f64),
             prose: info.prose_count.map(|n| n as f64),
-            turns: info.num_turns.map(f64::from),
         };
         self.state().marks.mark(&host_id, &session_id, &seen, now_ms)
     }
@@ -945,16 +955,16 @@ impl SessionList {
         host_id: String,
         session_id: String,
         item_count: Option<u32>,
+        conversation: Option<u32>,
         activity: Option<u32>,
         prose: Option<u32>,
-        turns: Option<u32>,
         now_ms: f64,
     ) -> bool {
         let seen = Seen {
             item_count: item_count.map(f64::from),
+            conversation: conversation.map(f64::from),
             activity: activity.map(f64::from),
             prose: prose.map(f64::from),
-            turns: turns.map(f64::from),
         };
         self.state().marks.mark(&host_id, &session_id, &seen, now_ms)
     }
@@ -962,7 +972,7 @@ impl SessionList {
     pub fn since(&self, host_id: String, session_id: String) -> Option<ReadMark> {
         let state = self.state();
         let mark = state.marks.get(&host_id, &session_id)?;
-        Some(ReadMark { item_count: mark.item_count as u32, seen_at: mark.seen_at })
+        Some(ReadMark { item_count: mark.item_count as u32, conversation: mark.conversation.map(|n| n as u32), seen_at: mark.seen_at })
     }
 
     pub fn forget(&self, host_id: String, session_id: String) -> bool {

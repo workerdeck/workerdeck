@@ -257,9 +257,9 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SeenCounts {
     pub item_count: u32,
+    pub conversation: Option<u32>,
     pub activity: Option<u32>,
     pub prose: Option<u32>,
-    pub turns: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -414,8 +414,9 @@ impl Session {
         self.act(|live| live.set_navigation(Navigation { subagents, shells }))
     }
 
-    pub fn set_recap(&self, boundary: Option<u32>, since_ms: Option<f64>) -> Vec<Effect> {
-        self.act(|live| live.set_recap(boundary.map(|b| b as usize), since_ms))
+    // `conversation` is the read mark's: the core starts the recap from the top when another conversation is attached.
+    pub fn set_recap(&self, boundary: Option<u32>, conversation: Option<u32>, since_ms: Option<f64>) -> Vec<Effect> {
+        self.act(|live| live.set_recap(boundary.map(|b| b as usize), conversation, since_ms))
     }
 
     pub fn expand_everything(&self) -> Vec<Effect> {
@@ -532,9 +533,9 @@ impl Session {
         let info = live.session_info()?;
         Some(SeenCounts {
             item_count: live.view().item_count() as u32,
+            conversation: info.conversation.map(|n| n as u32),
             activity: info.activity_count.map(|n| n as u32),
             prose: info.prose_count.map(|n| n as u32),
-            turns: info.num_turns,
         })
     }
 
