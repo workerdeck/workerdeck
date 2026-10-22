@@ -795,7 +795,8 @@ stamped on the runner config (durable host-only key `owner`) and on the agent re
 re-resolves a stamped owner. A relay-defaulted owner is read (`ownerFor`, `defaultOwner`) but
 never stamped (`forProfile`, `stampOwner`). `routes/owners.ts` is the operator-only
 `POST /owners/rename`, over `AgentService.renameOwner`, `SessionParkManager.renameOwner` and
-`withOwnerRenamed` on each session record under its lifecycle lock, then parking's pass (a rename, so past
+`withOwnerRenamed` on each session record under its lifecycle lock with parking wakes fenced (live runner,
+parked config and index row move in the same step), then parking's pass (a rename, so past
 conversations' frozen owner and cached ended executions follow; a `to` that already names someone merges the two).
 The record is the owner authority: a startup stamp on the index lands on the record too
 (`adoptIndexOwners`), and a record that already has one puts it back on the index.

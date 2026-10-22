@@ -936,6 +936,49 @@ describe('owner rename moves every copy of one session in one locked step', () =
     expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'bob' })).status).toBe(200)
   })
 
+  it('fences a dormant wake paused in its factory, so a cut before the parking pass never captures the old owner', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir, { owners: true })
+    const id = (await createNamed(first.base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
+    await idle(first.server, id)
+    await stop(first.server)
+
+    const wakeHeld = deferred()
+    let wakePaused = false
+    const { server, base, built } = await gateway(dir, {
+      owners: true,
+      creating: (target) => {
+        if (target !== id || runnersOf(built, id).length > 0) {
+          return undefined
+        }
+        wakePaused = true
+        return wakeHeld.promise
+      },
+    })
+    const waking = server.parking.ensureLive(id).catch(() => undefined)
+    await vi.waitFor(() => expect(wakePaused).toBe(true))
+    const parked = deferred()
+    const original = server.parking.renameOwner.bind(server.parking)
+    let reached = false
+    const spy = vi.spyOn(server.parking, 'renameOwner').mockImplementation(async (from, to) => {
+      reached = true
+      await parked.promise
+      return original(from, to)
+    })
+    const renaming = call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
+    await tick(60)
+    wakeHeld.resolve()
+    await waking
+    await vi.waitFor(() => expect(reached).toBe(true))
+    expect(server.registry.get(id)?.info().owner).not.toBe('alice')
+    expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
+    parked.resolve()
+    expect((await renaming).status).toBe(200)
+    spy.mockRestore()
+    await idle(server, id)
+    expect((await server.records.get(id))?.conversations.map((entry) => [entry.n, entry.auth.owner])).toEqual([[1, 'bob']])
+  })
+
   it('puts the index row back on the new owner after an edit resynced it from the not yet renamed record', async () => {
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir, { owners: true })

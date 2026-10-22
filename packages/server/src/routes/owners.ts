@@ -21,34 +21,21 @@ export async function handleOwnerRename(ctx: ServerContext, req: IncomingMessage
   if ('status' in agents) {
     fail(agents.status, agents.error)
   }
-  // Per session, under its lifecycle lock, every copy moves at once; parking's pass after it catches a wake in flight.
+  // Per session, under its lifecycle lock with wakes fenced; parking's pass after it covers configs with no record.
   // A rename relabels: when `to` already names someone, both become one authorization identity.
   const sessions = new Set<string>()
   for (const listed of await ctx.records.list()) {
     await ctx.locks.run([listed.id], async () => {
-      let renamed: SessionRecord | undefined
-      await ctx.records.transact(listed.id, (current) => {
-        renamed = current ? withOwnerRenamed(current, from, to) : undefined
-        return renamed
-      })
-      if (!renamed) {
-        return
-      }
-      sessions.add(listed.id)
-      for (const entry of renamed.conversations) {
-        ctx.cuts.refreshEntry(listed.id, entry)
-      }
-      const live = ctx.registry.get(listed.id)
-      if (live?.info().owner === from) {
-        live.setOwner?.(to)
-      }
-      const config = ctx.parking.configOf(listed.id)
-      if (config?.owner === from) {
-        ctx.parking.remember(listed.id, { ...config, owner: to })
-      }
-      const row = ctx.agents.get(listed.id)
-      if (row && row.owner !== renamed.owner && !ctx.agents.frozen(listed.id)) {
-        await ctx.agents.patch(listed.id, (agent) => ({ ...agent, owner: renamed!.owner }))
+      const fencedBefore = ctx.parking.fenced(listed.id)
+      await ctx.parking.fence(listed.id)
+      try {
+        if (await renameSession(ctx, listed.id, from, to)) {
+          sessions.add(listed.id)
+        }
+      } finally {
+        if (!fencedBefore) {
+          ctx.parking.unfence(listed.id)
+        }
       }
     })
   }
@@ -59,4 +46,33 @@ export async function handleOwnerRename(ctx: ServerContext, req: IncomingMessage
   ctx.owners.rebuildRetained([...ctx.agents.owners(), ...[...ctx.registry.list(), ...stored].map((info) => info.owner)])
   ctx.teams?.republish()
   json(res, 200, { agents: agents.renamed, sessions: sessions.size } satisfies RenameOwnerResponse)
+}
+
+// Every copy of one session's owner moves in one step, with wakes fenced: a wake in flight never registers a runner
+// built from the old owner.
+async function renameSession(ctx: ServerContext, id: string, from: string, to: string): Promise<boolean> {
+  let renamed: SessionRecord | undefined
+  await ctx.records.transact(id, (current) => {
+    renamed = current ? withOwnerRenamed(current, from, to) : undefined
+    return renamed
+  })
+  if (!renamed) {
+    return false
+  }
+  for (const entry of renamed.conversations) {
+    ctx.cuts.refreshEntry(id, entry)
+  }
+  const live = ctx.registry.get(id)
+  if (live?.info().owner === from) {
+    live.setOwner?.(to)
+  }
+  const config = ctx.parking.configOf(id)
+  if (config?.owner === from) {
+    ctx.parking.remember(id, { ...config, owner: to })
+  }
+  const row = ctx.agents.get(id)
+  if (row && row.owner !== renamed.owner && !ctx.agents.frozen(id)) {
+    await ctx.agents.patch(id, (agent) => ({ ...agent, owner: renamed!.owner }))
+  }
+  return true
 }
