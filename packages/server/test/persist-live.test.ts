@@ -129,11 +129,11 @@ describe('live sessions that survive a restart', () => {
 
     await vi.waitFor(async () => {
       const record = await store.get(session.id)
+      // The end of the turn already wrote a live idle record: only the one with the deferred execution is this one.
+      expect(record && 'executions' in record ? record.executions : []).toHaveLength(1)
       expect(record?.kind).toBe('live')
       expect(record?.info.status).toBe('idle')
     })
-    const record = await store.get(session.id)
-    expect(record && 'executions' in record ? record.executions : []).toHaveLength(1)
     client.socket.close()
   })
 
