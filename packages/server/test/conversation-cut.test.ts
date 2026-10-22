@@ -644,6 +644,11 @@ describe('the successor is durable before the intent goes', () => {
             release = resolve
           })
         }
+        if (built.length === 3) {
+          runner.hold = new Promise((resolve) => {
+            release = resolve
+          })
+        }
       },
     })
     const id = await create(base)
@@ -657,7 +662,9 @@ describe('the successor is durable before the intent goes', () => {
     expect(retried.status).toBe(200)
     expect(built).toHaveLength(3)
     expect(await server.records.get(id)).toMatchObject({ conversation: 2 })
-    expect((await server.records.get(id))?.cut).toBeUndefined()
+    release!()
+    await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined())
+    expect((await server.records.get(id))?.startFailed).toBeUndefined()
   })
 
   it('resumes a successor that already exists on recovery instead of replacing it', async () => {

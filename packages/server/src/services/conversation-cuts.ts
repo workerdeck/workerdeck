@@ -391,7 +391,12 @@ export class ConversationCuts {
         stuck.close('server')
       }
       ctx.parking.unfence(id)
-      return await this.#startCommitted(record)
+      // A late settle skips a recorded failure, so the old attempt's must not outlive the new one's start.
+      const retried = await ctx.records.transactDurable(id, (current) => {
+        const { startFailed: _failed, ...rest } = current!
+        return rest
+      })
+      return await this.#startCommitted(retried)
     })
   }
 
