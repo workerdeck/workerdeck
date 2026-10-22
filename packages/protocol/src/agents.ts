@@ -74,7 +74,7 @@ export type AgentInfo = {
   avatar?: string
   // The first message of a conversation a crash may have kept from the engine; the user sends it again or dismisses it.
   undelivered?: string
-  // The new conversation was committed but did not start; Retry start (`POST /agents/:id/retry-start`) starts it.
+  // The new conversation was committed but did not start; Retry start (`POST /sessions/:id/conversations/retry`) starts it.
   startFailed?: string
   config: AgentConfig
   lead?: string

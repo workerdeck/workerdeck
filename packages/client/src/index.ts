@@ -1,5 +1,4 @@
 import type {
-  AgentConversationsResponse,
   AgentInfo,
   AgentResponse,
   CompleteAccountRequest,
@@ -283,23 +282,6 @@ export class WorkerDeckClient {
 
   async removeRemoteMember(id: string, agent: string): Promise<AgentResponse> {
     return await this.#call('DELETE', this.#agent(id, `/remote-members/${encodeURIComponent(agent)}`))
-  }
-
-  // `expectedGeneration` is the conversation the caller is looking at: a request against one the agent already left is refused.
-  async restartAgent(id: string, expectedGeneration: number, prompt?: string): Promise<AgentResponse> {
-    return await this.#call('POST', this.#agent(id, '/restart'), { expectedGeneration, ...(prompt === undefined ? {} : { prompt }) })
-  }
-
-  async retryAgentStart(id: string, expectedGeneration: number): Promise<AgentResponse> {
-    return await this.#call('POST', this.#agent(id, '/retry-start'), { expectedGeneration })
-  }
-
-  async settleUndelivered(id: string, send: boolean, expectedGeneration: number): Promise<AgentResponse> {
-    return await this.#call('POST', this.#agent(id, '/undelivered'), { send, expectedGeneration })
-  }
-
-  async agentConversations(id: string): Promise<AgentConversationsResponse> {
-    return await this.#call('GET', this.#agent(id, '/conversations'))
   }
 
   async retireAgent(id: string, request: RetireAgentRequest): Promise<{ retired: string[]; released: string[] }> {
