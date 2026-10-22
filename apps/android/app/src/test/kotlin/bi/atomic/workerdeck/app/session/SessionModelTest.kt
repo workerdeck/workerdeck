@@ -49,10 +49,15 @@ class SessionModelTest {
         val sockets = CopyOnWriteArrayList<Pair<FakeSocket, WebSocketListener>>()
         val requests = CopyOnWriteArrayList<Triple<String, String, (Int, String) -> Unit>>()
 
-        override fun socket(sessionId: String, afterSeq: Long, listener: WebSocketListener): WebSocket =
-            FakeSocket().also { sockets.add(it to listener) }
+        val histories = CopyOnWriteArrayList<Long?>()
 
-        override fun request(sessionId: String, method: String, path: String, scoped: Boolean, answer: (Int, String) -> Unit) {
+        override fun socket(sessionId: String, afterSeq: Long, conversation: Long?, listener: WebSocketListener): WebSocket =
+            FakeSocket().also {
+                histories.add(conversation)
+                sockets.add(it to listener)
+            }
+
+        override fun request(sessionId: String, method: String, path: String, scoped: Boolean, generation: Long?, answer: (Int, String) -> Unit) {
             requests.add(Triple(method, path, answer))
         }
 
@@ -92,10 +97,10 @@ class SessionModelTest {
         listener.onMessage(socket, ATTACHED)
         eventually("live") { model.ui.value.connection == ConnectionState.LIVE }
 
-        listener.onClosing(socket, 4010, "conversation archived")
+        listener.onClosing(socket, 1000, "conversation started")
         assertTrue(socket.closed)
         eventually("a second socket") { transport.sockets.size == 2 }
-        listener.onClosed(socket, 4010, "conversation archived")
+        listener.onClosed(socket, 1000, "conversation started")
         Thread.sleep(1_000)
         assertEquals(2, transport.sockets.size)
         model.close()
@@ -156,7 +161,7 @@ class SessionModelTest {
         val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
         eventually("a socket") { transport.sockets.isNotEmpty() }
         val (socket, listener) = transport.open()
-        listener.onMessage(socket, ATTACHED.replace("\"acks\":true", "\"acks\":true,\"shell\":true"))
+        listener.onMessage(socket, ATTACHED.replace("\"replayingFrom\":0,", "\"replayingFrom\":0,\"shell\":true,"))
         eventually("the chrome offers shells") { model.ui.value.chrome?.canRunShell == true }
         assertTrue(model.composer.leadingTrigger("$"))
         assertEquals(Gutter.SHELL, model.composer.view("", 0).gutter)
@@ -174,7 +179,7 @@ class SessionModelTest {
         eventually("a socket") { transport.sockets.isNotEmpty() }
         val (socket, listener) = transport.open()
         listener.onMessage(socket, ATTACHED)
-        eventually("the composer read the chrome") { model.composer.view("", 0).enabled }
+        eventually("the composer read the chrome") { model.composer.view("", 0).enabled && model.ui.value.chrome?.conversation == 1L }
         model.composer.add(PickedFile("a.txt", "text/plain", "hi".toByteArray(), null))
         eventually("the upload settled") { model.composer.ui.value.chips.singleOrNull()?.status == AttachmentStatus.Ready }
         assertEquals("text/plain", transport.uploads.single().second)
@@ -185,83 +190,77 @@ class SessionModelTest {
     }
 
     @Test
-    fun aSupersededSessionNamesItsSuccessorAndTheNextModelTakesTheComposerOver() {
+    fun aCutReattachesTheSameScreenAndTheStagedFilesGoUpAgain() {
         val transport = FakeTransport()
         var next = 0
         transport.answers = { call ->
             if (call.path.contains("attachments")) HttpAnswer(200u, "application/json", """{"attachment":{"id":"att_${++next}"}}""") else HttpAnswer(404u, null, "")
         }
-        val old = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
         eventually("a socket") { transport.sockets.isNotEmpty() }
         val (socket, listener) = transport.open()
         listener.onMessage(socket, ATTACHED)
-        listener.onMessage(socket, QUESTION)
-        eventually("the composer read the chrome") { old.composer.view("", 0).enabled }
-        eventually("the question") { old.ui.value.prompt != null }
-        old.composer.add(PickedFile("a.txt", "text/plain", "hi".toByteArray(), null))
-        eventually("the upload settled") { old.composer.ui.value.chips.singleOrNull()?.status == AttachmentStatus.Ready }
-        listener.onMessage(socket, SUPERSEDED)
-        eventually("the successor") { old.ui.value.chrome?.supersededBy == "s2" }
+        eventually("the composer read the chrome") { model.composer.view("", 0).enabled && model.ui.value.chrome?.conversation == 1L }
+        model.composer.add(PickedFile("a.txt", "text/plain", "hi".toByteArray(), null))
+        eventually("the upload settled") { model.composer.ui.value.chips.singleOrNull()?.status == AttachmentStatus.Ready }
+        assertEquals(1L, model.ui.value.chrome?.conversation)
 
-        val successor = SessionModel(transport, "s2", Metrics(8.0, 16.0, 800.0, 13.0), carried = old.releaseComposer())
-        old.close()
-        eventually("the file went up again") { transport.uploads.any { it.first.path.startsWith("/sessions/s2/attachments") } }
-        eventually("the chip is ready again") { successor.composer.ui.value.chips.singleOrNull()?.status == AttachmentStatus.Ready }
-        eventually("a socket for the successor") { transport.sockets.size == 2 }
-        val (next2, nextListener) = transport.open()
-        nextListener.onMessage(next2, ATTACHED.replace("\"s1\"", "\"s2\""))
-        eventually("live") { successor.ui.value.connection == ConnectionState.LIVE }
-        assertEquals(null, successor.ui.value.prompt)
-        assertEquals(null, successor.ui.value.chrome?.supersededBy)
-        val outgoing = successor.composer.send("look", false) as Outgoing.Message
+        listener.onClosing(socket, 1000, "conversation started")
+        eventually("a second socket") { transport.sockets.size == 2 }
+        val (again, againListener) = transport.open()
+        againListener.onMessage(again, ATTACHED.replace("\"conversation\":1", "\"conversation\":2"))
+        eventually("conversation 2") { model.ui.value.chrome?.conversation == 2L }
+        eventually("the file went up again") { transport.uploads.size == 2 }
+        eventually("the chip is ready again") { model.composer.ui.value.chips.singleOrNull()?.status == AttachmentStatus.Ready }
+        val outgoing = model.composer.send("look", false) as Outgoing.Message
         assertEquals(listOf("att_2"), outgoing.attachmentIds)
-        successor.close()
-    }
-
-    @Test
-    fun anArchivedConversationReadsAsDeletedOnceTheAgentsAreKnownAndOffersNoAgentActions() {
-        val transport = FakeTransport()
-        transport.answers = { call ->
-            if (call.path == "/agents") HttpAnswer(200u, "application/json", """{"agents":[]}""") else HttpAnswer(404u, null, "")
-        }
-        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
-        eventually("a socket") { transport.sockets.isNotEmpty() }
-        val (socket, listener) = transport.open()
-        listener.onMessage(socket, ARCHIVED_AGENT)
-        eventually("the archived view") { model.agent.value.archived != null }
-        val view = model.agent.value.archived!!
-        assertEquals(ArchivedKind.DELETED, view.kind)
-        assertEquals(null, view.current)
-        assertTrue(model.ui.value.chrome!!.archived)
-        assertEquals(null, model.ui.value.chrome!!.agentId)
-        assertEquals(null, model.agent.value.notice)
+        assertEquals(listOf<Long?>(null, null), transport.histories.toList())
         model.close()
     }
 
     @Test
-    fun anArchivedConversationWhoseAgentLivesOnOffersGoToCurrent() {
+    fun aPastConversationOpensItsOwnSocketAndReadsAsPastOnceTheListIsKnown() {
         val transport = FakeTransport()
         transport.answers = { call ->
-            if (call.path == "/agents") HttpAnswer(200u, "application/json", agents("\"sessionId\":\"s2\"")) else HttpAnswer(404u, null, "")
+            if (call.path == "/sessions/s1/conversations") HttpAnswer(200u, "application/json", """{"conversation":3,"history":[]}""") else HttpAnswer(404u, null, "")
         }
-        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0), history = 2)
         eventually("a socket") { transport.sockets.isNotEmpty() }
+        assertEquals(2L, transport.histories.single())
         val (socket, listener) = transport.open()
-        listener.onMessage(socket, ARCHIVED_AGENT)
-        eventually("the archived view") { model.agent.value.archived != null }
-        assertEquals(ArchivedKind.PAST, model.agent.value.archived!!.kind)
-        assertEquals("s2", model.agent.value.archived!!.current)
+        listener.onMessage(socket, LIVE_AGENT)
+        eventually("the archived view") { model.conversation.value.archived != null }
+        val view = model.conversation.value.archived!!
+        assertEquals(ArchivedKind.PAST, view.kind)
+        assertEquals(3L, view.current)
+        assertTrue(model.ui.value.chrome!!.historical)
+        assertEquals(null, model.conversation.value.notice)
         model.close()
     }
 
     @Test
-    fun aLiveAgentShowsItsNoticeAndItsActionsNameTheShownConversation() {
+    fun aDeletedAgentsPastConversationOffersNoWayToTheCurrent() {
+        val transport = FakeTransport()
+        transport.answers = { call ->
+            if (call.path == "/sessions/s1/conversations") HttpAnswer(200u, "application/json", """{"conversation":3,"closed":true,"history":[]}""") else HttpAnswer(404u, null, "")
+        }
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0), history = 1)
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, LIVE_AGENT)
+        eventually("the archived view") { model.conversation.value.archived != null }
+        assertEquals(false, model.ui.value.chrome!!.canNewConversation)
+        model.close()
+    }
+
+    @Test
+    fun aLiveSessionShowsItsNoticeAndItsActionsNameTheShownConversation() {
         val transport = FakeTransport()
         transport.answers = { call ->
             when {
-                call.path == "/agents" -> HttpAnswer(200u, "application/json", agents("\"sessionId\":\"s1\",\"undelivered\":\"go on\""))
-                call.path.endsWith("/restart") -> HttpAnswer(200u, "application/json", """{"agent":{"id":"ag","name":"WD-Test","createdAt":0,"updatedAt":0,"pastSessions":[],"config":{}},"session":{"id":"s2","status":"starting","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}""")
-                call.path.endsWith("/undelivered") || call.path.startsWith("/agents/ag") -> HttpAnswer(200u, "application/json", "{}")
+                call.path == "/sessions/s1/conversations" && call.method == "GET" ->
+                    HttpAnswer(200u, "application/json", """{"conversation":1,"history":[],"pendingPrompt":{"text":"go on","n":1,"state":"uncertain"}}""")
+                call.path.startsWith("/sessions/s1/conversations") || call.path.startsWith("/agents/ag") -> HttpAnswer(200u, "application/json", "{}")
                 else -> HttpAnswer(404u, null, "")
             }
         }
@@ -269,27 +268,52 @@ class SessionModelTest {
         eventually("a socket") { transport.sockets.isNotEmpty() }
         val (socket, listener) = transport.open()
         listener.onMessage(socket, LIVE_AGENT)
-        eventually("the notice") { model.agent.value.notice?.undelivered == "go on" }
+        eventually("the notice") { model.conversation.value.notice?.uncertainPrompt == "go on" }
+        eventually("the chrome") { model.ui.value.chrome?.conversation == 1L }
         val chrome = model.ui.value.chrome!!
         assertEquals("ag", chrome.agentId)
-        assertEquals(false, chrome.canClearContext)
+        assertEquals(true, chrome.canNewConversation)
         assertEquals(null, chrome.newConversationBlocked)
 
         model.newConversation()
-        eventually("the successor") { model.successor.value == "s2" }
-        val restart = transport.calls.single { it.path.endsWith("/restart") }
-        assertTrue(restart.body!!.contains("\"expectedSessionId\":\"s1\""))
+        eventually("the cut") { transport.calls.any { it.method == "POST" && it.path == "/sessions/s1/conversations" } }
+        assertTrue(transport.calls.single { it.method == "POST" && it.path == "/sessions/s1/conversations" }.body!!.contains("\"expectedGeneration\":1"))
 
-        model.settleUndelivered(true)
-        eventually("the settle") { transport.calls.any { it.path.endsWith("/undelivered") } }
-        assertTrue(transport.calls.single { it.path.endsWith("/undelivered") }.body!!.contains("\"send\":true"))
+        model.settle(true)
+        eventually("the settle") { transport.calls.any { it.path.endsWith("/conversations/pending") } }
+        assertTrue(transport.calls.single { it.path.endsWith("/conversations/pending") }.body!!.contains("\"send\":true"))
 
         var deleted = false
         model.deleteAgent { deleted = true }
         eventually("the delete") { deleted }
         val retire = transport.calls.single { it.method == "DELETE" && it.path == "/agents/ag" }
         assertTrue(retire.body!!.contains("\"members\":\"release\""))
-        assertTrue(retire.body!!.contains("\"expectedSessionId\":\"s1\""))
+        assertTrue(retire.body!!.contains("\"expectedGeneration\":1"))
+        model.close()
+    }
+
+    @Test
+    fun unconfirmedInputAsksBeforeTheCutDiscardsIt() {
+        val transport = FakeTransport()
+        transport.answers = { call ->
+            when {
+                call.method == "POST" && call.path == "/sessions/s1/conversations" ->
+                    HttpAnswer(409u, "application/json", """{"error":"unconfirmed","code":"unconfirmed_input","conversation":1,"inputRevision":"r.1","pendingInput":1}""")
+                call.path == "/sessions/s1/conversations/discard" -> HttpAnswer(200u, "application/json", "{}")
+                else -> HttpAnswer(404u, null, "")
+            }
+        }
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, LIVE_AGENT)
+        eventually("the chrome") { model.ui.value.chrome?.agentId == "ag" }
+        model.newConversation()
+        eventually("the confirmation") { model.discard.value != null }
+        model.discardAndCut(model.discard.value!!)
+        eventually("the discard") { transport.calls.any { it.path == "/sessions/s1/conversations/discard" } }
+        assertEquals(null, model.discard.value)
+        assertEquals(null, model.actionError.value)
         model.close()
     }
 
@@ -297,7 +321,7 @@ class SessionModelTest {
     fun aRefusedActionSaysWhatFailed() {
         val transport = FakeTransport()
         transport.answers = { call ->
-            if (call.path.endsWith("/restart")) HttpAnswer(409u, "application/json", """{"error":"conflict","message":"Moved on"}""") else HttpAnswer(404u, null, "")
+            if (call.method == "POST" && call.path == "/sessions/s1/conversations") HttpAnswer(409u, "application/json", """{"error":"Moved on"}""") else HttpAnswer(404u, null, "")
         }
         val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
         eventually("a socket") { transport.sockets.isNotEmpty() }
@@ -306,8 +330,7 @@ class SessionModelTest {
         eventually("the chrome") { model.ui.value.chrome?.agentId == "ag" }
         model.newConversation()
         eventually("the error") { model.actionError.value != null }
-        assertTrue(model.actionError.value!!.startsWith("Could not start a new conversation: "))
-        assertEquals(null, model.successor.value)
+        assertEquals("Could not start a new conversation: Moved on", model.actionError.value)
         model.close()
     }
 
@@ -556,12 +579,11 @@ class SessionModelTest {
         const val QUESTION =
             """{"type":"event","event":{"type":"permission_requested","seq":1,"ts":1,"request":{"id":"r1","toolName":"AskUserQuestion","toolUseId":"t1","input":{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"a"},{"label":"b"}]}]}}}}"""
 
-        const val SUPERSEDED = """{"type":"event","event":{"type":"session_superseded","successor":"s2","seq":3,"ts":1}}"""
 
         const val RESOLVED = """{"type":"event","event":{"type":"permission_resolved","requestId":"r1","seq":2,"ts":1}}"""
 
-        const val METERED =
-            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Metered","status":"idle","cwd":"/r","createdAt":1,"profile":"p1","lastSeq":0,"pendingPermissionCount":0,"capabilities":{"rateLimits":true}}}"""
+        val METERED =
+            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"session":{"id":"s1","title":"Metered","status":"idle","cwd":"/r","createdAt":1,"profile":"p1","lastSeq":0,"conversation":1,"pendingPermissionCount":0,"capabilities":${caps("\"rateLimits\":true")}}}"""
 
         const val CONTEXT_USAGE =
             """{"type":"event","event":{"type":"context_usage","usage":{"totalTokens":124000,"maxTokens":200000,"percentage":62,"model":"claude-opus-4-6","categories":[{"name":"Messages","tokens":98000,"color":"#497eae"}]},"seq":1,"ts":1760000001000}}"""
@@ -572,17 +594,22 @@ class SessionModelTest {
         const val PROFILES =
             """{"profiles":[{"name":"p1","usage":{"seven_day":{"info":{"status":"allowed","utilization":71},"updatedAt":1760000003000}},"spend":{"weekUsd":41.2,"monthUsd":160,"weekByModel":{},"unpricedShare":0}}]}"""
 
-        const val ARCHIVED_AGENT =
-            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Old work","status":"closed","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"archived":true,"agent":{"id":"ag","name":"WD-Test"}}}"""
+        val LIVE_AGENT =
+            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"session":{"id":"s1","title":"Work","status":"idle","sdkSessionId":"sdk","cwd":"/r","createdAt":1,"lastSeq":0,"conversation":1,"pendingPermissionCount":0,"capabilities":${caps("\"rateLimits\":false")},"agent":{"id":"ag","name":"WD-Test"}}}"""
 
-        const val LIVE_AGENT =
-            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Work","status":"idle","sdkSessionId":"sdk","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"capabilities":{"clearContext":true},"agent":{"id":"ag","name":"WD-Test"}}}"""
 
-        fun agents(extra: String) =
-            """{"agents":[{"id":"ag","name":"WD-Test","createdAt":0,"updatedAt":0,"pastSessions":[],"config":{},$extra}]}"""
+        // A whole capability record (the core reads none partial), everything off but `extra`.
+        fun caps(extra: String) =
+            "{" + listOf(
+                "\"interactiveApprovals\":false", "\"permissionModes\":[]", "\"defaultPermissionMode\":\"default\"", "\"resume\":false",
+                "\"resumeBackfill\":false", "\"listSessions\":false", "\"contextUsage\":false", "\"mcpStatus\":false",
+                "\"mcpServerActions\":false", "\"sessionMcpServers\":false", "\"toolFilters\":\"none\"", "\"slashCommands\":false",
+                "\"skillsList\":false", "\"settingSources\":false", "\"budgets\":false", "\"attachments\":[]", "\"vfs\":false",
+                "\"streaming\":\"none\"", extra,
+            ).joinToString(",") + "}"
 
         const val ATTACHED =
-            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Deck work","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"""
+            """{"type":"attached","protocolVersion":2,"replayingFrom":0,"session":{"id":"s1","title":"Deck work","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"conversation":1,"pendingPermissionCount":0}}"""
 
         const val SHELL_ROW =
             """{"type":"event","event":{"type":"user_message","parentToolUseId":null,"synthetic":true,"replay":true,"seq":2,"ts":1,"shell":{"id":"sh_1","sessionId":"s1","ordinal":1,"command":"npm run dev","label":"npm run dev","cwd":"/r","owner":"user","status":"running","startedAt":1,"bytes":0,"cols":80,"rows":24},"message":{"role":"user","content":"<local-command-stdout>${'$'} npm run dev\nlistening</local-command-stdout>"}}}"""

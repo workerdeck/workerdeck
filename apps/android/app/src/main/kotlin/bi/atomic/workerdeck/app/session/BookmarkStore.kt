@@ -13,12 +13,14 @@ class BookmarkStore private constructor(private val prefs: SharedPreferences) {
     private val changes = MutableStateFlow(0)
     val revision: StateFlow<Int> = changes
 
-    fun forSession(hostId: String, sessionId: String): List<String> = marks.forSession(hostId, sessionId)
+    // Marks belong to one conversation of the session: `conversation` is the one the screen shows.
+    fun forSession(hostId: String, sessionId: String, conversation: Long): List<String> = marks.forSession(hostId, sessionId, conversation)
 
-    fun contains(hostId: String, sessionId: String, itemId: String): Boolean = marks.contains(hostId, sessionId, itemId)
+    fun contains(hostId: String, sessionId: String, conversation: Long, itemId: String): Boolean =
+        marks.contains(hostId, sessionId, conversation, itemId)
 
-    fun toggle(hostId: String, sessionId: String, itemId: String): Boolean =
-        marks.toggle(hostId, sessionId, itemId).also { save() }
+    fun toggle(hostId: String, sessionId: String, conversation: Long, itemId: String): Boolean =
+        marks.toggle(hostId, sessionId, conversation, itemId).also { save() }
 
     fun removeHost(hostId: String) {
         if (marks.removeHost(hostId)) save()

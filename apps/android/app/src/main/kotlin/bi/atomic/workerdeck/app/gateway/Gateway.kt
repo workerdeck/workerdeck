@@ -29,12 +29,11 @@ class Gateway(val id: String, val baseUrl: String, val key: String, val name: St
 }
 
 // Every paired gateway, in pairing order. Each auth key is sealed with an AES key that never leaves the Android
-// Keystore; prefs hold only the ciphertext. A single pairing from before multi-gateway is read as a one-item list.
+// Keystore; prefs hold only the ciphertext.
 class GatewayStore(context: Context) {
     private val prefs = context.getSharedPreferences("gateway", Context.MODE_PRIVATE)
 
     fun load(): List<Gateway> {
-        migrate()
         val raw = prefs.getString("gateways", null) ?: return emptyList()
         val array = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
         val opened = (0 until array.length()).mapNotNull { i ->
@@ -70,14 +69,6 @@ class GatewayStore(context: Context) {
     }
 
     private fun entry(id: String, url: String, sealed: String) = JSONObject().put("id", id).put("url", url).put("key", sealed)
-
-    private fun migrate() {
-        val url = prefs.getString("url", null) ?: return
-        val sealed = prefs.getString("key", null)
-        val id = prefs.getString("id", null) ?: UUID.randomUUID().toString()
-        val items = if (sealed == null) stored() else stored() + entry(id, url, sealed)
-        prefs.edit().remove("url").remove("key").remove("id").putString("gateways", JSONArray(items).toString()).apply()
-    }
 
     private fun secret(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

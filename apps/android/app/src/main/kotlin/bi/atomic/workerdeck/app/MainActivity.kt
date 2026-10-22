@@ -19,13 +19,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
@@ -77,8 +75,6 @@ private fun App(store: GatewayStore) {
     var gateways by remember { mutableStateOf(store.load()) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var open by rememberSaveable { mutableStateOf<List<String>?>(null) }
-    // The shown session is the successor a follow moved to, and has not drawn its first frame yet.
-    var handover by rememberSaveable { mutableStateOf(false) }
     // hostId, then "agent" or "session"; the form itself is not saved across a process death.
     var creating by rememberSaveable { mutableStateOf<List<String>?>(null) }
     if (gateways.isEmpty() || adding) {
@@ -113,7 +109,7 @@ private fun App(store: GatewayStore) {
                 created.cwd?.let { recents.remember(create[0], it) }
                 sessions.pullRefresh()
                 creating = null
-                created.sessionId?.let { id -> open = listOf(create[0], id, created.cwd?.trimEnd('/')?.substringAfterLast('/') ?: "Session") }
+                created.sessionId?.let { id -> open = listOf(create[0], id, created.cwd?.trimEnd('/')?.substringAfterLast('/') ?: "Session", CURRENT) }
             },
             onBack = { creating = null },
         )
@@ -124,12 +120,10 @@ private fun App(store: GatewayStore) {
             onOpen = { hostId, sessionId, title, entry ->
                 sessions.select(hostId, sessionId)
                 sessions.open(hostId, sessionId)
-                handover = false
-                open = listOf(hostId, sessionId, title) + entryParts(entry)
+                open = listOf(hostId, sessionId, title, CURRENT) + entryParts(entry)
             },
-            onOpenPast = { hostId, sessionId, title ->
-                handover = false
-                open = listOf(hostId, sessionId, title, PINNED)
+            onOpenPast = { hostId, sessionId, title, conversation ->
+                open = listOf(hostId, sessionId, title, conversation.toString())
             },
             onAdd = { adding = true },
             onNew = { hostId, agent -> creating = listOf(hostId, if (agent) "agent" else "session") },
@@ -141,37 +135,20 @@ private fun App(store: GatewayStore) {
             },
         )
     } else {
-        val retarget by sessions.retarget.collectAsStateWithLifecycle()
-        val pinned = target.getOrNull(3) == PINNED
-        LaunchedEffect(target[0], target[1], pinned) {
-            if (pinned) sessions.pin(target[0], target[1]) else sessions.follow(target[0], target[1])
-        }
-        LaunchedEffect(retarget) {
-            val move = retarget ?: return@LaunchedEffect
-            sessions.retargeted()
-            if (move.hostId == target[0] && move.from == target[1]) {
-                handover = true
-                open = listOf(target[0], move.to, target[2])
-            }
-        }
+        val conversation = target.getOrNull(3)?.toLongOrNull()
         SessionScreen(
             client,
             target[1],
             target[2],
-            entryOf(target.drop(3)),
-            recap = sessions.recap(target[0], target[1]),
-            onSeen = { sessions.mark(target[0], target[1], it) },
-            onLeave = { seen -> seen?.let { sessions.finalizeSeen(target[0], target[1], it.itemCount) } },
-            onSuperseded = { sessions.superseded(target[0], target[1], it) },
-            handover = handover,
-            onGoToCurrent = { current ->
-                handover = false
-                open = listOf(target[0], current, target[2])
-            },
+            entryOf(target.drop(4)),
+            recap = if (conversation == null) sessions.recap(target[0], target[1]) else null,
+            onSeen = { if (conversation == null) sessions.mark(target[0], target[1], it) },
+            onLeave = { seen -> if (conversation == null) seen?.let { sessions.finalizeSeen(target[0], target[1], it.itemCount) } },
+            conversation = conversation,
+            onGoToCurrent = { open = listOf(target[0], target[1], target[2], CURRENT) },
             onAgentDeleted = { sessions.pastAgentsChanged(target[0]) },
         ) {
-            sessions.markSeen(target[0], target[1])
-            sessions.unfollow()
+            if (conversation == null) sessions.markSeen(target[0], target[1])
             open = null
         }
     }
@@ -188,8 +165,9 @@ private fun JankScreen(name: String) {
     }
 }
 
-// A past conversation opened from an agent's history: read-only, and it never follows the agent.
-private const val PINNED = "pinned"
+// The open route is hostId, sessionId, title, then the conversation: a past one's n (read-only), or this for the
+// session's current one.
+private const val CURRENT = "current"
 
 // The open route is saved as strings across a configuration change: kind, then id.
 private fun entryParts(entry: Entry?): List<String> = when (entry) {

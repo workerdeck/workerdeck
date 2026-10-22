@@ -87,9 +87,8 @@ fun SessionScreen(
     recap: ReadMark? = null,
     onSeen: (SeenCounts) -> Unit = {},
     onLeave: (SeenCounts?) -> Unit = {},
-    onSuperseded: (String) -> Unit = {},
-    handover: Boolean = false,
-    onGoToCurrent: ((String) -> Unit)? = null,
+    conversation: Long? = null,
+    onGoToCurrent: (() -> Unit)? = null,
     onAgentDeleted: () -> Unit = {},
     onBack: () -> Unit,
 ) {
@@ -108,13 +107,8 @@ fun SessionScreen(
                 Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2 - RAIL_WIDTH).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
             }
             val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
-            // A new id on the same screen is the agent's next conversation: the old model hands its composer over.
-            val shown = remember { arrayOfNulls<SessionModel>(1) }
-            val model = remember(client, sessionId) {
-                SessionModel(client, sessionId, metrics, entry, recap, carried = shown[0]?.releaseComposer()).also {
-                    shown[0] = it
-                    images.host = it::hostImagePath
-                }
+            val model = remember(client, sessionId, conversation) {
+                SessionModel(client, sessionId, metrics, entry, recap, conversation).also { images.host = it::hostImagePath }
             }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             DisposableEffect(model, lifecycle) {
@@ -130,34 +124,50 @@ fun SessionScreen(
             val seen by model.seen.collectAsStateWithLifecycle()
             LaunchedEffect(seen) { seen?.let(onSeen) }
             val context = LocalContext.current
-            val bookmarks = remember(client, sessionId) { SessionBookmarks(BookmarkStore.of(context), client.gateway.id, sessionId) }
+            val ui by model.ui.collectAsStateWithLifecycle()
+            val attached = ui.chrome?.conversation
+            val bookmarks = remember(client, sessionId, attached) { SessionBookmarks(BookmarkStore.of(context), client.gateway.id, sessionId, attached) }
             LaunchedEffect(metrics) { model.resize(metrics) }
             val bookmarkRevision by bookmarks.revision.collectAsStateWithLifecycle()
-            LaunchedEffect(bookmarkRevision) { model.bookmarks(bookmarks.ids()) }
-            val ui by model.ui.collectAsStateWithLifecycle()
+            LaunchedEffect(bookmarks, bookmarkRevision) { model.bookmarks(bookmarks.ids()) }
             var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
             var picker by rememberSaveable { mutableStateOf<Picker?>(null) }
-            var clearing by rememberSaveable { mutableStateOf(false) }
             var meter by rememberSaveable { mutableStateOf<Meter?>(null) }
             var extrasSheet by rememberSaveable { mutableStateOf<ExtrasSheet?>(null) }
             val extras by model.extras.collectAsStateWithLifecycle()
             val chrome = ui.chrome
-            // From the model itself: the collected state can still hold the previous model's successor for a frame.
-            LaunchedEffect(model, chrome?.supersededBy) { model.ui.value.chrome?.supersededBy?.let(onSuperseded) }
-            val successor by model.successor.collectAsStateWithLifecycle()
-            LaunchedEffect(model, successor) { model.successor.value?.let(onSuperseded) }
-            val agent by model.agent.collectAsStateWithLifecycle()
+            val past by model.conversation.collectAsStateWithLifecycle()
             val actionError by model.actionError.collectAsStateWithLifecycle()
+            val discard by model.discard.collectAsStateWithLifecycle()
+            val settleCut by model.settleCut.collectAsStateWithLifecycle()
+            val returned by model.undelivered.collectAsStateWithLifecycle()
             var deleting by rememberSaveable { mutableStateOf(false) }
-            val readOnly = chrome?.archived == true
+            val readOnly = conversation != null
+            LaunchedEffect(returned?.nonce) {
+                val back = returned ?: return@LaunchedEffect
+                if (draft.text.isBlank()) {
+                    val edit = composerInsert("", back.text)
+                    draft = TextFieldValue(edit.text, TextRange(edit.cursor.toInt()))
+                    model.composer.edit(edit.text, edit.cursor.toInt())
+                }
+                model.composer.announce(
+                    if (back.uncertain) "A message may not have reached the conversation; its text is back in the composer."
+                    else "A message did not reach the conversation, which moved on; its text is back in the composer.",
+                )
+                model.undeliveredShown()
+            }
             Column(Modifier.fillMaxSize().imePadding()) {
                 SessionTopBar(
                     ui.title ?: fallbackTitle,
                     onBack,
                     model::reconnect,
-                    onClearContext = if (chrome?.canClearContext == true) ({ clearing = true }) else null,
-                    agentActions = chrome?.takeIf { it.agentId != null }?.let {
-                        AgentMenu(it.newConversationBlocked, onNewConversation = model::newConversation, onDelete = { deleting = true })
+                    actions = chrome?.takeIf { !readOnly }?.let {
+                        ConversationMenu(
+                            newConversation = it.canNewConversation,
+                            blocked = it.newConversationBlocked,
+                            onNewConversation = model::newConversation,
+                            onDelete = if (it.agentId != null) ({ deleting = true }) else null,
+                        )
                     },
                     onMeter = if (ui.usage != null) ({ meter = it }) else null,
                     contextMeter = ui.usage?.contextUsage == true,
@@ -181,16 +191,15 @@ fun SessionScreen(
                     )
                 }
                 ConversationBars(
-                    archived = agent.archived.takeIf { readOnly },
-                    notice = agent.notice.takeIf { !readOnly },
-                    starting = handover && chrome?.status.isNullOrEmpty(),
+                    archived = past.archived.takeIf { readOnly },
+                    notice = past.notice.takeIf { !readOnly },
                     onGoToCurrent = onGoToCurrent,
-                    onSettle = model::settleUndelivered,
+                    onSettle = { model.settle(it) },
                     onRetryStart = model::retryStart,
                 )
                 if (ui.rows.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        if (ui.progress == null && agent.archived?.unavailable == true) {
+                        if (ui.progress == null && past.archived?.unavailable == true) {
                             Text("Transcript unavailable", style = MaterialTheme.typography.bodyMedium, color = Wd.colors.secondary)
                         } else if (ui.progress == null && ui.connection == ConnectionState.LIVE && !readOnly) {
                             EmptyState(extras.cwd ?: chrome?.cwd, ui.canRunShell)
@@ -251,19 +260,24 @@ fun SessionScreen(
             shell?.let { ShellScreen(model, it.id, style, palette, onClose = {}) }
             val frame by model.frame.collectAsStateWithLifecycle()
             frame?.let { FrameScreen(model, it, bookmarks, style, LINE_HEIGHT, SIDE_PADDING, metrics.cell, palette, promptMaxHeight) }
-            if (clearing) {
-                // Not destructive red: the old conversation stays resumable, same wording as the other clients.
+            discard?.let { confirmation ->
                 AlertDialog(
-                    onDismissRequest = { clearing = false },
-                    title = { Text("Clear the conversation?") },
-                    text = { Text("The session keeps running and starts a fresh conversation. The old one stays resumable.") },
+                    onDismissRequest = model::discardDismissed,
+                    title = { Text(confirmation.title) },
+                    text = { Text(confirmation.detail) },
                     confirmButton = {
-                        TextButton(onClick = {
-                            clearing = false
-                            model.clearContext()
-                        }) { Text("Clear context") }
+                        TextButton(onClick = { model.discardAndCut(confirmation) }) { Text(confirmation.confirm, color = Wd.colors.red) }
                     },
-                    dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } },
+                    dismissButton = { TextButton(onClick = model::discardDismissed) { Text("Cancel") } },
+                )
+            }
+            settleCut?.let { n ->
+                AlertDialog(
+                    onDismissRequest = model::settleDismissed,
+                    title = { Text("The first message may not have arrived") },
+                    text = { Text("A new conversation waits until you decide on it.") },
+                    confirmButton = { TextButton(onClick = { model.settle(true, n) }) { Text("Send again") } },
+                    dismissButton = { TextButton(onClick = { model.settle(false, n) }) { Text("Dismiss", color = Wd.colors.red) } },
                 )
             }
             if (deleting) {
@@ -275,7 +289,10 @@ fun SessionScreen(
                     confirmButton = {
                         TextButton(onClick = {
                             deleting = false
-                            model.deleteAgent(onAgentDeleted)
+                            model.deleteAgent {
+                                onAgentDeleted()
+                                onBack()
+                            }
                         }) { Text("Delete agent", color = Wd.colors.red) }
                     },
                     dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } },
@@ -330,8 +347,7 @@ private fun SessionTopBar(
     title: String,
     onBack: () -> Unit,
     onReconnect: () -> Unit,
-    onClearContext: (() -> Unit)?,
-    agentActions: AgentMenu?,
+    actions: ConversationMenu?,
     onMeter: ((Meter) -> Unit)?,
     contextMeter: Boolean,
     sheets: List<ExtrasSheet>,
@@ -394,7 +410,7 @@ private fun SessionTopBar(
                                 },
                             )
                         }
-                        agentActions?.let { actions ->
+                        actions?.takeIf { it.newConversation }?.let { actions ->
                             DropdownMenuItem(
                                 text = {
                                     Column {
@@ -409,21 +425,12 @@ private fun SessionTopBar(
                                 },
                             )
                         }
-                        onClearContext?.let { clear ->
-                            DropdownMenuItem(
-                                text = { Text("Clear context") },
-                                onClick = {
-                                    menu = false
-                                    clear()
-                                },
-                            )
-                        }
-                        agentActions?.let { actions ->
+                        actions?.onDelete?.let { delete ->
                             DropdownMenuItem(
                                 text = { Text("Delete agent…", color = colors.red) },
                                 onClick = {
                                     menu = false
-                                    actions.onDelete()
+                                    delete()
                                 },
                             )
                         }
@@ -498,4 +505,4 @@ private fun CatchUpBar(text: String, onJump: () -> Unit, onDismiss: () -> Unit) 
 }
 
 // A live agent conversation's own actions; `blocked` is why New conversation is off right now.
-private class AgentMenu(val blocked: String?, val onNewConversation: () -> Unit, val onDelete: () -> Unit)
+private class ConversationMenu(val newConversation: Boolean, val blocked: String?, val onNewConversation: () -> Unit, val onDelete: (() -> Unit)?)

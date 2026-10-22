@@ -18,21 +18,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import bi.atomic.workerdeck.app.ui.Wd
-import bi.atomic.workerdeck.core.ffi.AgentNotice
+import bi.atomic.workerdeck.core.ffi.ConversationNotice
 import bi.atomic.workerdeck.core.ffi.ArchivedView
 
-// The agent-conversation lines above a transcript: a read-only conversation's banner, a first message a crash may
-// have kept from the engine, a new conversation that did not start, and the wait for one that is starting.
+// The conversation lines above a transcript: a past conversation's banner, a first message whose delivery is unknown,
+// and a new conversation that did not start.
 @Composable
 fun ConversationBars(
     archived: ArchivedView?,
-    notice: AgentNotice?,
-    starting: Boolean,
-    onGoToCurrent: ((String) -> Unit)?,
+    notice: ConversationNotice?,
+    onGoToCurrent: (() -> Unit)?,
     onSettle: (Boolean) -> Unit,
     onRetryStart: () -> Unit,
 ) {
@@ -45,11 +43,10 @@ fun ConversationBars(
                 Text(view.banner, style = small, color = colors.secondary)
                 view.note?.let { Text(it, style = small, color = colors.tertiary) }
             }
-            val current = view.current
-            if (current != null && onGoToCurrent != null) BarButton("Go to current") { onGoToCurrent(current) }
+            if (view.current != null && onGoToCurrent != null) BarButton("Go to current", onGoToCurrent)
         }
     }
-    notice?.undelivered?.let { text ->
+    notice?.uncertainPrompt?.let { text ->
         Bar("undelivered-bar") {
             Column(Modifier.weight(1f)) {
                 Text("The first message may not have been delivered", style = small, color = colors.secondary)
@@ -69,15 +66,6 @@ fun ConversationBars(
             }
             BarButton("Retry start", onRetryStart)
         }
-    }
-    if (starting) {
-        Text(
-            "Starting a new conversation…",
-            style = small,
-            color = colors.secondary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("handover-starting"),
-        )
     }
 }
 

@@ -39,15 +39,15 @@ import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ConversationItem
 import kotlinx.coroutines.launch
 
-// An agent's conversations, newest first. The current one opens the agent view (which follows); a past one opens
-// read-only and never follows.
+// A session's conversations, newest first. The current one opens the session's live screen, a past one (or any of a
+// deleted agent's) opens by its number, read-only.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsSheet(
     target: ConversationsTarget,
     load: suspend () -> List<ConversationItem>?,
-    onOpen: (sessionId: String, title: String) -> Unit,
-    onOpenPast: (sessionId: String, title: String) -> Unit,
+    onOpen: (title: String) -> Unit,
+    onOpenPast: (conversation: Long, title: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = Wd.colors
@@ -68,9 +68,9 @@ fun ConversationsSheet(
             val shown = items
             when {
                 shown != null -> LazyColumn(Modifier.padding(bottom = 16.dp)) {
-                    items(shown, key = { it.sessionId }) { item ->
+                    items(shown, key = { it.n }) { item ->
                         ConversationLine(item) {
-                            if (item.current && !target.retired) onOpen(item.sessionId, item.title) else onOpenPast(item.sessionId, item.title)
+                            if (item.current && !target.retired) onOpen(item.title) else onOpenPast(item.n, item.title)
                         }
                         HorizontalDivider(Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = colors.separator)
                     }
@@ -91,7 +91,7 @@ fun ConversationsSheet(
 private fun ConversationLine(item: ConversationItem, onClick: () -> Unit) {
     val colors = Wd.colors
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp).testTag("conversation-${item.sessionId}"),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp).testTag("conversation-${item.n}"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
