@@ -35,7 +35,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 
 | Package | What it is |
 | --- | --- |
-| `packages/protocol` | Wire types **and the few rules both sides must agree on** (`transcriptActivity`, `transcriptProse`, `transcriptContent`, `replayCoalesceKey`, `logCoalesceKey`, `snapshotRetains`, `replayRetains`, result truncation, image refs, tool titles, `teamReaches`, `projectAccent`; the sessions-list, unread and usage view models). Dependency-free, browser-safe. Breaking → bump `PROTOCOL_VERSION` (currently **2**, for the conversation cut; reset to 1 just before 1.0.0 and **locked as of that launch** - every breaking change now costs a bump and a mismatch banner). |
+| `packages/protocol` | Wire types **and the few rules both sides must agree on** (`transcriptActivity`, `transcriptProse`, `transcriptContent`, `replayCoalesceKey`, `logCoalesceKey`, `snapshotRetains`, `replayRetains`, result truncation, image refs, tool titles, `teamReaches`, `projectAccent`, `SessionAddress` and the cut's wire; the sessions-list, unread and usage view models). Dependency-free, browser-safe. Breaking → bump `PROTOCOL_VERSION` (currently **2**: since 4.0.0 a session id spans many conversations and every mutation must name its own, which an older client cannot; **locked**, so every breaking change costs a bump and a mismatch banner). |
 | `packages/core` | The engines, shipped as adapters: `SessionRunner` (Claude SDK), `CodexRunner` (codex app-server), `AiSdkRunner` (provider). No transport. |
 | `packages/sandbox` | Untrusted-code boundary: QuickJS-NG WASM guest, map VFS, by-value host bridge. Leaf. |
 | `packages/queue` | `JobQueue` + `QueueAdapter`. `claimNext` must stay atomic. |
