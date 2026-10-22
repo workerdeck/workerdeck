@@ -132,7 +132,7 @@ struct CoreSessionView: View {
     .onAppear {
       wireImages()
       syncBookmarks()
-      if let mark = fixtureRecap ?? (settings.catchUpMode ? unread.since(host: hostId, sessionId: sessionId) : nil) {
+      if let mark = fixtureRecap ?? (settings.catchUpMode && model.history == nil ? unread.since(host: hostId, sessionId: sessionId) : nil) {
         model.setRecap(mark)
       }
       if client != nil { push.visibleSessionId = sessionId }
@@ -156,10 +156,10 @@ struct CoreSessionView: View {
     }
   }
 
-  // Only while this session is really on screen: a mark from anywhere else is how an unread badge silently stops
-  // working.
+  // Only while this session's current conversation is really on screen: a mark from anywhere else (a past
+  // conversation counts its own items) is how an unread badge silently stops working.
   private func mark(_ seen: SeenCounts) {
-    guard client != nil else { return }
+    guard client != nil, model.history == nil else { return }
     unread.mark(
       host: hostId, sessionId: sessionId, itemCount: Int(seen.itemCount), activity: seen.activity.map(Int.init),
       prose: seen.prose.map(Int.init), turns: seen.turns.map(Int.init))
@@ -168,7 +168,7 @@ struct CoreSessionView: View {
   // The in-view marks ran off the attach snapshot's counters, so anything the rollup counted since would read as
   // unread although it was on screen: leaving trues the mark up once from a fresh read.
   private func finalizeSeen() {
-    guard let client, let seen = model.ui.seen else { return }
+    guard let client, model.history == nil, let seen = model.ui.seen else { return }
     Task { @MainActor [unread, hostId, sessionId] in
       let answer = await client.answer(getSessionCall(id: sessionId))
       guard answer.status == 200 else { return }
