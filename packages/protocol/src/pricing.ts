@@ -99,8 +99,6 @@ export type PricingMerge = {
   dropped: string[]
 }
 
-let activeTable: PricingTable = DEFAULT_PRICING
-
 function rateFromInput(value: unknown): ModelRate | undefined {
   if (value === null || typeof value !== 'object') {
     return undefined
@@ -134,17 +132,6 @@ export function mergePricing(overrides: unknown, base: PricingTable = DEFAULT_PR
   return { pricing: { ...base, ...accepted }, overrides: accepted, dropped }
 }
 
-export function activePricing(): PricingTable {
-  return activeTable
-}
-
-/** @deprecated Mutates a process-wide table that every caller naming no table reads. Merge with `mergePricing` and pass the table explicitly. */
-export function setPricingOverrides(overrides: unknown): PricingMerge {
-  const merged = mergePricing(overrides)
-  activeTable = merged.pricing
-  return merged
-}
-
 export function pricingAgeDays(now: number, asOf: string = PRICING_AS_OF): number {
   const dated = Date.parse(asOf)
   return Number.isFinite(dated) ? Math.floor((now - dated) / DAY_MS) : 0
@@ -169,7 +156,7 @@ export function canonicalModel(model: string): string {
     .replace(/-v\d+:\d+$/, '')
 }
 
-export function rateFor(model: string | undefined, pricing: PricingTable = activePricing()): ModelRate | undefined {
+export function rateFor(model: string | undefined, pricing: PricingTable = DEFAULT_PRICING): ModelRate | undefined {
   return model ? pricing[canonicalModel(model)] : undefined
 }
 
@@ -266,7 +253,7 @@ function unpricedBreakdown(tokens: number): CostBreakdown {
   }
 }
 
-export function costOf(usage: TokenUsage, model: string | undefined, pricing: PricingTable = activePricing()): CostBreakdown {
+export function costOf(usage: TokenUsage, model: string | undefined, pricing: PricingTable = DEFAULT_PRICING): CostBreakdown {
   const rate = rateFor(model, pricing)
   if (!rate) {
     return unpricedBreakdown(totalTokens(usage))
@@ -287,7 +274,7 @@ export function costOf(usage: TokenUsage, model: string | undefined, pricing: Pr
   }
 }
 
-export function costOfByModel(byModel: ByModel, pricing: PricingTable = activePricing()): CostBreakdown {
+export function costOfByModel(byModel: ByModel, pricing: PricingTable = DEFAULT_PRICING): CostBreakdown {
   const acc: CostBreakdown = {
     input: 0,
     output: 0,
@@ -320,7 +307,7 @@ export function costOfByModel(byModel: ByModel, pricing: PricingTable = activePr
   return acc
 }
 
-export function unpricedModels(byModel: ByModel, pricing: PricingTable = activePricing()): string[] {
+export function unpricedModels(byModel: ByModel, pricing: PricingTable = DEFAULT_PRICING): string[] {
   return Object.keys(byModel).filter((model) => rateFor(model, pricing) === undefined)
 }
 

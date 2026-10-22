@@ -15,7 +15,6 @@ import {
   mergePricing,
   pricingAgeNote,
   rateFor,
-  setPricingOverrides,
   subscriptionComparison,
   unknownBasisModels,
   worseBasis,
@@ -248,14 +247,6 @@ describe('mergePricing', () => {
     })
     expect(merged.dropped).toEqual(['claude-opus-5', 'gpt-5', 'claude-sonnet-5'])
     expect(merged.pricing['claude-opus-5']).toEqual(DEFAULT_PRICING['claude-opus-5'])
-  })
-
-  it('reaches every pricing call once set as the active table, and resets cleanly', () => {
-    setPricingOverrides({ 'claude-opus-5': { input: 100, output: 100, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0 } })
-    expect(rateFor('claude-opus-5')?.input).toBe(100)
-    expect(costOf({ ...emptyTokenUsage(), input: 1_000_000 }, 'claude-opus-5').total).toBeCloseTo(100)
-    setPricingOverrides(undefined)
-    expect(rateFor('claude-opus-5')?.input).toBe(5)
   })
 })
 
