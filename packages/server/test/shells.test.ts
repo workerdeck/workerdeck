@@ -165,9 +165,10 @@ withPty('kill', () => {
     const shells = makeRegistry()
     const cwd = tempDir()
     const marker = join(cwd, 'late')
+    const markerAt = Date.now() + 2000
     const { shell, source } = await shells.spawn({
       runner: runner('s1', cwd),
-      command: `(sleep 0.6; echo late > ${marker}) & sleep 30`,
+      command: `(sleep 2; echo late > ${marker}) & sleep 30`,
       owner: 'user',
     })
     await sleep(100)
@@ -177,7 +178,7 @@ withPty('kill', () => {
     expect(killed).toMatchObject({ status: 'exited', endReason: 'killed' })
     expect(killed?.exitCode).toBeUndefined()
     expect(fired).toHaveBeenCalledTimes(1)
-    await sleep(900)
+    await sleep(Math.max(0, markerAt + 300 - Date.now()))
     expect(existsSync(marker)).toBe(false)
     expect(shells.kill('s1', shell.id)).toMatchObject({ endReason: 'killed' })
   })
@@ -284,7 +285,7 @@ withPty('kill', () => {
     const pidFile = join(cwd, 'pid')
     const { shell } = await shells.spawn({ runner: runner('s1', cwd), command: `echo $$ > ${pidFile}; exec sleep 30`, owner: 'user' })
     const done = await run(shells, runner('s2'), 'true')
-    await sleep(150)
+    await vi.waitFor(() => expect(readFileSync(pidFile, 'utf8')).toMatch(/^\d+\n$/))
     const pid = Number(readFileSync(pidFile, 'utf8').trim())
     expect(shells.killAll('server_stopped')).toBe(1)
     expect(shells.get('s1', shell.id)).toMatchObject({ status: 'exited', endReason: 'server_stopped' })
@@ -516,8 +517,8 @@ withPty('drain', () => {
 withPty('attach', () => {
   it('replays what came before, streams what comes after, and ends with the shell', async () => {
     const shells = makeRegistry()
-    const { shell, source } = await shells.spawn({ runner: runner('s1'), command: 'echo first; sleep 0.3; echo second', owner: 'user' })
-    await sleep(120)
+    const { shell, source } = await shells.spawn({ runner: runner('s1'), command: 'echo first; sleep 0.6; echo second', owner: 'user' })
+    await vi.waitFor(() => expect(source.text()).toContain('first'))
     const got: string[] = []
     const ended: string[] = []
     const attached = await shells.attach('s1', shell.id, { write: (d) => got.push(d), end: (r) => ended.push(r) })
