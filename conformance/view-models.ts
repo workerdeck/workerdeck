@@ -776,21 +776,41 @@ const WATERMARKS: VmCase[] = [
     calls: [
       [
         {
-          'mac:old': { itemCount: 1, activity: 1, prose: 1, turns: 1, seenAt: T0 - 40 * 86_400_000 },
-          'mac:legacy': { itemCount: 4, activity: 9, turns: 2, seenAt: T0 - 1_000 } as unknown as Watermark,
+          'mac:old': { itemCount: 1, activity: 1, prose: 1, seenAt: T0 - 40 * 86_400_000 },
+          'mac:legacy': { itemCount: 4, activity: 9, seenAt: T0 - 1_000 } as unknown as Watermark,
         },
         [
-          ['mark', 'mac', 's1', { itemCount: 3, activity: 5, prose: 2, turns: 1 }, T0],
-          ['mark', 'mac', 's1', { itemCount: 3, activity: 5, prose: 2, turns: 1 }, T0 + 30_000],
-          ['mark', 'mac', 's1', { itemCount: 1, activity: 2 }, T0 + 30_000],
+          ['mark', 'mac', 's1', { itemCount: 3, conversation: 1, activity: 5, prose: 2 }, T0],
+          ['mark', 'mac', 's1', { itemCount: 3, conversation: 1, activity: 5, prose: 2 }, T0 + 30_000],
+          ['mark', 'mac', 's1', { itemCount: 1, conversation: 1, activity: 2 }, T0 + 30_000],
           ['mark', 'mac', 's1', {}, T0 + 61_000],
           ['mark', 'mac', 's1', { prose: 1 }, T0 + 62_000],
-          ['mark', 'mac', 's1', { prose: 4, turns: 3 }, T0 + 62_500],
+          ['mark', 'mac', 's1', { prose: 4 }, T0 + 62_500],
           ['mark', 'mac', 'legacy', { activity: 9 }, T0],
           ['mark', 'mac', 'legacy', { prose: 0 }, T0 + 10],
+          ['mark', 'mac', 'legacy', { itemCount: 2, conversation: 3 }, T0 + 20],
           ['forget', 'mac', 'nobody'],
           ['forget', 'mac', 's1'],
           ['mark', 'box', 's2', { prose: 7 }, T0 + 31 * 86_400_000],
+        ],
+      ],
+    ],
+  },
+  {
+    module: 'watermarks',
+    name: 'cut',
+    fn: 'watermarkScript',
+    calls: [
+      [
+        {},
+        [
+          ['mark', 'mac', 's1', { itemCount: 200, conversation: 1, activity: 400, prose: 100 }, T0],
+          ['mark', 'mac', 's1', { itemCount: 5, conversation: 2, activity: 410, prose: 102 }, T0 + 1_000],
+          ['mark', 'mac', 's1', { itemCount: 200, conversation: 1, activity: 400, prose: 100 }, T0 + 2_000],
+          ['mark', 'mac', 's1', { itemCount: 3, conversation: 2 }, T0 + 70_000],
+          ['mark', 'mac', 's1', { itemCount: 9, conversation: 2, prose: 104 }, T0 + 71_000],
+          ['mark', 'mac', 's1', { itemCount: 90 }, T0 + 140_000],
+          ['mark', 'mac', 's1', { itemCount: 1, conversation: 3 }, T0 + 141_000],
         ],
       ],
     ],
@@ -801,9 +821,21 @@ const WATERMARKS: VmCase[] = [
     fn: 'unseenCount',
     calls: [
       [undefined, { proseCount: 5 }],
-      [{ itemCount: 0, activity: 0, prose: 2, turns: 0, seenAt: T0 }, { proseCount: 5 }],
-      [{ itemCount: 0, activity: 0, prose: 9, turns: 0, seenAt: T0 }, { proseCount: 5 }],
-      [{ itemCount: 0, activity: 0, prose: 2, turns: 0, seenAt: T0 }, {}],
+      [{ itemCount: 0, activity: 0, prose: 2, seenAt: T0 }, { proseCount: 5 }],
+      [{ itemCount: 0, activity: 0, prose: 9, seenAt: T0 }, { proseCount: 5 }],
+      [{ itemCount: 0, activity: 0, prose: 2, seenAt: T0 }, {}],
+    ],
+  },
+  {
+    module: 'watermarks',
+    name: 'catch-up',
+    fn: 'catchUpItems',
+    calls: [
+      [{ itemCount: 200, conversation: 1 }, 1],
+      [{ itemCount: 200, conversation: 1 }, 2],
+      [{ itemCount: 200, conversation: 3 }, 2],
+      [{ itemCount: 200 }, 2],
+      [{ itemCount: 200, conversation: 1 }, undefined],
     ],
   },
 ]

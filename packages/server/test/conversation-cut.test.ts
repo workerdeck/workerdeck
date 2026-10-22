@@ -851,6 +851,41 @@ describe('a mutation names its conversation and is re-checked under the lock', (
     expect((await server.records.get(id))?.pendingPrompt).toMatchObject({ state: 'uncertain' })
   })
 
+  it('keeps the lifetime counts monotonic across cuts, a dormant cut, restarts and a wake', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir)
+    const id = await create(first.base, { prompt: undefined })
+    await idle(first.server, id)
+    first.built[0]!.say('one')
+    first.built[0]!.say('two')
+    expect((await call(first.base, `/sessions/${id}`)).body.session).toMatchObject({ activityCount: 2, proseCount: 2 })
+
+    expect((await call(first.base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
+    await idle(first.server, id)
+    expect((await first.server.records.get(id))?.counters).toEqual({ activity: 2, prose: 2 })
+    const second = first.built.at(-1)!
+    expect(second.config.counterBase).toEqual({ activity: 2, prose: 2 })
+    expect((await call(first.base, `/sessions/${id}`)).body.session).toMatchObject({ conversation: 2, proseCount: 2 })
+    second.say('three')
+    second.settle()
+    expect((await call(first.base, `/sessions/${id}`)).body.session).toMatchObject({ conversation: 2, activityCount: 3, proseCount: 3 })
+    await stop(first.server)
+
+    const restarted = await gateway(dir)
+    expect(restarted.server.registry.get(id)).toBeUndefined()
+    expect((await call(restarted.base, `/sessions/${id}`)).body.session).toMatchObject({ conversation: 2, proseCount: 3 })
+    expect((await call(restarted.base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 2 })).status).toBe(200)
+    await idle(restarted.server, id)
+    expect((await restarted.server.records.get(id))?.counters).toEqual({ activity: 3, prose: 3 })
+    expect((await call(restarted.base, `/sessions/${id}`)).body.session).toMatchObject({ conversation: 3, proseCount: 3 })
+    await stop(restarted.server)
+
+    const third = await gateway(dir)
+    const woken = await third.server.parking.ensureLive(id)
+    expect(woken?.info()).toMatchObject({ activityCount: 3, proseCount: 3 })
+    expect(third.built.at(-1)!.config.counterBase).toEqual({ activity: 3, prose: 3 })
+  })
+
   it('moves the canonical scope with a scope-changing cut, and keeps it across a restart', async () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir, { scoped: true })

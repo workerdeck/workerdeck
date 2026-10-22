@@ -913,6 +913,19 @@ describe('SessionRunner', () => {
       expect(runner.info().activityCount).toBe(activityBefore)
     })
 
+    it('counts on top of the base a later conversation of the same session is built with', async () => {
+      const { harness, runner } = makeRunner({ counterBase: { activity: 400, prose: 100 } })
+      expect(runner.info()).toMatchObject({ activityCount: 400, proseCount: 100 })
+      void runner.start()
+      harness.emit(initMessage)
+      harness.emit(assistantMessage)
+      harness.emit(resultMessage)
+      await tick()
+      const info = runner.info()
+      expect(info.activityCount).toBeGreaterThan(400)
+      expect(info.proseCount).toBe(101)
+    })
+
     it('replays no pre-reset content to a fresh attach, but every state-bearing event', async () => {
       const { harness, runner } = makeRunner({}, { models: [{ value: 'opus', displayName: 'Opus', description: '' }], commands: [] })
       void runner.start()

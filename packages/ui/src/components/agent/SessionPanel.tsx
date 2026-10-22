@@ -11,6 +11,7 @@ import {
 import type { WorkerDeckClient } from '@workerdeck/client'
 import {
   PROTOCOL_VERSION,
+  catchUpItems,
   mergeUsage,
   orderUsageWindows,
   sessionTasks,
@@ -77,7 +78,7 @@ import { useTicker } from '../terminal/items.tsx'
 import { ArchivedBanner } from './ArchivedBanner.tsx'
 import { ApprovalPrompts, type ApprovalPromptProps } from './ApprovalPrompts.tsx'
 import { SessionPanelProviders } from './session-panel-providers.tsx'
-import { useCatchUp } from './use-catch-up.ts'
+import { useCatchUp, type CatchUpMark } from './use-catch-up.ts'
 import { useHostImage } from './use-host-image.ts'
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
@@ -131,7 +132,7 @@ export interface SessionPanelProps {
   controlsSurface?: 'internal' | 'external' | 'status'
   onControls?: (controls: SessionControls | undefined) => void
   focusComposerOnClick?: boolean
-  unseen?: { itemCount: number; since?: number }
+  unseen?: CatchUpMark
   readOnly?: boolean
   approvalPrompts?: Record<string, ComponentType<ApprovalPromptProps>>
   toolHost?: UseToolCallHostOptions | false
@@ -207,6 +208,8 @@ export type SessionVitals = {
   // Absent means unknown, which is not the same as fresh.
   rateLimitsUpdatedAt: number | undefined
   itemCount: number
+  // The conversation `itemCount` counts items of, so a read mark never carries the position into another one.
+  conversation: number | undefined
   totalCostUsd: number
 }
 
@@ -330,7 +333,8 @@ export function SessionPanel({
   }, [returnReveal, shellReturnReveal])
 
   const { mark: catchUp, dismiss: dismissCatchUp } = useCatchUp(sessionId, unseen)
-  const newCount = catchUp ? Math.max(0, state.items.length - catchUp.itemCount) : 0
+  const catchUpStart = catchUp ? catchUpItems(catchUp, state.session?.conversation) : 0
+  const newCount = catchUp ? Math.max(0, state.items.length - catchUpStart) : 0
 
   const openPanel = useCallback(
     (target: SessionSurfacePanel) => {
@@ -433,6 +437,7 @@ export function SessionPanel({
     rateLimits,
     rateLimitsUpdatedAt: usageUpdatedAt,
     itemCount: state.items.length,
+    conversation: state.session?.conversation,
     totalCostUsd: state.totalCostUsd,
   }
   const lastVitals = useRef<SessionVitals | undefined>(undefined)
@@ -716,7 +721,7 @@ export function SessionPanel({
                   scrubber={scrubber}
                   bookmarks={bookmarks}
                   replaying={replaying}
-                  catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
+                  catchUp={catchUp && newCount > 0 ? { from: catchUpStart, since: catchUp.since } : undefined}
                   reveal={frameReturnReveal ?? reveal}
                   frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
                   onOpenSubagent={enterSubagent}

@@ -1,5 +1,5 @@
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, type SessionEvent, type SessionEventBody, type SessionInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, transcriptActivity, transcriptProse, type SessionEvent, type SessionEventBody, type SessionInfo } from '@workerdeck/protocol'
 
 // A resumable engine stand-in: names its session on start, sends `prompt` like the real engines, and can be held busy.
 export class EngineRunner implements Runner {
@@ -77,7 +77,23 @@ export class EngineRunner implements Runner {
       pendingPermissionCount: 0,
       title: 'Archived talk',
       ...(this.config.epoch === undefined ? {} : { epoch: this.config.epoch }),
+      ...this.#counts(),
     }
+  }
+
+  // The core runner's rule: the log's own counts on top of the base the gateway built this conversation with.
+  #counts(): Pick<SessionInfo, 'activityCount' | 'proseCount'> {
+    const base = this.config.counterBase
+    const activity = this.#events.reduce((sum, event) => sum + transcriptActivity(event), 0)
+    const prose = this.#events.reduce((sum, event) => sum + transcriptProse(event), 0)
+    if (base === undefined && activity === 0 && prose === 0) {
+      return {}
+    }
+    return { activityCount: activity + (base?.activity ?? 0), proseCount: prose + (base?.prose ?? 0) }
+  }
+
+  say(text: string): void {
+    this.#emit({ type: 'assistant_message', uuid: `say-${this.#seq + 1}`, message: { role: 'assistant', content: [{ type: 'text', text }] } } as SessionEventBody)
   }
 
   subscribe(listener: (event: SessionEvent) => void, afterSeq = 0): () => void {

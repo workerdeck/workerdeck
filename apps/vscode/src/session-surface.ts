@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import type { PermissionMode } from '@workerdeck/protocol'
+import type { CatchUpFrom, PermissionMode } from '@workerdeck/protocol'
 import { resolvePosix } from '@workerdeck/protocol'
 import type { SessionVitals, SessionSurfacePanel } from '@workerdeck/ui'
 import type { GatewayHost, HostStore } from './hosts.ts'
@@ -36,7 +36,7 @@ export type SurfaceDelegate = {
   vitals: (surface: AnySurface) => void
   subagent: (surface: AnySurface) => void
   shell: (surface: AnySurface) => void
-  unseen: (hostId: string, sessionId: string) => { itemCount: number; since: number } | undefined
+  unseen: (hostId: string, sessionId: string) => CatchUpFrom | undefined
   visibilityChanged: (surface: AnySurface) => void
   focused: (surface: AnySurface) => void
   peerAvatars: (hostId: string) => Record<string, AgentAvatarImage>
@@ -75,7 +75,7 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
   // It answers "where were you when you opened this?", so it cannot be re-read at push time: making the view
   // visible marks the session seen, and `show()` awaits the focus command in between. Re-reading afterwards
   // returned the mark that opening had just moved, which cost the recap seam, the dimming and the jump target.
-  #unseen: { itemCount: number; since: number } | undefined
+  #unseen: CatchUpFrom | undefined
   #transports: WebviewTransportHost | undefined
   #peerAvatarsSent: Record<string, AgentAvatarImage> | undefined
 

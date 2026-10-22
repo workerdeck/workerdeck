@@ -1576,6 +1576,14 @@ code map in `docs/PACKAGES.md` server.
   is refused (409), authorized against n's history entry (`endedExecution`).
 - **Jobs never cut.** Every door refuses a job run (409 `JOB_CUT_REFUSAL`), and Edit settings
   refuses one too: a job run has no next conversation.
+- **`activityCount` and `proseCount` are lifetime counts for the id; `numTurns` is not.** The cut
+  writes the counts it read from n (the max with the record's old base) as `cut.counters` and, at
+  the commit, `SessionRecord.counters`; n+1's runner gets them as `counterBase` and adds its log's
+  own counts. `counterBase` is a transient config key: `runtimeStore()` hands the record's value to
+  every runtime it reads, so a park, sleep, wake, restart or a runtime clear never drops it, and
+  the dormant rebuild re-applies it after the host's hook. Without it a read mark of n (keyed by the
+  stable id, max-merged) swallows n+1's first messages. `numTurns` stays per conversation because
+  `newConversationGate` reads 0 as an empty conversation.
 
 ## Named sessions (the identity index, retire, history)
 
@@ -3104,6 +3112,12 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   Reading it as 0 instead would badge every previously-visited session with its entire prose history
   the first time it polls. Same rule in the Swift mirror (`Watermarks.swift`). There is no rows or
   turns fallback: `proseCount` is in every 1.x gateway, and a record without it badges nothing.
+- **A mark's `itemCount` belongs to its `conversation`; `activity` and `prose` are lifetime.** The
+  item count is a transcript position, so a newer conversation's reading replaces it, an older or
+  unnamed one (a late final mark from a view that has not seen the cut) never raises it, and only
+  the same conversation takes the max. `catchUpItems` starts a recap at 0 when the mark was taken in
+  another conversation. A view of a past conversation marks nothing. Rust mirror:
+  `crates/core/src/vm/watermarks.rs`, checked by the `watermarks.*` goldens.
 - **A caller that knows nothing about prose must pass `undefined`, never 0.** `Watermarks.mark`
   keeps the previous `prose` when the argument is absent, so a mark of 0 would walk a real prose
   watermark back and re-badge everything the operator had read.

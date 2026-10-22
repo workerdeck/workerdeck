@@ -274,8 +274,9 @@ the scope-containment rule where a gateway-tagged root scopes only that gateway 
 untagged one only loopback; `orderGroups`/`moveGroup`/`resetGroupOrder` apply the operator's dragged
 order per grouping from `ViewConfig.groupOrder` *after* `groupRows`, so the Rust core's `group_rows`
 goldens never see it, and a group the order never named lands after its ranked predecessor;
-`collapsedGroups` folds any grouping, its keys being disjoint across groupings), and `watermarks.ts` is the **unread model** (monotonic marks
-behind a `WatermarkStore` seam, and `unseenCount`'s prose arithmetic). They are
+`collapsedGroups` folds any grouping, its keys being disjoint across groupings), and `watermarks.ts` is the **unread model** (marks
+behind a `WatermarkStore` seam: lifetime `activity`/`prose` take the max, `itemCount` is scoped to its
+`conversation`; `unseenCount`'s prose arithmetic, `catchUpFrom`/`catchUpItems` for the recap start). They are
 rules, not preferences: the extension's unread status-bar item counts the *same* rows its
 list shows, so a client that filtered differently would announce work it is hiding. Tests live
 in `packages/react/test/session-list.test.ts` + `watermarks.test.ts` (protocol has no
@@ -1051,7 +1052,9 @@ cut is in flight and on a job run. Prompt acks (`services/prompt-acks.ts`) key o
 clientId and retain each outcome, so a stale resend is answered ran (plain ack), `notDelivered` or
 `uncertain`, never run again; only a `NotDelivered` error means "never ran". Every invariant (one
 write, write token, lock order, validation order, discard-and-cut, quiet stop, the engine store,
-recovery) is in `docs/GOTCHAS.md` § Conversation cut; named sessions in § Named sessions. **Parking** is deferred execution's other half and needs `Runner.park()` - which only
+recovery) is in `docs/GOTCHAS.md` § Conversation cut; named sessions in § Named sessions. The record's
+`counters` (lifetime activity and prose at the start of the current conversation) feed the runner's
+`counterBase`, so `SessionInfo.activityCount`/`proseCount` never fall back across a cut. **Parking** is deferred execution's other half and needs `Runner.park()` - which only
 the provider engine has, because claude and codex run behind a binary that owns its process
 state. **Dormancy** is the restart story for those two: a `DormantSessionRecord` holds no
 transcript at all, just the id, the `sdkSessionId` to resume from and the config to rebuild

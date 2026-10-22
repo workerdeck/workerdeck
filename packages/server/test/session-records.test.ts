@@ -61,6 +61,23 @@ describe('SessionRecords', () => {
     expect(await records.clearRuntime('s1', 1, 'resumed')).toBe(false)
   })
 
+  it('hands the record lifetime counts to every runtime it reads, never storing them in the runtime itself', async () => {
+    const store = createFileSessionRecordStore({ dir })
+    const records = new SessionRecords(store)
+    await records.transact('s1', () => ({ ...ledger('s1', 2), counters: { activity: 40, prose: 9 } }))
+    await records.saveRuntime(dormant('s1', { counterBase: { activity: 1, prose: 1 } }), 2)
+
+    const raw = await store.get('s1')
+    expect(raw?.runtime?.config.counterBase).toBeUndefined()
+    expect(raw?.running?.counterBase).toBeUndefined()
+    const runtimes = records.runtimeStore()
+    expect((await runtimes.get('s1'))?.config.counterBase).toEqual({ activity: 40, prose: 9 })
+    expect((await runtimes.list())[0]?.config.counterBase).toEqual({ activity: 40, prose: 9 })
+
+    expect(await runtimes.delete('s1', 2, 'resumed')).toBe(true)
+    expect((await records.get('s1'))?.counters).toEqual({ activity: 40, prose: 9 })
+  })
+
   it('refuses a runtime save or clear taken for another conversation', async () => {
     const records = new SessionRecords(new MemorySessionRecordStore())
     await records.transact('s1', () => ledger('s1', 2))
