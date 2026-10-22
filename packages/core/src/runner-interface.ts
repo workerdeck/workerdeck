@@ -37,6 +37,9 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   avatar?: AvatarDirectory
   // Set by the gateway only where the agent may reset its own context; its presence is what offers `context_reset`.
   contextReset?: ContextResetDirectory
+  // Host-only, never persisted: the agent's own reason for the reset that opened this conversation, shown as its first
+  // event (`conversation_reset` with `agentReason`).
+  agentResetReason?: string
   shells?: ShellDirectory
   shellAgentWrite?: ShellAgentWrite
   // Stamped by the gateway at create time from the principal that asked, and persisted with the record: the shell

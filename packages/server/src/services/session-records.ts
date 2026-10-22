@@ -34,7 +34,14 @@ export type ConversationEntry = {
   transcript?: 'unavailable'
 }
 
-export type SessionCut = { from: number; to: number; phase: 'prepared' | 'committed'; epoch: number; target: SessionRunnerConfig }
+export type SessionCut = {
+  from: number
+  to: number
+  phase: 'prepared' | 'committed'
+  epoch: number
+  target: SessionRunnerConfig
+  agentReason?: string
+}
 
 export type PendingPrompt = PendingPromptInfo
 

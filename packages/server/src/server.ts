@@ -195,12 +195,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       ? undefined
       : new ContextResetService({
           ...options.agentContextReset,
-          cut: async (sessionId, prompt) => {
+          cut: async (sessionId, prompt, reason) => {
             const runner = registry.get(sessionId)
             if (!runner) {
               throw new Error('the session ended before its reset could run')
             }
-            await cuts.clearOnIdle(runner, 'context_reset', prompt)
+            await cuts.clearOnIdle(runner, 'context_reset', prompt, undefined, reason)
           },
           onError: (error) => diagnose(error, 'context-reset'),
         })

@@ -30,6 +30,11 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
     this.createdAt = createdAt
     this.core = new RunnerCore({ ...options, pricing: config.pricing, hooks: this.coreHooks() })
     this.localCommands = new LocalCommandQueue((text, uuid, shell) => this.core.emit(localCommandEvent(text, uuid, shell)))
+    const reason = config.agentResetReason
+    if (reason !== undefined && (config as { restore?: unknown }).restore === undefined && config.resume === undefined) {
+      // After the subclass constructor: its core hooks read fields it has not set yet.
+      queueMicrotask(() => this.core.emit({ type: 'conversation_reset', agentReason: reason }))
+    }
   }
 
   abstract close(reason?: CloseReason): void

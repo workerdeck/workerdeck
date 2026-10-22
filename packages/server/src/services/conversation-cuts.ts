@@ -23,6 +23,8 @@ export type CutReason = 'user' | 'clear' | 'context_reset'
 export type CutRequest = {
   expectedGeneration: number
   prompt?: string
+  // A `context_reset`'s own reason, shown as the notice opening the new conversation.
+  agentReason?: string
   reason: CutReason
   target?: ConversationTarget
   discard?: { revision: string }
@@ -165,7 +167,13 @@ export class ConversationCuts {
 
   // The one rule for every door that asks while a turn runs: the cut waits for the next idle. `outcome` hears whether a
   // queued cut happened (true) or was dropped, failed before its commit, or lost its runner (false).
-  async clearOnIdle(runner: Runner, reason: CutReason, prompt?: string, outcome?: (cut: boolean) => void): Promise<CutResult | undefined> {
+  async clearOnIdle(
+    runner: Runner,
+    reason: CutReason,
+    prompt?: string,
+    outcome?: (cut: boolean) => void,
+    agentReason?: string,
+  ): Promise<CutResult | undefined> {
     const ctx = this.#ctx
     if (isJobRun(runner.info())) {
       fail(409, JOB_CUT_REFUSAL)
@@ -179,9 +187,9 @@ export class ConversationCuts {
       fail(409, `the session moved on to conversation ${now}`)
     }
     if (runner.info().status === 'idle' && !unanswered(runner)) {
-      return await this.cut(runner.id, { expectedGeneration: n, reason, ...(prompt ? { prompt } : {}) })
+      return await this.cut(runner.id, { expectedGeneration: n, reason, ...(prompt ? { prompt } : {}), ...(agentReason ? { agentReason } : {}) })
     }
-    this.#queueOnIdle(runner, n, reason, prompt, outcome)
+    this.#queueOnIdle(runner, n, reason, prompt, outcome, agentReason)
     return undefined
   }
 
@@ -191,6 +199,7 @@ export class ConversationCuts {
     reason: CutReason,
     prompt: string | undefined,
     outcome: ((cut: boolean) => void) | undefined,
+    agentReason?: string,
   ): void {
     const ctx = this.#ctx
     const id = runner.id
@@ -226,7 +235,7 @@ export class ConversationCuts {
       }
       if (event.type === 'status_changed' && event.status === 'idle' && !unanswered(runner)) {
         const heard = leave()
-        this.cut(id, { expectedGeneration: from, reason, ...(prompt ? { prompt } : {}) }).then(
+        this.cut(id, { expectedGeneration: from, reason, ...(prompt ? { prompt } : {}), ...(agentReason ? { agentReason } : {}) }).then(
           () => tell(heard, true),
           (error: unknown) => {
             tell(heard, (ctx.records.conversationOf(id) ?? 1) > from)
@@ -297,7 +306,14 @@ export class ConversationCuts {
       for (const executionId of entry.executions) {
         this.#leaving.set(executionId, id)
       }
-      const cut: SessionCut = { from: conversation, to: conversation + 1, phase: 'prepared', epoch: (info.epoch ?? 0) + 1, target }
+      const cut: SessionCut = {
+        from: conversation,
+        to: conversation + 1,
+        phase: 'prepared',
+        epoch: (info.epoch ?? 0) + 1,
+        target,
+        ...(request.agentReason ? { agentReason: request.agentReason } : {}),
+      }
       await ctx.records.transactDurable(id, (current) => ({ ...(current ?? freshRecord(id)), cut }))
       // A hot reload carried the runner away while the intent was being written: it is the next generation's now.
       if (this.#closed || (live && ctx.registry.get(id) !== live)) {
@@ -715,7 +731,7 @@ export class ConversationCuts {
     const ctx = this.#ctx
     const built = ctx.factory.buildRunnerConfig({ ...cut.target, prompt, resume: undefined, forkSession: undefined })
     const config: SessionRunnerConfig = { ...built, epoch: cut.epoch }
-    const runner = await ctx.factory.buildRunner(config, undefined, id)
+    const runner = await ctx.factory.buildRunner(cut.agentReason ? { ...config, agentResetReason: cut.agentReason } : config, undefined, id)
     if (this.#closed) {
       runner.close('server')
       fail(503, GENERATION_ENDED)

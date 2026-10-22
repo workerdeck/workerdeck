@@ -360,6 +360,9 @@ describe('context_reset through the gateway', () => {
       agent: { id: agent.id, name: 'Wren', conversation: 2 },
     })
     expect(inputTexts(first!)).toEqual(['work'])
+    const opened: SessionEventBody[] = []
+    fx.server().registry.get(agent.id)!.subscribe((event) => opened.push(event), 0)()
+    expect(opened.find((event) => event.type === 'conversation_reset')).toMatchObject({ agentReason: REQUEST.reason })
   })
 
   it('holds a cut while the engine has not answered a peer message queued before a turn result; a slash command never holds it', async () => {

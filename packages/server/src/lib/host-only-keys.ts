@@ -21,6 +21,7 @@ const HOST_ONLY_KEY_TABLE: Record<HostOnlyKey, 'durable' | 'transient'> = {
   sessionInfoFn: 'transient',
   peers: 'transient',
   contextReset: 'transient',
+  agentResetReason: 'transient',
   avatar: 'transient',
   shells: 'transient',
   shellAgentWrite: 'transient',

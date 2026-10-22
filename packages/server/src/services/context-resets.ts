@@ -11,7 +11,7 @@ export type AgentContextResetOptions = {
 
 export type ContextResetServiceOptions = AgentContextResetOptions & {
   // A reset is a conversation cut under the same id (named or not), its prompt the first message of the next one.
-  cut?: (sessionId: string, prompt: string) => Promise<void>
+  cut?: (sessionId: string, prompt: string, reason: string) => Promise<void>
   onError?: (error: unknown, sessionId: string) => void
   now?: () => number
   resetTimeoutMs?: number
@@ -134,7 +134,7 @@ export class ContextResetService implements ContextResetDirectory {
     this.#running.add(runner.id)
     try {
       if (this.#options.cut) {
-        await this.#options.cut(runner.id, request.prompt)
+        await this.#options.cut(runner.id, request.prompt, request.reason)
         this.#record(runner.id)
         return
       }
