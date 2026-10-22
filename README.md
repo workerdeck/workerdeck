@@ -129,10 +129,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   model. The agent can read its own effort through the `session_info` tool.
 - **Agents that manage their own context.** With `--agent-context-reset on` (or per session or
   profile), a session gets the `context_reset` tool: once its turn ends, the gateway gives it a
-  clean start and sends the prompt it wrote as the first message. A named agent gets a brand-new
-  session (the old one is closed and kept), any other session has its conversation cleared. That's
-  how a long unattended session keeps going on a clean context, or an agent moves on to its next
-  task. Resets are rate-limited, and each one leaves a line in the transcript saying why.
+  clean start and sends the prompt it wrote as the first message: a new conversation under the same
+  session id, with the old one kept readable in its history. That's how a long unattended session
+  keeps going on a clean context, or an agent moves on to its next task. Resets are rate-limited, and each one leaves a line in the transcript saying why.
 - **Reaching a person who isn't watching.** Server-wide webhooks for the four moments a human acts
   on (permission requested, turn finished, error, closed). The permission payload carries the
   whole request, so a consumer can answer it over REST - which is what makes an Approve button in
@@ -173,10 +172,15 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   composer, `#` names one of them: it completes from the sessions this gateway shows and sends a
   hint, not an order - "commit what #Astra left unstaged" tells the agent which session to go and
   read, and the transcript keeps the bare text you typed.
-- **Agents that outlive their sessions, in teams.** An agent is a name, an avatar and a standing
-  brief the gateway keeps across restarts; it owns one session at a time and *New conversation*
-  starts it fresh. Drag one agent onto another to form a team (one level deep): members sit under
-  their lead in every client, reach only their lead and teammates through the peer tools, and sleep
+- **Conversations under one id.** A session keeps its id for life. *New conversation* (or a typed
+  `/clear`) starts a fresh one under that id; the old one stays readable, read-only, from the
+  engine's own store, so `claude --resume` and the CLI's stats keep seeing it. Every mutation
+  names the conversation it was meant for, so a stale tab or a late call is refused instead of
+  landing in the next conversation.
+- **Agents, in teams.** An agent is a session with a name: an avatar and a standing brief the
+  gateway keeps across restarts, on the same id. *Make agent* names any session, and un-naming
+  leaves a plain session with its history. Drag one agent onto another to form a team (one level
+  deep): members sit under their lead in every client, reach only their lead and teammates through the peer tools, and sleep
   when idle (`--agent-sleep-after`, 15 minutes by default). `#` in the composer finds an agent by
   name. Over a relay a team can span machines and owners: every agent answers to an owner
   (`--owner`, per profile, enrolled with `--owners`), and agents of different owners meet only in a
@@ -292,6 +296,10 @@ pooling or rate-limit circumvention. The OAuth itself stays 100% provider-owned 
   are tighter by construction: MCP is declared on the profile, never by the caller.)
 - **Parking is single-host either way.** The file store survives a restart, but two servers over
   one directory would race to rebuild the same sessions.
+- **4.0.0 changed the stored state and the relay wire.** A gateway on 4.0.0 refuses state written
+  by an earlier release, with an error naming the file: migrate an install from before 4.0.0 once
+  before 4.0.0 starts on it. 3.x and 4.0 cannot be mixed on one relay; upgrade the relay and every
+  gateway on it together.
 - **The VS Code extension can run the server for you.** Turn on `workerdeck.host.enabled` and it
   supervises a `workerdeck` process on your machine - via `npx` if you have not installed it - with
   start/stop/restart in the palette and the dashboard on the same port. One server per machine, not
@@ -325,20 +333,13 @@ Dev never builds: apps and tests resolve packages straight to TS source via the
 
 ## Status
 
-**0.15.0** - early but real. Three engines, the protocol, server, client, headless React layer,
-styled UI, dashboard, job queue, sandbox and deferred execution are all in and tested. 0.9 landed
-the engine adapters and the Codex engine; 0.10 added the session workspace and codex skills and
-generated images; 0.11 published the VS Code extension; 0.12 rebuilt its navigation around native
-editor chrome and lifted the sessions-list and unread models into the protocol so every client
-shows the same list; 0.13 added cross-origin gateway auth and rebuilt the dashboard; 0.14 and 0.15
-shipped together as **0.15.0** - session `scope` enforced at every door, `sandboxedProviderProfile()`,
-a loud MCP failure instead of a silently tool-less session, host tools at a stated trust, and
-[`apps/embedded`](apps/embedded) as the reference embedding. The iOS app's APNs push reached a
-physical phone from a live gateway for the first time on 2026-08-20 - registration, delivery and a
-tapped notification opening the session it names are all confirmed; the lock-screen Approve/Deny
-action still is not. That first real pass immediately found two bugs (every tap aborted the app on
-a main-thread assert, and a dial could fail silently), so treat push as newly proven rather than
-settled. `PROTOCOL_VERSION` guards breaking changes and is at **1** - reset at the 1.0.0 launch
-and locked since, so every breaking wire change now costs a bump and a mismatch banner.
+**4.0.0**. Three engines, the protocol, server, client, headless React layer, styled UI,
+dashboard, VS Code extension, relay, job queue, sandbox and deferred execution are all in and
+tested, with [`apps/embedded`](apps/embedded) as the reference embedding. 4.0.0 made an agent a
+session with a name: one record per session id, conversations under it, past conversations read
+from the engine's own store, and a generation token on every mutation. The iOS app's APNs push is
+confirmed end to end from a live gateway (registration, delivery, a tapped notification opening
+its session); the lock-screen Approve/Deny action is not yet. `PROTOCOL_VERSION` guards breaking
+changes and is at **2**, so every breaking wire change costs a bump and a mismatch banner.
 
 MIT © Tobias Strebitzer
