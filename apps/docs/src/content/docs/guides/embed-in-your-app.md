@@ -103,7 +103,7 @@ results, and the job routes.
 Which means your client does **no ownership filtering at all**:
 
 ```ts
-const { sessions } = await client.listSessions()   // already only this user's
+const sessions = await client.listSessions()   // already only this user's
 ```
 
 That is the point. A check the client performs is a check the client can skip. If the default rule
@@ -114,9 +114,10 @@ Two things worth internalising:
 
 - **A miss is 404, never 403.** Whether a session exists in someone else's scope is not this
   caller's business, and the answer is byte-identical to an unknown id.
-- **Visibility is full control.** There is no read-only attach: a client that can see a session can
-  message it, answer its approvals, interrupt it and close it. Scope is the boundary; `readOnly` on
-  the panel is an affordance.
+- **Visibility is full control.** Attaching to a session's current conversation is not a read
+  level: a client that can see a session can message it, answer its approvals, interrupt it and
+  close it. Scope is the boundary; `readOnly` on the panel is an affordance. (Only a *past*
+  conversation, `?conversation=n`, attaches read-only.)
 
 **Checkpoint:** user B gets 404 on user A's session id.
 
@@ -294,6 +295,20 @@ should *not* solve for you.
 
   This is the *provider* engine's mechanism specifically. Claude and codex have engine-side session
   stores and go dormant instead, remembering only an id to resume from.
+
+  The store's directory holds session records and **nothing else**: give it a directory of its
+  own, because another JSON file in it refuses the start. A store of your own implements
+  `SessionRecordStore` (`save`, `get`, `list`, `delete`) and validates its own raw data.
+  `WorkerServer.preflight()` reads the stored state and throws for anything this gateway cannot
+  read, writing nothing; `listen()` runs it first, so call it yourself only if your app writes
+  state of its own at startup, before those writes. State from a WorkerDeck release before 4.0.0
+  (`parking.store`, `createFileSessionStore`) is refused this way: migrate it once before 4.0.0
+  starts on it.
+- **Mutations name their conversation.** A session keeps its id across *New conversation*, so every
+  mutating call says which conversation it meant and a stale one is a 409, never applied to the
+  next conversation. `WorkerDeckClient` does this for you. If your server calls the REST routes
+  directly, send `x-workerdeck-generation: <SessionInfo.conversation>` on every mutating
+  `/sessions/:id/*` call (see [Protocol](/workerdeck/docs/reference/protocol/#conversations)).
 - **Restarts also sign people out, if you let them.** A per-process session secret is the obvious
   default and it makes working persistence look completely broken: sessions are scoped, a scoped
   session answers 404 to anyone else, so a new secret on boot preserves every conversation and

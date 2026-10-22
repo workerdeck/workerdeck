@@ -150,6 +150,19 @@ What this does not protect against:
   every owner on it, and a gateway enrolled with several owners can speak for all of them.
   Enroll the smallest set.
 
+## Versions
+
+The relay and its gateways speak relay wire version 2 since WorkerDeck 4.0.0. Upgrade the relay
+and **every** gateway on it to 4.0 together: 3.x and 4.0 cannot be mixed on one relay, and a
+gateway on the other version is turned away with close code 4426 (`the relay speaks a different
+wire version`), logs it, and retries once a minute until the versions match.
+
+The relay keeps its enrollments in `gateways.json` in its state dir, one entry per gateway name:
+`{ "hash": "<sha-256 of the key>", "enrolledAt": <epoch ms>, "owners": ["..."] }`, where `owners`
+is optional and absent means the relay's default owner. An entry in any other shape, as written by
+a relay before 4.0.0, makes the relay refuse to start and name the gateway; migrate the file once
+before 4.0.0 starts on it. `enroll`, `--owners` and `revoke` write the new shape for you.
+
 ## Running the relay as a service
 
 The relay belongs on a machine that stays up, under a service manager that restarts it. The

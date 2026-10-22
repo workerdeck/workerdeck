@@ -23,11 +23,25 @@ increasing `seq` (starting at 1) and an epoch-ms `ts`, plus a small `SessionComm
 Clients attach over WebSocket, optionally replaying from a known `seq`, and drive the session
 with commands.
 
+A session keeps one **stable id** for its whole life, and that id is the only address a client
+needs. What changes under it is the **conversation**: `SessionInfo.conversation` counts from 1, and
+*New conversation* (a typed `/clear`, the `clear_context` command, an agent's `context_reset`)
+starts conversation n+1 under the same id. A number is never reused, not even after an erase. A
+past conversation stays readable from the engine's own store (see [Conversations](#conversations)).
+
+A session may be **named**: `SessionInfo.agent` (an `AgentRef`: name, avatar, team) is what every
+client calls an agent. Naming and un-naming are a `PATCH` on the same id, so an agent is a session,
+optionally named, and never a second record.
+
+`SessionAddress` (`{ id, conversation? }`) is where a view points: absent `conversation` is the
+current one, which a cut moves on under the same address; a number is a read-only past
+conversation. `addressKey`, `sameAddress`, `addressOf` and `isHistorical` are the helpers.
+
 ## Versioning and skew detection
 
-`PROTOCOL_VERSION` (currently `7`) is bumped on any breaking change to events, commands, or REST
-shapes. The server reports it in the `attached` (and `queue_attached`) frame so clients can
-detect skew:
+`PROTOCOL_VERSION` (currently `2`, since WorkerDeck 4.0.0) is bumped on any breaking change to
+events, commands, or REST shapes. The server reports it in the `attached` (and `queue_attached`)
+frame so clients can detect skew:
 
 ```ts
 import { PROTOCOL_VERSION, type ServerFrame } from '@workerdeck/protocol'
@@ -66,7 +80,7 @@ ws.onmessage = ({ data }) => {
 | `file_delivered` | The agent handed over a file from its scratch filesystem (`deliver_file`); download it under `GET /sessions/:id/files/<path>`. |
 | `file_produced` | The **engine** wrote a file on the *host* filesystem and reported the path - codex's `image_gen` saving a PNG is the case that motivated it. The host-filesystem sibling of `file_delivered`. Carries an opaque `fileId`, the absolute `path` as the engine reported it, and a media type where the runner could determine one; fetch it at `GET /sessions/:id/produced/:fileId`. This event **is** the allowlist for that route - nothing else can add a path to it. |
 | `sdk_event` | Forward-compatible passthrough for any SDK message this protocol version doesn't model first-class (task progress, compaction boundaries, auth status, …). |
-| `conversation_reset` | The conversation was cleared in place - same session id, same watermarks, empty context - carrying the engine session id the fresh conversation runs under when the engine reported one. Its replay rules are load-bearing: a re-attach skips transcript *content* strictly below the latest reset while every state-bearing event still replays, so a client cannot resurrect a cleared conversation but also does not come back with no model list and no cwd. `activityCount` stays monotonic across it on purpose - it is an unread cursor, not an item count. |
+| `conversation_reset` | A runner used **without a gateway** cleared its conversation in place: same session id, empty context, carrying the engine session id the fresh conversation runs under when the engine reported one. A re-attach skips transcript *content* strictly below the latest reset while every state-bearing event still replays. On a gateway every clear is a cut to a new conversation instead (see [Conversations](#conversations)), announced by the `conversation_started` frame, not by this event. |
 | `session_error` / `session_closed` | Terminal errors and closure (`reason: 'client' | 'server' | 'error'`). |
 
 ## Commands (client → server)
@@ -81,27 +95,50 @@ uploaded ahead of it), `permission_decision` (`requestId`,
 `protocol_error` unless it is idle, see `POST /v1/sessions/:id/sleep`), `close`, and the two answers to a bridged tool call - `tool_call_result` /
 `tool_call_error`, each carrying the `executionId` it is answering.
 
-`clear_context` resets the conversation in place and is answered with a `conversation_reset`
-event. Send it only where `EngineCapabilities.clearContext` says so (absent = false, so an older
-gateway hides the control rather than offering one that errors). Sent while a turn is running it
-**queues** behind that turn rather than cutting it short - a clear is not an interrupt; interrupt
-first if the intent was to stop the work as well as forget it. Each engine reaches the same state
-its own way: Claude sends the `/clear` its CLI already lists, codex starts a fresh thread (the old
-one is *not* deleted - it stays resumable from the sessions picker), and the provider engine drops
-its in-process message array.
+`clear_context` asks for a new conversation. On a gateway it is the same cut as *New
+conversation*, and so is a `user_message` whose whole text is `/clear` with nothing attached
+(anything longer is ordinary text for the engine). Sent while a turn is running it **queues**
+behind that turn rather than cutting it short: a clear is not an interrupt. A gateway offers it on
+every session that is not closed or failed (`clearContextOffered`), whatever the engine;
+`EngineCapabilities.clearContext` describes a runner used without a gateway, which keeps each
+engine's own clear (Claude's `/clear`, a fresh codex thread, the provider engine dropping its message array) and
+answers with `conversation_reset`.
 
-WebSocket framing: the server sends `attached` (protocol version + `SessionInfo` snapshot +
-`replayingFrom`), then `event` frames, with `protocol_error` for bad input; the client sends
-bare `SessionCommand`s. Two further server frames belong to the browser tool bridge:
+### WebSocket framing
+
+The server sends `attached` (protocol version + `SessionInfo` snapshot + `replayingFrom`), then
+`event` frames, with `protocol_error` for bad input. The client sends `ClientFrame`s: a
+`SessionCommand` plus **`generation`**, the conversation the sender meant (the `conversation` of
+the snapshot it attached to). A command without one, or for a conversation that has ended, is
+refused with a `protocol_error` and never applied to the next conversation. `shell_attach` and
+`shell_detach` are the only commands that need no `generation`. `@workerdeck/client` stamps it for
+you.
+
+- **`ack`.** Every gateway answers a `user_message` that carries a `clientId` with
+  `{ type: 'ack', clientId }` once the prompt was handled, and runs a repeated `clientId` once, so a
+  client may resend an unacked prompt after a reconnect. `notDelivered: true` means it was refused
+  before the engine saw it (its conversation ended, a cut was in flight, a refusal): the text is
+  the sender's to resubmit. `uncertain: true` means this resend was refused and whether an earlier
+  attempt ran is no longer known; the sender decides.
+- **`conversation_started`** (`{ conversation, epoch }`) is sent on the old conversation's socket
+  once a cut has committed; the server then closes that socket with code `4011`
+  (`CONVERSATION_ENDED_CLOSE_CODE`). Reattach to the same id to follow the new conversation. A
+  client that missed the frame reads the current number from the next `attached` or list.
+- **`?conversation=n`** on the attach URL opens a **read-only** socket on past conversation n: an
+  `attached` frame and that conversation's events, read from the engine's store, and no commands.
+  It never falls through to the current conversation.
+
+Two further server frames belong to the browser tool bridge:
 `tool_call_request` (execute this tool in your own sandbox - `toolName`, `input`, an optional
 `vfsSeed` and `limits`, and an `expiresAt` after which the server gives up) and
 `tool_call_canceled` (abandon it; the turn was interrupted, it timed out, or the session closed).
 Only sandbox-benefiting tools are ever bridged - authoritative ones (MCP, secret-bearing APIs)
 execute server-side and never appear on this channel.
 
-An attach is **full control, not a read level**: a client holding one can send `user_message`,
-`permission_decision`, `interrupt` and `close`. Anything that decides who may watch a session
-must decide it before the attach, not after.
+An attach to the current conversation is **full control, not a read level**: a client holding
+one can send `user_message`, `permission_decision`, `interrupt` and `close`. Anything that decides
+who may watch a session must decide it before the attach, not after. Only the `?conversation=n`
+history socket is read-only.
 
 ## REST shapes
 
@@ -123,15 +160,61 @@ must decide it before the attach, not after.
   CLI refuses to *switch into* bypass unless the process was spawned for it, so a picker can
   disable the mode rather than offer a refusal), `apiKeySource`, `lastSeq`,
   `pendingPermissionCount`, `title`, cumulative `totalCostUsd` / `numTurns`, `activityCount`,
-  `lastActivityAt`, `scope`, `subagents`, and `project` - the `.workerdeck.json` name/root/icon
+  `lastActivityAt`, `scope`, `owner`, `subagents`, `conversation` (the current conversation's
+  number, the token every mutation names), `agent` (present on a named session), and `project` - the `.workerdeck.json` name/root/icon
   the *gateway* resolved by an ancestor walk from the session's realpath'd cwd, since no client
   can see that filesystem. Its icon is an **address** (a glyph name, or a media type plus a
   content hash whose bytes come from `GET /sessions/:id/project/icon`), never bytes: this record
   rides every row of a 1.2s poll. Absent means no project; see the
   [Project identity](../../guides/projects/) guide.
-- `UpdateSessionRequest` - the `PATCH` body behind renaming. `title` is **three-state**: a string
+- `UpdateSessionRequest` - the `PATCH /sessions/:id` body. `title` is **three-state**: a string
   sets `meta.title`, an explicit `null` clears it so the derived title (the first prompt) comes
-  back, and omitting it leaves the name alone. A rename never reaches the model.
+  back, and omitting it leaves the name alone. A rename never reaches the model. `statusLabel`
+  sets or clears the one-line status. `agent` (`SessionAgentRequest`: name, brief, lead, owner,
+  sharing, ...) names the session or updates a named one's identity, and `agent: null` un-names it
+  (operator only; refused while it leads or belongs to a team). `config` (`SessionSettingsPatch`:
+  `cwd`, `profile`, `model`, `reasoningEffort`, `permissionMode`, `agentContextReset`) sets what the
+  **next** conversation starts from, never the running one; the response then carries `settings`.
+
+## Conversations
+
+Every mutation names the conversation it was meant for, so a call that raced a cut is refused
+rather than landing on the next conversation (409 `the session moved on to conversation n`):
+
+- **REST:** every mutating route under `/sessions/:id/*` (`PATCH`, `DELETE`, permission answers,
+  uploads, sleep, shells, tasks, MCP actions) needs the `x-workerdeck-generation` header
+  (`GENERATION_HEADER`) set to the session's current `conversation`. A missing header is a 409 too.
+  The conversation routes and the agent routes that cut, retry, settle or delete
+  (`/agents/:id/restart`, `retry-start`, `undelivered`, `DELETE /agents/:id`) take
+  `expectedGeneration` in the body instead.
+- **WebSocket:** `generation` on every command (above).
+
+`WorkerDeckClient` tracks the last conversation it saw for each session (`conversationOf`) and
+sends both for you.
+
+| Route | Body / answer |
+| --- | --- |
+| `GET /sessions/:id/conversations` | `ConversationsResponse`: the current `conversation`, `history` (one `ConversationSummary` per past conversation: `n`, engine, profile, cwd, title, cost, times, `transcript: 'unavailable'` when the engine's store no longer has it), `closed`, a `pendingPrompt` or `startFailed` waiting on a person, and the `settings` the next conversation starts from. |
+| `GET /sessions/:id/conversations/:n` | `ConversationHistoryResponse`: that conversation's `info` and `events`, read from the engine's own store. |
+| `POST /sessions/:id/conversations` | `NewConversationRequest` (`expectedGeneration`, optional first `prompt`, optional `target`: profile, cwd, model, scope) starts conversation n+1; answers `NewConversationResponse` (`session`, `conversation`). 409 while the session is busy or still starting, and on a job run. |
+| `POST /sessions/:id/conversations/discard` | `DiscardAndCutRequest` (`expectedGeneration`, `inputRevision`, `prompt?`): the same cut after a person accepted losing pending input. |
+| `POST /sessions/:id/conversations/retry` | `{ expectedGeneration }`: start a conversation that was committed but did not start (`startFailed`). |
+| `POST /sessions/:id/conversations/pending` | `SettlePendingPromptRequest` (`expectedGeneration`, `send`): Send again or Dismiss a first message whose delivery is uncertain. |
+| `DELETE /sessions/:id/conversations/:n` | Operator only: forget the gateway's copy of a past conversation (`EraseConversationResponse`). n stays, marked unavailable; the engine's store is never touched. |
+
+Two 409 refusals carry a body a client acts on:
+
+- **`unconfirmed_input`** (`UnconfirmedInputRefusal`): the engine cannot confirm that input queued
+  for it was consumed. The body names the `conversation`, an `inputRevision`, how many messages are
+  pending (`pendingInput`) and whether some may come from peer agents (`mayIncludePeer`). Show that
+  to a person; if they accept losing it, send `discard` with the same `inputRevision`. Input that
+  arrived since answers `input_changed` and must be confirmed again. `unconfirmedInputOf(error)` in
+  `@workerdeck/client` reads it from a `WorkerDeckError`.
+- **`uncertain_prompt`** (`UncertainPromptRefusal`): a first message may not have reached the
+  session; settle it with `pending` before starting another conversation.
+
+`(sessionId, conversation)` is the key to correlate audit and usage records: the `SessionInfo` on
+every `attached` frame, list row, notification and webhook carries both.
 
 ### Session scope
 

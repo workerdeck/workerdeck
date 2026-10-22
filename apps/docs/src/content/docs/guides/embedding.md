@@ -64,7 +64,40 @@ handle.on('event', (event) => console.log(event.seq, event.type))
 On reconnect the handle asks the server for events after the last seq it saw, so the stream is
 gapless and duplicates are dropped; commands sent while disconnected are buffered and flushed on
 reopen. Browsers cannot set WebSocket headers - authenticate the socket with a ticket query
-param via `buildWsUrl(sessionId, afterSeq)` or with cookies.
+param via `buildWsUrl(sessionId, afterSeq, truncateResults, imageRefs, conversation)` (keep every
+query parameter `sessionWsUrl` would add, `conversation` included) or with cookies.
+
+### Conversations
+
+A session keeps its id across *New conversation*; what moves on is `SessionInfo.conversation`. The
+client remembers the last conversation it saw for each session (from `getSession`, `listSessions`
+and every `attached` frame) and stamps it on every mutation: the `x-workerdeck-generation` header
+on REST, `generation` on WebSocket commands. A call for a conversation that has ended is refused,
+never applied to the next one. A handle whose conversation ended emits `undeliveredPrompt` for a
+prompt the gateway refused before the engine saw it, so its text can go back in the composer.
+
+```ts
+const info = await client.getSession(id)
+await client.newConversation(id, { expectedGeneration: info.conversation ?? 1, prompt: 'Next task' })
+const { history } = await client.conversations(id)
+const { n } = history[0]                                     // a past conversation
+const past = await client.conversationHistory(id, n)         // its events, read-only
+const archived = client.attach(id, { conversation: n })      // a read-only socket on it
+```
+
+| Method | What it does |
+| --- | --- |
+| `nameSession(id, agent)` / `unnameSession(id)` | Make a session an agent under the same id, or a plain session again (operator only). |
+| `updateSessionSettings(id, config)` | What the next conversation starts from (`cwd`, `profile`, `model`, ...); `null` clears one. |
+| `newConversation(id, request)` | Start conversation n+1. A 409 that `unconfirmedInputOf(error)` recognises means pending input would be lost: show it, then `discardAndCut(id, { expectedGeneration, inputRevision })` once a person confirms. |
+| `conversations(id)` / `conversationHistory(id, n)` | The list of past conversations / one of them, read from the engine's own store. |
+| `eraseConversation(id, n)` | Operator only: forget the gateway's copy of a past conversation. |
+| `retryConversationStart(id, generation)` / `settlePendingPrompt(id, send, generation)` | Recover a conversation that did not start, or a first message whose delivery is uncertain. |
+| `restartAgent(id, generation, prompt?)`, `retryAgentStart(id, generation)`, `settleUndelivered(id, send, generation)`, `retireAgent(id, { expectedGeneration, members? })` | The agent routes; each now takes the conversation it is meant for. |
+| `conversationOf(id)` / `noteConversation(id, n)` | Read or set the token the client sends for a session. |
+
+`SessionHandle.clearContext()` sends the same cut over the socket, queued behind a running turn.
+`createAgent` no longer accepts `adopt`: name an existing session with `nameSession` instead.
 
 ## The UI options ladder
 

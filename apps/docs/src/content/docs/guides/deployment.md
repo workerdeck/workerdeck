@@ -54,16 +54,20 @@ createWorkerServer({
 })
 ```
 
-`hydrate()` runs inside `listen()`, so the records are re-indexed and their watchdogs re-armed
-before the server accepts a request. Three things to know:
+`listen()` first runs `preflight()`, which reads every record and refuses the start on anything
+this gateway cannot read, then re-indexes the records and re-arms their watchdogs before the server
+accepts a request. Four things to know:
 
 - **The directory holds plaintext transcripts.** Each record is one parked session's whole event
   log and tool I/O. Protect it like the SDK's own `~/.claude/projects`.
 - **Credentials never reach it.** The stored config keeps the wire request only: `env`,
   `extraOptions`, and injected functions are dropped, and a rebuilt provider session resolves
   credentials through `createEngineRunner` from the environment, exactly as the first build did.
-- **One process per directory.** Two servers sharing it would both hydrate and both rebuild the
-  same sessions.
+- **One process per directory, and nothing else in it.** Two servers sharing it would both
+  hydrate and both rebuild the same sessions, and another JSON file in it refuses the start.
+- **State from before 4.0.0 is refused.** A gateway on 4.0.0 or later will not start on session
+  records or an agent store written by an earlier release (the error names the file). Migrate an
+  older install once before 4.0.0 starts on it.
 
 Durability doesn't make a restart free. A turn actually in flight dies with the process, as does
 a pending permission request, and a running job is left claimed. `workerdeck guard` asks a live
@@ -80,7 +84,7 @@ npx workerdeck guard --url https://worker.internal/v1 --token "$TOKEN" \
 else, use `--header name=value` (repeatable).
 
 It blocks on any session that is `starting`, `running`, or `awaiting_approval`, on any running
-job, on parked sessions unless `--allow-parked` says a durable `SessionStore` is configured, and
+job, on parked sessions unless `--allow-parked` says a durable `SessionRecordStore` is configured, and
 on queued jobs unless `--allow-queued` says the same of the `QueueAdapter`. The two are separate
 decisions: a durable session store under the bundled in-memory adapter still wakes a parked
 session that no job is left waiting on, so the guard says so rather than pretending otherwise.

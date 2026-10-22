@@ -4,11 +4,14 @@ description: Long-lived, named agents with an avatar and a standing brief, group
 order: 13
 ---
 
-A **session** is one run. An **agent** is the identity that outlives it: a name, an avatar, a
-standing brief and the config its sessions start from, kept by the gateway in
-`<state-dir>/agents.json`. An agent owns one session at a time, its current **conversation**.
-Compaction, sleep and a gateway restart all keep it; *New conversation* starts a fresh one under the
-same identity and team (see [Conversations](#conversations)).
+An **agent** is a session with a name. Every session keeps one id for its whole life; naming it
+adds an identity to that same session: a name, an avatar, a standing brief, its team and its
+sharing, kept by the gateway in `<state-dir>/agents.json`. An agent's id is its session's
+id, and un-naming a session leaves it a plain session with the same id and history.
+
+What a session runs is its current **conversation**. Compaction, sleep and a gateway restart all
+keep it; *New conversation* starts a fresh one under the same id, identity and team (see
+[Conversations](#conversations)).
 
 ## Create one
 
@@ -22,8 +25,7 @@ same identity and team (see [Conversations](#conversations)).
 - **REST:** `POST /v1/agents` with `{ name, brief, config: { cwd, model, ... }, prompt }`, or
   `POST /v1/sessions` with an `agent: { name, brief }` block. An existing session is named with
   `PATCH /v1/sessions/:id { "agent": { "name": "..." } }` and un-named with `{ "agent": null }`
-  (refused while it is in a team). An agent's id is its session's id. The `/agents` routes and
-  naming are operator-only.
+  (refused while it is in a team). The `/agents` routes and naming are operator-only.
 
 The brief reaches the model as host instructions on every session the agent runs; it is not part
 of the session data clients receive.
@@ -44,10 +46,13 @@ phones). Its history comes from the engine's own session store, so it follows th
 retention: a transcript Claude Code or Codex has since pruned shows as unavailable. The session
 keeps its id, so a view that shows an agent stays on it.
 
-*Delete agent...* removes the agent from your agents and releases its team members. Its
-conversations stay readable under *Past agents*. Over REST: `POST /v1/agents/:id/restart` (New
-conversation), `GET /v1/agents/:id/conversations`, `GET /v1/agents?retired=1`, `DELETE
-/v1/agents/:id`; the session routes under `/v1/sessions/:id/conversations` serve the same history.
+*Delete agent...* retires the agent and releases its team members. Its conversations stay
+readable under *Past agents*. Closing a session that is not named keeps its conversations readable
+too. Over REST: `POST /v1/sessions/:id/conversations` (New conversation, for any session),
+`GET /v1/sessions/:id/conversations`, `GET /v1/agents?retired=1`, `DELETE /v1/agents/:id`; the
+agent routes `POST /v1/agents/:id/restart` and `GET /v1/agents/:id/conversations` do the same for an
+agent. Each call that starts a conversation or retires an agent carries `expectedGeneration`, the
+conversation you were looking at, and is refused (409) if the session has moved on since.
 
 ## Teams
 
