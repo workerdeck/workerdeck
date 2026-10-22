@@ -468,7 +468,7 @@ describe('history under its frozen auth across an owner move', () => {
   it('erases a past conversation for an operator: n kept as unavailable, the engine store never read again, n never reused', async () => {
     const dir = await fixture.stateDir()
     const reads: string[] = []
-    const { server, base } = await gateway(dir, {
+    const { server, base, built } = await gateway(dir, {
       options: {
         historyReader: {
           read: async (target) => {
@@ -480,6 +480,7 @@ describe('history under its frozen auth across an owner move', () => {
     })
     const id = await createPlain(base)
     await idle(server, id)
+    built[0]!.emit({ type: 'execution_dispatched', executionId: 'erase-x', toolName: 'tool', backend: 'server', deferred: true })
     expect((await cut(base, id, 1)).status).toBe(200)
     await idle(server, id)
     expect((await call(base, `/sessions/${id}/conversations/1`)).body.events).toHaveLength(1)
@@ -507,9 +508,8 @@ describe('history under its frozen auth across an owner move', () => {
     for (const key of ['engineSessionId', 'engineHome', 'snapshot', 'running', 'title', 'costUsd']) {
       expect(entry).not.toHaveProperty(key)
     }
-    for (const executionId of before.executions) {
-      expect(server.cuts.endedExecution(executionId)?.entry).toEqual(entry)
-    }
+    expect(before.executions).toEqual(['erase-x'])
+    expect(server.cuts.endedExecution('erase-x')?.entry).toEqual(entry)
     const read = await call(base, `/sessions/${id}/conversations/1`)
     expect(read).toMatchObject({ status: 200, body: { events: [], info: { conversation: 1, transcript: 'unavailable' } } })
     expect(reads).toHaveLength(1)
