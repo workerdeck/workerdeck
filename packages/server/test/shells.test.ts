@@ -165,20 +165,21 @@ withPty('kill', () => {
     const shells = makeRegistry()
     const cwd = tempDir()
     const marker = join(cwd, 'late')
-    const markerAt = Date.now() + 2000
+    const pidFile = join(cwd, 'grandchild.pid')
     const { shell, source } = await shells.spawn({
       runner: runner('s1', cwd),
-      command: `(sleep 2; echo late > ${marker}) & sleep 30`,
+      command: `sh -c 'echo $$ > ${pidFile}; sleep 2; echo late > ${marker}' & sleep 30`,
       owner: 'user',
     })
-    await sleep(100)
+    const grandchild = await pidFrom(pidFile)
     const fired = vi.fn()
     source.subscribe(fired)
     const killed = shells.kill('s1', shell.id)
     expect(killed).toMatchObject({ status: 'exited', endReason: 'killed' })
     expect(killed?.exitCode).toBeUndefined()
     expect(fired).toHaveBeenCalledTimes(1)
-    await sleep(Math.max(0, markerAt + 300 - Date.now()))
+    // The shell that would write the marker is gone, so the marker can never appear.
+    await gone(grandchild)
     expect(existsSync(marker)).toBe(false)
     expect(shells.kill('s1', shell.id)).toMatchObject({ endReason: 'killed' })
   })
@@ -203,14 +204,13 @@ withPty('kill', () => {
     const { shell } = await shells.spawn({ runner: runner('s1', cwd), command, owner: 'user' })
     await pidFrom(pidFile)
     const plain = join(cwd, 'plain')
-    // Far past the kill even on a loaded host, and checked only once that much time has passed.
-    const plainAt = Date.now() + 2000
+    const groupedPid = join(cwd, 'grouped.pid')
     const grouped = await shells.spawn({
       runner: runner('s1', cwd),
-      command: `(sleep 2; echo late > ${plain}) & sleep 30`,
+      command: `sh -c 'echo $$ > ${groupedPid}; sleep 2; echo late > ${plain}' & sleep 30`,
       owner: 'user',
     })
-    await sleep(100)
+    const groupedChild = await pidFrom(groupedPid)
     expect(shells.kill('s1', shell.id)).toMatchObject({ status: 'exited', endReason: 'killed' })
     expect(shells.kill('s1', grouped.shell.id)).toMatchObject({ status: 'exited', endReason: 'killed' })
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/process table/) }), {
@@ -219,7 +219,7 @@ withPty('kill', () => {
       shellId: shell.id,
     })
     await vi.waitFor(() => expect(existsSync(marker)).toBe(true), { timeout: 4000 })
-    await sleep(Math.max(0, plainAt + 300 - Date.now()))
+    await gone(groupedChild)
     expect(existsSync(plain)).toBe(false)
   })
 
@@ -474,20 +474,29 @@ withPty('index', () => {
 withPty('source', () => {
   it('coalesces output notifications while running and fires synchronously on exit', async () => {
     const shells = makeRegistry()
-    const { source } = await shells.spawn({
+    const script = join(tempDir(), 'ticks.cjs')
+    // Ten writes 30 ms apart from one process: no fork per write, and each tick its own PTY chunk.
+    writeFileSync(
+      script,
+      "let i = 0; const t = setInterval(() => { process.stdout.write(i + '\\n'); if (++i === 10) { clearInterval(t); setTimeout(() => {}, 450) } }, 30)",
+    )
+    const { shell, source } = await shells.spawn({
       runner: runner('s1'),
-      // Five separate writes inside one window: an external `sleep` between them forks, and on a loaded host the forks alone outlast it.
-      command: 'for i in 1 2 3 4 5; do echo $i; done; sleep 0.45',
+      command: `${JSON.stringify(process.execPath)} ${JSON.stringify(script)}`,
       owner: 'user',
     })
+    const chunks: string[] = []
+    await shells.attach('s1', shell.id, { write: (data) => chunks.push(data), end: () => {} })
     const seen: Array<{ status: string; text: string }> = []
     source.subscribe(() => seen.push({ status: source.info().status, text: source.text() }))
     await settled(source)
+    const all = '0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n'
     const whileRunning = seen.filter((s) => s.status === 'running')
+    expect(chunks.length).toBeGreaterThanOrEqual(3)
     expect(whileRunning.length).toBeGreaterThanOrEqual(1)
-    expect(whileRunning.length).toBeLessThanOrEqual(2)
-    expect(whileRunning.at(-1)?.text).toBe('1\n2\n3\n4\n5\n')
-    expect(seen.at(-1)).toEqual({ status: 'exited', text: '1\n2\n3\n4\n5\n' })
+    expect(whileRunning.length).toBeLessThan(chunks.length)
+    expect(whileRunning.at(-1)?.text).toBe(all)
+    expect(seen.at(-1)).toEqual({ status: 'exited', text: all })
   })
 
   it('hands out the ttyText view of the raw bytes, cached between changes', async () => {
