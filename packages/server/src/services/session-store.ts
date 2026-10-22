@@ -4,7 +4,7 @@ import { DURABLE_HOST_KEYS } from '../lib/host-only-keys.ts'
 import { engineOf } from '../lib/profile-env.ts'
 
 export type ParkedSessionRecord = {
-  kind?: 'parked' | 'live'
+  kind: 'parked' | 'live'
   id: string
   info: SessionInfo
   profile?: string
@@ -87,7 +87,7 @@ export function parseStoredRecord(value: unknown): StoredSessionRecord | null {
   if (!record.info || !record.config) {
     return null
   }
-  if ((record as { kind?: string }).kind === 'archived') {
+  if (record.kind !== 'parked' && record.kind !== 'live' && record.kind !== 'dormant') {
     return null
   }
   record.info = withCurrentCapabilities(record.info)
@@ -108,8 +108,8 @@ export function parseStoredRecord(value: unknown): StoredSessionRecord | null {
   return parked as ParkedSessionRecord
 }
 
-// A record parked by an older gateway lacks capability keys added since; the engine's defaults fill them, so a
-// client never reads a SessionInfo missing a required key. Stored keys win: a sandboxed profile narrows them.
+// A record stored before a capability key was added lacks it; the engine's defaults fill it, so a client never reads a
+// SessionInfo missing a required key. Stored keys win: a sandboxed profile narrows them.
 function withCurrentCapabilities(info: SessionInfo): SessionInfo {
   if (!info.capabilities) {
     return info

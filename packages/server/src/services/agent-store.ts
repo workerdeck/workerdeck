@@ -5,7 +5,7 @@ import { readJsonOrSync, writeJsonAtomicSync } from '../lib/atomic-file.ts'
 // Store-only fields, stripped from every `AgentInfo`: `schema` marks the record layout (`AGENT_SCHEMA`), `pendingJoin` is a
 // remote join the lead may already have accepted, and `roster` versions the team this agent leads. The row's id is the
 // session's id.
-export type StoredAgent = Omit<AgentInfo, 'sessionId' | 'pastSessions' | 'conversations' | 'undelivered' | 'startFailed'> & {
+export type StoredAgent = Omit<AgentInfo, 'undelivered' | 'startFailed'> & {
   avatarSeed: string
   // Set on a retired agent's tombstone: kept for its conversation history, outside every active lookup.
   retiredAt?: number

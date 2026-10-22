@@ -17,6 +17,7 @@ afterEach(async () => {
 
 function record(id: string, config: Partial<SessionRunnerConfig> = {}): ParkedSessionRecord {
   return {
+    kind: 'parked',
     id,
     info: {
       id,
