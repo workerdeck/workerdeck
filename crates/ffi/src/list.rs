@@ -939,11 +939,13 @@ impl SessionList {
     ) -> bool {
         let Ok(answer) = serde_json::from_str::<SessionAnswer>(&body) else { return false };
         let info = answer.session;
+        // The counters are lifetime: a body from after a cut counts what the next conversation said, never on screen.
+        let cut_since = conversation.is_some() && info.conversation.is_some_and(|n| Some(n) != conversation.map(i64::from));
         let seen = Seen {
             item_count: item_count.map(f64::from),
             conversation: conversation.map(f64::from),
-            activity: info.activity_count.map(|n| n as f64),
-            prose: info.prose_count.map(|n| n as f64),
+            activity: info.activity_count.filter(|_| !cut_since).map(|n| n as f64),
+            prose: info.prose_count.filter(|_| !cut_since).map(|n| n as f64),
         };
         self.state().marks.mark(&host_id, &session_id, &seen, now_ms)
     }

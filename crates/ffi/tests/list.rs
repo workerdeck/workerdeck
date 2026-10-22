@@ -202,9 +202,22 @@ fn a_mark_after_a_cut_keeps_the_new_conversations_count() {
     assert!(list.mark("h1".into(), "s1".into(), Some(200), Some(1), Some(400), Some(100), 1_000.0));
     assert!(list.mark("h1".into(), "s1".into(), Some(5), Some(2), Some(410), Some(102), 2_000.0));
     let late = format!(r#"{{"session":{}}}"#, idle("s1", r#","conversation":2,"activityCount":411,"proseCount":103"#));
-    assert!(list.mark_session("h1".into(), "s1".into(), Some(200), Some(1), late, 3_000.0));
+    assert!(!list.mark_session("h1".into(), "s1".into(), Some(200), Some(1), late, 3_000.0));
     let mark = list.since("h1".into(), "s1".into()).unwrap();
     assert_eq!((mark.item_count, mark.conversation), (5, Some(2)));
+}
+
+#[test]
+fn leaving_after_an_unseen_cut_marks_none_of_the_next_conversations_prose() {
+    let list = SessionList::new(None, None);
+    let before = format!(r#"{{"sessions":[{}]}}"#, idle("s1", r#","conversation":1,"proseCount":10"#));
+    list.set_host("h1".into(), "mac".into(), true, before).unwrap();
+    assert!(list.mark("h1".into(), "s1".into(), Some(20), Some(1), Some(30), Some(10), 1_000.0));
+    let after = format!(r#"{{"session":{}}}"#, idle("s1", r#","conversation":2,"activityCount":50,"proseCount":14"#));
+    list.mark_session("h1".into(), "s1".into(), Some(22), Some(1), after, 2_000.0);
+    let mark: serde_json::Value = serde_json::from_str(&list.marks_json()).unwrap();
+    assert_eq!((mark["h1:s1"]["prose"].as_f64(), mark["h1:s1"]["activity"].as_f64()), (Some(10.0), Some(30.0)));
+    assert_eq!(list.since("h1".into(), "s1".into()).unwrap().item_count, 22);
 }
 
 #[test]
