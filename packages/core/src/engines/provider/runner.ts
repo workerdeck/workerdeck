@@ -127,8 +127,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
     this.#messages = [...state.messages]
     this.localCommands.restore(state.pendingLocalCommands ?? [])
     for (const call of state.pendingToolCalls) {
-      const legacy = (call as { deferred?: boolean }).deferred
-      this.#pendingToolCalls.set(call.toolCallId, legacy === undefined ? call : { ...call, parkable: call.parkable ?? legacy })
+      this.#pendingToolCalls.set(call.toolCallId, call)
     }
     this.#dispatched = new Set(state.dispatched)
     this.#numTurns = state.numTurns
