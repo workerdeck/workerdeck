@@ -1,7 +1,9 @@
 import type { SessionRunnerConfig } from '@workerdeck/core'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { AGENT_SLEEP_AFTER_MS_DEFAULT, type AgentInfo, type AgentResponse, type SessionInfo } from '@workerdeck/protocol'
@@ -38,6 +40,19 @@ const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47])
 
 const { servers, stateDir, cleanup } = gatewayFixture('wd-agents-')
 afterEach(cleanup)
+
+// A home of the file's own, so the default profile is the same with or without a ~/.claude on the host.
+const HOME = mkdtempSync(join(tmpdir(), 'wd-agents-home-'))
+const CLAUDE_CONFIG = join(HOME, '.claude')
+beforeAll(() => {
+  mkdirSync(CLAUDE_CONFIG)
+  vi.stubEnv('HOME', HOME)
+  vi.stubEnv('CLAUDE_CONFIG_DIR', undefined)
+})
+afterAll(() => {
+  vi.unstubAllEnvs()
+  rmSync(HOME, { recursive: true, force: true })
+})
 
 function fakeAvatars(): AvatarProvider & { rolls: number } {
   return {
@@ -88,6 +103,7 @@ async function startGateway(
     allowUnauthenticated: extra.authenticate === undefined,
     ...extra,
     allowedCwdRoots: ['/tmp'],
+    profiles: [{ name: 'default', configDir: CLAUDE_CONFIG }],
     ...(dir
       ? {
           sessions: { store: createFileSessionRecordStore({ dir: join(dir, 'sessions') }) },
