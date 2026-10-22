@@ -454,7 +454,12 @@ export function createFileSessionRecordStore(options: FileSessionRecordStoreOpti
     }
     const version = (parsed as { version?: unknown } | null)?.version
     if (version !== FORMAT_VERSION) {
-      throw new UnsupportedStateError(path, `has session format ${String(version)}, which this gateway cannot read`)
+      throw new UnsupportedStateError(
+        path,
+        version === undefined
+          ? 'is not a session record; the session record directory holds nothing else'
+          : `has session format ${String(version)}, which this gateway cannot read`,
+      )
     }
     const record = parseSessionRecord(parsed)
     // A current record that does not parse would vanish with its cut.

@@ -90,7 +90,7 @@ async function startGateway(
     allowedCwdRoots: ['/tmp'],
     ...(dir
       ? {
-          sessions: { store: createFileSessionRecordStore({ dir }) },
+          sessions: { store: createFileSessionRecordStore({ dir: join(dir, 'sessions') }) },
           parking: { parkDelayMs: 10 },
           agentStore: createFileAgentStore(join(dir, 'agents.json')),
         }
@@ -171,10 +171,10 @@ describe('agents', () => {
     const sessionId = body.session!.id
     first.harness.emit(initMessage)
     await vi.waitFor(() => expect(appended(first.harness)).toBe('You own the iOS client.'))
-    await vi.waitFor(async () => expect(await fileRuntimeStore(dir).get(sessionId)).not.toBeNull())
+    await vi.waitFor(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
     // The brief rides the pending identity only until the first start is durable.
     await vi.waitFor(async () => expect((await first.server.records.get(sessionId))?.identity).toBeUndefined())
-    const raw = await readFile(join(dir, `${encodeURIComponent(sessionId)}.json`), 'utf8')
+    const raw = await readFile(join(dir, 'sessions', `${encodeURIComponent(sessionId)}.json`), 'utf8')
     expect(raw).not.toContain('You own the iOS client.')
 
     await first.server.close()
@@ -198,7 +198,7 @@ describe('agents', () => {
     const first = await startGateway(dir)
     const { body } = await call<AgentResponse>(first.base, '/agents', 'POST', { name: 'Wren', config: { cwd: '/tmp/project' } })
     const sessionId = body.session!.id
-    await vi.waitFor(async () => expect(await fileRuntimeStore(dir).get(sessionId)).not.toBeNull())
+    await vi.waitFor(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
@@ -222,7 +222,7 @@ describe('agents', () => {
     const sessionId = body.session!.id
     first.harness.emit(initMessage)
     await vi.waitFor(() => expect(excludes(first.harness)).toContain('/tmp/AGENTS.md'))
-    await vi.waitFor(async () => expect(await fileRuntimeStore(dir).get(sessionId)).not.toBeNull())
+    await vi.waitFor(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
