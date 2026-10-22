@@ -308,8 +308,9 @@ boundary: anything a client needs must be expressible as protocol events and com
 - `failed` - the underlying query errored; terminal
 - `closed` - closed by a client or the host; terminal
 
-1. `POST /v1/sessions` → registry creates a `SessionRunner`; the runner starts `query()` with a
-   streaming-input iterable and re-pins `cwd` every call (the SDK treats it as per-query).
+1. `POST /v1/sessions` → the gateway opens the session's record (below), then the registry creates
+   a `SessionRunner`; the runner starts `query()` with a streaming-input iterable and re-pins `cwd`
+   every call (the SDK treats it as per-query).
 2. Every SDKMessage is normalized into a protocol event, stamped with a monotonic `seq`, logged,
    and fanned out to attached WebSockets. Unmodeled SDK messages pass through as `sdk_event` -
    the rule is to promote what UIs need to first-class events rather than parse payloads
@@ -340,6 +341,39 @@ boundary: anything a client needs must be expressible as protocol events and com
    `starting` → `running` as usual. Unlike parking (runner evicted, snapshot persisted, woken by a
    result) and dormancy (runner gone after a restart, woken by an attach into a fresh log), the log
    and its seqs continue unbroken. Invariants in `docs/GOTCHAS.md` §Engine sleep.
+
+### The record and its conversations
+
+A gateway session's id is stable for its whole life, and every session has one durable
+`SessionRecord` (`services/session-records.ts`) from create on, written and read back before the
+runner registers:
+
+- `owner` and `scope`, on every session;
+- `requested`, what the next conversation starts from (Edit settings, `PATCH /sessions/:id
+  { config }`, writes here), and `running`, what the current one runs with;
+- `conversation`, the current conversation number n, from 1, never reused;
+- `runtime`, the parking or dormancy record (`SessionParkManager` writes it through an adapter);
+- `conversations[]`, one history entry per ended conversation: engine, profile, engine home, cwd,
+  engine conversation id (or a provider snapshot), title, cost, times, and the `auth` (owner,
+  scope) frozen at its end;
+- `cut`, `pendingPrompt` and `startFailed` while a conversation is being started.
+
+**The conversation cut** ends n and starts n+1 under the same id: "New conversation" (`POST
+/sessions/:id/conversations`), a typed `/clear` or WS `clear_context`, the agent's `context_reset`.
+The old engine conversation stays in the engine's own store, untouched, so `claude --resume` and the
+CLI's stats still see it; n+1 is a fresh engine session. Past conversations are read back from that
+store, read-only (`GET /sessions/:id/conversations/:n`, WS `?conversation=n`), authorized by their
+frozen `auth`. `generation` is n: every mutating call names it (`x-workerdeck-generation`, WS
+`generation`, `expectedGeneration`) and a stale one is a 409, so nothing aimed at n lands on n+1. The
+old socket gets `conversation_started` and close 4011; a reconnect to the same id attaches n+1. `epoch`
+is the replay log's generation, not n: a dormant wake bumps it too. A client addresses a
+conversation as `SessionAddress = { id, conversation? }` (absent = current).
+
+Closing an unnamed session (`DELETE`) appends the current conversation to the history and sets
+`closedAt`: the record stays, its history readable, listed under `GET /sessions?closed=1`. A job run
+is an unnamed session that never cuts. Invariants in `docs/GOTCHAS.md` § Conversation cut; named
+sessions in § Agents and teams below. Which storage format this record is, and what happens to state
+from before 4.0.0, is § Version numbers.
 
 ## Embedding: sandboxed sessions and session scope
 
@@ -547,16 +581,16 @@ the sender's gateway and only a remote session's id and title travel into the en
 ## Agents and teams
 
 An **agent** is a named session: the session's record plus an identity row (`AgentInfo`: name,
-avatar, a standing brief, team) in the agent index under the **same id**. Each conversation of the
-session is one history entry; the id survives them all. "New conversation" (`POST
-/sessions/:id/conversations`, `POST /agents/:id/restart`, a typed `/clear`, the agent's own
-`context_reset`) is the conversation cut, for named and unnamed sessions alike; past conversations
-are served from the engine's own store (the gateway keeps no transcript copy). `POST /agents` and
-`POST /sessions { agent }` create a named session through the ordinary create ladder; `PATCH
-/sessions/:id { agent }` names or un-names one. **Deleting** an agent (`DELETE`) writes a
-**tombstone**, then closes its record (the current conversation joins the history), releasing its
-members (or retiring them, `members: 'retire'`), so its history stays reachable under Past agents
-(`GET /agents?retired=1`). Invariants: `docs/GOTCHAS.md` §Agent conversations.
+avatar, a standing brief, sharing, team) in the agent index (`agents.json`) under the **same id**.
+The record owns everything about conversations, so naming changes none of it: an agent cuts, wakes
+and sleeps like any session, and `SessionInfo.agent` (`AgentRef`) is decoration. An unnamed session
+is a plain card with no avatar. `POST /agents` and `POST /sessions { agent }` create a named session
+through the ordinary create ladder; `PATCH /sessions/:id { agent }` names one, `{ agent: null }`
+un-names it (refused in a team), and the id never changes either way. **Deleting** an agent
+(`DELETE`) writes a **tombstone**, then closes its record (the current conversation joins the
+history), releasing its members (or retiring them, `members: 'retire'`), so its history stays
+reachable under Past agents (`GET /agents?retired=1`). Invariants: `docs/GOTCHAS.md` § Named
+sessions.
 
 A **team** is a lead and the agents whose `lead` names it, one level deep. Teams gate peer
 messaging: a member reaches only its lead and teammates, and nobody outside a team reaches its

@@ -575,8 +575,9 @@ removed is sent as `null`, which the gateway clears to its default), so the file
 never touched and a remote gateway works the same. `jsonValidation` binds
 `media/agent-settings.schema.json` to `*.agent.json` for completion and hovers; unknown keys and a
 `brief` key are refused on save with the reason. After a save, an idle agent is offered *New
-conversation now*, since the config applies at the next build. Drag to join posts `wd-team-move` (session ids;
-the host maps them to agents, adopts a plain session, then patches `order` for it and its siblings).
+conversation now*, since the config (the record's `requested`) applies at the next conversation. Drag to join posts
+`wd-team-move` (session ids; `runTeamMove` names a plain session by PATCH, so its agent id is its session id, then
+patches `order` for it and its siblings).
 Drag and Add to team share `#moveIntoTeam`: a join between two owners asks in a modal first, and
 the `TeamMoveOutcome` (`packages/client`) comes back as one message, with a Withdraw invitation
 button while an invitation stays open. The QuickPick title carries the owner; a top-level agent
@@ -594,8 +595,8 @@ became one always-visible `⋯` in the card's `actions` slot (`CardMenu`, which 
 `wd-session-menu`) opening a **QuickPick**, decided host-side off the polled model - a
 popover anchored in a 280px view would be clipped by the view's own bounds, and a card that went
 stale between the poll and the press must not offer Stop for a finished session. That QuickPick
-is also where **New conversation** lives, on every live card, named or not: Clear context and New conversation
-are one cut, so a card offers it once (`clearContextOffered` shows it, `newConversationGate` enables it). It goes
+is also where **New conversation** lives, on every live card, named or not, and there is no separate Clear
+context: both are the same cut (`clearContextOffered` shows it, `newConversationGate` enables it). It goes
 over REST through `startNewConversation` (`@workerdeck/ui/format`), so a refusal over unread input becomes a modal
 that states the count, warns when peer messages may be in it, and on confirm calls `discardAndCut`; input that
 arrives meanwhile asks again. Second, **rename is a double-click on the title** -
@@ -632,8 +633,9 @@ extension only connects to takes its defaults from its own config.
 
 `workerdeck.host.agentContextReset` (`off`, the default, `on` or `never`) reaches the child as
 `--agent-context-reset <value>` when it is not `off`, and is a restart-offer key. An agent-requested
-reset draws as one info notice (`The agent cleared its context: <reason>`) in the emptied
-transcript. The react reducer and the Rust core both seed it from `conversation_reset.agentReason`.
+reset is a cut: the tab stays on the same session id and shows conversation n+1, which starts with
+the agent's prompt; the reason is not drawn. The `The agent cleared its context: <reason>` notice the
+react reducer seeds from `conversation_reset.agentReason` appears only for a standalone runner.
 
 ### Dev harness & CSP
 
@@ -775,13 +777,13 @@ close is asynchronous, so its `close` event lands after `dispose()` returns and 
 be posted into the new document. Per-view listeners still belong in `wire`, which must not be
 re-run on reload or they double-register.
 
-- **Agent conversations.** A session keeps its id across conversations, so nothing follows anything: surfaces
+- **Conversations.** A session keeps its id across conversations, so a surface never moves: surfaces
   are keyed by address (`SessionRef.conversation`, persisted in `SurfaceState`; absent = the current one).
   A past conversation always opens read-only in its own editor tab (the panel shows current conversations only),
   titled `<name> · conversation n`; `wd-go-to-current` from its banner opens the current one where a click would.
   Conversations is a QuickPick from every card's menu (`client.conversations(id)` through `conversationList`,
   named or not); `workerdeck.pastAgents` lists retired
-  agents into the same pick. Delete agent... replaces Retire; the card menu fetches the session's conversations
+  agents into the same pick. Delete agent... retires a named session (tombstone, then close); the card menu fetches the session's conversations
   when it opens (`conversationRecovery`), for Retry start (`retryConversationStart`) and Send again / Dismiss
   (`settlePendingPrompt`) on any session.
 
@@ -846,9 +848,11 @@ unreachable. Storage is `node:sqlite`, one file,
 zero deps. **`.embedded/` is data, not build output, and nothing automated may delete it**:
 `pnpm clean` removes `dist` only, and wiping the wiki is the separate, explicit `pnpm reset`.
 That is not a tidiness rule - the two were once the same script, and it cost someone their
-documents. Under `parking.persistLive` the parked records in `.embedded/sessions` hold each
-session's whole transcript in plaintext, so they want the same protection as the database
-beside them. `EMBEDDED_MODEL` (default `gpt-5.6-luna`) is env, not a constant; there is **one**
+documents. The session records in `.embedded/sessions` hold each session's whole transcript in
+plaintext (the live runtime under `parking.persistLive`, and a provider snapshot in every past
+conversation's history entry), so they want the same protection as the database beside them. Each
+history entry also freezes the session's `scope`, so a past conversation stays readable by its user
+alone even if the record's scope changed later. `EMBEDDED_MODEL` (default `gpt-5.6-luna`) is env, not a constant; there is **one**
 provider and one key, deliberately - the openai-compatible branch was removed because every
 branch in a reference app is a branch a reader must hold that teaches nothing about embedding.
 The one thing still deferred upstream is an express-free
@@ -1577,7 +1581,8 @@ Three layers, each replaceable without touching the others:
   carry their own delay), so a script only adds pauses for pacing the story. **`turn_result.totalCostUsd` is cumulative**, as on the wire; a per-turn value
   makes the card's cost go backwards. Client commands (a typed message, an approval, a model
   switch) reach `onCommand` listeners newest-first, so a journey waiting on one pre-empts the
-  controller's default replies.
+  controller's default replies. Its `attached` hello names no `conversation`, so the client sends
+  every command untokened: only a scripted gateway accepts that, and the stage models no cut.
 - **`src/tour/`** is the runtime. A `Journey` is a scene (seeds + selection) and an async
   `run(director)`. `explain`, `hint` (the periwinkle prompt drawn over the composer; clicking it
   sends the prompt as a user message) and `until` (wait for a real client command, e.g. the
