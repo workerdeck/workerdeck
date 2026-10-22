@@ -558,7 +558,7 @@ class SessionModelTest {
     @Test
     fun aReadMarkFromTheLastVisitDrawsTheSeamAndTheCatchUpBarUntilDismissed() {
         val transport = FakeTransport()
-        val mark = ReadMark(1u, System.currentTimeMillis() - 42 * 60_000.0)
+        val mark = ReadMark(1u, null, System.currentTimeMillis() - 42 * 60_000.0)
         val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0), recap = mark)
         eventually("a socket") { transport.sockets.isNotEmpty() }
         val (socket, listener) = transport.open()

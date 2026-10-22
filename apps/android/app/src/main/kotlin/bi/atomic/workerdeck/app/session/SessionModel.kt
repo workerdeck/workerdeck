@@ -182,7 +182,7 @@ class SessionModel(
     init {
         worker.act { session ->
             session.setWallClock(System.currentTimeMillis().toDouble()) + session.setNavigation(true, true) +
-                recap?.let { session.setRecap(it.itemCount, it.seenAt) }.orEmpty() + session.takeEffects()
+                recap?.let { session.setRecap(it.itemCount, it.conversation, it.seenAt) }.orEmpty() + session.takeEffects()
         }
         scope.launch {
             val answer = client.answer(getSessionCall(sessionId))
@@ -204,7 +204,7 @@ class SessionModel(
 
     fun clearRecap() = worker.act {
         state.value = state.value.copy(catchUp = null)
-        it.setRecap(null, null)
+        it.setRecap(null, null, null)
     }
 
     // A long-press asks the core what this row offers; a row with nothing to offer opens no menu.

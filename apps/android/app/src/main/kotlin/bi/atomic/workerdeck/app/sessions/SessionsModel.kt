@@ -276,14 +276,14 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
 
     // Only while the session is really on screen: a mark from anywhere else is how an unread badge stops working.
     fun mark(hostId: String, sessionId: String, seen: SeenCounts) =
-        saveMarks(list.mark(hostId, sessionId, seen.itemCount, seen.activity, seen.prose, seen.turns, now()))
+        saveMarks(list.mark(hostId, sessionId, seen.itemCount, seen.conversation, seen.activity, seen.prose, now()))
 
     // The in-view marks ran off the attach snapshot's counters, so leaving trues the mark up once from a fresh read.
-    fun finalizeSeen(hostId: String, sessionId: String, itemCount: UInt) {
+    fun finalizeSeen(hostId: String, sessionId: String, seen: SeenCounts) {
         val client = clients[hostId] ?: return
         viewModelScope.launch {
             val answer = runCatching { client.answer(getSessionCall(sessionId)) }.getOrNull() ?: return@launch
-            if (answer.status.toInt() == 200) saveMarks(list.markSession(hostId, sessionId, itemCount, answer.body, now()))
+            if (answer.status.toInt() == 200) saveMarks(list.markSession(hostId, sessionId, seen.itemCount, seen.conversation, answer.body, now()))
         }
     }
 

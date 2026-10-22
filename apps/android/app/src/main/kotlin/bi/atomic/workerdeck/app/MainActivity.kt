@@ -143,7 +143,7 @@ private fun App(store: GatewayStore) {
             entryOf(target.drop(4)),
             recap = if (conversation == null) sessions.recap(target[0], target[1]) else null,
             onSeen = { if (conversation == null) sessions.mark(target[0], target[1], it) },
-            onLeave = { seen -> if (conversation == null) seen?.let { sessions.finalizeSeen(target[0], target[1], it.itemCount) } },
+            onLeave = { seen -> if (conversation == null) seen?.let { sessions.finalizeSeen(target[0], target[1], it) } },
             conversation = conversation,
             onGoToCurrent = { open = listOf(target[0], target[1], target[2], CURRENT) },
             onAgentDeleted = { sessions.pastAgentsChanged(target[0]) },
