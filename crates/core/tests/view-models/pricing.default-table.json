@@ -119,6 +119,13 @@
         "cacheWrite1h": 2,
         "cacheRead": 0.1
       },
+      "gpt-6.1-sol": {
+        "input": 2,
+        "output": 10,
+        "cacheWrite5m": 2,
+        "cacheWrite1h": 2,
+        "cacheRead": 0.1
+      },
       "gpt-6-astra": {
         "input": 10,
         "output": 50,
