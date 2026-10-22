@@ -54,7 +54,7 @@ final class CoreSessionModel {
     ) { [weak self] ui in
       DispatchQueue.main.async { MainActor.assumeIsolated { self?.ui = ui } }
     }
-    if let recap { driver.setRecap(boundary: recap.itemCount, since: recap.seenAt) }
+    if let recap { driver.setRecap(recap) }
     if !bookmarkIds.isEmpty { driver.setBookmarks(bookmarkIds) }
     self.driver = driver
     entry = nil
@@ -62,7 +62,7 @@ final class CoreSessionModel {
 
   func setRecap(_ mark: CatchUpMark) {
     recap = mark
-    driver?.setRecap(boundary: mark.itemCount, since: mark.seenAt)
+    driver?.setRecap(mark)
   }
 
   func clearRecap() {

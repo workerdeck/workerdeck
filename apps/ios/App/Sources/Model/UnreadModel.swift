@@ -22,20 +22,22 @@ final class UnreadModel {
 
   // Callers own the "genuinely on screen" test: that is a fact about the UI, not about storage.
   @discardableResult
-  func mark(host: UUID, sessionId: String, itemCount: Int?, activity: Int?, prose: Int?, turns: Int?) -> Bool {
+  func mark(host: UUID, sessionId: String, itemCount: Int?, conversation: Int?, activity: Int?, prose: Int?) -> Bool {
     let moved = list.mark(
       hostId: host.uuidString, sessionId: sessionId, itemCount: itemCount.map(UInt32.init),
-      activity: activity.map(UInt32.init), prose: prose.map(UInt32.init), turns: turns.map(UInt32.init),
+      conversation: conversation.map(UInt32.init), activity: activity.map(UInt32.init), prose: prose.map(UInt32.init),
       nowMs: Date().timeIntervalSince1970 * 1000)
     if moved { changed() }
     return moved
   }
 
-  // The true-up on leaving: a fresh `GET /v1/sessions/:id` body, read by the core.
+  // The true-up on leaving: a fresh `GET /v1/sessions/:id` body, read by the core. `conversation` is the one the screen
+  // rendered `itemCount` in, never the body's: after a cut the body already names the next one.
   @discardableResult
-  func markSession(host: UUID, sessionId: String, itemCount: Int?, body: String) -> Bool {
+  func markSession(host: UUID, sessionId: String, itemCount: Int?, conversation: Int?, body: String) -> Bool {
     let moved = list.markSession(
-      hostId: host.uuidString, sessionId: sessionId, itemCount: itemCount.map(UInt32.init), body: body,
+      hostId: host.uuidString, sessionId: sessionId, itemCount: itemCount.map(UInt32.init),
+      conversation: conversation.map(UInt32.init), body: body,
       nowMs: Date().timeIntervalSince1970 * 1000)
     if moved { changed() }
     return moved
@@ -45,7 +47,7 @@ final class UnreadModel {
   // a reader would walk the recap row down the transcript while they read it.
   func since(host: UUID, sessionId: String) -> CatchUpMark? {
     list.since(hostId: host.uuidString, sessionId: sessionId).map {
-      CatchUpMark(itemCount: Int($0.itemCount), seenAt: $0.seenAt)
+      CatchUpMark(itemCount: Int($0.itemCount), conversation: $0.conversation.map(Int.init), seenAt: $0.seenAt)
     }
   }
 
@@ -63,8 +65,9 @@ final class UnreadModel {
   }
 }
 
-// What a session screen was handed at mount: how much of the transcript had been read, and when (epoch ms).
+// What a session screen was handed at mount: how much of which conversation had been read, and when (epoch ms).
 struct CatchUpMark: Equatable {
   var itemCount: Int
+  var conversation: Int? = nil
   var seenAt: Double
 }

@@ -161,8 +161,8 @@ struct CoreSessionView: View {
   private func mark(_ seen: SeenCounts) {
     guard client != nil, model.history == nil else { return }
     unread.mark(
-      host: hostId, sessionId: sessionId, itemCount: Int(seen.itemCount), activity: seen.activity.map(Int.init),
-      prose: seen.prose.map(Int.init), turns: seen.turns.map(Int.init))
+      host: hostId, sessionId: sessionId, itemCount: Int(seen.itemCount), conversation: seen.conversation.map(Int.init),
+      activity: seen.activity.map(Int.init), prose: seen.prose.map(Int.init))
   }
 
   // The in-view marks ran off the attach snapshot's counters, so anything the rollup counted since would read as
@@ -172,7 +172,9 @@ struct CoreSessionView: View {
     Task { @MainActor [unread, hostId, sessionId] in
       let answer = await client.answer(getSessionCall(id: sessionId))
       guard answer.status == 200 else { return }
-      unread.markSession(host: hostId, sessionId: sessionId, itemCount: Int(seen.itemCount), body: answer.body)
+      unread.markSession(
+        host: hostId, sessionId: sessionId, itemCount: Int(seen.itemCount), conversation: seen.conversation.map(Int.init),
+        body: answer.body)
     }
   }
 

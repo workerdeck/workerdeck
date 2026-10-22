@@ -49,7 +49,7 @@ private final class PreviewList {
     var fed = sessions
     for index in fed.indices {
       guard let id = fed[index]["id"] as? String, let count = unseen[id] else { continue }
-      _ = list.mark(hostId: hostId, sessionId: id, itemCount: nil, activity: 0, prose: 0, turns: 0, nowMs: 0)
+      _ = list.mark(hostId: hostId, sessionId: id, itemCount: nil, conversation: nil, activity: 0, prose: 0, nowMs: 0)
       fed[index]["proseCount"] = count
     }
     _ = try? list.setHost(hostId: hostId, hostName: "mini", local: true, body: ListFixture.body(fed))

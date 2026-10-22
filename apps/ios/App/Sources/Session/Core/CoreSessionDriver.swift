@@ -182,15 +182,20 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   func dismiss(_ requestId: String) { worker.act { $0.dismissQuestion(requestId: requestId) } }
 
-  func setRecap(boundary: Int, since: Double) {
-    worker.act { session in session.setRecap(boundary: UInt32(max(0, boundary)), sinceMs: since) }
+  // The core compares the mark's conversation with the attached one and recaps from the top on a mismatch.
+  func setRecap(_ mark: CatchUpMark) {
+    worker.act { session in
+      session.setRecap(
+        boundary: UInt32(max(0, mark.itemCount)), conversation: mark.conversation.map { UInt32(max(0, $0)) },
+        sinceMs: mark.seenAt)
+    }
   }
 
   func clearRecap() {
     worker.act { [self] session in
       ui.extras.catchUp = nil
       publish(ui)
-      return session.setRecap(boundary: nil, sinceMs: nil)
+      return session.setRecap(boundary: nil, conversation: nil, sinceMs: nil)
     }
   }
 
