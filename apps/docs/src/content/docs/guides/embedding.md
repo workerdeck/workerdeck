@@ -96,11 +96,12 @@ const archived = client.attach(id, { conversation: n })      // a read-only sock
 | `conversations(id)` / `conversationHistory(id, n)` | The list of past conversations / one of them, read from the engine's own store. |
 | `eraseConversation(id, n)` | Operator only: forget the gateway's copy of a past conversation. |
 | `retryConversationStart(id, generation)` / `settlePendingPrompt(id, send, generation)` | Recover a conversation that did not start, or a first message whose delivery is uncertain. |
-| `restartAgent(id, generation, prompt?)`, `retryAgentStart(id, generation)`, `settleUndelivered(id, send, generation)`, `retireAgent(id, { expectedGeneration, members? })` | The agent routes; each now takes the conversation it is meant for. |
+| `retireAgent(id, { expectedGeneration, members? })` | Retire an agent; it takes the conversation it is meant for. An agent's conversations use the session calls above. |
 | `conversationOf(id)` / `noteConversation(id, n)` | Read or set the token the client sends for a session. |
 
 `SessionHandle.clearContext()` sends the same cut over the socket, queued behind a running turn.
-`createAgent` no longer accepts `adopt`: name an existing session with `nameSession` instead.
+`createAgent` refuses any field outside `CreateAgentRequest` (400), `adopt` included: name an existing session with
+`nameSession` instead.
 
 ## The UI options ladder
 

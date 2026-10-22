@@ -1467,7 +1467,7 @@ has the shape; these are the ways to get it wrong.
 
 A session id is stable for its whole life. A cut ends conversation n and starts n+1 under the same
 id, for every session, named or not. Doors: `POST /sessions/:id/conversations` (and `/discard`),
-`POST /agents/:id/restart`, a typed exact `/clear` and WS `clear_context` (both queued until idle),
+a typed exact `/clear` and WS `clear_context` (both queued until idle),
 and the agent's `context_reset`. The shape is in `docs/ARCHITECTURE.md` § Session lifecycle, the
 code map in `docs/PACKAGES.md` server.
 
@@ -1485,9 +1485,8 @@ code map in `docs/PACKAGES.md` server.
   never defaulted:
   - ordinary session mutations (`/sessions/:id/*`, `DELETE /sessions/:id` included) carry the
     `x-workerdeck-generation` header (`GENERATION_HEADER`); missing or stale is 409;
-  - the conversation POSTs (new, `/discard`, `/retry`, `/pending`) and the `/agents/:id` `restart`,
-    `retry-start` and `undelivered` routes take `expectedGeneration` in the body; missing is 400,
-    stale is 409;
+  - the conversation POSTs (new, `/discard`, `/retry`, `/pending`) and `DELETE /agents/:id` take
+    `expectedGeneration` in the body; missing is 400, stale is 409;
   - `DELETE /sessions/:id/conversations/:n` needs neither, since n is in the path.
 
   Every WS command except `shell_attach` / `shell_detach` carries `generation`. A route decides auth and the generation
@@ -1619,7 +1618,8 @@ session, named or not, cuts the same way (§ Conversation cut).
 - **Naming is a PATCH.** `PATCH /sessions/:id { agent }` names an unnamed session (operator only,
   owner resolved as for a create) or updates a named one; `{ agent: null }` un-names it and is
   refused while it leads, belongs to, or is joining a team. Un-naming touches only the index.
-  There is no adopt (`POST /agents { adopt }` answers 400): `runTeamMove` names an unnamed mover
+  There is no adopt: `POST /agents` refuses every field outside `CreateAgentRequest` with 400
+  (`unsupported field: adopt`), never creating a different session. `runTeamMove` names an unnamed mover
   with PATCH, and the member's id is the session's own.
 - **Retire: hold, tombstone, then close.** `DELETE /agents/:id { expectedGeneration }` and `DELETE
   /sessions/:id` on a named session take the lifecycle locks of the agent and every member (sorted,
@@ -1630,9 +1630,10 @@ session, named or not, cuts the same way (§ Conversation cut).
   list, no peer reach) while the others finish, the DELETE answers 500, and a second `DELETE
   /agents/:id` on the tombstone or the startup pass finishes it. The DELETE route takes these
   locks itself instead of the per-route one, because the locks are not reentrant.
-- **The `/agents` lifecycle doors name their conversation.** `restart`, `retry-start`,
-  `undelivered` and `DELETE` require `expectedGeneration` (400 without) and re-check it with the
-  caller's sight of the session inside the lock, as the `/sessions/:id/conversations` routes do.
+- **`DELETE /agents/:id` names its conversation.** It requires `expectedGeneration` (400 without)
+  and re-checks it with the caller's sight of the session inside the lock, as the
+  `/sessions/:id/conversations` routes do. New conversation, Retry start and Send again or Dismiss
+  live only on `/sessions/:id/conversations`.
 - **Startup reconciliation** (`reconcileIdentity`, before `cuts.recover`): a tombstone whose record
   is still open finishes its close; an index row with no record is dropped with a diagnostic. The
   drop runs only with a durable `sessions.store`: on the memory default every row would look orphaned.

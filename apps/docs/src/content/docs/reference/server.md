@@ -95,8 +95,8 @@ is a 409 too):
   the `x-workerdeck-generation` header (`GENERATION_HEADER`) set to the session's current
   `conversation`. Missing or stale: 409.
 - **The conversation POSTs** (`/v1/sessions/:id/conversations`, `…/discard`, `…/retry`, `…/pending`)
-  require `expectedGeneration` in the body instead (missing: 400, stale: 409), and so do the agent
-  routes `/v1/agents/:id/restart`, `retry-start`, `undelivered` and `DELETE /v1/agents/:id`.
+  require `expectedGeneration` in the body instead (missing: 400, stale: 409), and so does
+  `DELETE /v1/agents/:id`.
 - **`DELETE /v1/sessions/:id/conversations/:n`** names its conversation by the path `n` and needs
   neither.
 
@@ -130,9 +130,8 @@ and pending methods explicitly. See [Protocol](/workerdeck/docs/reference/protoc
 | `POST /v1/sessions/:id/sleep` | Stop the session's engine process now, keeping the session (`{ session }`, with `engineAsleep: true`). The next message wakes it. 409 with the reason when the session is not idle, has a pending approval or a running subagent or background task, or has no conversation yet; 501 for an engine without a process (`EngineCapabilities.engineSleep: false`); 200 no-op for a session that is not live. The WS `sleep` command does the same. |
 | `POST /v1/sessions/:id/tasks/:toolUseId/stop` | Stop a running background task (a sub-agent record with `stoppable: true`). 404 = nothing stoppable under that id, 409 = session parked, 501 = the engine cannot stop tasks. |
 | `POST /v1/sessions/:id/tasks/:toolUseId/background` | Move a running foreground Bash call or sub-agent to the background (Claude's Ctrl+B): the call returns at once, the turn continues, the task reports when it settles. Without `:toolUseId` (`/tasks/background`) every foreground task moves. 404 = nothing matched, 501 = the engine cannot (only claude can; `capabilities.backgroundTasks`). |
-| `GET /v1/agents` / `POST /v1/agents` | List the named sessions (`AgentsResponse`) / create one (`CreateAgentRequest`: `name`, `config`, `prompt`, `lead`, `owner`, `sharing`). `?retired=1` lists retired agents with their conversations. Operator only. |
+| `GET /v1/agents` / `POST /v1/agents` | List the named sessions (`AgentsResponse`) / create one (`CreateAgentRequest`: `name`, `config`, `prompt`, `lead`, `owner`, `sharing`, `crossOwner`; any other field is refused with 400). `?retired=1` lists retired agents with their conversations. Operator only. |
 | `GET /v1/agents/:id` / `PATCH /v1/agents/:id` / `DELETE /v1/agents/:id` | One agent / update it (`UpdateAgentRequest`; `config` keys merge, `null` clears one) / retire it (`RetireAgentRequest`: `expectedGeneration`, `members: 'release' \| 'retire'`). A retired agent's conversations stay readable. |
-| `POST /v1/agents/:id/restart` / `retry-start` / `undelivered` | New conversation, Retry start, and Send again or Dismiss, each with `expectedGeneration` in the body; the same operations as the session conversation routes. `GET /v1/agents/:id/conversations` lists its conversations. |
 | `GET /v1/profiles` | List profiles (`ListProfilesResponse`), filtered to the caller's `allowedProfiles`. Store-backed ones carry `managed: true`; `canManage` says whether this caller may create more. |
 | `POST /v1/profiles` | Create a managed profile (`CreateProfileRequest`). 404 without a `profileStore`, 403 without `canManageProfiles` on the principal, 409 if the name is taken, 400 if the profile is one startup would have refused. |
 | `PATCH /v1/profiles/:name` | Merge into a managed profile (`UpdateProfileRequest`). The name is the route - profiles cannot be renamed, since sessions and jobs are pinned to it. 403 for a startup-declared profile. |

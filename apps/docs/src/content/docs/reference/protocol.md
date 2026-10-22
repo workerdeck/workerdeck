@@ -186,8 +186,8 @@ rather than landing on the next conversation (409 `the session moved on to conve
   the `x-workerdeck-generation` header (`GENERATION_HEADER`) set to the session's current
   `conversation`. Missing or stale: 409.
 - **The conversation POSTs** (`/sessions/:id/conversations`, `…/discard`, `…/retry`, `…/pending`)
-  require `expectedGeneration` in the body instead (missing: 400, stale: 409), and so do the agent
-  routes `/agents/:id/restart`, `retry-start`, `undelivered` and `DELETE /agents/:id`.
+  require `expectedGeneration` in the body instead (missing: 400, stale: 409), and so does
+  `DELETE /agents/:id`.
 - **`DELETE /sessions/:id/conversations/:n`** names its conversation by the path `n` and needs
   neither.
 - **WebSocket:** `generation` on every command (above).
