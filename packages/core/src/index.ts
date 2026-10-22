@@ -17,6 +17,7 @@ export type {
   SessionEventListener,
   SleepResult,
   ClearContextOptions,
+  CounterBase,
   InputSnapshot,
 } from './runner-interface.ts'
 export { CostLedger, type CostFigures, type CostLedgerState } from './lib/cost-ledger.ts'

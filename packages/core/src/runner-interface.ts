@@ -56,7 +56,12 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   effortDefaults?: Record<string, string>
   // The status label a woken session last showed; the event log takes over once it sees a set or a reset.
   statusLabel?: StatusLabel
+  // Host-only: the session's lifetime counts when this conversation began, added to the log's own so
+  // `activityCount` and `proseCount` never fall back across a cut.
+  counterBase?: CounterBase
 }
+
+export type CounterBase = { activity: number; prose: number }
 
 export type ParkedExecution = {
   executionId: string

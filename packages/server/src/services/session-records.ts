@@ -1,6 +1,6 @@
 import { readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
+import type { CounterBase, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import type { PendingPromptInfo, ProfileEngine } from '@workerdeck/protocol'
 import { isMissing, writeFileAtomic } from '../lib/atomic-file.ts'
 import type { StoredAgent } from './agent-store.ts'
@@ -41,6 +41,7 @@ export type SessionCut = {
   epoch: number
   target: SessionRunnerConfig
   agentReason?: string
+  counters?: CounterBase
 }
 
 export type PendingPrompt = PendingPromptInfo
@@ -63,6 +64,9 @@ export type SessionRecord = {
   pendingPrompt?: PendingPrompt
   startFailed?: StartFailure
   identity?: PendingIdentity
+  // The lifetime counts when the current conversation began. Kept here, not in a runtime, so no park, sleep, wake or
+  // restart drops it: every runtime read hands it to the config a runner is rebuilt from.
+  counters?: CounterBase
   closedAt?: number
   createdAt: number
 }
@@ -283,8 +287,8 @@ export class SessionRecords {
   runtimeStore(): SessionStore {
     return {
       save: (record) => this.saveRuntime(record, conversationOf(record)),
-      get: async (id) => (await this.get(id))?.runtime ?? null,
-      list: async () => (await this.list()).flatMap((record) => (record.runtime ? [record.runtime] : [])),
+      get: async (id) => runtimeOf(await this.get(id)),
+      list: async () => (await this.list()).flatMap((record) => runtimeOf(record) ?? []),
       delete: (id, conversation, reason) => this.clearRuntime(id, conversation, reason),
     }
   }
@@ -402,10 +406,19 @@ export function disposable(record: SessionRecord): boolean {
   )
 }
 
+function runtimeOf(record: SessionRecord | null): StoredSessionRecord | null {
+  const runtime = record?.runtime
+  if (!runtime || !record.counters) {
+    return runtime ?? null
+  }
+  return { ...runtime, config: { ...runtime.config, counterBase: record.counters } }
+}
+
 function durableView(record: SessionRecord): string {
-  const { conversation, cut, pendingPrompt, startFailed, closedAt, conversations, owner, scope } = toDurableSessionRecord(record)
+  const { conversation, cut, pendingPrompt, startFailed, closedAt, conversations, owner, scope, counters } = toDurableSessionRecord(record)
   return JSON.stringify({
     conversation,
+    counters,
     cut,
     pendingPrompt,
     startFailed,

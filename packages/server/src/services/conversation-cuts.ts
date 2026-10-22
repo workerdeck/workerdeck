@@ -1,4 +1,4 @@
-import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
+import type { CounterBase, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import {
   ENGINE_CAPABILITIES,
   INPUT_CHANGED_CODE,
@@ -313,6 +313,7 @@ export class ConversationCuts {
         epoch: (info.epoch ?? 0) + 1,
         target,
         ...(request.agentReason ? { agentReason: request.agentReason } : {}),
+        counters: lifetimeCounters(record?.counters, info),
       }
       await ctx.records.transactDurable(id, (current) => ({ ...(current ?? freshRecord(id)), cut }))
       // A hot reload carried the runner away while the intent was being written: it is the next generation's now.
@@ -467,6 +468,7 @@ export class ConversationCuts {
       ...(request.target?.scope ? { scope: cut.target.scope } : {}),
       runtime: this.#freshRuntime(current.id, cut, info),
       cut: { ...cut, phase: 'committed' },
+      ...(cut.counters ? { counters: cut.counters } : {}),
       ...(request.prompt ? { pendingPrompt: { text: request.prompt, n: next, state: 'pending' as const } } : {}),
     }
   }
@@ -494,12 +496,13 @@ export class ConversationCuts {
         epoch: cut.epoch,
         conversation: cut.to,
         pendingPermissionCount: 0,
+        ...(cut.counters ? { activityCount: cut.counters.activity, proseCount: cut.counters.prose } : {}),
         ...(info.owner ? { owner: info.owner } : {}),
         ...(target.scope ? { scope: target.scope } : {}),
         ...(target.meta ? { meta: target.meta } : {}),
       },
       ...(target.profile ? { profile: target.profile } : {}),
-      config: { ...target, epoch: cut.epoch },
+      config: { ...target, epoch: cut.epoch, ...(cut.counters ? { counterBase: cut.counters } : {}) },
       savedAt: Date.now(),
     }
   }
@@ -730,7 +733,7 @@ export class ConversationCuts {
   async #startFresh(id: string, cut: SessionCut, prompt: string | undefined): Promise<Runner> {
     const ctx = this.#ctx
     const built = ctx.factory.buildRunnerConfig({ ...cut.target, prompt, resume: undefined, forkSession: undefined })
-    const config: SessionRunnerConfig = { ...built, epoch: cut.epoch }
+    const config: SessionRunnerConfig = { ...built, epoch: cut.epoch, ...(cut.counters ? { counterBase: cut.counters } : {}) }
     const runner = await ctx.factory.buildRunner(cut.agentReason ? { ...config, agentResetReason: cut.agentReason } : config, undefined, id)
     if (this.#closed) {
       runner.close('server')
@@ -887,6 +890,15 @@ function unconfirmedDetails(runner: Runner, conversation: number): Omit<Unconfir
 }
 
 // A runtime for n+1 that the engine has named (or a live snapshot): the successor exists and is resumed, not replaced.
+// The runner's counts already include the base it was built with; the max keeps a stored row that predates it from
+// walking the lifetime back.
+export function lifetimeCounters(base: CounterBase | undefined, info: Pick<SessionInfo, 'activityCount' | 'proseCount'>): CounterBase {
+  return {
+    activity: Math.max(base?.activity ?? 0, info.activityCount ?? 0),
+    prose: Math.max(base?.prose ?? 0, info.proseCount ?? 0),
+  }
+}
+
 function successorKept(runtime: StoredSessionRecord, to: number): boolean {
   return runtime.info.conversation === to && !(isDormant(runtime) && runtime.sdkSessionId === undefined)
 }
