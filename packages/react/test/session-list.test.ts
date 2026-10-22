@@ -484,14 +484,8 @@ describe('promotedShells', () => {
 })
 
 describe('normalizeViewConfig', () => {
-  it('drops a stored collapsedTeams rather than migrating it', () => {
-    const next = normalizeViewConfig({ collapsedTeams: ['mac:A'] } as Partial<ViewConfig>)
-    expect('collapsedTeams' in next).toBe(false)
-    expect(next.expandedTeams).toBeUndefined()
-  })
-
-  it('reads a stored gateway grouping as project, and an unknown one as the default', () => {
-    expect(normalizeViewConfig({ groupBy: 'gateway' as never }).groupBy).toBe('project')
+  it('reads a grouping it does not know as the default', () => {
+    expect(normalizeViewConfig({ groupBy: 'gateway' as never }).groupBy).toBe(DEFAULT_VIEW_CONFIG.groupBy)
     expect(normalizeViewConfig({ groupBy: 'bogus' as never }).groupBy).toBe(DEFAULT_VIEW_CONFIG.groupBy)
     expect(normalizeViewConfig(undefined)).toEqual(DEFAULT_VIEW_CONFIG)
   })
