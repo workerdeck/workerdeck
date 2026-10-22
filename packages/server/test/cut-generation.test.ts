@@ -576,7 +576,7 @@ describe('permissions across the cut', () => {
     const stale = await call(base, `/sessions/${id}/permissions/p-1`, 'POST', { behavior: 'deny' }, generation(1))
     expect(stale.status).toBe(409)
     const unknown = await call(base, `/sessions/${id}/permissions/p-1`, 'POST', { behavior: 'deny' }, generation(2))
-    expect(unknown.status).toBe(404)
+    expect({ status: unknown.status, error: unknown.body.error }).toEqual({ status: 404, error: 'permission request not found (already resolved or expired)' })
     expect(first.calls.filter((entry) => entry.startsWith('permission'))).toEqual(['permission:p-1'])
     expect(next.approvals).toEqual([])
   })
