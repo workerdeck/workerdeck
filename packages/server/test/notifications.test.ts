@@ -261,7 +261,8 @@ describe('SessionNotifier diagnostics', () => {
         { op: 'hook', message: 'hook failed' },
         { op: 'webhook', message: 'webhook answered HTTP 500' },
       ])
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      // The spy is global: an earlier test's gateway, closed after its receiver, may still be retrying its session_closed.
+      expect(fetchMock.mock.calls.filter(([url]) => url === 'http://127.0.0.1:9/hook')).toHaveLength(2)
     } finally {
       fetchMock.mockRestore()
     }
