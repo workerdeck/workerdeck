@@ -31,9 +31,12 @@ enum SessionRoute: Hashable {
   /// - Parameter conversation: a past conversation's n, opened read-only (from
   ///   the Conversations sheet, a bookmark or a notification about it); nil is
   ///   the session's current conversation.
+  /// - Parameter requested: a notification's n that resolved as the current conversation; the screen reopens it
+  ///   read-only if a cut lands before the attach.
   case session(
     hostId: UUID, sessionId: String, seq: Int? = nil, epoch: Int? = nil,
-    subagent: String? = nil, reveal: String? = nil, shell: String? = nil, conversation: Int64? = nil)
+    subagent: String? = nil, reveal: String? = nil, shell: String? = nil, conversation: Int64? = nil,
+    requested: Int64? = nil)
   case create(hostId: UUID, seed: CreateSessionSeed)
 
   // Where a step line under a session row goes. Here rather than at the list,

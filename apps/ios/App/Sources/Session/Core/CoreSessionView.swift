@@ -28,21 +28,24 @@ struct CoreSessionView: View {
   private var fixtureRecap: CatchUpMark?
   private let composerServices: CoreComposerServices
   private var onGoToCurrent: (() -> Void)?
+  private var onMisplaced: ((Int64) -> Void)?
 
-  // `conversation`: a past conversation of the session, shown read-only; nil is the current one.
+  // `conversation`: a past conversation of the session, shown read-only; nil is the current one. `expect`: the
+  // conversation a notification resolved as current; an attach showing another one calls `onMisplaced` with it.
   init(
     sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry? = nil, conversation: Int64? = nil,
-    onGoToCurrent: (() -> Void)? = nil
+    expect: Int64? = nil, onGoToCurrent: (() -> Void)? = nil, onMisplaced: ((Int64) -> Void)? = nil
   ) {
     self.hostId = hostId
     self.sessionId = sessionId
     self.client = client
     self.onGoToCurrent = onGoToCurrent
+    self.onMisplaced = onMisplaced
     composerServices = .live(client: client)
     _model = State(
       initialValue: CoreSessionModel(
         sessionId: sessionId, baseURL: client.baseURL.absoluteString, authKey: client.authKey, entry: entry,
-        history: conversation))
+        history: conversation, expect: expect))
   }
 
   // Frames replayed with no gateway behind them: `UIPREVIEW=core` and the UI tests.
@@ -145,6 +148,7 @@ struct CoreSessionView: View {
       finalizeSeen()
     }
     .onChange(of: model.ui.chrome?.conversation) { _, _ in syncBookmarks() }
+    .onChange(of: model.ui.misplaced) { _, n in if let n { onMisplaced?(n) } }
     .onChange(of: model.ui.seen) { _, seen in
       if scenePhase == .active, let seen { mark(seen) }
     }
@@ -543,27 +547,39 @@ struct CorePromptCard: View {
 
 // One session route's screen: the current conversation, or a past one (`conversation`) read-only, whose Go to current
 // opens the session's live screen in its place.
+// `requested`: a notification's n that resolved as current; if the attach shows a later conversation, the route
+// reopens n read-only with the entry.
 struct CoreSessionRoute: View {
   let sessionId: String
   let hostId: UUID
   let client: WorkerClient
   let entry: CoreEntry?
-  private let opened: Int64?
+  private let requested: Int64?
+  @State private var entryFor: Int64?
   @State private var conversation: Int64?
 
-  init(sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry?, conversation: Int64?) {
+  init(
+    sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry?, conversation: Int64?,
+    requested: Int64? = nil
+  ) {
     self.sessionId = sessionId
     self.hostId = hostId
     self.client = client
     self.entry = entry
-    opened = conversation
+    self.requested = conversation == nil ? requested : nil
+    _entryFor = State(initialValue: conversation)
     _conversation = State(initialValue: conversation)
   }
 
   var body: some View {
     CoreSessionView(
-      sessionId: sessionId, hostId: hostId, client: client, entry: conversation == opened ? entry : nil,
-      conversation: conversation, onGoToCurrent: { conversation = nil }
+      sessionId: sessionId, hostId: hostId, client: client, entry: conversation == entryFor ? entry : nil,
+      conversation: conversation, expect: conversation == nil && entryFor == nil ? requested : nil,
+      onGoToCurrent: { conversation = nil },
+      onMisplaced: { n in
+        entryFor = n
+        conversation = n
+      }
     )
     .id(conversation)
   }

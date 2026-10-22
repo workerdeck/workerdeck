@@ -23,11 +23,14 @@ final class CoreSessionModel {
   // A past conversation's n: the screen shows it read-only.
   let history: Int64?
 
+  private let expect: Int64?
+
   init(
     sessionId: String, baseURL: String, authKey: String?, fixture: [String]? = nil, entry: CoreEntry? = nil,
-    history: Int64? = nil
+    history: Int64? = nil, expect: Int64? = nil
   ) {
     self.history = history
+    self.expect = expect
     self.fixture = fixture
     self.entry = entry
     self.sessionId = sessionId
@@ -50,7 +53,7 @@ final class CoreSessionModel {
     let driver = CoreSessionDriver(
       sessionId: sessionId, baseURL: baseURL, authKey: authKey, composer: composer, metrics: core,
       hideThinking: hideThinking,
-      fixture: fixture, entry: entry, history: history
+      fixture: fixture, entry: entry, history: history, expect: expect
     ) { [weak self] ui in
       DispatchQueue.main.async { MainActor.assumeIsolated { self?.ui = ui } }
     }

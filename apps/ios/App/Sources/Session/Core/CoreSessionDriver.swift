@@ -58,6 +58,8 @@ struct CoreSessionUi: @unchecked Sendable {
   var peek: CoreRailPeek?
   var focus: TranscriptFocusRequest?
   var seen: SeenCounts?
+  // The conversation a notification asked for, when the attach showed another one: the route reopens it read-only.
+  var misplaced: Int64?
   var composer = CoreComposerContext()
   var usage: SessionUsageView?
   var extras = CoreSessionExtras()
@@ -124,6 +126,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private var railSize: CoreRailSize?
   private var frameRailSize: CoreRailSize?
   private var pending: CoreEntry?
+  private var expect: Int64?
   private var bookmarks: [String] = []
 
   // Socket callbacks arrive on URLSession's queue, maybe before the worker stored the socket, so each task carries its
@@ -134,12 +137,13 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   init(
     sessionId: String, baseURL: String, authKey: String?, composer: Composer, metrics: Metrics, hideThinking: Bool,
-    fixture: [String]? = nil, entry: CoreEntry? = nil, history: Int64? = nil,
+    fixture: [String]? = nil, entry: CoreEntry? = nil, history: Int64? = nil, expect: Int64? = nil,
     publish: @escaping @Sendable (CoreSessionUi) -> Void
   ) {
     self.history = history
     self.fixture = fixture
     pending = entry
+    self.expect = history == nil ? expect : nil
     self.sessionId = sessionId
     self.composer = composer
     self.baseURL = baseURL
@@ -602,6 +606,15 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     }
     if ui.connection == .live, ui.progress == nil {
       if changed.transcript || changed.chrome || ui.seen == nil { ui.seen = session.seen() }
+      // A cut between the notification's conversations read and this attach shows a later conversation: the entry
+      // names a row of the requested one, so it is handed to that conversation's screen instead.
+      if let expected = expect, let attached = ui.chrome?.conversation {
+        expect = nil
+        if attached != expected {
+          pending = nil
+          ui.misplaced = expected
+        }
+      }
       if pending != nil, !ui.main.rows.isEmpty { enter() }
     }
     publish(ui)

@@ -17,6 +17,7 @@ struct SessionListView: View {
 
   @State private var model: SessionListModel?
   @State private var path: [SessionRoute] = []
+  @State private var routeAttempt = 0
   @State private var showHostManager = false
   @State private var showSettings = false
   @State private var pendingClose: ListItem?
@@ -85,13 +86,15 @@ struct SessionListView: View {
     }
     .onChange(of: scenePhase) { _, phase in
       guard phase == .active else { return }
+      // A notification route whose conversations read never answered is tried again.
+      if push.pendingRoute != nil { routeAttempt &+= 1 }
       // The token can change while the app is away, and a gateway restart forgets
       // nothing - but a *first* launch after adding a host might have failed.
       Task { await push.syncRegistrations() }
     }
     // Both an appear and a change: a cold launch from a notification sets the
     // route before this view exists.
-    .task(id: push.pendingRoute) { await consumePushRoute() }
+    .task(id: PushAttempt(route: push.pendingRoute, attempt: routeAttempt)) { await consumePushRoute() }
     .sheet(isPresented: $showHostManager) {
       NavigationStack { HostListView() }
     }
@@ -115,28 +118,30 @@ struct SessionListView: View {
       return
     }
     var conversation: Int64?
-    var seq = route.seq
     if let n = route.conversation {
       // The list may not be loaded yet (a cold launch) or may predate another client's cut, so the notification's n
       // is weighed against a fresh read of the session's conversations. The route stays pending until that answers;
-      // with no answer after a few tries it opens the session's current screen, without the row it cannot place.
+      // with no answer after a few tries it stays pending for the next foreground rather than open the wrong one.
       let current = await currentConversation(hostId: hostId, sessionId: route.sessionId)
-      guard !Task.isCancelled, push.pendingRoute == route else { return }
-      if let current {
-        conversation = addressOf(id: route.sessionId, conversation: n, current: current.n).conversation
-      } else {
-        seq = nil
-      }
+      guard !Task.isCancelled, push.pendingRoute == route, let current else { return }
+      conversation = addressOf(id: route.sessionId, conversation: n, current: current.n).conversation
     }
     // Replaces rather than appends, so Back from a pushed-to session lands on
     // the list however deep the stack happened to be.
     path = [
-      .session(hostId: hostId, sessionId: route.sessionId, seq: seq, epoch: route.epoch, conversation: conversation)
+      .session(
+        hostId: hostId, sessionId: route.sessionId, seq: route.seq, epoch: route.epoch, conversation: conversation,
+        requested: conversation == nil ? route.conversation : nil)
     ]
     push.clearRoute()
   }
 
   private struct Current { let n: Int64? }
+
+  private struct PushAttempt: Equatable {
+    let route: PushRoute?
+    let attempt: Int
+  }
 
   // The session's current n from its own conversations list (nil n: closed, or out of scope), or nil when no answer
   // came after a few tries. Waits for the list model on a cold launch.
@@ -161,12 +166,13 @@ struct SessionListView: View {
   @ViewBuilder
   private func destination(_ route: SessionRoute) -> some View {
     switch route {
-    case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal, let shell, let conversation):
+    case .session(
+      let hostId, let sessionId, let seq, let epoch, let subagent, let reveal, let shell, let conversation, let requested):
       if let model, let context = model.context(for: hostId) {
         CoreSessionRoute(
           sessionId: sessionId, hostId: hostId, client: context.client,
           entry: SessionRoute.entry(seq: seq, epoch: epoch, subagent: subagent, reveal: reveal, shell: shell),
-          conversation: conversation)
+          conversation: conversation, requested: requested)
       } else {
         missingHost
       }
