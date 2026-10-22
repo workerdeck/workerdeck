@@ -39,6 +39,7 @@
     "smoke:restart": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/restart.ts",
     "smoke:shell-write": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/shell-write.ts",
     "smoke:sleep": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/sleep.ts",
+    "smoke:cut": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/cut.ts",
     "smoke:context-reset": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/context-reset.ts",
     "smoke:teams": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/teams.ts",
     "smoke:background": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/background.ts",

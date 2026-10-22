@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import WebSocket from 'ws'
 import type { PermissionMode, PermissionRequest, ServerFrame, SessionInfo, ShellInfo } from '@workerdeck/protocol'
+import { conversationOf, generationHeaders } from './lib/generation.ts'
 import { fail, finish, note, ok, step, warn } from './lib/report.ts'
 
 const arg = process.argv[2] ?? 'all'
@@ -39,7 +40,8 @@ function sleep(ms: number) {
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${base}${path}`, { ...init, headers: { 'content-type': 'application/json', ...init?.headers } })
+  const stamp = await generationHeaders(base, path, init?.method)
+  const res = await fetch(`${base}${path}`, { ...init, headers: { 'content-type': 'application/json', ...stamp, ...init?.headers } })
   if (!res.ok) {
     throw new Error(`${init?.method ?? 'GET'} ${path} → ${res.status} ${await res.text()}`)
   }
@@ -123,6 +125,8 @@ function bare(name: string): string {
 
 async function turn(id: string, prompt: string, decide: Decide, opts: { mode?: PermissionMode; timeoutMs?: number } = {}): Promise<Turn> {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
+  const conversation = conversationOf(ws)
+  let generation = 0
   const result: Turn = { text: '', cards: [], policy: [], tools: [], done: false }
   let live = false
   const resolved = new Map<string, string>()
@@ -142,6 +146,7 @@ async function turn(id: string, prompt: string, decide: Decide, opts: { mode?: P
             type: 'permission_decision',
             requestId: event.request.id,
             behavior,
+            generation,
             ...(behavior === 'deny' ? { message: 'denied by the smoke' } : {}),
           }),
         )
@@ -178,13 +183,14 @@ async function turn(id: string, prompt: string, decide: Decide, opts: { mode?: P
     ws.once('open', () => r())
     ws.once('error', j)
   })
+  generation = await conversation
   await sleep(1_500)
   live = true
   if (opts.mode) {
-    ws.send(JSON.stringify({ type: 'set_permission_mode', mode: opts.mode }))
+    ws.send(JSON.stringify({ type: 'set_permission_mode', mode: opts.mode, generation }))
     await sleep(500)
   }
-  ws.send(JSON.stringify({ type: 'user_message', text: prompt }))
+  ws.send(JSON.stringify({ type: 'user_message', text: prompt, generation }))
   await settled
   ws.close()
   if (process.env.WD_SMOKE_DEBUG) {
@@ -297,11 +303,12 @@ async function denied(engine: 'claude' | 'codex'): Promise<void> {
 // A `$` from the composer, as the operator types it: the shell is owned by the user.
 async function userShell(id: string, command: string): Promise<ShellInfo> {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws`)
+  const generation = conversationOf(ws)
   await new Promise<void>((r, j) => {
     ws.once('open', () => r())
     ws.once('error', j)
   })
-  ws.send(JSON.stringify({ type: 'shell_command', command }))
+  ws.send(JSON.stringify({ type: 'shell_command', command, generation: await generation }))
   const deadline = Date.now() + 15_000
   try {
     for (;;) {

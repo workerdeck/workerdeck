@@ -14,7 +14,7 @@ import { deflateSync } from 'node:zlib'
 import WebSocket from 'ws'
 import { WorkerDeckClient } from '@workerdeck/client'
 import { createWorkerServer } from '@workerdeck/server'
-import { ENGINE_CAPABILITIES, type SessionEvent } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, GENERATION_HEADER, type SessionEvent } from '@workerdeck/protocol'
 
 // CRC-32, the PNG/zlib one.
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
@@ -206,7 +206,7 @@ async function expectRefused(testCase: Case): Promise<string | null> {
   const url = `http://127.0.0.1:${port}/v1/sessions/${session.id}/attachments?name=${encodeURIComponent(testCase.name)}`
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': testCase.mediaType },
+    headers: { 'content-type': testCase.mediaType, [GENERATION_HEADER]: String(session.conversation ?? 1) },
     body: new Uint8Array(testCase.data),
   })
   const payload = (await res.json().catch(() => ({}))) as { error?: string }

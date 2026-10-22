@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import WebSocket from 'ws'
 import type { ServerFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
+import { conversationOf } from './lib/generation.ts'
 import { fail, finish, note, ok, step, warn } from './lib/report.ts'
 
 const [engineArg = 'claude', ...extras] = process.argv.slice(2)
@@ -132,6 +133,7 @@ type AttachResult = { text: string; events: SessionEvent[]; replayed: number; re
 
 async function attach(id: string, prompt?: string, timeoutMs = 120_000): Promise<AttachResult> {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
+  const generation = conversationOf(ws)
   const events: SessionEvent[] = []
   let replayed = 0
   let replayingFrom: number | undefined
@@ -187,7 +189,7 @@ async function attach(id: string, prompt?: string, timeoutMs = 120_000): Promise
     // Let the replay drain first, so a `turn_result` from the history cannot be mistaken for this turn's.
     await sleep(1_500)
     live = true
-    ws.send(JSON.stringify({ type: 'user_message', text: prompt }))
+    ws.send(JSON.stringify({ type: 'user_message', text: prompt, generation: await generation }))
     await settled
   } else {
     await sleep(2_500)
@@ -429,6 +431,7 @@ async function clearNoChild(id: string): Promise<boolean> {
 // rather than the `clear_context` command because both are the same call in the runner.
 async function clearOverWs(id: string): Promise<boolean> {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
+  const generation = conversationOf(ws)
   let sawReset = false
   const done = new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, 20_000)
@@ -448,7 +451,7 @@ async function clearOverWs(id: string): Promise<boolean> {
     ws.once('error', reject)
   })
   await sleep(1_500) // let the replay drain
-  ws.send(JSON.stringify({ type: 'user_message', text: '/clear' }))
+  ws.send(JSON.stringify({ type: 'user_message', text: '/clear', generation: await generation }))
   await done
   ws.close()
   return sawReset

@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import WebSocket from 'ws'
 import type { ServerFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
+import { conversationOf } from './lib/generation.ts'
 
 const WORD = 'ORRERY'
 // Not 879x: that block is busy on this machine, and a smoke that cannot listen reports as a gateway that will not start.
@@ -125,6 +126,7 @@ type Attached = {
 
 async function attach(id: string, afterSeq = 0): Promise<Attached> {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=${afterSeq}`)
+  const conversation = conversationOf(ws)
   const events: SessionEvent[] = []
   let resolveTurn: (() => void) | undefined
   ws.on('error', () => {})
@@ -142,8 +144,9 @@ async function attach(id: string, afterSeq = 0): Promise<Attached> {
     ws.once('open', () => resolve())
     ws.once('error', reject)
   })
+  const generation = await conversation
   return {
-    send: (text) => ws.send(JSON.stringify({ type: 'user_message', text })),
+    send: (text) => ws.send(JSON.stringify({ type: 'user_message', text, generation })),
     close: () => ws.close(),
     events,
     turnEnded: () =>
