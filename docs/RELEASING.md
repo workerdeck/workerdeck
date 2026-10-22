@@ -1671,9 +1671,14 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   compiling but without an emulator or device check (deferred past 4.0, Tobias). Activity and prose counts are lifetime per stable id (the record carries
   `counters`, the next runner gets `counterBase`), so unread survives a cut; a read mark's `itemCount` is scoped to
   its `conversation` (`catchUpFrom`/`catchUpItems`, the recap restarts at 0 in a new conversation) and `turns` left
-  the watermark; a past conversation marks nothing. **Verified**: `pnpm lint`, typecheck, `turbo run test --concurrency=1 --force` (12/13 locally; server
-  817/819 with 2 to 3 different cut/webhook timing tests failing per full run at load 11+, each file green alone 3x,
-  so the gate was re-run on a GitHub runner by a Publish `dry_run` dispatch on the branch: [result]), cargo test +
+  the watermark; a past conversation marks nothing. **Verified**: `pnpm lint`, typecheck, `turbo run test --concurrency=1 --force` (the first Publish
+  `dry_run` dispatch on the branch failed 3 server tests on a clean runner too, which was not load: Retry start left
+  the previous attempt's durable `startFailed` on the record, so a retry that came up after
+  `agentStartupTimeoutMs` could never settle its cut (`fd91928a`); the agents tests depended on the host having
+  `~/.claude` for a `default` profile; the shared `idle()` helper returned before a cut settled; and a handful of
+  fixed sleeps raced a loaded host. Fixed without retries or skips; the second dry run at `5749a895` passed, the
+  local server suite 3/3 full runs green at load 17; one rare cut-generation flake, about 4 in 40 local runs at load
+  17, stays open and now prints its refusal), cargo test +
   clippy, `pnpm fixtures:golden`/`fixtures:vm --check`/`fixtures:frames --check` clean, iOS sim build +
   `CoreTranscriptUITests` 4/4 + WorkerDeckKit 57/57, Android unit tests + `assembleDebug`, gatekeeper, paid
   `smoke:cut all` 25/0 on the final tree; WD-Review clean on P1 to P5, D9, M1 and the merged tree (findings H1, M1
