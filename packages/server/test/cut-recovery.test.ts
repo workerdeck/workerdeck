@@ -613,6 +613,11 @@ describe('a hot reload with a cut in flight', () => {
     await idle(first.server, id)
     const pending = cut(first.base, id, 1, 'next').catch(() => undefined)
     await vi.waitFor(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
+    // The intent is durable before the successor is built: wait for it to be the registered runner.
+    await vi.waitFor(() => {
+      expect(first.built[1]).toBeDefined()
+      expect(first.server.registry.get(id)).toBe(first.built[1])
+    })
     const fresh = first.built[1]!
     expect(fresh.info().status).toBe('starting')
 
@@ -745,6 +750,11 @@ describe('a hot reload with a cut in flight', () => {
     await idle(first.server, id)
     const pending = cut(first.base, id, 1, 'next').catch(() => undefined)
     await vi.waitFor(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
+    // The intent is durable before the successor is built: wait for it to be the registered runner.
+    await vi.waitFor(() => {
+      expect(first.built[1]).toBeDefined()
+      expect(first.server.registry.get(id)).toBe(first.built[1])
+    })
     const fresh = first.built[1]!
     const carried = first.server.releaseSession(id)!
     await closeOld(first.server)
