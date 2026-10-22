@@ -3,7 +3,7 @@ import {
   errorMessage,
   isSharing,
   type AgentConfig,
-  type AgentConversationsResponse,
+  type AgentConversation,
   type AgentInfo,
   type SessionAgentRequest,
   type SessionInfo,
@@ -19,7 +19,6 @@ import type { AuthContext } from '../services/auth.ts'
 import { requestedConfig, type SessionRecord } from '../services/session-records.ts'
 import { entryInfo } from './conversations.ts'
 import { vetCreateRequest } from './create-vet.ts'
-import { sessionInfoOf } from './session-lookup.ts'
 
 export type IdentityInput = {
   name?: unknown
@@ -520,35 +519,22 @@ export function agentInfoOf(ctx: ServerContext, agent: StoredAgent, record: Sess
 }
 
 // Each past row is checked against its own frozen auth.
-export async function conversationRows(ctx: ServerContext, id: string, auth: AuthContext, live: boolean): Promise<AgentConversationsResponse> {
-  const record = await ctx.records.get(id)
-  const rows: AgentConversationsResponse['conversations'] = []
-  const current = live && record?.closedAt === undefined ? await sessionInfoOf(ctx, id) : undefined
-  if (current && ctx.auth.canSee(auth, current)) {
-    rows.push({
-      n: record?.conversation ?? current.conversation ?? 1,
-      current: true,
-      startedAt: record?.conversations.at(-1)?.endedAt ?? record?.createdAt ?? current.createdAt,
-      ...(current.title ? { title: current.title } : {}),
-      session: ctx.projects.withProject(current),
-    })
-  }
-  const history = record?.conversations ?? []
+export async function pastConversations(ctx: ServerContext, id: string, auth: AuthContext): Promise<AgentConversation[]> {
+  const history = (await ctx.records.get(id))?.conversations ?? []
+  const rows: AgentConversation[] = []
   for (let index = history.length - 1; index >= 0; index--) {
     const entry = history[index]!
-    if (!ctx.auth.canSee(auth, entryInfo(id, entry))) {
-      continue
+    if (ctx.auth.canSee(auth, entryInfo(id, entry))) {
+      rows.push({
+        n: entry.n,
+        startedAt: entry.startedAt,
+        endedAt: entry.endedAt,
+        ...(entry.title ? { title: entry.title } : {}),
+        ...(entry.transcript ? { transcript: entry.transcript } : {}),
+      })
     }
-    rows.push({
-      n: entry.n,
-      current: false,
-      startedAt: entry.startedAt,
-      endedAt: entry.endedAt,
-      ...(entry.title ? { title: entry.title } : {}),
-      ...(entry.transcript ? { transcript: entry.transcript } : {}),
-    })
   }
-  return { conversations: rows }
+  return rows
 }
 
 async function writeIdentity(

@@ -200,14 +200,14 @@ describe('a named session', () => {
     expect(await server.records.get(plain.id)).toEqual(before)
   })
 
-  it('keeps its id and identity through context_reset-style cuts and a typed restart', async () => {
+  it('keeps its id and identity through a new conversation', async () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const session = await createNamed(base, 'Wren')
     await idle(server, session.id)
-    const restarted = await call(base, `/agents/${session.id}/restart`, 'POST', { prompt: 'again', expectedGeneration: 1 })
+    const restarted = await call(base, `/sessions/${session.id}/conversations`, 'POST', { prompt: 'again', expectedGeneration: 1 })
     expect(restarted.status).toBe(200)
-    expect(restarted.body.agent).toMatchObject({ id: session.id, name: 'Wren' })
+    expect(restarted.body.conversation).toBe(2)
     expect(restarted.body.session).toMatchObject({ id: session.id, conversation: 2, agent: { id: session.id, name: 'Wren', conversation: 2 } })
     expect(built).toHaveLength(2)
     expect(built[1]!.sent).toEqual(['again'])
@@ -421,17 +421,17 @@ describe('review probes', () => {
     expect(server.locks.gated(lead.id)).toBe(false)
   })
 
-  it('refuses /agents lifecycle calls that name no conversation or a stale one', async () => {
+  it('refuses lifecycle calls on a named session that name no conversation or a stale one', async () => {
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir)
     const session = await createNamed(base, 'Wren')
     await idle(server, session.id)
-    for (const path of ['restart', 'retry-start', 'undelivered']) {
-      expect((await call(base, `/agents/${session.id}/${path}`, 'POST', {})).status).toBe(400)
+    for (const path of ['', '/retry', '/pending']) {
+      expect((await call(base, `/sessions/${session.id}/conversations${path}`, 'POST', {})).status).toBe(400)
     }
     expect((await call(base, `/agents/${session.id}`, 'DELETE', {})).status).toBe(400)
-    expect((await call(base, `/agents/${session.id}/restart`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
-    expect((await call(base, `/agents/${session.id}/restart`, 'POST', { expectedGeneration: 1 })).status).toBe(409)
+    expect((await call(base, `/sessions/${session.id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
+    expect((await call(base, `/sessions/${session.id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(409)
     expect((await server.records.get(session.id))?.conversation).toBe(2)
     expect((await call(base, `/agents/${session.id}`, 'DELETE', { expectedGeneration: 1 })).status).toBe(409)
     expect((await call(base, '/agents')).body.agents).toHaveLength(1)
@@ -501,7 +501,7 @@ describe('review probes', () => {
     await vi.waitFor(async () => expect((await second.server.records.get(named))?.cut).toBeUndefined())
     const agent = (await call(second.base, `/agents/${named}`)).body.agent as AgentInfo
     expect(agent).toMatchObject({ id: named, name: 'Atlas', undelivered: 'plan it' })
-    expect((await call(second.base, `/agents/${named}/undelivered`, 'POST', { send: true, expectedGeneration: 1 })).status).toBe(200)
+    expect((await call(second.base, `/sessions/${named}/conversations/pending`, 'POST', { send: true, expectedGeneration: 1 })).status).toBe(200)
     expect(second.built.at(-1)!.sent).toEqual(['plan it'])
   })
 
@@ -589,7 +589,7 @@ describe('recheck probes', () => {
     expect((await second.server.records.get(id))?.startFailed?.error).toContain('already exists')
     expect(second.server.registry.get(id)).toBeUndefined()
     expect((await call(second.base, `/sessions/${id}`, 'PATCH', { agent: { name: 'Atlas 2' } }, 1)).status).toBe(200)
-    expect((await call(second.base, `/agents/${id}/retry-start`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
+    expect((await call(second.base, `/sessions/${id}/conversations/retry`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
     expect(second.built.map((runner) => runner.id)).toEqual([id])
     expect((await call(second.base, `/agents/${id}`)).body.agent).toMatchObject({ id, name: 'Atlas 2' })
   })

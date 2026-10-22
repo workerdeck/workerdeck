@@ -32,8 +32,6 @@ export function isHistorical(address: SessionAddress | undefined): boolean {
 
 export type ConversationRow = AgentConversation & { current: boolean }
 
-export type AgentConversationsResponse = { conversations: (ConversationRow & { session?: SessionInfo })[] }
-
 export type RetiredAgentInfo = {
   id: string
   name: string

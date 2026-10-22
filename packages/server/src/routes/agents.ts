@@ -19,9 +19,9 @@ import type { StoredAgent } from '../services/agent-store.ts'
 import type { AvatarImage } from '../services/avatars.ts'
 import {
   agentInfoOf,
-  conversationRows,
   createNamedSession,
   finishRetired,
+  pastConversations,
   requestFromConfig,
   retireAgent,
   rollAvatar,
@@ -31,7 +31,7 @@ import {
 import { conversationGuard, expectedGenerationOf } from './conversations.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
-export const ADOPT_GONE = 'adopt is gone: name the session with PATCH /sessions/:id { agent }'
+const CREATE_FIELDS = new Set<string>(['name', 'config', 'prompt', 'lead', 'owner', 'sharing', 'crossOwner'] satisfies (keyof CreateAgentRequest)[])
 
 export async function handleAgents(
   ctx: ServerContext,
@@ -47,13 +47,7 @@ export async function handleAgents(
     if (req.method === 'GET') {
       if (new URL(req.url ?? '', 'http://x').searchParams.get('retired') === '1') {
         const retired = await Promise.all(
-          agents.tombstones().map(async (tombstone) => {
-            const rows = await conversationRows(ctx, tombstone.id, auth, false)
-            return agents.retiredInfo(
-              tombstone,
-              rows.conversations.map(({ current: _current, session: _session, ...row }) => row),
-            )
-          }),
+          agents.tombstones().map(async (tombstone) => agents.retiredInfo(tombstone, await pastConversations(ctx, tombstone.id, auth))),
         )
         json(res, 200, { retired } satisfies RetiredAgentsResponse)
         return
@@ -67,11 +61,6 @@ export async function handleAgents(
   }
   const [id, action, ...extra] = rest.split('/').map(decodeURIComponent)
   const tombstone = id === undefined ? undefined : agents.tombstone(id)
-  if (tombstone && action === 'conversations' && extra.length === 0) {
-    requireMethod(req, 'GET')
-    json(res, 200, await conversationRows(ctx, tombstone.id, auth, false))
-    return
-  }
   if (tombstone && action === undefined && req.method === 'DELETE') {
     await ctx.locks.run([tombstone.id], () => finishRetired(ctx, tombstone.id))
     json(res, 200, { retired: [tombstone.id], released: [] })
@@ -83,40 +72,6 @@ export async function handleAgents(
   }
   if (action === 'remote-members') {
     await remoteMembers(ctx, req, res, agent, extra[0])
-    return
-  }
-  if (action === 'restart') {
-    requireMethod(req, 'POST')
-    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { prompt?: unknown; expectedGeneration?: unknown }
-    const expectedGeneration = expectedGenerationOf(body)
-    const prompt = typeof body.prompt === 'string' && body.prompt !== '' ? body.prompt : undefined
-    const cut = await ctx.cuts.cut(
-      agent.id,
-      { expectedGeneration, reason: 'user', ...(prompt ? { prompt } : {}) },
-      conversationGuard(ctx, agent.id, auth, expectedGeneration),
-    )
-    await respond(ctx, res, 200, agent, cut.session)
-    return
-  }
-  if (action === 'retry-start') {
-    requireMethod(req, 'POST')
-    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { expectedGeneration?: unknown }
-    const guard = conversationGuard(ctx, agent.id, auth, expectedGenerationOf(body))
-    const retried = await ctx.cuts.retryStart(agent.id, guard)
-    await respond(ctx, res, 200, agent, retried.session)
-    return
-  }
-  if (action === 'undelivered') {
-    requireMethod(req, 'POST')
-    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { send?: unknown; expectedGeneration?: unknown }
-    const guard = conversationGuard(ctx, agent.id, auth, expectedGenerationOf(body))
-    await ctx.cuts.settlePendingPrompt(agent.id, body.send === true, guard)
-    await respond(ctx, res, 200, agent)
-    return
-  }
-  if (action === 'conversations') {
-    requireMethod(req, 'GET')
-    json(res, 200, await conversationRows(ctx, agent.id, auth, true))
     return
   }
   if (action === 'avatar') {
@@ -174,8 +129,9 @@ async function createAgent(ctx: ServerContext, req: IncomingMessage, res: Server
   if (!isRecord(body)) {
     fail(400, 'request body must be a JSON object')
   }
-  if ((body as { adopt?: unknown }).adopt !== undefined) {
-    fail(400, ADOPT_GONE)
+  const unknown = Object.keys(body).filter((key) => !CREATE_FIELDS.has(key))
+  if (unknown.length > 0) {
+    fail(400, `unsupported field${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}`)
   }
   const config = isRecord(body.config) ? body.config : {}
   const prompt = typeof body.prompt === 'string' ? body.prompt : undefined

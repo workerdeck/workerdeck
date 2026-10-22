@@ -49,9 +49,8 @@ keeps its id, so a view that shows an agent stays on it.
 *Delete agent...* retires the agent and releases its team members. Its conversations stay
 readable under *Past agents*. Closing a session that is not named keeps its conversations readable
 too. Over REST: `POST /v1/sessions/:id/conversations` (New conversation, for any session),
-`GET /v1/sessions/:id/conversations`, `GET /v1/agents?retired=1`, `DELETE /v1/agents/:id`; the
-agent routes `POST /v1/agents/:id/restart` and `GET /v1/agents/:id/conversations` do the same for an
-agent. Each call that starts a conversation or retires an agent carries `expectedGeneration`, the
+`GET /v1/sessions/:id/conversations`, `GET /v1/agents?retired=1`, `DELETE /v1/agents/:id`. An
+agent's id is its session id, so the session routes serve agents too. Each call that starts a conversation or retires an agent carries `expectedGeneration`, the
 conversation you were looking at, and is refused (409) if the session has moved on since.
 
 ## Teams

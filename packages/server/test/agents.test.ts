@@ -337,26 +337,35 @@ describe('agents', () => {
     expect(((await (await fetch(`${base}/agents`, { headers: op })).json()) as { agents: AgentInfo[] }).agents).toHaveLength(1)
   })
 
-  it('restarts an agent into a fresh session, keeping its identity and its team', async () => {
+  it('starts a new conversation of an agent, keeping its identity and its team', async () => {
     const { base, server } = await startGateway(undefined, { avatars: fakeAvatars(), ownQuery: true })
     const lead = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
     const member = (
       await call<AgentResponse>(base, '/agents', 'POST', { name: 'Pip', config: { cwd: '/tmp/project' }, lead: lead.agent.id })
     ).body
-    const restarted = await call<AgentResponse>(base, `/agents/${member.agent.id}/restart`, 'POST', { expectedGeneration: 1 })
+    const restarted = await call<{ session: SessionInfo }>(base, `/sessions/${member.agent.id}/conversations`, 'POST', { expectedGeneration: 1 })
     expect(restarted.status).toBe(200)
-    expect(restarted.body.agent).toMatchObject({ id: member.agent.id, name: 'Pip', lead: lead.agent.id })
-    expect(restarted.body.session!.id).toBe(member.session!.id)
+    expect((await call<AgentResponse>(base, `/agents/${member.agent.id}`)).body.agent).toMatchObject({
+      id: member.agent.id,
+      name: 'Pip',
+      lead: lead.agent.id,
+    })
+    expect(restarted.body.session.id).toBe(member.session!.id)
     const fresh = server.registry.get(member.agent.id) as unknown as { config: SessionRunnerConfig }
     expect(fresh.config.engineHome).toEqual({ claudeConfigDir: expect.any(String) })
-    expect(restarted.body.session!.agent).toMatchObject({ name: 'Pip', team: 'Atlas', conversation: 2 })
+    expect(restarted.body.session.agent).toMatchObject({ name: 'Pip', team: 'Atlas', conversation: 2 })
     expect(await server.records.get(member.agent.id)).toMatchObject({ conversation: 2, conversations: [{ n: 1 }] })
   })
 
-  it('names an existing session through PATCH, under its own id, and refuses the old adopt', async () => {
-    const { base } = await startGateway()
+  it('names an existing session through PATCH, under its own id, and refuses unsupported create fields', async () => {
+    const { base, server } = await startGateway()
     const session = (await call<{ session: SessionInfo }>(base, '/sessions', 'POST', { cwd: '/tmp/project' })).body.session
-    expect((await call(base, '/agents', 'POST', { adopt: session.id, name: 'Quill' })).status).toBe(400)
+    const adopt = await call<{ error: string }>(base, '/agents', 'POST', { adopt: session.id, name: 'Quill' })
+    expect(adopt).toMatchObject({ status: 400, body: { error: 'unsupported field: adopt' } })
+    const several = await call<{ error: string }>(base, '/agents', 'POST', { name: 'Quill', resume: 'x', team: 'y' })
+    expect(several).toMatchObject({ status: 400, body: { error: 'unsupported fields: resume, team' } })
+    expect(server.registry.list()).toHaveLength(1)
+    expect((await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents).toEqual([])
     const named = await call<{ session: SessionInfo }>(base, `/sessions/${session.id}`, 'PATCH', { agent: { name: 'Quill' } })
     expect(named.status).toBe(200)
     expect(named.body.session.agent).toMatchObject({ id: session.id, name: 'Quill' })

@@ -1040,9 +1040,9 @@ take the lock themselves; `closeLocked` (an unnamed `DELETE`: current conversati
 `closedAt`) expects the caller to hold it. `recover` runs before listen; `firstStarted` settles a
 create's own intent (0 to 1) in the background. `faults` is the test seam for crash points. Doors:
 `POST /sessions/:id/conversations` (`/discard` after an `unconfirmed_input` refusal), typed exact
-`/clear`, WS `clear_context`, `context_reset`, and `POST /agents/:id/restart`, named or not. An
+`/clear`, WS `clear_context` and `context_reset`, named or not. An
 ordinary session mutation carries `x-workerdeck-generation` (409 missing or stale) and runs under
-the lifecycle lock; the conversation POSTs and the agent restart / retry-start / undelivered routes
+the lifecycle lock; the conversation POSTs and `DELETE /agents/:id`
 take body `expectedGeneration` instead (400 missing, 409 stale); `DELETE .../conversations/:n` needs
 neither;
 `PATCH /sessions/:id { config }` writes `requested` for every session (vetted as a create by
@@ -1248,9 +1248,8 @@ the body, and `eraseConversation` names n in the path.
 command queued across a cut is refused by the gateway rather than run on n+1; a frame with no token
 waits in the outbox until the socket's `attached` names one. The client does not act on
 `conversation_started`: the close (4011) reconnects like any other and the next hello carries n+1.
-The `/agents` lifecycle wrappers (`restartAgent`, `retryAgentStart`, `settleUndelivered`,
-`agentConversations`) still exist for their routes; the clients in this repo use the session-level
-calls above.
+The conversation lifecycle is session-level only: `/agents` carries identity and team operations,
+and `POST /agents` refuses any field outside `CreateAgentRequest` (400 `unsupported field: ...`).
 `runTeamMove` (`src/team-move.ts`) is the one drop-to-join for every host. It throws only before
 its first change; after that it returns a `TeamMoveOutcome`: `committed` (`yes`, `no`, or `unknown`
 when the join got no answer and may still commit), `adopted` when it named an unnamed mover by
