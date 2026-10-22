@@ -27,7 +27,7 @@ import { HOST_SECTION, needsRestart } from './host/settings.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { SidebarProvider } from './sidebar.ts'
 import { SessionStatusBar, SubagentStatusItem, UnreadStatusItem, badgeEnabled } from './status-bar.ts'
-import { createWatermarks, unseenCount } from './watermarks.ts'
+import { catchUpFrom, createWatermarks, unseenCount } from './watermarks.ts'
 
 const SECTION_VIEWS: Record<SectionKind, string> = {
   info: 'workerdeck.sessionInfo',
@@ -81,9 +81,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const info = infoOf(session.host.id, session.sessionId)
     const moved = watermarks.mark(session.host.id, session.sessionId, {
       itemCount: surface.vitals?.itemCount,
+      conversation: surface.vitals?.conversation,
       activity: info?.activityCount,
       prose: info?.proseCount,
-      turns: info?.numTurns,
     })
     if (moved) {
       sidebar.refreshUnread()
@@ -193,10 +193,7 @@ export function activate(context: vscode.ExtensionContext): void {
         model.setSelectedShell(surface.shellId)
       }
     },
-    unseen: (hostId, sessionId) => {
-      const mark = watermarks.get(hostId, sessionId)
-      return mark ? { itemCount: mark.itemCount, since: mark.seenAt } : undefined
-    },
+    unseen: (hostId, sessionId) => catchUpFrom(watermarks.get(hostId, sessionId)),
     visibilityChanged: (surface) => {
       markSeen(surface)
       // The mark is written from the last poll, so refresh and mark once more - with `force`, the surface being already hidden.

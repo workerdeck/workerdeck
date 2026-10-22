@@ -68,10 +68,11 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
   // The workspace asks for this record too and nothing de-dupes, but one small GET beats threading the panel's
   // session state back out through a prop nobody else wants.
   const { info, error } = useSessionInfo(client, sessionId)
-  const markSeen = useMarkSeen(hostId, sessionId)
+  // A past conversation is history: reading it marks nothing about the current one.
+  const markSeen = useMarkSeen(hostId, conversation === undefined ? sessionId : undefined)
   const { bookmarks, toggle: toggleBookmark } = useBookmarks(`${hostId}:${sessionId}`)
   // Read once, at mount: re-reading it as the mark moves would walk the catch-up row down the transcript under the reader.
-  const [unseen] = useState(() => (getCatchUp() === 'on' ? unseenSince(hostId, sessionId) : undefined))
+  const [unseen] = useState(() => (getCatchUp() === 'on' && conversation === undefined ? unseenSince(hostId, sessionId) : undefined))
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
   const [thinking] = useState(getThinking)
@@ -119,8 +120,8 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
     if (!polled || !visible) {
       return
     }
-    markSeen({ activity: polled.activityCount, prose: polled.proseCount, turns: polled.numTurns })
-  }, [polled?.activityCount, polled?.proseCount, polled?.numTurns, visible, markSeen])
+    markSeen({ activity: polled.activityCount, prose: polled.proseCount })
+  }, [polled?.activityCount, polled?.proseCount, visible, markSeen])
 
   const close = async () => {
     try {
@@ -194,8 +195,8 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
         }
         unseen={unseen}
         onVitals={(vitals) => {
-          // Only `itemCount`: the socket is its sole source, and `activity`/`turns` ride the effect above instead.
-          markSeen({ itemCount: vitals.itemCount })
+          // Only `itemCount` and its conversation: the socket is their sole source, and `activity`/`prose` ride the effect above instead.
+          markSeen({ itemCount: vitals.itemCount, conversation: vitals.conversation })
           nudgeSessions()
         }}
         header={({ actions }) => (

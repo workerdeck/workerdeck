@@ -1,4 +1,4 @@
-import type { GatewayRelayMeta, PermissionMode, ScopeRoot, SessionInfo, WorkspaceScope } from '@workerdeck/protocol'
+import type { CatchUpFrom, GatewayRelayMeta, PermissionMode, ScopeRoot, SessionInfo, WorkspaceScope } from '@workerdeck/protocol'
 import type { SubagentDisplay, ViewConfig } from './view-config.ts'
 import type { SessionSurfacePanel, SessionVitals } from '@workerdeck/ui'
 
@@ -112,7 +112,7 @@ export type HostToPanel =
         sessionId: string
         hostName: string
         cwd?: string
-        unseen?: { itemCount: number; since: number }
+        unseen?: CatchUpFrom
         // A past conversation, read-only; it rides window reloads.
         conversation?: number
       }

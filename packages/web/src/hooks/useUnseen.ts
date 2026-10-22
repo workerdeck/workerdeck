@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react'
-import { Watermarks, unseenCount } from '@workerdeck/protocol'
-import type { SessionInfo, Watermark, WatermarkStore } from '@workerdeck/protocol'
+import { Watermarks, catchUpFrom, unseenCount } from '@workerdeck/protocol'
+import type { CatchUpFrom, SessionInfo, Watermark, WatermarkReading, WatermarkStore } from '@workerdeck/protocol'
 import { readJson, writeJson } from '../lib/storage.ts'
 import { createStore } from '../lib/store.ts'
 
@@ -32,16 +32,15 @@ export function useUnseen() {
   return { unseenFor, watermarks }
 }
 
-export function unseenSince(hostId: string, sessionId: string): { itemCount: number; since: number } | undefined {
-  const mark = watermarks.get(hostId, sessionId)
-  return mark ? { itemCount: mark.itemCount, since: mark.seenAt } : undefined
+export function unseenSince(hostId: string, sessionId: string): CatchUpFrom | undefined {
+  return catchUpFrom(watermarks.get(hostId, sessionId))
 }
 
 // A background tab is not being read, and marking it read anyway is how an unread badge quietly stops working.
 export function useMarkSeen(hostId: string, sessionId: string | undefined) {
-  const seen = useRef<{ itemCount?: number; activity?: number; prose?: number; turns?: number }>({})
+  const seen = useRef<WatermarkReading>({})
   return useCallback(
-    (reading: { itemCount?: number; activity?: number; prose?: number; turns?: number }) => {
+    (reading: WatermarkReading) => {
       if (!sessionId || document.hidden) {
         return
       }

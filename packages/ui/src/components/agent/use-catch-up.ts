@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-export type CatchUpMark = { itemCount: number; since?: number }
+export type CatchUpMark = { itemCount: number; since?: number; conversation?: number }
 
 type CatchUpState = { sessionId: string | undefined; mark: CatchUpMark | undefined; caughtUp: boolean }
 

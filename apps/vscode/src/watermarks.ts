@@ -3,7 +3,7 @@ import { Watermarks } from '@workerdeck/protocol'
 import type { Watermark, WatermarkStore } from '@workerdeck/protocol'
 
 export type { Watermark }
-export { unseenCount } from '@workerdeck/protocol'
+export { catchUpFrom, unseenCount } from '@workerdeck/protocol'
 
 const KEY = 'workerdeck.watermarks.v1'
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
 import { useBookmarks } from '@workerdeck/react'
+import type { CatchUpFrom } from '@workerdeck/protocol'
 import {
   Button,
   SessionPanel,
@@ -21,7 +22,7 @@ type Shown = {
   sessionId: string
   hostName: string
   cwd?: string
-  unseen?: { itemCount: number; since: number }
+  unseen?: CatchUpFrom
   conversation?: number
 }
 
