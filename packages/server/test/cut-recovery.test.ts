@@ -248,6 +248,20 @@ describe('every fault point leaves a record the next process finishes', () => {
     expect(recovered.pendingPrompt).toBeUndefined()
   })
 
+  it('a context_reset committed before the crash still opens n+1 with the agent reason', async () => {
+    const { dir, id, crashed } = await crashAt('after-commit')
+    await writeFile(
+      fileOf(dir, id),
+      JSON.stringify({ version: 1, record: { ...crashed, cut: { ...crashed.cut!, agentReason: 'context at 80%' } } }),
+    )
+
+    const second = await gateway(dir)
+    expect(second.built).toHaveLength(1)
+    expect(second.built[0]!.config.agentResetReason).toBe('context at 80%')
+    await idle(second.server, id)
+    expect((await onDisk(dir, id)).cut).toBeUndefined()
+  })
+
   it('a crash between the sending mark and the start: n+1 starts without the prompt, which waits as uncertain', async () => {
     const { dir, id, crashed } = await crashAt('after-commit')
     // Rebuild the moment between `sending` and the fresh start: the committed intent, the prompt marked as handed over.
