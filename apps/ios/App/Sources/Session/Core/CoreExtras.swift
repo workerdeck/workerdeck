@@ -61,7 +61,7 @@ struct CoreExtrasSheets: ViewModifier {
             McpServersView(
               model: McpServersModel(
                 servers: McpServers(sessionId: sessionId, canManage: extras.facts.mcpCanManage),
-                transport: { await client.answer($0) }))
+                generation: model.ui.chrome?.conversation ?? 1, transport: { await client.answer($0) }))
           case .skills:
             SkillsView(sections: model.skillSections, onUse: use)
           }

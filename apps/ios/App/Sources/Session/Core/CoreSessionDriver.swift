@@ -107,6 +107,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private static let log = Logger(subsystem: "bi.atomic.workerdeck.ios", category: "core-session")
 
   private let sessionId: String
+  private let history: Int64?
   private let baseURL: String
   private let apiBase: String
   private let authKey: String?
@@ -133,9 +134,10 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   init(
     sessionId: String, baseURL: String, authKey: String?, composer: Composer, metrics: Metrics, hideThinking: Bool,
-    fixture: [String]? = nil, entry: CoreEntry? = nil,
+    fixture: [String]? = nil, entry: CoreEntry? = nil, history: Int64? = nil,
     publish: @escaping @Sendable (CoreSessionUi) -> Void
   ) {
+    self.history = history
     self.fixture = fixture
     pending = entry
     self.sessionId = sessionId
@@ -144,7 +146,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     self.apiBase = WorkerDeckSession.apiBase(baseUrl: baseURL)
     self.authKey = authKey?.isEmpty == false ? authKey : nil
     self.publish = publish
-    session = Session(afterSeq: 0, reconnect: true, nonce: UUID().uuidString, metrics: metrics)
+    session = Session(afterSeq: 0, reconnect: true, nonce: UUID().uuidString, metrics: metrics, history: history)
     super.init()
     urlSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     worker = SessionWorker(session: session) { [weak self] effects in self?.handle(effects) }
@@ -165,7 +167,6 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   func backgroundTask() { worker.act { $0.backgroundTask(toolUseId: nil) } }
   func runShell(_ command: String) { worker.act { $0.runShell(command: command) } }
   func interrupt() { worker.act { $0.interrupt() } }
-  func clearContext() { worker.act { $0.clearContext() } }
   func setModel(_ model: String?) { worker.act { $0.setModel(model: model) } }
   func setEffort(_ effort: String?) { worker.act { $0.setEffort(effort: effort) } }
   func setMode(_ mode: Mode) { worker.act { $0.setPermissionMode(mode: mode) } }
@@ -202,10 +203,10 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   func hostImage(_ path: String) -> HostImageFetch { session.hostImagePath(sessionId: sessionId, path: path) }
 
-  func archivedView(agentsBody: String?) -> ArchivedView? {
+  func archivedView(conversationsBody: String?) -> ArchivedView? {
     let now = Date()
     return session.archivedView(
-      agentsBody: agentsBody, nowMs: now.timeIntervalSince1970 * 1000,
+      conversationsBody: conversationsBody, nowMs: now.timeIntervalSince1970 * 1000,
       offsetMinutes: Int32(TimeZone.current.secondsFromGMT(for: now) / 60))
   }
   func backgroundTask(_ toolUseId: String) { worker.act { $0.backgroundTask(toolUseId: toolUseId) } }
@@ -409,7 +410,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
         _ = bump()
         socket?.cancel(with: .normalClosure, reason: nil)
         socket = nil
-      case .request(let id, let method, let path, let scoped): request(id, method, path, scoped)
+      case .request(let id, let method, let path, let scoped, let token): request(id, method, path, scoped, token)
       case .changed(let changed): self.changed(changed)
       case .openShell(let id):
         guard ui.shell?.id != id else { break }
@@ -429,7 +430,8 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     }
     let mine = bump()
     socket?.cancel(with: .goingAway, reason: nil)
-    let address = WorkerDeckSession.socketUrl(baseUrl: baseURL, sessionId: sessionId, afterSeq: afterSeq)
+    let address = WorkerDeckSession.socketUrl(
+      baseUrl: baseURL, sessionId: sessionId, afterSeq: afterSeq, conversation: history)
     guard let url = URL(string: address) else {
       socket = nil
       worker.act { $0.closed(now: ProcessInfo.processInfo.systemUptime) }
@@ -506,19 +508,22 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     }
   }
 
-  private func request(_ id: UInt64, _ method: String, _ path: String, _ scoped: Bool) {
+  private func request(_ id: UInt64, _ method: String, _ path: String, _ scoped: Bool, _ token: Int64?) {
     if fixture != nil {
       let (status, body) = CoreReplayFixture.respond(method, path)
       worker.act { $0.responded(id: id, status: status, body: body) }
       return
     }
-    let address = apiBase + sessionRequestCall(sessionId: sessionId, method: method, path: path, scoped: scoped).path
+    let address =
+      apiBase
+      + sessionRequestCall(sessionId: sessionId, method: method, path: path, scoped: scoped, generation: token).path
     guard let url = URL(string: address) else {
       worker.act { $0.responded(id: id, status: 0, body: "") }
       return
     }
     var request = authed(URLRequest(url: url))
     request.httpMethod = method
+    if let token { request.setValue(String(token), forHTTPHeaderField: generationHeader()) }
     if method != "GET" { request.httpBody = Data() }
     urlSession.dataTask(with: request) { [weak self] data, response, _ in
       let status = UInt16(clamping: (response as? HTTPURLResponse)?.statusCode ?? 0)
@@ -531,6 +536,19 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     var request = request
     if let authKey { request.setValue("Bearer \(authKey)", forHTTPHeaderField: "Authorization") }
     return request
+  }
+
+  // A prompt refused before the engine saw it (its conversation ended under it) goes back into the composer.
+  private func readUndelivered() {
+    let back = session.takeUndelivered()
+    guard !back.isEmpty else { return }
+    ui.composer.undelivered = back.map(\.text).joined(separator: "\n\n")
+    ui.composer.undeliveredCount &+= 1
+    let maybe = back.contains(where: \.uncertain)
+    ui.error =
+      maybe
+      ? "A message may not have reached the conversation; its text is back in the composer."
+      : "A message did not reach the conversation, which moved on; its text is back in the composer."
   }
 
   // Each part is re-read only when the core says it moved: a replay's progress ticks never touch the layout.
@@ -547,7 +565,12 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       ui.modelPicker = session.modelPicker()
       ui.modePicker = session.modePicker()
       ui.canRunShell = session.canRunShell()
-      composer.readSession(session: session)
+      let moves = composer.readSession(session: session)
+      if !moves.isEmpty {
+        ui.composer.reuploads = moves
+        ui.composer.reuploadCount &+= 1
+      }
+      readUndelivered()
       ui.composer.read(skills: session.skills())
       readUsage()
       readExtras()

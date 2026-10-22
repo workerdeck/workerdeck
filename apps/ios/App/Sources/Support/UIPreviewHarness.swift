@@ -598,8 +598,8 @@ struct UIPreviewHarness: View {
       .environment(CoreMediaFixture.bookmarks)
 
     case .corearchived:
-      // A past agent conversation with no gateway behind it: the banner, the transcript, and no composer.
-      NavigationStack { CoreSessionView(fixture: CoreReplayFixture.archivedFrames) }
+      // A past conversation with no gateway behind it: the banner, the transcript, and no composer.
+      NavigationStack { CoreSessionView(fixture: CoreReplayFixture.archivedFrames, conversation: 1) }
         .environment(AppSettings())
         .environment(UnreadModel())
         .environment(PushCoordinator())
@@ -701,7 +701,8 @@ private struct CoreExtrasPreview: View {
       case .mcp:
         McpServersView(
           model: McpServersModel(
-            servers: McpServers(sessionId: "preview", canManage: true), transport: PreviewGateway.transport))
+            servers: McpServers(sessionId: "preview", canManage: true), generation: 1,
+            transport: PreviewGateway.transport))
       case .skills: SkillsView(sections: sections, onUse: { _ in })
       case .files: HostFilesView(scope: HostFileScope(transport: PreviewGateway.transport, cwd: PreviewGateway.root))
       }

@@ -9,7 +9,6 @@ import WorkerDeckKit
 struct CoreComposer: View {
   let model: CoreSessionModel
   let scroll: TranscriptScrollModel
-  private let carry: ComposerCarry?
 
   @State private var composer: ComposerModel
   @State private var draft = ""
@@ -25,15 +24,10 @@ struct CoreComposer: View {
   private static let cell: CGFloat = 32
   private static let gap: CGFloat = 8
 
-  init(model: CoreSessionModel, scroll: TranscriptScrollModel, services: CoreComposerServices, carry: ComposerCarry? = nil) {
+  init(model: CoreSessionModel, scroll: TranscriptScrollModel, services: CoreComposerServices) {
     self.model = model
     self.scroll = scroll
-    self.carry = carry
-    let carried = carry?.model.flatMap { $0.core === model.composer ? $0 : nil }
-    let composer = carried ?? ComposerModel(core: model.composer, services: services)
-    carry?.model = composer
-    _composer = State(initialValue: composer)
-    _draft = State(initialValue: carry?.draft ?? "")
+    _composer = State(initialValue: ComposerModel(core: model.composer, services: services))
   }
 
   var body: some View {
@@ -107,7 +101,11 @@ struct CoreComposer: View {
       apply(composerInsert(draft: draft, text: text))
     }
     .task { await composer.pollPeers() }
-    .onChange(of: draft) { _, text in carry?.draft = text }
+    .onChange(of: model.ui.composer.reuploadCount) { _, _ in composer.reupload(model.ui.composer.reuploads) }
+    .onChange(of: model.ui.composer.undeliveredCount) { _, _ in
+      guard let text = model.ui.composer.undelivered, draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+      apply(composerInsert(draft: "", text: text))
+    }
   }
 
   @ViewBuilder

@@ -349,7 +349,7 @@ final class SessionListModel {
   func close(_ item: ListItem) async {
     guard let hostId = item.hostUUID, let client = context(for: hostId)?.client else { return }
     do {
-      try await client.perform(deleteSessionCall(id: item.sessionId))
+      try await client.perform(deleteSessionCall(id: item.sessionId, generation: item.row.conversation))
       // Its mark is noise now, and would count the whole history as read if the same id ever reappeared.
       unread.forget(host: hostId, sessionId: item.sessionId)
       await refresh()
@@ -363,20 +363,22 @@ final class SessionListModel {
     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
     await act(on: item) {
       try await $0.perform(
-        updateSessionCall(id: item.sessionId, patch: SessionPatch(title: trimmed.isEmpty ? .clear : .set(value: trimmed))))
+        updateSessionCall(
+          id: item.sessionId, patch: SessionPatch(title: trimmed.isEmpty ? .clear : .set(value: trimmed)),
+          generation: item.row.conversation))
     }
   }
 
   func stopTask(_ item: ListItem, toolUseId: String) async {
-    await act(on: item) { try await $0.perform(stopTaskCall(sessionId: item.sessionId, toolUseId: toolUseId)) }
+    await act(on: item) { try await $0.perform(stopTaskCall(sessionId: item.sessionId, toolUseId: toolUseId, generation: item.row.conversation)) }
   }
 
   func sleep(_ item: ListItem) async {
-    await act(on: item) { try await $0.perform(sleepSessionCall(id: item.sessionId)) }
+    await act(on: item) { try await $0.perform(sleepSessionCall(id: item.sessionId, generation: item.row.conversation)) }
   }
 
   func killShell(_ item: ListItem, shellId: String) async {
-    await act(on: item) { try await $0.perform(killShellCall(sessionId: item.sessionId, shellId: shellId)) }
+    await act(on: item) { try await $0.perform(killShellCall(sessionId: item.sessionId, shellId: shellId, generation: item.row.conversation)) }
   }
 
   private func act(on item: ListItem, _ body: (WorkerClient) async throws -> Void) async {
@@ -395,7 +397,7 @@ final class SessionListModel {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     await agentAct(on: item, "Could not set the status") {
       let label: StatusEdit = trimmed.isEmpty ? .clear : .set(text: trimmed, emoji: nil)
-      try await $0.perform(updateSessionCall(id: item.sessionId, patch: SessionPatch(statusLabel: label)))
+      try await $0.perform(updateSessionCall(id: item.sessionId, patch: SessionPatch(statusLabel: label), generation: item.row.conversation))
     }
   }
 
@@ -416,7 +418,7 @@ final class SessionListModel {
 
   func makeAgent(_ item: ListItem) async {
     await agentAct(on: item, "Could not make an agent") {
-      try await $0.perform(createAgentCall(request: NewAgent(adopt: item.sessionId)))
+      try await $0.perform(nameSessionCall(id: item.sessionId, generation: item.row.conversation))
     }
   }
 
@@ -434,7 +436,7 @@ final class SessionListModel {
           updateAgentCall(id: agentId, patch: AgentPatch(lead: .set(value: lead.agentId), crossOwner: crossing)))
       } else {
         try await client.perform(
-          createAgentCall(request: NewAgent(lead: lead.agentId, adopt: item.sessionId, crossOwner: crossing)))
+          nameSessionCall(id: item.sessionId, lead: lead.agentId, crossOwner: crossing, generation: item.row.conversation))
       }
     }
   }
@@ -462,19 +464,42 @@ final class SessionListModel {
     }
   }
 
-  // Names the conversation the row showed, so a row read before another client's rotation never rotates twice.
-  func restart(_ item: ListItem) async {
-    guard let agentId = item.row.agentId, item.row.newConversationBlocked == nil else { return }
-    await agentAct(on: item, "Could not start a new conversation") {
-      try await $0.perform(restartAgentCall(id: agentId, prompt: nil, expectedSessionId: item.sessionId))
+  // Names the conversation the row showed, so a row read before another client's cut never cuts twice. Input the
+  // engine cannot confirm comes back as a discard confirmation the list asks about; a first message of unknown
+  // delivery as a notice, since only the session screen settles it.
+  func newConversation(_ item: ListItem) async -> DiscardConfirmation? {
+    guard item.row.canNewConversation, item.row.newConversationBlocked == nil else { return nil }
+    return await cut(item, newConversationCall(id: item.sessionId, expectedGeneration: item.row.conversation, prompt: nil))
+  }
+
+  func discardAndCut(_ item: ListItem, _ confirmation: DiscardConfirmation) async {
+    _ = await cut(
+      item,
+      discardAndCutCall(
+        id: item.sessionId, expectedGeneration: confirmation.conversation, inputRevision: confirmation.inputRevision,
+        prompt: nil))
+  }
+
+  private func cut(_ item: ListItem, _ call: HttpCall) async -> DiscardConfirmation? {
+    guard let hostId = item.hostUUID, let client = context(for: hostId)?.client else { return nil }
+    let answer = await client.answer(call)
+    defer { Task { await refresh() } }
+    if (200..<300).contains(answer.status) { return nil }
+    if let confirmation = discardConfirmation(status: answer.status, body: answer.body) { return confirmation }
+    if uncertainPromptConversation(status: answer.status, body: answer.body) != nil {
+      actionError = "Open the session to settle its first message before a new conversation."
+      return nil
     }
+    let error = restError(status: answer.status, contentType: answer.contentType, body: answer.body)
+    actionError = "Could not start a new conversation: \(error?.message ?? "no answer")"
+    return nil
   }
 
   // The one removal for an agent: its conversations stay under Past agents and its members are released.
   func deleteAgent(_ item: ListItem) async {
     guard let agentId = item.row.agentId, let hostId = item.hostUUID else { return }
     await agentAct(on: item, "Could not delete the agent") {
-      try await $0.perform(retireAgentCall(id: agentId, members: .release, expectedSessionId: item.sessionId))
+      try await $0.perform(retireAgentCall(id: agentId, members: .release, expectedGeneration: item.row.conversation))
     }
     await refreshPastAgents(hostId)
   }
@@ -500,12 +525,13 @@ final class SessionListModel {
   }
 
   // Nil when the gateway could not answer; the sheet says so instead of showing an empty history.
-  func conversations(hostId: UUID, agentId: String) async -> [ConversationItem]? {
+  func conversations(hostId: UUID, sessionId: String, title: String?) async -> [ConversationItem]? {
     guard let client = context(for: hostId)?.client else { return nil }
-    let answer = await client.answer(agentConversationsCall(id: agentId))
+    let answer = await client.answer(conversationsCall(id: sessionId))
     let now = Date()
     guard answer.status == 200 else { return nil }
-    return agentConversations(body: answer.body, nowMs: now.timeIntervalSince1970 * 1000, offsetMinutes: Self.offset(now))
+    return sessionConversations(
+      body: answer.body, currentTitle: title, nowMs: now.timeIntervalSince1970 * 1000, offsetMinutes: Self.offset(now))
   }
 
   static func offset(_ date: Date) -> Int32 { Int32(TimeZone.current.secondsFromGMT(for: date) / 60) }

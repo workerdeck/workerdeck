@@ -30,6 +30,9 @@ struct PushPayload: Sendable, Equatable {
   /// Which log `seq` counts in (the session's `epoch`). A wake renumbers the log, so a payload
   /// that outlived one has to be told from a current one, which the core does.
   let epoch: Int?
+  /// The conversation `seq` belongs to: a tap after a cut opens that past
+  /// conversation read-only rather than the current one.
+  let conversation: Int64?
 
   init?(userInfo: [AnyHashable: Any]) {
     guard let sessionId = userInfo["sessionId"] as? String, !sessionId.isEmpty else { return nil }
@@ -41,6 +44,7 @@ struct PushPayload: Sendable, Equatable {
     // only a positive one is a seq, and 0 is "no event" rather than the first.
     seq = (userInfo["seq"] as? NSNumber).map(\.intValue).flatMap { $0 > 0 ? $0 : nil }
     epoch = (userInfo["epoch"] as? NSNumber).map(\.intValue)
+    conversation = (userInfo["conversation"] as? NSNumber).map(\.int64Value)
   }
 }
 
@@ -60,6 +64,8 @@ struct PushRoute: Sendable, Hashable {
   /// Carried beside `seq` because it is what makes it trustworthy, and part of the identity
   /// for the same reason `seq` is.
   var epoch: Int?
+  /// The conversation the seq belongs to; nil reads as the current one.
+  var conversation: Int64?
 }
 
 /// Category and action identifiers. The forwarder sets the category, so these

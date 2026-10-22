@@ -9,6 +9,12 @@ struct CoreComposerContext: Equatable, Sendable {
   var revision = 0
   var skills: [SkillInfo] = []
   var skillSections: [SkillSection] = []
+  // Staged files the core sent up again because the session moved on to its next conversation, and a prompt the
+  // gateway refused before the engine saw it: each lands in the composer once, by its counter.
+  var reuploads: [Reupload] = []
+  var reuploadCount = 0
+  var undelivered: String?
+  var undeliveredCount = 0
 
   mutating func read(skills: [Skill]) {
     revision &+= 1

@@ -20,15 +20,18 @@ final class CoreSessionModel {
   private var recap: CatchUpMark?
   private var pinRequested: String?
   private var entry: CoreEntry?
+  // A past conversation's n: the screen shows it read-only.
+  let history: Int64?
 
   init(
     sessionId: String, baseURL: String, authKey: String?, fixture: [String]? = nil, entry: CoreEntry? = nil,
-    composer: Composer? = nil
+    history: Int64? = nil
   ) {
+    self.history = history
     self.fixture = fixture
     self.entry = entry
     self.sessionId = sessionId
-    self.composer = composer ?? Composer(sessionId: sessionId)
+    self.composer = Composer(sessionId: sessionId)
     self.baseURL = baseURL
     self.authKey = authKey
   }
@@ -47,7 +50,7 @@ final class CoreSessionModel {
     let driver = CoreSessionDriver(
       sessionId: sessionId, baseURL: baseURL, authKey: authKey, composer: composer, metrics: core,
       hideThinking: hideThinking,
-      fixture: fixture, entry: entry
+      fixture: fixture, entry: entry, history: history
     ) { [weak self] ui in
       DispatchQueue.main.async { MainActor.assumeIsolated { self?.ui = ui } }
     }
@@ -80,7 +83,9 @@ final class CoreSessionModel {
 
   func usage(at date: Date) -> SessionUsageView? { driver?.usage(now: date) }
   func hostImage(_ path: String) -> HostImageFetch? { driver?.hostImage(path) }
-  func archivedView(agentsBody: String?) -> ArchivedView? { driver?.archivedView(agentsBody: agentsBody) }
+  func archivedView(conversationsBody: String?) -> ArchivedView? {
+    driver?.archivedView(conversationsBody: conversationsBody)
+  }
   func backgroundTask(_ toolUseId: String) { driver?.backgroundTask(toolUseId) }
   func sleep() { driver?.sleep() }
   func dismissError() { driver?.dismissError() }
@@ -114,7 +119,6 @@ final class CoreSessionModel {
   func closeShell(_ id: String) { driver?.closeShell(id) }
   func reconnect() { driver?.reconnect() }
   func interrupt() { driver?.interrupt() }
-  func clearContext() { driver?.clearContext() }
   func setModel(_ model: String?) { driver?.setModel(model) }
   func setEffort(_ effort: String?) { driver?.setEffort(effort) }
   func setMode(_ mode: Mode) { driver?.setMode(mode) }

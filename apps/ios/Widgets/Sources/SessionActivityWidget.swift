@@ -66,6 +66,7 @@ private func sessionURL(_ attributes: SessionActivityAttributes, _ state: Sessio
     + (attributes.hostId.map { [URLQueryItem(name: "host", value: $0)] } ?? [])
     + (state.seq.map { [URLQueryItem(name: "seq", value: String($0))] } ?? [])
     + (state.epoch.map { [URLQueryItem(name: "epoch", value: String($0))] } ?? [])
+    + (state.conversation.map { [URLQueryItem(name: "conversation", value: String($0))] } ?? [])
   return components.url
 }
 
