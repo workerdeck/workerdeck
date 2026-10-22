@@ -77,7 +77,8 @@ pub struct ArchivedView {
     pub unavailable: bool,
 }
 
-// What the session's own conversations list says now: its current n, or `retired` once it has none.
+// What the session's own conversations list says now: its current n, and `retired` only when the gateway says it is
+// closed. A current conversation outside the reader's scope is simply absent, never a closed session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct CurrentConversation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -88,10 +89,10 @@ pub struct CurrentConversation {
 
 impl CurrentConversation {
     pub fn of(response: &ConversationsResponse) -> Self {
-        match response.conversation.filter(|_| response.closed != Some(true)) {
-            Some(n) => CurrentConversation { conversation: Some(n), retired: None },
-            None => CurrentConversation { conversation: None, retired: Some(true) },
+        if response.closed == Some(true) {
+            return CurrentConversation { conversation: None, retired: Some(true) };
         }
+        CurrentConversation { conversation: response.conversation, retired: None }
     }
 }
 

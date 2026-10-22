@@ -77,6 +77,17 @@ mod history {
     }
 
     #[test]
+    fn only_a_closed_session_reads_as_retired_not_a_current_conversation_out_of_scope() {
+        use wd_native::vm::conversations::CurrentConversation;
+        let hidden = response(json!({"history": [{"n": 1, "engine": "claude", "cwd": "/w", "endedAt": 5}]}));
+        assert_eq!(CurrentConversation::of(&hidden), CurrentConversation { conversation: None, retired: None });
+        let closed = response(json!({"conversation": 2, "closed": true, "history": []}));
+        assert_eq!(CurrentConversation::of(&closed), CurrentConversation { conversation: None, retired: Some(true) });
+        let live = response(json!({"conversation": 2, "history": []}));
+        assert_eq!(CurrentConversation::of(&live), CurrentConversation { conversation: Some(2), retired: None });
+    }
+
+    #[test]
     fn recovery_names_a_failed_start_and_an_uncertain_first_message() {
         let quiet = response(json!({"conversation": 2, "history": [], "pendingPrompt": {"text": "hi", "n": 2, "state": "sending"}}));
         assert_eq!(conversation_recovery(&quiet), ConversationRecovery::default());
