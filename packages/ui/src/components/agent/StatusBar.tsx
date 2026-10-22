@@ -18,8 +18,6 @@ import { useTranscriptVariant } from './transcript-variant.tsx'
 export interface StatusBarProps {
   state: TranscriptState
   rateLimits?: Record<string, RateLimitInfo>
-  /** @deprecated Pass {@link StatusBarProps.connection}. */
-  connected?: boolean
   connection?: ConnectionState
   onOpenStatus?: () => void
   onOpenContext?: () => void
@@ -139,7 +137,6 @@ function Slot({ onClick, hint, children }: { onClick?: () => void; hint: string;
 export function StatusBar({
   state,
   rateLimits,
-  connected,
   connection,
   onOpenStatus,
   onOpenContext,
@@ -156,7 +153,7 @@ export function StatusBar({
   const windows = rateLimits ?? state.rateLimits
   const session = windows?.five_hour
   const weekly = windows?.seven_day
-  const link: ConnectionState = connection ?? (connected === false ? 'reconnecting' : 'live')
+  const link: ConnectionState = connection ?? 'live'
   const terminal = useTranscriptVariant() === 'terminal'
   const taskCount = tasks && tasks.length > 0 ? taskSummary(tasks) : undefined
   return (
