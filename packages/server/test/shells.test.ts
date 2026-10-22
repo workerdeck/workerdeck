@@ -77,9 +77,9 @@ function escapee(cwd: string): { command: string; marker: string; pidFile: strin
 }
 
 async function pidFrom(file: string): Promise<number> {
-  await vi.waitFor(() => expect(existsSync(file)).toBe(true), { timeout: 4000 })
+  // The file can exist before its pid is written to it.
+  await vi.waitFor(() => expect(existsSync(file) && Number(readFileSync(file, 'utf8').trim())).toBeGreaterThan(1), { timeout: 4000 })
   const pid = Number(readFileSync(file, 'utf8').trim())
-  expect(pid).toBeGreaterThan(1)
   expect(() => process.kill(pid, 0)).not.toThrow()
   return pid
 }
