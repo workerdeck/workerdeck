@@ -735,7 +735,9 @@ being no native transcript for the editor to own, so it cannot be what the rule 
 
 The cards carry it per session - an **unread badge** of messages since that session was last on
 screen (`src/watermarks.ts`, globalState, written **only while the panel is visible and
-showing it**, and monotonic so a compaction can't resurrect read rows). Messages, from
+showing it**; its `prose`/`activity` are lifetime counts for the session id and only ever grow, so neither a
+compaction nor a conversation cut resurrects read rows, while its `itemCount` belongs to the `conversation` it
+was taken in: a newer conversation's reading replaces it, an older one's never raises it). Messages, from
 `SessionInfo.proseCount`: the badge answers *is there something to read*, so a
 session grinding through forty tool calls badges nothing until it speaks. The panel turns the same mark into catch-up. The window's open
 folders are a facet too, and the only one **on by default**: `workspaceScope()` turns them
@@ -1411,7 +1413,10 @@ draws every state from canned rows.
 - **Conversations (protocol 2).** A route is a stable session id and an optional past conversation
   (`SessionRoute.session(.., conversation:)`, drawn by `CoreSessionRoute`). There is no follow: a cut closes the
   socket and the same screen reattaches to conversation n+1; Go to current swaps a past conversation for the live
-  screen in place. A past conversation opens read-only over its own socket (`?conversation=n`): banner from
+  screen in place. A notification's n is weighed against a fresh `GET /sessions/:id/conversations` (the route stays
+  pending, and is tried again on the next foreground, until it answers); an n that resolved as current rides along
+  as `requested`, and if a cut lands before the attach the driver drops the entry and `CoreSessionRoute` reopens n
+  read-only with it. A past conversation opens read-only over its own socket (`?conversation=n`): banner from
   `Session.archived_view` over one `GET /sessions/:id/conversations` read, no composer, no actions, no read marks
   and no catch-up seam. Every card and the session menu offer one New conversation (gated, hint as subtitle) for
   every live session; an `unconfirmed_input` 409 asks before discard-and-cut (`CoreConversationDialogs`, the
@@ -1488,7 +1493,10 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
 - **Read marks carry item counts, and a reopened session catches up.** Opening a row reads `SessionList.since` before
   the list's `markSeen` moves it; `SessionsModel` holds that mark (a rotation redraws the same seam) and the screen
   hands it to `Session.set_recap`. While the screen is started it marks with `Session.seen()`; on stop and on leave
-  it trues the mark up once from a fresh `GET /sessions/:id` (`SessionList.mark_session`). `Session.catch_up()` is the
+  it trues the mark up once from a fresh `GET /sessions/:id` (`SessionList.mark_session`), labelling the item count
+  with the conversation the screen rendered (`SeenCounts.conversation`), never the body's: after a cut the body names
+  the next one, and such a body raises no lifetime counter (it counts what the screen never drew). `set_recap` takes the mark's conversation and the core recaps from the top when another one is
+  attached (`catch_up_items`, the TS `catchUpItems`); iOS does the same. `Session.catch_up()` is the
   bar above the composer (jump puts the seam at the top, dismiss clears the recap); rows above the seam draw at 45%,
   as on iOS. No setting gates it (iOS has a Catch-up mode toggle; Android has no settings screen).
 - **Both native apps serve Claude and Codex sessions only** (Tobias, 2026-10-17). Provider (AI SDK) sessions are a
