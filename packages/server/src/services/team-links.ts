@@ -55,10 +55,9 @@ const INVITE_TTL_MS = 10 * 60_000
 const SOON_MS = 1_000
 const NO_SUCH_AGENT: TeamResult = { ok: false, reason: 'no such agent' }
 
-// An edge stored before owners, or asked through a relay without them, fits any owner; otherwise it holds only for
-// the owner it was agreed with.
+// An edge holds only for the owner it was agreed with.
 function ownerFits(stored: string | undefined, asked: string | undefined): boolean {
-  return stored === undefined || asked === undefined || stored === asked
+  return stored !== undefined && stored === asked
 }
 
 // The cross-gateway half of teams. The lead's gateway owns the roster, the member's gateway owns the member's consent:
@@ -141,7 +140,11 @@ export class TeamLinks {
       if (!result.ok) {
         return { status: 409, error: result.reason }
       }
-      const unprompted = result.owner !== undefined && result.owner !== this.#ownerOf(mover) ? this.#agents.unpromptedRefusal(mover) : null
+      if (result.owner === undefined) {
+        this.#notify('team.leave', mover.id, lead, op, this.#ownerOf(mover))
+        return { status: 502, error: `the gateway of ${lead} accepted without naming its owner` }
+      }
+      const unprompted = result.owner !== this.#ownerOf(mover) ? this.#agents.unpromptedRefusal(mover) : null
       if (unprompted) {
         this.#notify('team.leave', mover.id, lead, op, this.#ownerOf(mover))
         return unprompted
@@ -447,11 +450,8 @@ export class TeamLinks {
     }
   }
 
-  #joined(lead: string, op: string, leadName: string | undefined, owner: string | undefined): RemoteJoin {
-    return {
-      lead,
-      remoteLead: { name: leadName ?? lead, ...(owner === undefined ? {} : { owner }), state: 'joined', since: this.#now(), op },
-    }
+  #joined(lead: string, op: string, leadName: string | undefined, owner: string): RemoteJoin {
+    return { lead, remoteLead: { name: leadName ?? lead, owner, state: 'joined', since: this.#now(), op } }
   }
 
   #ownerRow(agent: StoredAgent | undefined): { owner?: string } {
@@ -760,8 +760,13 @@ export class TeamLinks {
       await this.#agents.releaseJoin(edge.from, edge.op)
       return
     }
+    if (answer.owner === undefined) {
+      this.#log(`teams: a join of ${edge.from} to ${edge.to} was answered without an owner; dropped`)
+      await this.#agents.releaseJoin(edge.from, edge.op)
+      return
+    }
     const previous = this.#agents.get(edge.from)
-    const crossOwner = answer.owner !== undefined && answer.owner !== this.#ownerOf(previous)
+    const crossOwner = answer.owner !== this.#ownerOf(previous)
     const unprompted = crossOwner && previous ? this.#agents.unpromptedRefusal(previous) : null
     const joined = this.#joined(edge.to, edge.op, answer.name, answer.owner)
     const outcome = unprompted ?? (await this.#agents.update(edge.from, { lead: edge.to }, { joined }))

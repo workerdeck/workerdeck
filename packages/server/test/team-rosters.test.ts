@@ -35,7 +35,9 @@ class Mesh {
           return { ok: true }
         }
         const name = this.nodes.get(gateway)?.agents.get(from)?.name
-        return node.teams.inbound(kind, { gateway, owner: 'tobias', agent: `${gateway}:${from}`, ...(name ? { name } : {}) }, target.id, op)
+        // The relay stamps the target's owner on every answer, as it does for real.
+        const result = await node.teams.inbound(kind, { gateway, owner: 'tobias', agent: `${gateway}:${from}`, ...(name ? { name } : {}) }, target.id, op)
+        return result.ok ? { owner: 'tobias', ...result } : result
       },
       teamStatus: async (targetName, body): Promise<TeamStatusAnswer> => {
         const node = this.#reach(targetName)
@@ -45,7 +47,7 @@ class Mesh {
         const answer = await node.teams.inboundStatus(
           { gateway },
           {
-            edges: body.edges.map((edge) => ({ ...edge, from: `${gateway}:${edge.from}`, to: parseRelayPeerId(edge.to)!.id })),
+            edges: body.edges.map((edge) => ({ owner: 'tobias', ...edge, from: `${gateway}:${edge.from}`, to: parseRelayPeerId(edge.to)!.id })),
             rosters: readTeamRosters(body.rosters, gateway),
             seen: body.seen ?? [],
           },
@@ -432,10 +434,10 @@ describe('unconfirmed edges carried over by the migration', () => {
 
   it('confirms matching halves on the first status exchange and dissolves a one-sided one, widening nothing before', async () => {
     const mesh = new Mesh()
-    const macStore = createMemoryAgentStore([base('L', { remoteMembers: [{ agent: 'win:M', state: 'unconfirmed', at: 1, op: OP }] })])
+    const macStore = createMemoryAgentStore([base('L', { remoteMembers: [{ agent: 'win:M', owner: 'tobias', state: 'unconfirmed', at: 1, op: OP }] })])
     const winStore = createMemoryAgentStore([
-      base('M', { lead: 'mac:L', remoteLead: { name: 'L', state: 'unconfirmed', since: 1, op: OP } }),
-      base('O', { lead: 'mac:L', remoteLead: { name: 'L', state: 'unconfirmed', since: 1, op: 'v1:ffffffffffffffffffffffffffffffff' } }),
+      base('M', { lead: 'mac:L', remoteLead: { name: 'L', owner: 'tobias', state: 'unconfirmed', since: 1, op: OP } }),
+      base('O', { lead: 'mac:L', remoteLead: { name: 'L', owner: 'tobias', state: 'unconfirmed', since: 1, op: 'v1:ffffffffffffffffffffffffffffffff' } }),
     ])
     const mac = await mesh.add('mac', macStore)
     const win = await mesh.add('win', winStore)
@@ -454,12 +456,12 @@ describe('unconfirmed edges carried over by the migration', () => {
     const mesh = new Mesh()
     const mac = await mesh.add(
       'mac',
-      createMemoryAgentStore([base('L', { remoteMembers: [{ agent: 'win:M', state: 'unconfirmed', at: 1, op: OP }] })]),
+      createMemoryAgentStore([base('L', { remoteMembers: [{ agent: 'win:M', owner: 'tobias', state: 'unconfirmed', at: 1, op: OP }] })]),
     )
     const win = await mesh.add(
       'win',
       createMemoryAgentStore([
-        base('M', { lead: 'mac:L', remoteLead: { name: 'L', state: 'unconfirmed', since: 1, op: OP } }),
+        base('M', { lead: 'mac:L', remoteLead: { name: 'L', owner: 'tobias', state: 'unconfirmed', since: 1, op: OP } }),
         base('C', { lead: 'M' }),
       ]),
     )
@@ -519,12 +521,13 @@ describe('second review', () => {
     const store = createMemoryAgentStore([
       record('M', {
         lead: 'mac:L',
-        remoteLead: { name: 'L', state: 'joined', since: 1, op: 'op-old' },
+        remoteLead: { name: 'L', owner: 'tobias', state: 'joined', since: 1, op: 'op-old' },
         pendingJoin: { op: 'op-new', lead: 'mac:L', at: 1 },
       }),
     ])
     const win = await mesh.add('win', store)
-    const ask = async (op: string) => (await win.teams.inboundStatus({ gateway: 'mac' }, { edges: [{ from: 'mac:L', to: 'M', op }] })).edges
+    const ask = async (op: string) =>
+      (await win.teams.inboundStatus({ gateway: 'mac' }, { edges: [{ from: 'mac:L', to: 'M', op, owner: 'tobias' }] })).edges
     expect(await ask('op-old')).toEqual([{ known: true, name: 'M', owner: 'tobias' }])
     expect(await ask('op-new')).toEqual([{ known: true, name: 'M', owner: 'tobias' }])
     expect(await ask('op-other')).toEqual([{ known: false }])

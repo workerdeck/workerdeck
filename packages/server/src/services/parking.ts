@@ -35,7 +35,6 @@ export type SessionParkOptions = {
   onParked?: (sessionId: string, executionId: string) => void
   onResumed?: (sessionId: string, runner: Runner) => void
   onError?: (error: unknown, context: ParkErrorContext) => void
-  engineHome?: (profile: string | undefined, engine: NonNullable<SessionInfo['engine']>) => SessionCapture['home']
   // The write token: the conversation a record is taken for, refused by the store once a cut has moved past it.
   conversationOf?: (sessionId: string) => number | undefined
 }
@@ -411,7 +410,7 @@ export class SessionParkManager {
     }
     const { engineAsleep: _asleep, ...info } = source
     const snapshot = runner?.snapshot?.() ?? (stored && !isDormant(stored) ? stored.snapshot : undefined)
-    const home = config.engineHome ?? this.#options.engineHome?.(info.profile, engineOf(info))
+    const home = config.engineHome
     return {
       id: sessionId,
       info: { ...this.#stamped(info), status: 'closed', pendingPermissionCount: 0 },

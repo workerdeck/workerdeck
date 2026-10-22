@@ -282,10 +282,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     onParking: (sessionId) => queue?.canParkSession(sessionId) ?? true,
     onParked: (sessionId, executionId) => void queue?.onSessionParking(sessionId, executionId),
     onResumed: (sessionId, runner) => queue?.onSessionResumed(sessionId, runner),
-    engineHome: (name, engine) => {
-      const profile = name === undefined ? undefined : profiles.get(name)
-      return name !== undefined && !profile ? undefined : engineHomeOf(profile, engine, factory.sessionEnvFor)
-    },
   })
 
   const peers =

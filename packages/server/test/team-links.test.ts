@@ -272,7 +272,7 @@ function fakeTransport(): FakeTransport & { down?: string } {
     statusCalls: [],
     answer: (edges) => edges.map((edge) => ({ ...edge, known: true, name: 'AC-Lead renamed' })),
     ready: () => transport.down,
-    team: async (): Promise<TeamResult> => ({ ok: true, leadName: 'AC-Lead' }),
+    team: async (): Promise<TeamResult> => ({ ok: true, leadName: 'AC-Lead', owner: 'tobias' }),
     teamStatus: async (target, body) => {
       transport.statusCalls.push({ gateway: target, ...body })
       return { edges: transport.answer(body.edges) }
@@ -326,7 +326,7 @@ describe('team reconcile', () => {
     const { teams, member } = await memberRig()
     const op = member.remoteLead!.op
     const ask = async (origin: string, from: string, asked: string | undefined = op) =>
-      (await teams.inboundStatus({ gateway: origin }, { edges: [{ from, to: member.id, op: asked }] })).edges
+      (await teams.inboundStatus({ gateway: origin }, { edges: [{ from, to: member.id, op: asked, owner: 'tobias' }] })).edges
     expect(await ask('mac', 'mac:L1')).toEqual([{ known: true, name: 'Scout' }])
     expect(await ask('mac', 'mac:L2')).toEqual([{ known: false }])
     expect(await ask('pi', 'mac:L1')).toEqual([{ known: false }])
@@ -352,7 +352,7 @@ describe('team reconcile', () => {
       'op-1',
     )
     expect(inbound).toEqual({ ok: false, reason: 'Scout is joining a team' })
-    release({ ok: true, leadName: 'AC-Lead' })
+    release({ ok: true, leadName: 'AC-Lead', owner: 'tobias' })
     expect(await joining).toMatchObject({ lead: 'mac:L1' })
   })
 
