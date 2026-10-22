@@ -251,6 +251,65 @@ describe('every fault point leaves a record the next process finishes', () => {
     expect(recovered.pendingPrompt).toBeUndefined()
   })
 
+  it('a recovery start that settles after the startup timeout clears the failure the crash left', async () => {
+    const { dir, id, crashed } = await crashAt('start')
+    expect(crashed.startFailed).toMatchObject({ n: 2 })
+    let release: (() => void) | undefined
+    const second = await gateway(dir, {
+      options: { agentStartupTimeoutMs: 20 },
+      building: (runner) => {
+        runner.hold = new Promise((resolve) => {
+          release = resolve
+        })
+      },
+    })
+    expect(second.built).toHaveLength(1)
+    expect((await onDisk(dir, id)).startFailed).toBeUndefined()
+    release!()
+    await idle(second.server, id)
+    expect(second.built[0]!.sent).toEqual(['next'])
+    const recovered = await onDisk(dir, id)
+    expect(recovered.cut).toBeUndefined()
+    expect(recovered.startFailed).toBeUndefined()
+    expect(recovered.pendingPrompt).toBeUndefined()
+  })
+
+  it('a recovery start still in flight is not retried, and a retry after it fails is the only attempt that settles', async () => {
+    const { dir, id } = await crashAt('start')
+    const releases: Array<() => void> = []
+    const second = await gateway(dir, {
+      options: { agentStartupTimeoutMs: 20 },
+      building: (runner) => {
+        if (releases.length === 0) {
+          runner.failStart = 'recovery fell over'
+        }
+        runner.hold = new Promise((resolve) => {
+          releases.push(resolve)
+        })
+      },
+    })
+    const retry = () => call(second.base, `/sessions/${id}/conversations/retry`, 'POST', { expectedGeneration: 2 })
+    expect((await retry()).status).toBe(409)
+
+    releases[0]!()
+    await vi.waitFor(async () => expect((await onDisk(dir, id)).startFailed).toEqual({ n: 2, error: 'recovery fell over' }), SETTLE)
+    expect((await retry()).status).toBe(200)
+    expect(second.built).toHaveLength(2)
+    await vi.waitFor(() => expect(releases).toHaveLength(2))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(await onDisk(dir, id)).toMatchObject({ cut: { phase: 'committed', to: 2 } })
+    expect((await onDisk(dir, id)).startFailed).toBeUndefined()
+
+    releases[1]!()
+    await idle(second.server, id)
+    const settled = await onDisk(dir, id)
+    expect(settled.cut).toBeUndefined()
+    expect(settled.startFailed).toBeUndefined()
+    // The recovery start was handed the prompt before it failed: never resent, left for a person to settle.
+    expect(second.built[1]!.sent).toEqual([])
+    expect(settled.pendingPrompt).toMatchObject({ text: 'next', state: 'uncertain' })
+  })
+
   it('a context_reset committed before the crash still opens n+1 with the agent reason', async () => {
     const { dir, id, crashed } = await crashAt('after-commit')
     await writeFile(

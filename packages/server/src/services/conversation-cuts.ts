@@ -70,6 +70,8 @@ export class ConversationCuts {
   #queued = new Map<string, { runner: Runner; leave: () => void }>()
   #waiting = new Map<string, Array<(cut: boolean) => void>>()
   #failedStarts = new Set<string>()
+  // The runner whose start may still settle n's intent; a superseded attempt's late settle is a no-op.
+  #attempts = new Map<string, Runner>()
   #firstStarts = new Map<string, Promise<void>>()
   #closed = false
   // Test seam: a step named here throws, standing in for a crash or a refused write at that boundary.
@@ -150,6 +152,7 @@ export class ConversationCuts {
         return
       }
       const identity = record.pendingPrompt?.n === 1
+      this.#attempts.set(id, runner)
       const startup = await startupOf(ctx, runner, identity)
       if (this.#closed) {
         return
@@ -391,12 +394,7 @@ export class ConversationCuts {
         stuck.close('server')
       }
       ctx.parking.unfence(id)
-      // A late settle skips a recorded failure, so the old attempt's must not outlive the new one's start.
-      const retried = await ctx.records.transactDurable(id, (current) => {
-        const { startFailed: _failed, ...rest } = current!
-        return rest
-      })
-      return await this.#startCommitted(retried)
+      return await this.#startCommitted(record)
     })
   }
 
@@ -586,9 +584,12 @@ export class ConversationCuts {
     let runner = live
     if (!runner) {
       this.#refuseClosed()
-      if (prompt !== undefined) {
-        await ctx.records.transactDurable(id, (current) => ({ ...current!, pendingPrompt: { ...intent!, state: 'sending' } }))
-      }
+      this.#attempts.delete(id)
+      // A replacement attempt begins: an earlier one's failure is no longer the record's to report.
+      await ctx.records.transactDurable(id, (current) => {
+        const { startFailed: _failed, ...rest } = current!
+        return prompt === undefined ? rest : { ...rest, pendingPrompt: { ...intent!, state: 'sending' } }
+      })
       this.#refuseClosed()
       try {
         this.#fault('start')
@@ -603,6 +604,7 @@ export class ConversationCuts {
       }
     }
     const started = runner
+    this.#attempts.set(id, started)
     const owed: Owed = { uncertain, identity: prompt !== undefined || carried }
     const startup = startupOf(ctx, started, owed.identity)
     const early = await within(startup, ctx.locks.startupTimeoutMs)
@@ -623,9 +625,19 @@ export class ConversationCuts {
 
   // `strict` answers the caller, so a failure throws; otherwise it settles in the background for nobody.
   async #settle(id: string, to: number, owed: Owed, runner: Runner, startup: Startup, strict: boolean): Promise<void> {
-    if (this.#closed) {
+    if (this.#closed || this.#attempts.get(id) !== runner) {
       return
     }
+    try {
+      await this.#settleOwned(id, to, owed, runner, startup, strict)
+    } finally {
+      if (this.#attempts.get(id) === runner) {
+        this.#attempts.delete(id)
+      }
+    }
+  }
+
+  async #settleOwned(id: string, to: number, owed: Owed, runner: Runner, startup: Startup, strict: boolean): Promise<void> {
     const record = await this.#ctx.records.get(id)
     if (record?.cut?.phase !== 'committed' || record.cut.to !== to || (!strict && record.startFailed !== undefined)) {
       return
