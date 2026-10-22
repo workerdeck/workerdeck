@@ -127,10 +127,13 @@ async function create(base: string, extra: Record<string, unknown> = {}, token?:
   return (res.body.session as SessionInfo).id
 }
 
+// A start settles through several record writes: a loaded host can take more than waitFor's default second.
+const SETTLE = { timeout: 5000 }
+
 // Idle, and no start or cut intent left: a cut's successor runs idle before the cut settles and lifts its gate.
 async function idle(server: WorkerServer, id: string): Promise<void> {
-  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'))
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined())
+  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'), SETTLE)
+  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined(), SETTLE)
 }
 
 async function stop(server: WorkerServer): Promise<void> {
@@ -302,7 +305,7 @@ describe('conversation cut under a stable id', () => {
     const frames = frameCollector(ws)
     await frames.waitFor((frame) => frame.type === 'attached')
     ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: ' /clear ' }))
-    await vi.waitFor(async () => expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(2))
+    await vi.waitFor(async () => expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(2), SETTLE)
     expect(built[0]!.sent).not.toContain(' /clear ')
     await idle(server, id)
 
@@ -314,7 +317,7 @@ describe('conversation cut under a stable id', () => {
     await new Promise((resolve) => setTimeout(resolve, 30))
     expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(2)
     built.at(-1)!.settle()
-    await vi.waitFor(async () => expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(3))
+    await vi.waitFor(async () => expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(3), SETTLE)
   })
 
   it('refuses a late execution result for an ended conversation with its own error', async () => {

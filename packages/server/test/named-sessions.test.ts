@@ -115,9 +115,12 @@ async function createNamed(base: string, name: string, extra: Record<string, unk
   return res.body.session as SessionInfo
 }
 
+// A start settles through several record writes: a loaded host can take more than waitFor's default second.
+const SETTLE = { timeout: 5000 }
+
 async function idle(server: WorkerServer, id: string): Promise<void> {
-  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'))
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined())
+  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'), SETTLE)
+  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined(), SETTLE)
 }
 
 async function stop(server: WorkerServer): Promise<void> {

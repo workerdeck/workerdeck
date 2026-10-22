@@ -200,9 +200,12 @@ function bearer(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` }
 }
 
+// A start settles through several record writes: a loaded host can take more than waitFor's default second.
+const SETTLE = { timeout: 5000 }
+
 async function idle(server: WorkerServer, id: string): Promise<void> {
-  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'))
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined())
+  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'), SETTLE)
+  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined(), SETTLE)
 }
 
 async function cut(base: string, id: string, expectedGeneration: number, token?: string): Promise<Call> {
@@ -1025,11 +1028,11 @@ describe('the cut stops its runner quietly', () => {
       await idle(server, id)
       const socket = await attach(wsBase, id)
       socket.send({ generation: 2, type: 'user_message', text: '/clear' })
-      await vi.waitFor(async () => expect((await server.records.get(id))?.conversation).toBe(3))
+      await vi.waitFor(async () => expect((await server.records.get(id))?.conversation).toBe(3), SETTLE)
       await idle(server, id)
       const again = await attach(wsBase, id)
       again.send({ generation: 3, type: 'clear_context' })
-      await vi.waitFor(async () => expect((await server.records.get(id))?.conversation).toBe(4))
+      await vi.waitFor(async () => expect((await server.records.get(id))?.conversation).toBe(4), SETTLE)
       await idle(server, id)
       await wait(50)
       expect(pushed.filter((note) => note.type === 'session_closed')).toEqual([])

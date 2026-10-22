@@ -251,7 +251,8 @@ withPty('kill', () => {
     const shells = makeRegistry({ timeoutMs: 150 })
     const started = Date.now()
     const { shell } = await run(shells, runner('s1'), 'sleep 30')
-    expect(Date.now() - started).toBeLessThan(2000)
+    // Far under the 30 s the command asks for, with room for a loaded host.
+    expect(Date.now() - started).toBeLessThan(4000)
     expect(shell).toMatchObject({ endReason: 'timeout' })
   })
 

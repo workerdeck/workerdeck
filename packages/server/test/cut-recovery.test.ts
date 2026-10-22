@@ -123,9 +123,12 @@ function cut(base: string, id: string, expectedGeneration: number, prompt?: stri
   return call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration, ...(prompt ? { prompt } : {}) })
 }
 
+// A start settles through several record writes: a loaded host can take more than waitFor's default second.
+const SETTLE = { timeout: 5000 }
+
 async function idle(server: WorkerServer, id: string): Promise<void> {
-  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'))
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined())
+  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'), SETTLE)
+  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined(), SETTLE)
   await server.parking.flush()
 }
 
