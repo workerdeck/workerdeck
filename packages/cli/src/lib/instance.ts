@@ -262,6 +262,13 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
     sweep.unref()
   }
 
+  try {
+    await server.preflight()
+  } catch (error) {
+    await server.close()
+    throw error
+  }
+
   let stopActivities: (() => void) | undefined
   if (apns) {
     // Boot reconcile before the driver, and before any session rebuilds: whatever is in the

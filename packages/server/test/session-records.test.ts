@@ -8,6 +8,7 @@ import {
   MemorySessionRecordStore,
   SessionRecords,
   MissingConversationError,
+  UnsupportedStateError,
   StaleConversationError,
   type SessionRecord,
   type SessionRecordStore,
@@ -192,17 +193,39 @@ describe('createFileSessionRecordStore', () => {
     const onError = vi.fn()
     const store = createFileSessionRecordStore({ dir, onError })
     await store.save(ledger('good'))
-    const write = (name: string, record: unknown, version = 2) => writeFile(join(dir, name), JSON.stringify({ version, record }))
-    await write('old.json', ledger('old'), 1)
+    const write = (name: string, record: unknown, version = 1) => writeFile(join(dir, name), JSON.stringify({ version, record }))
     await write('no-conversation.json', { ...ledger('no-conversation'), conversation: 0 })
     await write('no-history.json', { ...ledger('no-history'), conversations: undefined })
     await write('foreign.json', { ...ledger('foreign'), runtime: dormant('someone-else') })
     await write('broken-runtime.json', { ...ledger('broken-runtime'), runtime: { id: 'broken-runtime' } })
-    await writeFile(join(dir, 'truncated.json'), '{"version":2,"record":{"id":"tru')
+    await writeFile(join(dir, 'truncated.json'), '{"version":1,"record":{"id":"tru')
 
     expect((await store.list()).map((record) => record.id)).toEqual(['good'])
     expect(onError).toHaveBeenCalledTimes(5)
     expect(onError.mock.calls.map((call) => call[1].op)).toEqual(['read', 'read', 'read', 'read', 'read'])
     expect(onError.mock.calls.map((call) => String(call[0])).filter((message) => message.includes('incomplete'))).toHaveLength(4)
+  })
+
+  it('refuses a file written before 4.0.0 instead of skipping it', async () => {
+    const store = createFileSessionRecordStore({ dir })
+    await store.save(ledger('good'))
+    const old = { kind: 'dormant', id: 'old', info: {}, config: {}, profile: 'claude-a', savedAt: 1 }
+    await writeFile(join(dir, 'old.json'), JSON.stringify({ version: 1, record: old }))
+
+    await expect(store.list()).rejects.toBeInstanceOf(UnsupportedStateError)
+    await expect(store.get('old')).rejects.toThrow(/before 4\.0\.0/)
+    expect((await store.get('good'))?.id).toBe('good')
+  })
+
+  it('refuses a record in a format version it cannot read', async () => {
+    const store = createFileSessionRecordStore({ dir })
+    await writeFile(join(dir, 'other.json'), JSON.stringify({ version: 2, record: ledger('other') }))
+    await expect(store.list()).rejects.toThrow(/session format 2/)
+  })
+
+  it('refuses a parked record from before kinds existed', async () => {
+    const store = createFileSessionRecordStore({ dir })
+    await writeFile(join(dir, 'old.json'), JSON.stringify({ version: 1, record: { id: 'old', parkedAt: 1, executions: [] } }))
+    await expect(store.list()).rejects.toBeInstanceOf(UnsupportedStateError)
   })
 })

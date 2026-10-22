@@ -7,6 +7,7 @@ import {
   createFileAgentStore,
   createFileSessionRecordStore,
   createWorkerServer,
+  UnsupportedStateError,
   type AgentStore,
   type WorkerServer,
   type WorkerServerOptions,
@@ -289,16 +290,35 @@ describe('startup reconciliation', () => {
     expect((await call(second.base, '/agents?retired=1')).body.retired).toEqual([expect.objectContaining({ id: session.id })])
   })
 
-  it('drops an index row with no record, logs it, and leaves a row from before the merge alone', async () => {
+  it('drops an index row with no record and logs it', async () => {
     const dir = await fixture.stateDir()
-    const orphan: StoredAgent = { id: 'gone', name: 'Gone', createdAt: 1, updatedAt: 1, avatarSeed: 'gone', config: {}, schema: 2 }
-    const legacy = { ...orphan, id: 'old', name: 'Old', avatarSeed: 'old', sessionId: 'old-session', pastSessions: [] }
-    await writeFile(join(dir, 'agents.json'), JSON.stringify([orphan, legacy]))
+    const orphan: StoredAgent = { id: 'gone', name: 'Gone', createdAt: 1, updatedAt: 1, avatarSeed: 'gone', config: {}, schema: 1 }
+    await writeFile(join(dir, 'agents.json'), JSON.stringify([orphan]))
     const diagnostics: unknown[] = []
     const { base } = await gateway(dir, { diagnostics })
-    expect(((await call(base, '/agents')).body.agents as AgentInfo[]).map((agent) => agent.id)).toEqual(['old'])
+    expect((await call(base, '/agents')).body.agents).toEqual([])
     expect(diagnostics.map(String)).toEqual([expect.stringContaining('agent Gone (gone) has no session record')])
-    expect((JSON.parse(await readFile(join(dir, 'agents.json'), 'utf8')) as StoredAgent[]).map((row) => row.id)).toEqual(['old'])
+    expect(JSON.parse(await readFile(join(dir, 'agents.json'), 'utf8'))).toEqual([])
+  })
+
+  it('refuses to start on an agent row written before 4.0.0', async () => {
+    const dir = await fixture.stateDir()
+    const legacy = { id: 'old', name: 'Old', createdAt: 1, updatedAt: 1, avatarSeed: 'old', config: {}, schema: 2, sessionId: 'old-session', pastSessions: [] }
+    await writeFile(join(dir, 'agents.json'), JSON.stringify([legacy]))
+    await expect(gateway(dir)).rejects.toBeInstanceOf(UnsupportedStateError)
+  })
+
+  it('refuses before any startup step writes', async () => {
+    const dir = await fixture.stateDir()
+    const legacy = { id: 'old', name: 'Old', createdAt: 1, updatedAt: 1, avatarSeed: 'old', config: {}, schema: 2, sessionId: 'old-session', pastSessions: [] }
+    await writeFile(join(dir, 'agents.json'), JSON.stringify([legacy]))
+    const store = createFileAgentStore(join(dir, 'agents.json'))
+    const writes = vi.fn()
+    const agentStore: AgentStore = { ...store, apply: async (changes) => (writes(changes), store.apply(changes)) }
+    const profileStore = { list: () => [], save: writes, delete: writes }
+    await expect(gateway(dir, { agentStore, options: { profileStore } })).rejects.toBeInstanceOf(UnsupportedStateError)
+    expect(writes).not.toHaveBeenCalled()
+    expect(JSON.parse(await readFile(join(dir, 'agents.json'), 'utf8'))).toEqual([legacy])
   })
 })
 

@@ -4,7 +4,7 @@ import { readJsonOrSync, writeJsonAtomicSync } from '../lib/atomic-file.ts'
 
 // Store-only fields, stripped from every `AgentInfo`: `schema` marks the record layout (`AGENT_SCHEMA`), `pendingJoin` is a
 // remote join the lead may already have accepted, and `roster` versions the team this agent leads. The row's id is the
-// session's id; a row still carrying `sessionId` / `pastSessions` predates the merge and waits for the migration.
+// session's id.
 export type StoredAgent = Omit<AgentInfo, 'sessionId' | 'pastSessions' | 'conversations' | 'undelivered' | 'startFailed'> & {
   avatarSeed: string
   // Set on a retired agent's tombstone: kept for its conversation history, outside every active lookup.
@@ -15,7 +15,12 @@ export type StoredAgent = Omit<AgentInfo, 'sessionId' | 'pastSessions' | 'conver
   roster?: { epoch: string; rev: number; digest: string }
 }
 
-export const AGENT_SCHEMA = 2
+export const AGENT_SCHEMA = 1
+
+// Old rows share schema numbers with new ones, so they are told apart by shape: only a pre-4.0 row carries these.
+export function isPreMergeAgent(agent: object): boolean {
+  return 'sessionId' in agent || 'pastSessions' in agent
+}
 
 export type AgentStoreChanges = { saves: StoredAgent[]; deletes: string[] }
 

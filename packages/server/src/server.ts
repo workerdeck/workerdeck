@@ -574,6 +574,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     },
   })
 
+  // Read only, before every startup write: state this gateway cannot read refuses the start instead of being skipped.
+  const preflight = async (): Promise<void> => {
+    await records.list()
+    await agents.preflight()
+  }
+
   return {
     server,
     registry,
@@ -584,7 +590,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     cuts,
     locks,
     shells,
+    preflight,
     listen: async (port, host) => {
+      await preflight()
       await profiles.refreshStored()
       await profiles.seedStore()
       await agents.hydrate()

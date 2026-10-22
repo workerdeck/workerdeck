@@ -218,6 +218,9 @@ export type WorkerServer = {
   locks: LifecycleLocks
   // Null unless `shell.enabled`. The CLI's force-shutdown path reaches `killAllSync` through it.
   shells: ShellRegistry | null
+  // Rejects stored state this gateway cannot read, writing nothing. `listen` runs it first; a host with startup writes
+  // of its own runs it before them. Covers the built-in stores; a custom store validates its own raw data.
+  preflight: () => Promise<void>
   listen: (port: number, host?: string) => Promise<{ port: number }>
   // Let running turns finish before `close()`. A courtesy, never a correctness requirement: records are written
   // continuously, so a hard stop already loses nothing. Refuses new sessions for as long as it runs.

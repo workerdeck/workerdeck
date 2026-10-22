@@ -253,7 +253,7 @@ describe('every fault point leaves a record the next process finishes', () => {
     // Rebuild the moment between `sending` and the fresh start: the committed intent, the prompt marked as handed over.
     await writeFile(
       fileOf(dir, id),
-      JSON.stringify({ version: 2, record: { ...crashed, pendingPrompt: { text: 'next', n: 2, state: 'sending' } } }),
+      JSON.stringify({ version: 1, record: { ...crashed, pendingPrompt: { text: 'next', n: 2, state: 'sending' } } }),
     )
 
     const second = await gateway(dir)
@@ -396,10 +396,10 @@ describe('recovery is idempotent', () => {
 describe('recovery over records it cannot read or finish', () => {
   it('reports an unreadable and a partial file, and still finishes every other record', async () => {
     const { dir, id } = await crashAt('after-commit')
-    await writeFile(join(dir, 'sessions', 'truncated.json'), '{"version":2,"record":{"id":"trunc')
+    await writeFile(join(dir, 'sessions', 'truncated.json'), '{"version":1,"record":{"id":"trunc')
     await writeFile(
       join(dir, 'sessions', 'partial.json'),
-      JSON.stringify({ version: 2, record: { id: 'partial', conversation: 2, createdAt: 1, cut: { from: 1, to: 2, phase: 'committed' } } }),
+      JSON.stringify({ version: 1, record: { id: 'partial', conversation: 2, createdAt: 1, cut: { from: 1, to: 2, phase: 'committed' } } }),
     )
 
     const second = await gateway(dir)
@@ -447,7 +447,7 @@ describe('recovery over records it cannot read or finish', () => {
   it('reports a record the store throws on and carries on with the others', async () => {
     const { dir, id } = await crashAt('after-commit')
     const other = (await onDisk(dir, id)) as SessionRecord
-    await writeFile(fileOf(dir, 'locked'), JSON.stringify({ version: 2, record: { ...other, id: 'locked', runtime: undefined } }))
+    await writeFile(fileOf(dir, 'locked'), JSON.stringify({ version: 1, record: { ...other, id: 'locked', runtime: undefined } }))
 
     const second = await gateway(dir, {
       store: (inner) => ({ ...inner, get: (key) => (key === 'locked' ? Promise.reject(new Error('EACCES: locked')) : inner.get(key)) }),

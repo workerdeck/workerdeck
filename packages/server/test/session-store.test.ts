@@ -107,13 +107,12 @@ describe('the runtime view over the file record store', () => {
     expect((await store.get('../escape/s1'))?.id).toBe('../escape/s1')
   })
 
-  it('skips a corrupt, truncated, or foreign-version file instead of failing the boot', async () => {
+  it('skips a corrupt or truncated file instead of failing the boot', async () => {
     const onError = vi.fn()
     const store = runtimeStore(createFileSessionRecordStore({ dir, onError }))
     await store.save(record('good'))
-    await writeFile(join(dir, 'truncated.json'), '{"version":2,"record":{"id":"tru')
-    await writeFile(join(dir, 'shapeless.json'), '{"version":2,"record":{"id":"x"}}')
-    await writeFile(join(dir, 'future.json'), '{"version":99,"record":{}}')
+    await writeFile(join(dir, 'truncated.json'), '{"version":1,"record":{"id":"tru')
+    await writeFile(join(dir, 'shapeless.json'), '{"version":1,"record":{"id":"x"}}')
     await writeFile(join(dir, 'notes.txt'), 'ignored entirely')
 
     expect((await store.list()).map((r) => r.id)).toEqual(['good'])
@@ -209,7 +208,7 @@ describe('toDurableRecord', () => {
     const legacy = record('s1', { backfillHistory: false, hostOnlyLegacy: 'kept' } as Partial<SessionRunnerConfig>)
     await writeFile(
       join(dir, 's1.json'),
-      JSON.stringify({ version: 2, record: { id: 's1', conversation: 1, conversations: [], createdAt: 1, runtime: legacy } }),
+      JSON.stringify({ version: 1, record: { id: 's1', conversation: 1, conversations: [], createdAt: 1, runtime: legacy } }),
     )
     const loaded = await fileRuntimeStore(dir).get('s1')
     expect(loaded?.config).toMatchObject({ cwd: '/tmp/project', backfillHistory: false, hostOnlyLegacy: 'kept' })

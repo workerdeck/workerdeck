@@ -569,6 +569,27 @@ of the lead. The relay routes and filters team frames but never owns membership.
 serves each agent's avatar (`GET /agents/:id/avatar.png`) from a persisted recipe, so no client
 ports the composer; without one, `avatar` is absent and clients draw the engine tile. Invariants: `docs/GOTCHAS.md` §Agents and teams.
 
+## Version numbers
+
+Four independent numbers, each bumped only by a breaking change to what it versions:
+
+| Number | Where | Versions | Now |
+| --- | --- | --- | --- |
+| `PROTOCOL_VERSION` | `packages/protocol` | the wire between gateway and every client; a mismatch shows the banner | 2 |
+| `FORMAT_VERSION` | `server` `services/session-records.ts` | one session record file (`<stateDir>/sessions/`, or a host's `createFileSessionRecordStore` dir) | 1 |
+| `AGENT_SCHEMA` | `server` `services/agent-store.ts` | one `agents.json` row; a row from a newer schema is loaded frozen, never written | 1 |
+| `FORMAT_VERSION` | `cli` `auth/auth-sessions.ts` | the dashboard login sessions file | 1 |
+
+The `/v1/` REST prefix and the `v1:` prefix of derived team op ids are names, not any of these.
+
+State from before 4.0.0 reuses the storage numbers, so it is told apart by shape (`isPreMergeRecord`,
+`isPreMergeAgent`), and a gateway refuses to start on it (`UnsupportedStateError`) rather than skip it: an
+unmigrated install fails loudly instead of looking empty, and no new write lands on an old file's id. A record
+file in any other format number refuses the same way. The check is `WorkerServer.preflight()`: read only, first
+in `listen`, and run by the CLI before its own startup writes (APNs). It covers the built-in stores; a host's
+custom `SessionRecordStore` returns canonical records and validates its own raw data. 4.0.0 ships no migration
+in the repo; the few installs before it were migrated once by a one-off tool.
+
 ## Tooling conventions
 
 pnpm workspace + turbo; TS 7 native preview (`tsgo`) for typecheck; oxlint; tsdown builds

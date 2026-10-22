@@ -37,7 +37,9 @@ export {
   createFileSessionRecordStore,
   MemorySessionRecordStore,
   SessionRecords,
+  isPreMergeRecord,
   MissingConversationError,
+  UnsupportedStateError,
   StaleConversationError,
   toDurableSessionRecord,
 } from './services/session-records.ts'

@@ -14,7 +14,8 @@ import {
   type UpdateAgentRequest,
 } from '@workerdeck/protocol'
 import { parseRelayPeerId, type RelayAgentEntry } from '@workerdeck/relay-client'
-import { AGENT_SCHEMA, type AgentStore, type StoredAgent } from './agent-store.ts'
+import { AGENT_SCHEMA, isPreMergeAgent, type AgentStore, type StoredAgent } from './agent-store.ts'
+import { UnsupportedStateError } from './session-records.ts'
 
 export type AgentServiceOptions = {
   store: AgentStore
@@ -176,6 +177,13 @@ export class AgentService {
     this.#hydrated = true
   }
 
+  // Read only: refuses rows this gateway cannot read before any startup step writes.
+  async preflight(): Promise<void> {
+    if ((await this.#store.list()).some(isPreMergeAgent)) {
+      throw new UnsupportedStateError('the agent store')
+    }
+  }
+
   // Until the store is read, this gateway knows no agent, and must not answer another gateway as if it knew them all.
   hydrated(): boolean {
     return this.#hydrated
@@ -229,9 +237,9 @@ export class AgentService {
     }
   }
 
-  // Rows written by this layout (no legacy `sessionId` / `pastSessions`), which a session record must back.
+  // Rows a session record must back.
   indexed(): StoredAgent[] {
-    return [...this.#agents.values()].filter((agent) => !this.#frozen.has(agent.id) && !isLegacy(agent))
+    return [...this.#agents.values()].filter((agent) => !this.#frozen.has(agent.id))
   }
 
   decorate(info: SessionInfo): SessionInfo {
@@ -941,10 +949,6 @@ export class AgentService {
 function tombstoneOf(agent: StoredAgent, at: number): StoredAgent {
   const { lead: _lead, remoteLead: _remote, remoteMembers: _members, pendingJoin: _join, roster: _roster, ...rest } = agent
   return { ...rest, schema: AGENT_SCHEMA, retiredAt: at, updatedAt: at }
-}
-
-function isLegacy(agent: StoredAgent): boolean {
-  return 'pastSessions' in agent || 'sessionId' in agent
 }
 
 // The op both gateways derive for an edge stored before operation ids, without talking to each other.

@@ -368,7 +368,7 @@ describe('restart edge cases', () => {
       {
         id: 'M',
         name: 'M',
-        schema: 2,
+        schema: 1,
         createdAt: 1,
         updatedAt: 1,
         avatarSeed: 'M',
@@ -441,7 +441,7 @@ describe('schema 2 migration', () => {
     const pending = base('P', { pendingJoin: { op: 'o', lead: 'win:Q', at: 1 } })
 
     expect(normalizeAgent(member, 'win', 7)).toMatchObject({
-      schema: 2,
+      schema: 1,
       lead: 'mac:L',
       remoteLead: { name: 'AC-Lead', state: 'unconfirmed', since: 5, op: legacyOp('mac:L', 'win:M') },
     })
@@ -467,7 +467,7 @@ describe('schema 2 migration', () => {
     expect(mac.agents.get('L')?.remoteMembers?.[0]?.state).toBe('unconfirmed')
     expect(mac.agents.vouches({ id: 'win:M', lead: 'mac:L' }, 'win')).toBe(false)
     expect(mac.agents.relayAgent('none')).toBeUndefined()
-    expect((await winStore.list()).every((record) => record.schema === 2)).toBe(true)
+    expect((await winStore.list()).every((record) => record.schema === 1)).toBe(true)
 
     await win.teams.reconcile()
     expect(win.agents.get('M')?.remoteLead).toMatchObject({ state: 'joined', op: legacyOp('mac:L', 'win:M') })
@@ -500,7 +500,7 @@ describe('schema 2 migration', () => {
 
   it('loads a record from a newer schema but never writes, publishes or reconciles it', async () => {
     const mesh = new Mesh()
-    const future = base('s-f', { name: 'F', schema: 3, lead: 'mac:L', remoteLead: { name: 'L', state: 'joined', since: 1 } })
+    const future = base('s-f', { name: 'F', schema: 2, lead: 'mac:L', remoteLead: { name: 'L', state: 'joined', since: 1 } })
     const store = createMemoryAgentStore([future])
     let writes = 0
     const counting: AgentStore = { ...store, apply: (changes) => (writes++, store.apply(changes)) }
@@ -522,7 +522,7 @@ describe('second review', () => {
   const record = (id: string, extra: Partial<StoredAgent> = {}): StoredAgent => ({
     id,
     name: id,
-    schema: 2,
+    schema: 1,
     createdAt: 1,
     updatedAt: 1,
     avatarSeed: id,
