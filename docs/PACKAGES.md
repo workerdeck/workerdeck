@@ -2567,11 +2567,11 @@ names where each module came from:
 | `rows.rs` | `Terminal/TerminalBlocks.swift` + `TerminalRows.build`: recap boundary, brief rows, sub-agent frames, `hideThinking` |
 | `planner.rs` | `Terminal/TerminalPlanner.swift` (every expansion, press and frame branch, image boxes), plus `TerminalMetrics`, `TermFmt`, `ResultPreview`, `LiveTool` |
 | `expansion.rs` | `Terminal/TerminalExpansion.swift`: `ExpansionKey`, `TermPress`, open/full/pending |
-| `controller/session.rs` | The session connection as a sans-IO state machine: socket events and commands in, `Open`/`Send`/`Close`/`WakeAt` effects and app signals out; backoff, outbox, close-after-drain, acked prompts and `resync`, one rule set with the TS client (`plans/CONNECTION-PARITY.md`). `Close` means the host reports nothing more from that socket |
+| `controller/session.rs` | The session connection as a sans-IO state machine: socket events and commands in, `Open`/`Send`/`Close`/`WakeAt` effects and app signals out; backoff, outbox, close-after-drain, acked prompts and `resync`, one rule set with the TS client (`plans/CONNECTION-PARITY.md`). Every gateway acks: an unacked prompt is resent after a drop, and an ack with `notDelivered` or `uncertain` hands it back (`take_undelivered`). Every command carries the conversation it was written for (the last attach's `session.conversation`, or a history socket's own n) and is never restamped; one written before any attach waits for it. `Close` means the host reports nothing more from that socket |
 | `controller/live.rs` | `LiveSession`, the one session object: the connection, the reducer (attach seed, hydration), the replay hold over a buffered state, the seq index and `TranscriptView`, with connection state (`connecting`/`unreachable` before any open), a stale-attach resync (react's `staleAttach`), replayed running shells verified once, and one merged `WakeAt`. Effects are drained after every call; a burst of frames costs one view update |
 | `controller/` | `TranscriptView` (the app's `TerminalTranscriptModel`: presses return effects such as `FetchResult` / `OpenSubagent` instead of calling closures), `ReplayHold`, `TranscriptSeqIndex`, `StickyPrompt`, `TranscriptScrollGeometry` |
-| `vm/` | the `packages/protocol` view models (`session_list`, `agents`, `pricing`, `usage`, `watermarks`, `peer_mentions`, `checklist`, `tool_titles`, `model_menu`, `status_label`), `recap` (`packages/react`), `prompt` (`packages/ui`'s `permissionPromptModel`, `shell-request`, `question-answers`, plus the iOS whole-subject rule), `fmt`, `create_form` (the iOS `CreateSessionModel`, coercion after the web's `engineFormOptions`), `conversations` (`sessionListed`, `selectionOf`, `followTarget`, `followStep`, plus `Follow`, one screen's selection with the sessions it left; FFI `ConversationFollow`); ported from TypeScript, not from the kit. `collate.rs` approximates `localeCompare` |
-| `rest.rs` | the REST/wire records the view models read (`SessionInfo`, `AgentInfo`, ...), serde camelCase, unknown fields ignored |
+| `vm/` | the `packages/protocol` view models (`session_list`, `agents`, `pricing`, `usage`, `watermarks`, `peer_mentions`, `checklist`, `tool_titles`, `model_menu`, `status_label`), `recap` (`packages/react`), `prompt` (`packages/ui`'s `permissionPromptModel`, `shell-request`, `question-answers`, plus the iOS whole-subject rule), `fmt`, `create_form` (the iOS `CreateSessionModel`, coercion after the web's `engineFormOptions`), `conversations` (`SessionAddress`, `address_of`, the conversation list and recovery, the cut's refusals and discard text); ported from TypeScript, not from the kit. `collate.rs` approximates `localeCompare` |
+| `rest.rs` | the REST/wire records the view models read (`SessionInfo`, `ConversationsResponse`, ...), serde camelCase, unknown fields ignored. No lenient fields: a capability record must be whole, or the record it sits in does not decode |
 | `rest/calls.rs`, `rest/error.rs` | the REST layer below: `WorkerClient.swift`'s paths and request bodies, and its error reading |
 | `markdown.rs` | `MarkdownBlocks.swift` and a portable inline parser (Apple's `AttributedString(markdown:)` is not available off Darwin, and differs on an unclosed `**`) |
 | `cells.rs` | `Terminal/TerminalCells.swift`: extended graphemes, the plain-ASCII fast path, the word wrapper |
@@ -2580,7 +2580,9 @@ names where each module came from:
 
 **The REST layer.** The core owns every route it names: path (under the API base, ids through
 `encode_component`), query, JSON body, and the reading of the answer. `rest::calls` has one builder
-per endpoint returning an `HttpCall { method, path, body }`; three-state fields (`title`,
+per endpoint returning an `HttpCall { method, path, body, generation }`. Every mutating session call names the
+conversation it was written for (`generation`, which the platform sends as the `generationHeader()` header; the
+gateway refuses a stale one with 409), and the cut routes carry it as `expectedGeneration`; three-state fields (`title`,
 `statusLabel`, an agent's `lead`) are `Edit::Set` / `Edit::Clear` / absent. `rest::error::classify(status,
 content_type, body)` turns an answer into `RestError { status, kind, message }` with
 `answer_error`'s rules: status 0 is `Transport`, 401/403 `Auth`, anything not JSON (the dashboard's
@@ -2591,7 +2593,7 @@ transport (Swift `WorkerClient.perform` / `fetch`, Kotlin `GatewayClient.perform
 header, TLS, timeouts, and byte fetches, where any 2xx is the answer. A body a core view model eats
 (`SessionList.set_host`, `set_meta`, `set_profiles`) goes to it whole. Moved so far (R1): sessions
 list, get, update, sleep, delete, stop and background task, kill shell, resolve permission, agents
-list, restart, retire, update, avatar reroll, meta, profiles; then (R2) create session and agent,
+list, retire, update, avatar reroll, meta, profiles; then (R2) create session and agent,
 SDK sessions and profile detail; then (R3) attachment upload and fetch, MCP list
 and action, shells list, get and output, host files (roots, list, find, read, write), produced
 files, project icon, agent avatar and tool result (text and image). The native apps serve Claude
@@ -2629,7 +2631,8 @@ The request rules: trimmed strings, empty ones omitted; `cwd` omitted when the r
 `hostCwd: false`; settings sources and budgets only when the record offers them; `resume` only
 with the `resume` capability, `forkSession` only with it and `forkSession`; bypass sends
 `allowDangerouslySkipPermissions`; a stored session's title rides `meta.title` while its id is
-still the one in the field. An agent sends `sharing` only for an explicit choice outside a team,
+still the one in the field. A session form's optional name (`agent_name`) creates it named
+(`agent: { name }`). An agent sends `sharing` only for an explicit choice outside a team,
 and `crossOwner` when its lead belongs to another owner. With no record of its own, a profile reads
 the static `ENGINE_CAPABILITIES` table (`ProfileEngine::capabilities`).
 
@@ -2701,12 +2704,21 @@ snapshots in `docs/NATIVE-CORE-SNAPSHOTS.md`; little-endian, no version byte):
   (0 default, `0x01000000|index`, `0x02rrggbb`), `u8 attrs` (1 bold, 2 dim, 4 italic,
   8 underline, 16 inverse, 32 strike), `u32+bytes text`.
 
-- **Agent conversations (`vm::conversations`).** Selection, follow, list filter, `archived_view`,
-  `new_conversation_gate`, `clear_context_offered` are ports held to the TS goldens; history and past-agent rows
-  (date, duration) format in Rust from a UTC offset the platform passes, not the locale. FFI:
-  `agent_conversations`, `past_agents`, `agent_notice` (`undelivered`, `startFailed`), `Session.archived_view`,
-  chrome `agent_id`/`agent_name`/`new_conversation_blocked`, the Delete agent strings, and REST calls for
-  restart/retire with `expected_session_id`, retry start, settle undelivered, conversations, retired agents.
+- **Conversations (`vm::conversations`), protocol 2.** A screen points at a `SessionAddress { id, conversation }`:
+  the stable session id, and a past conversation's n or none for the current one (`address_of` reads a bookmark's or
+  a notification's n equal to the current one as the current address). There is no follow, selection or supersede:
+  the cut closes the socket and the reattach shows conversation n+1 under the same id. A history socket
+  (`socket_url(.., Some(n))`, `Session::new(.., history)`) is read-only and keeps its n; chrome `historical`,
+  `conversation` (the token every mutating call carries) and `can_new_conversation` (every live session). FFI:
+  `session_conversations` (the sheet's rows by n, current on top), `conversation_notice` (a first message of unknown
+  delivery, a failed start, each with its n), `discard_confirmation` (the `unconfirmed_input` / `input_changed` 409
+  and what `discard_and_cut_call` binds), `uncertain_prompt_conversation` (a cut refused until Send again or Dismiss),
+  `Session.archived_view` over the session's own conversations list, `past_agents`, the Delete agent strings. REST:
+  `conversations_call`, `new_conversation_call`, `discard_and_cut_call`, `retry_conversation_start_call`,
+  `settle_pending_prompt_call`, all on `/sessions/:id/conversations`; Make agent and a team join are
+  `name_session_call` (`PATCH /sessions/:id { agent }`); `retire_agent_call` carries `expectedGeneration`.
+  Bookmarks are kept per conversation (`host:id#n`); marks of the older shape are dropped. Dates format in Rust from
+  a UTC offset the platform passes, not the locale.
 
 ## `apps/docs`
 
