@@ -239,9 +239,9 @@ describe('rules and enrollment', () => {
     await expect(enrollGatewayHash(dir, 'x', 'nothex')).rejects.toThrow(/hash/)
     await expect(enrollGateway(dir, 'y', { owner: 'Not Valid' })).rejects.toThrow(/owner/)
     await enrollGateway(dir, 'dan-laptop', { rotate: true })
-    expect((await readEnrollments(dir)).gateways['dan-laptop']?.owner).toBe('dan')
+    expect((await readEnrollments(dir)).gateways['dan-laptop']?.owners).toEqual(['dan'])
     await setGatewayOwner(dir, 'dan-laptop', 'ruli')
-    expect((await readEnrollments(dir)).gateways['dan-laptop']?.owner).toBe('ruli')
+    expect((await readEnrollments(dir)).gateways['dan-laptop']?.owners).toEqual(['ruli'])
 
     const relay = await startRelay({ stateDir: dir, port: 0, log: () => {}, heartbeatMs: 60_000 })
     cleanups.push(() => relay.close())
@@ -645,36 +645,41 @@ describe('several owners on one gateway', () => {
   })
 })
 
+describe('enrollment file from before 4.0.0', () => {
+  const hash = 'a'.repeat(64)
+  for (const [label, entry] of [
+    ['a single owner', { hash, enrolledAt: 1, owner: 'tobias' }],
+    ['several owners', { ownersHash: hash, enrolledAt: 1, owners: ['silkweave', 'tobias'] }],
+    ['no enrollment time', { hash }],
+  ] as const) {
+    it(`refuses an entry with ${label}`, async () => {
+      const stateDir = await mkdtemp(join(tmpdir(), 'wd-relay-old-'))
+      cleanups.push(() => rm(stateDir, { recursive: true, force: true }))
+      await writeFile(join(stateDir, 'gateways.json'), JSON.stringify({ version: 1, gateways: { mac: entry } }))
+      await expect(readEnrollments(stateDir)).rejects.toThrow(/before 4\.0\.0/)
+      await expect(startRelay({ stateDir, port: 0, log: () => {}, heartbeatMs: 60_000 })).rejects.toThrow(/before 4\.0\.0/)
+    })
+  }
+})
+
 describe('enrollment with several owners', () => {
-  it('hides the key hash from older relays and reads it back', async () => {
+  it('stores one shape for every owner count and reads it back', async () => {
     const stateDir = await mkdtemp(join(tmpdir(), 'wd-relay-owners-'))
     cleanups.push(() => rm(stateDir, { recursive: true, force: true }))
     await enrollGateway(stateDir, 'mini', { owners: ['silkweave', 'tobias'] })
     await enrollGateway(stateDir, 'mac', { owners: ['tobias'] })
+    await enrollGateway(stateDir, 'pi')
     const raw = JSON.parse(await readFile(join(stateDir, 'gateways.json'), 'utf8'))
-    expect(raw.gateways.mini.hash).toBeUndefined()
-    expect(raw.gateways.mini.ownersHash).toMatch(/^[0-9a-f]{64}$/)
-    expect(raw.gateways.mac).toMatchObject({ owner: 'tobias' })
+    expect(raw.version).toBe(1)
+    expect(Object.keys(raw.gateways.mini).sort()).toEqual(['enrolledAt', 'hash', 'owners'])
+    expect(raw.gateways.mac.owners).toEqual(['tobias'])
+    expect(Object.keys(raw.gateways.pi).sort()).toEqual(['enrolledAt', 'hash'])
     const file = await readEnrollments(stateDir)
     expect(file.gateways.mini?.owners).toEqual(['silkweave', 'tobias'])
-    expect(file.gateways.mac?.owner).toBe('tobias')
+    expect(file.gateways.mac?.owners).toEqual(['tobias'])
+    expect(file.gateways.pi?.owners).toBeUndefined()
     await expect(enrollGateway(stateDir, 'x', { owner: 'a', owners: ['b'] })).rejects.toThrow(/not both/)
     await expect(enrollGateway(stateDir, 'y', { owners: ['Bad Name'] })).rejects.toThrow(/owner/)
-  })
-
-  it('drops a multi-owner record whose owner list is unreadable instead of narrowing it', async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), 'wd-relay-owners-'))
-    cleanups.push(() => rm(stateDir, { recursive: true, force: true }))
-    const hash = 'a'.repeat(64)
-    await writeFile(
-      join(stateDir, 'gateways.json'),
-      JSON.stringify({
-        version: 1,
-        gateways: { mini: { ownersHash: hash, owners: ['tobias', 'NOT OK'] }, ok: { ownersHash: hash, owners: ['a', 'b'] } },
-      }),
-    )
-    const file = await readEnrollments(stateDir)
-    expect(Object.keys(file.gateways)).toEqual(['ok'])
   })
 })
 

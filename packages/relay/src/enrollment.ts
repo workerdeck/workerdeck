@@ -3,16 +3,12 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { RELAY_GATEWAY_NAME, RELAY_OWNER_NAME } from '@workerdeck/relay-client'
 
-// `owners` holds two or more owners; one owner stays in `owner`, the layout older relays read.
-export type Enrollment = { hash: string; enrolledAt: number; owner?: string; owners?: string[] }
+// No `owners` means the relay's default owner, resolved when read.
+export type Enrollment = { hash: string; enrolledAt: number; owners?: string[] }
 
 export type EnrollOptions = { rotate?: boolean; owner?: string; owners?: string[] }
 
 export type EnrollmentFile = { version: 1; gateways: Record<string, Enrollment> }
-
-// On disk a record with several owners keeps its key hash here and has no `hash`, so an older relay, which reads only
-// `owner`, finds no key and refuses the gateway instead of collapsing its owners into one.
-type StoredEnrollment = { hash?: string; ownersHash?: string; enrolledAt?: number; owner?: string; owners?: string[] }
 
 export const ENROLLMENT_FILE = 'gateways.json'
 
@@ -63,7 +59,7 @@ export function parseOwners(list: string): string[] {
 }
 
 export function ownersOf(enrollment: Enrollment | undefined, fallback: string): string[] {
-  return enrollment?.owners ?? [enrollment?.owner ?? fallback]
+  return enrollment?.owners ?? [fallback]
 }
 
 export function checkKeyHash(hash: string): string | null {
@@ -71,76 +67,62 @@ export function checkKeyHash(hash: string): string | null {
 }
 
 export async function readEnrollments(stateDir: string): Promise<EnrollmentFile> {
+  const path = enrollmentPath(stateDir)
   let text: string
   try {
-    text = await readFile(enrollmentPath(stateDir), 'utf8')
+    text = await readFile(path, 'utf8')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return { version: 1, gateways: {} }
     }
     throw error
   }
-  const parsed = JSON.parse(text) as { gateways?: Record<string, StoredEnrollment | null> }
+  const parsed = JSON.parse(text) as { version?: unknown; gateways?: unknown }
+  if (parsed.version !== 1 || !parsed.gateways || typeof parsed.gateways !== 'object') {
+    throw new Error(`${path} is not an enrollment file this relay can read`)
+  }
   const gateways: Record<string, Enrollment> = {}
-  for (const [name, entry] of Object.entries(parsed.gateways ?? {})) {
-    const enrollment = entry ? readEnrollment(entry) : undefined
-    if (checkGatewayName(name) === null && enrollment) {
-      gateways[name] = enrollment
+  for (const [name, entry] of Object.entries(parsed.gateways as Record<string, unknown>)) {
+    const enrollment = readEnrollment(entry)
+    if (checkGatewayName(name) !== null || !enrollment) {
+      throw new Error(`${path}: gateway ${name} was enrolled by WorkerDeck before 4.0.0 or is malformed; migrate the file first`)
     }
+    gateways[name] = enrollment
   }
   return { version: 1, gateways }
 }
 
-// A multi-owner record with an unreadable owner list is dropped whole: it never falls back to fewer owners.
-function readEnrollment(entry: StoredEnrollment): Enrollment | undefined {
-  const enrolledAt = typeof entry.enrolledAt === 'number' ? entry.enrolledAt : 0
-  if (entry.ownersHash !== undefined || entry.owners !== undefined) {
-    const owners = Array.isArray(entry.owners) ? entry.owners : []
-    if (
-      !isHash(entry.ownersHash) ||
-      owners.length < 2 ||
-      !owners.every((owner) => typeof owner === 'string' && checkOwnerName(owner) === null)
-    ) {
-      return undefined
-    }
-    return { hash: entry.ownersHash, enrolledAt, owners: [...new Set(owners)] }
-  }
-  if (!isHash(entry.hash)) {
+function readEnrollment(value: unknown): Enrollment | undefined {
+  const entry = value as Partial<Record<string, unknown>> | null
+  if (!entry || typeof entry !== 'object' || !isHash(entry.hash) || typeof entry.enrolledAt !== 'number') {
     return undefined
   }
-  return {
-    hash: entry.hash,
-    enrolledAt,
-    ...(typeof entry.owner === 'string' && checkOwnerName(entry.owner) === null ? { owner: entry.owner } : {}),
+  if (Object.keys(entry).some((key) => key !== 'hash' && key !== 'enrolledAt' && key !== 'owners')) {
+    return undefined
   }
+  if (entry.owners === undefined) {
+    return { hash: entry.hash, enrolledAt: entry.enrolledAt }
+  }
+  const owners = entry.owners
+  if (!Array.isArray(owners) || owners.length === 0 || !owners.every((owner) => typeof owner === 'string' && checkOwnerName(owner) === null)) {
+    return undefined
+  }
+  return { hash: entry.hash, enrolledAt: entry.enrolledAt, owners: [...new Set(owners as string[])] }
 }
 
 function isHash(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
 }
 
-function storedEnrollment(enrollment: Enrollment): StoredEnrollment {
-  const { hash, enrolledAt, owner, owners } = enrollment
-  if (owners && owners.length > 1) {
-    return { ownersHash: hash, enrolledAt, owners }
-  }
-  const sole = owners?.[0] ?? owner
-  return { hash, enrolledAt, ...(sole ? { owner: sole } : {}) }
-}
-
 function withOwners(hash: string, enrolledAt: number, owners: readonly string[] | undefined): Enrollment {
-  if (!owners || owners.length === 0) {
-    return { hash, enrolledAt }
-  }
-  return owners.length === 1 ? { hash, enrolledAt, owner: owners[0] } : { hash, enrolledAt, owners: [...owners] }
+  return owners && owners.length > 0 ? { hash, enrolledAt, owners: [...owners] } : { hash, enrolledAt }
 }
 
 async function writeEnrollments(stateDir: string, file: EnrollmentFile): Promise<void> {
   const path = enrollmentPath(stateDir)
   await mkdir(dirname(path), { recursive: true, mode: 0o700 })
   const tmp = `${path}.${process.pid}.tmp`
-  const gateways = Object.fromEntries(Object.entries(file.gateways).map(([name, entry]) => [name, storedEnrollment(entry)]))
-  await writeFile(tmp, `${JSON.stringify({ version: file.version, gateways }, null, 2)}\n`, { mode: 0o600 })
+  await writeFile(tmp, `${JSON.stringify({ version: file.version, gateways: file.gateways }, null, 2)}\n`, { mode: 0o600 })
   await rename(tmp, path)
 }
 
@@ -174,7 +156,7 @@ async function enroll(stateDir: string, name: string, hash: string, options: Enr
   if (previous && !options.rotate) {
     throw new Error(`gateway ${name} is already enrolled; pass --rotate to issue a new key`)
   }
-  const owners = requested ?? previous?.owners ?? (previous?.owner ? [previous.owner] : undefined)
+  const owners = requested ?? previous?.owners
   file.gateways[name] = withOwners(hash, Date.now(), owners)
   await writeEnrollments(stateDir, file)
 }

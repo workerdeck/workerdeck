@@ -218,7 +218,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
   const enrolledOwners = (name: string): string[] => ownersOf(enrollments.gateways[name], defaultOwner)
   const ownersDefaulted = (name: string): boolean => {
     const enrollment = enrollments.gateways[name]
-    return enrollment?.owners === undefined && enrollment?.owner === undefined
+    return enrollment?.owners === undefined
   }
 
   // Which owner a frame about `agent` speaks for: its published entry's, else the claim, which must be enrolled.

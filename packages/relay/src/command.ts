@@ -254,7 +254,7 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
       }
       for (const [name, entry] of names) {
         console.log(
-          `${name}\t${entry.owners ? `owners ${entry.owners.join(', ')}` : `owner ${entry.owner ?? `${DEFAULT_RELAY_OWNER} (default)`}`}\tenrolled ${new Date(entry.enrolledAt).toISOString()}`,
+          `${name}\t${entry.owners ? `owners ${entry.owners.join(', ')}` : `owner ${DEFAULT_RELAY_OWNER} (default)`}\tenrolled ${new Date(entry.enrolledAt).toISOString()}`,
         )
       }
       return 0
