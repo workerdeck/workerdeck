@@ -1649,6 +1649,36 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   npm 12/12 (the last, `queue`, live about 6 min after the run), Marketplace 3.15.0 about 5 min after;
   mini deck + relay upgraded.
 
+  **4.0.0** - **One session record, cut 2026-10-22** (tag `v4.0.0`). A **major**: protocol **2**, relay wire **2**.
+  Agents and sessions are one record under one stable id; an agent is a session with an optional identity block
+  (name, avatar, brief, team), an unnamed session is a plain card. A new conversation is a cut on that record:
+  conversation n+1 under the same id, the past one archived read-only with its history read from the engine store
+  (`claude --resume` and the CLI's own stats keep working; WorkerDeck never writes the engine store). Every
+  mutation carries the conversation token, so a stale client can no longer act on a newer conversation.
+  **Breaking**: protocol 2 (`SessionAddress` replaces the follow/supersede machine; one "New conversation" entry
+  per card with a discard-and-cut confirmation when input is unanswered; typed `/clear` with unanswered input is
+  refused with a notice); relay wire 2 (one enrollment shape, owners built in; relay and gateways upgrade
+  together); a gateway refuses pre-4.0 state on boot (`UnsupportedStateError`, storage numbers reset to 1) and
+  installs migrate once with the uncommitted one-off tool (`_docs/NEXT-MIGRATE.md`); host API
+  `parking.store` is now `sessions.store`; `setPricingOverrides`/`activePricing` gone; `StatusBar` `connected`
+  gone; `AttachedFrame.acks` gone (every gateway acks prompts); `POST /agents/:id/restart|retry-start|undelivered` and
+  `GET /agents/:id/conversations` gone (session routes `/sessions/:id/conversations[/retry|/pending]` replace
+  them; client `restartAgent`/`retryAgentStart`/`settleUndelivered`/`agentConversations` and protocol
+  `AgentConversationsResponse` gone); `POST /agents` refuses unknown fields with 400 (the `adopt` answer is gone). `/v1/agents` stays for
+  identity and team operations. Client-local state (read marks, view config) resets on upgrade by decision, no
+  stored-value upgrades. Native: crates, iOS and Android on protocol 2, one screen per stable session address,
+  past conversations read-only. Android ships the protocol 2 port unit-tested and
+  compiling but without an emulator or device check (deferred past 4.0, Tobias). Activity and prose counts are lifetime per stable id (the record carries
+  `counters`, the next runner gets `counterBase`), so unread survives a cut; a read mark's `itemCount` is scoped to
+  its `conversation` (`catchUpFrom`/`catchUpItems`, the recap restarts at 0 in a new conversation) and `turns` left
+  the watermark; a past conversation marks nothing. **Verified**: `pnpm lint`, typecheck, `turbo run test --concurrency=1 --force` (12/13 locally; server
+  817/819 with 2 to 3 different cut/webhook timing tests failing per full run at load 11+, each file green alone 3x,
+  so the gate was re-run on a GitHub runner by a Publish `dry_run` dispatch on the branch: [result]), cargo test +
+  clippy, `pnpm fixtures:golden`/`fixtures:vm --check`/`fixtures:frames --check` clean, iOS sim build +
+  `CoreTranscriptUITests` 4/4 + WorkerDeckKit 57/57, Android unit tests + `assembleDebug`, gatekeeper, paid
+  `smoke:cut all` 25/0 on the final tree; WD-Review clean on P1 to P5, D9, M1 and the merged tree (findings H1, M1
+  to M3, R1 fixed); hand checks web + VS Code 8/8 (Tobias, 63rd). Push notification rerouting (M3/R1) is
+  build-verified only (no push seam in the UI tests). **Published** [date]: [npm 12/12, Marketplace, migrations].
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

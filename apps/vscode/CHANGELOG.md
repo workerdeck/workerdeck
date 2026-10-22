@@ -5,6 +5,29 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [4.0.0] - 2026-10-22
+
+Needs a 4.0.0 gateway (protocol 2). A 3.x gateway shows the version mismatch banner.
+
+### Changed
+
+- **One session, many conversations.** Agents and sessions are one record with a stable id. "New
+  conversation" (one entry in every card's menu, replacing Clear context) starts conversation n+1 in
+  the same panel; the previous one is archived read-only.
+- **Conversations...** is available on every session, named or not. A past conversation opens in a
+  read-only tab "<name> · conversation n" that survives a window reload; Go to current returns to the
+  live one.
+- **Unanswered input is never dropped silently.** A new conversation over input the agent has not
+  answered asks first ("Discard and start"); a prompt the gateway could not confirm offers Send again
+  and Dismiss.
+- **Start recovery for every session**: Retry start when a new conversation fails to come up.
+- **Unread counts survive a new conversation**, and the catch-up bar starts fresh in each one.
+
+### Removed
+
+- The follow/supersede machine: panels are keyed by session address, so a new conversation never
+  moves a tab to another id.
+
 ## [3.15.0] - 2026-10-20
 
 ### Added
