@@ -202,9 +202,11 @@ withPty('kill', () => {
     const { shell } = await shells.spawn({ runner: runner('s1', cwd), command, owner: 'user' })
     await pidFrom(pidFile)
     const plain = join(cwd, 'plain')
+    // Far past the kill even on a loaded host, and checked only once that much time has passed.
+    const plainAt = Date.now() + 2000
     const grouped = await shells.spawn({
       runner: runner('s1', cwd),
-      command: `(sleep 0.6; echo late > ${plain}) & sleep 30`,
+      command: `(sleep 2; echo late > ${plain}) & sleep 30`,
       owner: 'user',
     })
     await sleep(100)
@@ -216,6 +218,7 @@ withPty('kill', () => {
       shellId: shell.id,
     })
     await vi.waitFor(() => expect(existsSync(marker)).toBe(true), { timeout: 4000 })
+    await sleep(Math.max(0, plainAt + 300 - Date.now()))
     expect(existsSync(plain)).toBe(false)
   })
 
@@ -471,7 +474,8 @@ withPty('source', () => {
     const shells = makeRegistry()
     const { source } = await shells.spawn({
       runner: runner('s1'),
-      command: 'for i in 1 2 3 4 5; do echo $i; sleep 0.02; done; sleep 0.45',
+      // Five separate writes inside one window: an external `sleep` between them forks, and on a loaded host the forks alone outlast it.
+      command: 'for i in 1 2 3 4 5; do echo $i; done; sleep 0.45',
       owner: 'user',
     })
     const seen: Array<{ status: string; text: string }> = []
