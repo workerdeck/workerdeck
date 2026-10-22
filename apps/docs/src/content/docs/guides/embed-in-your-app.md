@@ -91,7 +91,8 @@ principal. It runs once per request; the authorization predicate in §4 runs per
 
 ## 4. Ownership, without writing ownership code
 
-`scope` is opaque string tags, assigned at create, immutable afterwards. The gateway stores and
+`scope` is opaque string tags, assigned at create, immutable within one conversation (only an
+operator's *New conversation* may set new tags, and past conversations keep theirs). The gateway stores and
 enforces them; **you** decide what they mean. "user" is one app's vocabulary; the next app's is
 "tenant" or "workspace".
 
@@ -297,18 +298,23 @@ should *not* solve for you.
   stores and go dormant instead, remembering only an id to resume from.
 
   The store's directory holds session records and **nothing else**: give it a directory of its
-  own, because another JSON file in it refuses the start. A store of your own implements
+  own. A record written before 4.0.0, a file of another format number, or any other JSON file in it
+  refuses the start; a file that is not valid JSON or an incomplete current-format record is
+  reported to `onError` and skipped. A store of your own implements
   `SessionRecordStore` (`save`, `get`, `list`, `delete`) and validates its own raw data.
-  `WorkerServer.preflight()` reads the stored state and throws for anything this gateway cannot
-  read, writing nothing; `listen()` runs it first, so call it yourself only if your app writes
+  `WorkerServer.preflight()` reads the stored state and throws for what refuses the start,
+  writing nothing; `listen()` runs it first, so call it yourself only if your app writes
   state of its own at startup, before those writes. State from a WorkerDeck release before 4.0.0
   (`parking.store`, `createFileSessionStore`) is refused this way: migrate it once before 4.0.0
   starts on it.
 - **Mutations name their conversation.** A session keeps its id across *New conversation*, so every
   mutating call says which conversation it meant and a stale one is a 409, never applied to the
-  next conversation. `WorkerDeckClient` does this for you. If your server calls the REST routes
-  directly, send `x-workerdeck-generation: <SessionInfo.conversation>` on every mutating
-  `/sessions/:id/*` call (see [Protocol](/workerdeck/docs/reference/protocol/#conversations)).
+  next conversation. Ordinary session mutations carry the `x-workerdeck-generation` header set to
+  `SessionInfo.conversation` (missing or stale: 409); `WorkerDeckClient` sends it for you. The
+  conversation POSTs (new, discard, retry, pending) require `expectedGeneration` in the body
+  (missing: 400), which you pass to the client methods explicitly. `DELETE
+  /sessions/:id/conversations/:n` uses the path `n` and needs neither (see
+  [Protocol](/workerdeck/docs/reference/protocol/#conversations)).
 - **Restarts also sign people out, if you let them.** A per-process session secret is the obvious
   default and it makes working persistence look completely broken: sessions are scoped, a scoped
   session answers 404 to anyone else, so a new secret on boot preserves every conversation and

@@ -181,20 +181,25 @@ history socket is read-only.
 Every mutation names the conversation it was meant for, so a call that raced a cut is refused
 rather than landing on the next conversation (409 `the session moved on to conversation n`):
 
-- **REST:** every mutating route under `/sessions/:id/*` (`PATCH`, `DELETE`, permission answers,
-  uploads, sleep, shells, tasks, MCP actions) needs the `x-workerdeck-generation` header
-  (`GENERATION_HEADER`) set to the session's current `conversation`. A missing header is a 409 too.
-  The conversation routes and the agent routes that cut, retry, settle or delete
-  (`/agents/:id/restart`, `retry-start`, `undelivered`, `DELETE /agents/:id`) take
-  `expectedGeneration` in the body instead.
+- **Ordinary session mutations** (every `PATCH`, `DELETE` and `POST` under `/sessions/:id/`
+  outside `/conversations`: permission answers, uploads, sleep, shells, tasks, MCP actions) carry
+  the `x-workerdeck-generation` header (`GENERATION_HEADER`) set to the session's current
+  `conversation`. Missing or stale: 409.
+- **The conversation POSTs** (`/sessions/:id/conversations`, `…/discard`, `…/retry`, `…/pending`)
+  require `expectedGeneration` in the body instead (missing: 400, stale: 409), and so do the agent
+  routes `/agents/:id/restart`, `retry-start`, `undelivered` and `DELETE /agents/:id`.
+- **`DELETE /sessions/:id/conversations/:n`** names its conversation by the path `n` and needs
+  neither.
 - **WebSocket:** `generation` on every command (above).
 
 `WorkerDeckClient` tracks the last conversation it saw for each session (`conversationOf`) and
-sends both for you.
+sends the header and the WebSocket `generation` for you. It does not infer `expectedGeneration`:
+pass it explicitly to `newConversation`, `discardAndCut`, `retryConversationStart`,
+`settlePendingPrompt` and the agent methods.
 
 | Route | Body / answer |
 | --- | --- |
-| `GET /sessions/:id/conversations` | `ConversationsResponse`: the current `conversation`, `history` (one `ConversationSummary` per past conversation: `n`, engine, profile, cwd, title, cost, times, `transcript: 'unavailable'` when the engine's store no longer has it), `closed`, a `pendingPrompt` or `startFailed` waiting on a person, and the `settings` the next conversation starts from. |
+| `GET /sessions/:id/conversations` | `ConversationsResponse`: the current `conversation`, `history` (one `ConversationSummary` per past conversation: `n`, engine, profile, cwd, title, cost, times, `transcript: 'unavailable'` on an entry already marked so, by an erase or an earlier failed read; a transcript the engine has since pruned shows only when the entry is opened), `closed`, a `pendingPrompt` or `startFailed` waiting on a person, and the `settings` the next conversation starts from. |
 | `GET /sessions/:id/conversations/:n` | `ConversationHistoryResponse`: that conversation's `info` and `events`, read from the engine's own store. |
 | `POST /sessions/:id/conversations` | `NewConversationRequest` (`expectedGeneration`, optional first `prompt`, optional `target`: profile, cwd, model, scope) starts conversation n+1; answers `NewConversationResponse` (`session`, `conversation`). 409 while the session is busy or still starting, and on a job run. |
 | `POST /sessions/:id/conversations/discard` | `DiscardAndCutRequest` (`expectedGeneration`, `inputRevision`, `prompt?`): the same cut after a person accepted losing pending input. |
@@ -218,7 +223,9 @@ every `attached` frame, list row, notification and webhook carries both.
 
 ### Session scope
 
-`scope` is a bag of opaque string tags, assigned at create and immutable after. It is the only
+`scope` is a bag of opaque string tags, assigned at create and immutable within one conversation:
+an operator's *New conversation* may set a new scope (`target.scope`) for the conversation it
+starts, and every past conversation keeps the scope frozen at its cut. It is the only
 intra-deployment scoping primitive in the protocol, and the split is deliberate: WorkerDeck
 stores and *enforces* the tags, and the embedder's `authorizeSession(principal, session)` decides
 what they mean - `{ user, space }` is one app's vocabulary and the next has tenants. A principal

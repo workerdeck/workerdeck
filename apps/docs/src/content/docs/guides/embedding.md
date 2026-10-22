@@ -71,8 +71,11 @@ query parameter `sessionWsUrl` would add, `conversation` included) or with cooki
 
 A session keeps its id across *New conversation*; what moves on is `SessionInfo.conversation`. The
 client remembers the last conversation it saw for each session (from `getSession`, `listSessions`
-and every `attached` frame) and stamps it on every mutation: the `x-workerdeck-generation` header
-on REST, `generation` on WebSocket commands. A call for a conversation that has ended is refused,
+and every `attached` frame) and stamps it on ordinary mutations: the `x-workerdeck-generation`
+header on REST, `generation` on WebSocket commands. The cut, retry and pending methods take
+`expectedGeneration` from you explicitly; the client does not infer it, so read it from the
+`SessionInfo` you are showing. `eraseConversation` names its conversation by `n` and needs
+neither. A call for a conversation that has ended is refused,
 never applied to the next one. A handle whose conversation ended emits `undeliveredPrompt` for a
 prompt the gateway refused before the engine saw it, so its text can go back in the composer.
 
