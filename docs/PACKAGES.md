@@ -1040,8 +1040,11 @@ take the lock themselves; `closeLocked` (an unnamed `DELETE`: current conversati
 `closedAt`) expects the caller to hold it. `recover` runs before listen; `firstStarted` settles a
 create's own intent (0 to 1) in the background. `faults` is the test seam for crash points. Doors:
 `POST /sessions/:id/conversations` (`/discard` after an `unconfirmed_input` refusal), typed exact
-`/clear`, WS `clear_context`, `context_reset`, and `POST /agents/:id/restart`, named or not. A
-mutating session route requires `x-workerdeck-generation` and runs under the lifecycle lock;
+`/clear`, WS `clear_context`, `context_reset`, and `POST /agents/:id/restart`, named or not. An
+ordinary session mutation carries `x-workerdeck-generation` (409 missing or stale) and runs under
+the lifecycle lock; the conversation POSTs and the agent restart / retry-start / undelivered routes
+take body `expectedGeneration` instead (400 missing, 409 stale); `DELETE .../conversations/:n` needs
+neither;
 `PATCH /sessions/:id { config }` writes `requested` for every session (vetted as a create by
 `requestedFrom`, shared with `PATCH /agents/:id`), applies at the next cut and is refused while a
 cut is in flight and on a job run. Prompt acks (`services/prompt-acks.ts`) key on session, n and
@@ -1237,7 +1240,10 @@ prompt? })` after `unconfirmedInputOf(error)` read a refusal (`WorkerDeckError` 
 conversation's read-only socket and never moves the client's conversation token (`buildWsUrl` gets it as a 5th
 argument, which `hostAuth` forwards).
 **The conversation token** is the client's: `noteConversation` records the n every session answer
-and every `attached` hello names, and each mutating REST call sends it as `x-workerdeck-generation`.
+and every `attached` hello names, and each ordinary mutating REST call sends it as
+`x-workerdeck-generation`; the conversation calls (`newConversation`, `discardAndCut`,
+`retryConversationStart`, `settlePendingPrompt`) take it as the explicit `expectedGeneration` they put in
+the body, and `eraseConversation` names n in the path.
 `SessionHandle` stamps `generation` on a command when it is created and never rewrites it, so a
 command queued across a cut is refused by the gateway rather than run on n+1; a frame with no token
 waits in the outbox until the socket's `attached` names one. The client does not act on
