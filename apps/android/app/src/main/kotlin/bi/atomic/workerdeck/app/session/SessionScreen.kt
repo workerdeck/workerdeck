@@ -140,22 +140,9 @@ fun SessionScreen(
             val actionError by model.actionError.collectAsStateWithLifecycle()
             val discard by model.discard.collectAsStateWithLifecycle()
             val settleCut by model.settleCut.collectAsStateWithLifecycle()
-            val returned by model.undelivered.collectAsStateWithLifecycle()
+            val returned by model.returned.collectAsStateWithLifecycle()
             var deleting by rememberSaveable { mutableStateOf(false) }
             val readOnly = conversation != null
-            LaunchedEffect(returned?.nonce) {
-                val back = returned ?: return@LaunchedEffect
-                if (draft.text.isBlank()) {
-                    val edit = composerInsert("", back.text)
-                    draft = TextFieldValue(edit.text, TextRange(edit.cursor.toInt()))
-                    model.composer.edit(edit.text, edit.cursor.toInt())
-                }
-                model.composer.announce(
-                    if (back.uncertain) "A message may not have reached the conversation; its text is back in the composer."
-                    else "A message did not reach the conversation, which moved on; its text is back in the composer.",
-                )
-                model.undeliveredShown()
-            }
             Column(Modifier.fillMaxSize().imePadding()) {
                 SessionTopBar(
                     ui.title ?: fallbackTitle,
@@ -239,6 +226,19 @@ fun SessionScreen(
                         )
                     }
                     StatusStrip(chrome, ui.connection, ui.usage, model::reconnect, onPicker = { if (!readOnly) picker = it }, onMeter = { meter = it })
+                    returned.firstOrNull()?.takeIf { !readOnly }?.let { back ->
+                        ReturnedBar(
+                            back,
+                            waiting = returned.size - 1,
+                            onInsert = {
+                                val edit = composerInsert(draft.text, back.text)
+                                draft = TextFieldValue(edit.text, TextRange(edit.cursor.toInt()))
+                                model.composer.edit(edit.text, edit.cursor.toInt())
+                                model.settleReturned(back.id)
+                            },
+                            onDismiss = { model.settleReturned(back.id) },
+                        )
+                    }
                     if (!readOnly) Composer(
                         composer = model.composer,
                         draft = draft,

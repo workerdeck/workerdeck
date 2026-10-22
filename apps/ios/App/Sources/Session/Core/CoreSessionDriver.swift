@@ -538,17 +538,23 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     return request
   }
 
-  // A prompt refused before the engine saw it (its conversation ended under it) goes back into the composer.
+  // A prompt refused before the engine saw it, or of unknown delivery, waits above the composer for the reader.
   private func readUndelivered() {
-    let back = session.takeUndelivered()
-    guard !back.isEmpty else { return }
-    ui.composer.undelivered = back.map(\.text).joined(separator: "\n\n")
-    ui.composer.undeliveredCount &+= 1
-    let maybe = back.contains(where: \.uncertain)
-    ui.error =
-      maybe
-      ? "A message may not have reached the conversation; its text is back in the composer."
-      : "A message did not reach the conversation, which moved on; its text is back in the composer."
+    for prompt in session.takeUndelivered() {
+      ui.composer.returned.append(
+        ReturnedPrompt(
+          id: ui.composer.nextReturned, text: prompt.text, uncertain: prompt.uncertain,
+          attachments: prompt.attachmentIds.count))
+      ui.composer.nextReturned &+= 1
+    }
+  }
+
+  func settleReturned(_ id: Int) {
+    worker.act { [self] _ in
+      ui.composer.returned.removeAll { $0.id == id }
+      publish(ui)
+      return []
+    }
   }
 
   // Each part is re-read only when the core says it moved: a replay's progress ticks never touch the layout.

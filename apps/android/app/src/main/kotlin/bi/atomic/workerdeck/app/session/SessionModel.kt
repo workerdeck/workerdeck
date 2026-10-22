@@ -58,6 +58,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -98,8 +99,10 @@ sealed interface Entry {
 // What the session's conversations list says: a past conversation's banner, or what the current one asks of the user.
 data class ConversationView(val archived: ArchivedView? = null, val notice: ConversationNotice? = null)
 
-// Text the gateway handed back after its conversation ended under it; `nonce` lands it in the composer once.
-data class Returned(val text: String, val uncertain: Boolean, val nonce: Long)
+// A prompt the gateway handed back (refused before the engine saw it, or of unknown delivery). It waits above the
+// composer until the reader inserts or dismisses it; sent attachments are not kept, so `attachments` says how many to
+// add again.
+data class Returned(val id: Long, val text: String, val uncertain: Boolean, val attachments: Int)
 
 data class Jump(val row: Int, val nonce: Long, val top: Boolean = false)
 
@@ -164,8 +167,9 @@ class SessionModel(
     val discard: StateFlow<DiscardConfirmation?> = discardState
     private val settleState = MutableStateFlow<Long?>(null)
     val settleCut: StateFlow<Long?> = settleState
-    private val undeliveredState = MutableStateFlow<Returned?>(null)
-    val undelivered: StateFlow<Returned?> = undeliveredState
+    private val returnedState = MutableStateFlow<List<Returned>>(emptyList())
+    val returned: StateFlow<List<Returned>> = returnedState
+    private var nextReturned = 0L
     val composer = ComposerModel(sessionId, client, scope)
 
     fun hostImagePath(path: String): HostImageFetch = session.hostImagePath(sessionId, path)
@@ -289,8 +293,9 @@ class SessionModel(
         actionErrorState.value = null
     }
 
-    fun undeliveredShown() {
-        undeliveredState.value = null
+    // Inserted into the draft or dismissed: either way it leaves the queue.
+    fun settleReturned(id: Long) {
+        returnedState.update { list -> list.filter { it.id != id } }
     }
 
     private fun act(failure: String, call: suspend () -> Result<Unit>) {
@@ -312,12 +317,11 @@ class SessionModel(
         }
     }
 
-    // A prompt refused before the engine saw it (its conversation ended under it) goes back into the composer.
     private fun readUndelivered() {
         val back = session.takeUndelivered()
         if (back.isEmpty()) return
-        val nonce = (undeliveredState.value?.nonce ?: 0) + 1
-        undeliveredState.value = Returned(back.joinToString("\n\n") { it.text }, back.any { it.uncertain }, nonce)
+        val added = back.map { Returned(nextReturned++, it.text, it.uncertain, it.attachmentIds.size) }
+        returnedState.update { it + added }
     }
 
     fun openShell(id: String, cols: Int, rows: Int) = worker.act {

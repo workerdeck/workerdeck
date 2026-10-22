@@ -90,3 +90,26 @@ private fun BarButton(label: String, onClick: () -> Unit) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = Wd.colors.accent)
     }
 }
+
+// A prompt the gateway handed back, above the composer: its text, why, and Insert (into whatever draft is there) or
+// Dismiss. Attachments it carried are not kept once sent, so the bar says to add them again.
+@Composable
+fun ReturnedBar(prompt: Returned, waiting: Int, onInsert: () -> Unit, onDismiss: () -> Unit) {
+    val colors = Wd.colors
+    val small = MaterialTheme.typography.bodySmall
+    Bar("returned-prompt") {
+        Column(Modifier.weight(1f)) {
+            Text(if (prompt.uncertain) "This message may not have arrived" else "This message did not arrive", style = small, color = colors.secondary)
+            Text(prompt.text, style = small, color = colors.tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val notes = listOfNotNull(
+                "${prompt.attachments} attachment(s) not kept: add them again".takeIf { prompt.attachments > 0 },
+                "$waiting more waiting".takeIf { waiting > 0 },
+            )
+            if (notes.isNotEmpty()) Text(notes.joinToString(" · "), style = small, color = colors.tertiary)
+        }
+        BarButton("Insert", onInsert)
+        TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp), modifier = Modifier.height(36.dp)) {
+            Text("Dismiss", style = small, color = colors.secondary)
+        }
+    }
+}

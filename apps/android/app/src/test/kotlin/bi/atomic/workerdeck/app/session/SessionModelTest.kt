@@ -219,6 +219,27 @@ class SessionModelTest {
     }
 
     @Test
+    fun handedBackPromptsQueueUntilEachIsSettled() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        eventually("attached") { model.ui.value.chrome?.conversation == 1L }
+        model.send("first", emptyList())
+        model.send("second", emptyList())
+        eventually("both sent") { socket.sent.count { it.contains("\"user_message\"") } == 2 }
+        val ids = socket.sent.filter { it.contains("\"user_message\"") }.map { Regex("\"clientId\":\"([^\"]+)\"").find(it)!!.groupValues[1] }
+        listener.onMessage(socket, """{"type":"ack","clientId":"${ids[0]}","notDelivered":true}""")
+        listener.onMessage(socket, """{"type":"ack","clientId":"${ids[1]}","uncertain":true}""")
+        eventually("both handed back") { model.returned.value.size == 2 }
+        assertEquals(listOf("first" to false, "second" to true), model.returned.value.map { it.text to it.uncertain })
+        model.settleReturned(model.returned.value.first().id)
+        assertEquals(listOf("second"), model.returned.value.map { it.text })
+        model.close()
+    }
+
+    @Test
     fun aPastConversationOpensItsOwnSocketAndReadsAsPastOnceTheListIsKnown() {
         val transport = FakeTransport()
         transport.answers = { call ->

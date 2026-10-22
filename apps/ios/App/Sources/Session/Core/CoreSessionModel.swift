@@ -89,6 +89,8 @@ final class CoreSessionModel {
   func backgroundTask(_ toolUseId: String) { driver?.backgroundTask(toolUseId) }
   func sleep() { driver?.sleep() }
   func dismissError() { driver?.dismissError() }
+  // Inserted into the draft or dismissed: either way it leaves the queue.
+  func settleReturned(_ id: Int) { driver?.settleReturned(id) }
 
   func visible(first: Int, last: Int) { driver?.visible(first: first, last: last) }
 
