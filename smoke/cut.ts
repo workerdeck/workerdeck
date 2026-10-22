@@ -12,6 +12,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:net'
 import WebSocket from 'ws'
 import {
@@ -26,7 +27,9 @@ import { fail, finish, note, ok, step, warn } from './lib/report.ts'
 
 const withCodex = (process.argv[2] ?? 'all') === 'all'
 const WORD = 'ORRERY'
-// A port free a moment ago, and a child that must still be alive once it answers: never another gateway's.
+// A free port, and a per-run key only the spawned child knows: readiness wants 401 without it and 200 with it.
+const KEY = randomUUID()
+const auth = { authorization: `Bearer ${KEY}` }
 const PORT = await new Promise<number>((resolve) => {
   const probe = createServer().listen(0, '127.0.0.1', () => {
     const { port } = probe.address() as { port: number }
@@ -65,7 +68,7 @@ type Reply = { status: number; body: any }
 async function call(path: string, method = 'GET', body?: unknown, generation?: number): Promise<Reply> {
   const res = await fetch(`${base}${path}`, {
     method,
-    headers: { 'content-type': 'application/json', ...(generation === undefined ? {} : { [GENERATION_HEADER]: String(generation) }) },
+    headers: { 'content-type': 'application/json', ...auth, ...(generation === undefined ? {} : { [GENERATION_HEADER]: String(generation) }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   return { status: res.status, body: await res.json().catch(() => ({})) }
@@ -117,7 +120,7 @@ type Socket = {
 }
 
 async function open(id: string): Promise<Socket> {
-  const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
+  const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`, { headers: auth })
   const frames: ServerFrame[] = []
   const events: SessionEvent[] = []
   const closed = new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)))
@@ -187,7 +190,7 @@ async function startGateway(): Promise<void> {
       stateDir,
       '--no-web',
     ],
-    { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, WORKERDECK_AUTH_KEY: undefined } },
+    { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, WORKERDECK_AUTH_KEY: KEY } },
   )
   let exited = false
   child.once('exit', () => (exited = true))
@@ -203,7 +206,9 @@ async function startGateway(): Promise<void> {
         throw new Error('the gateway exited before it answered')
       }
       try {
-        return (await fetch(`${base}/sessions`)).ok && !exited ? true : undefined
+        const anonymous = await fetch(`${base}/sessions`)
+        const keyed = await fetch(`${base}/sessions`, { headers: auth })
+        return anonymous.status === 401 && keyed.ok ? true : undefined
       } catch {
         return undefined
       }

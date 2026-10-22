@@ -906,3 +906,60 @@ describe('owner rename against a cut and ended executions', () => {
     expect((await call(base, '/executions/x-r/result', 'POST', result, { token: 'alice' })).status).toBe(404)
   })
 })
+
+async function indexOwner(base: string, id: string): Promise<string | undefined> {
+  return (await call(base, `/agents/${id}`, 'GET', undefined, { token: 'operator' })).body.agent?.owner
+}
+
+describe('owner rename moves every copy of one session in one locked step', () => {
+  it('leaves nothing under the old owner for a cut between the record pass and the parking pass', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir, { owners: true })
+    const id = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
+    await idle(server, id)
+    const parked = deferred()
+    const original = server.parking.renameOwner.bind(server.parking)
+    let reached = false
+    const spy = vi.spyOn(server.parking, 'renameOwner').mockImplementation(async (from, to) => {
+      reached = true
+      await parked.promise
+      return original(from, to)
+    })
+    const renaming = call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
+    await vi.waitFor(() => expect(reached).toBe(true))
+    expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
+    await idle(server, id)
+    parked.resolve()
+    expect((await renaming).status).toBe(200)
+    spy.mockRestore()
+    expect((await server.records.get(id))?.conversations.map((entry) => [entry.n, entry.auth.owner])).toEqual([[1, 'bob']])
+    expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'bob' })).status).toBe(200)
+  })
+
+  it('puts the index row back on the new owner after an edit resynced it from the not yet renamed record', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir, { owners: true })
+    const id = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
+    await idle(server, id)
+    const listing = deferred()
+    const original = server.records.list.bind(server.records)
+    let reached = false
+    const spy = vi.spyOn(server.records, 'list').mockImplementation(async () => {
+      if (!reached) {
+        reached = true
+        await listing.promise
+      }
+      return original()
+    })
+    const renaming = call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
+    await vi.waitFor(() => expect(reached).toBe(true))
+    expect(await indexOwner(base, id)).toBe('bob')
+    expect((await call(base, `/agents/${id}`, 'PATCH', { config: { model: 'm2' } }, { token: 'operator' })).status).toBe(200)
+    expect(await indexOwner(base, id)).toBe('alice')
+    listing.resolve()
+    expect((await renaming).status).toBe(200)
+    spy.mockRestore()
+    expect(await indexOwner(base, id)).toBe('bob')
+    expect((await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'bob' })).body.session).toMatchObject({ owner: 'bob' })
+  })
+})

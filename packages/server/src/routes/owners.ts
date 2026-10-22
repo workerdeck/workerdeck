@@ -21,8 +21,7 @@ export async function handleOwnerRename(ctx: ServerContext, req: IncomingMessage
   if ('status' in agents) {
     fail(agents.status, agents.error)
   }
-  // Records first, each under its lifecycle lock: a cut holding it finishes first, and one after reads the new owner.
-  // Then parking's pass, behind its wake barrier, catches every runner registered meanwhile under the old owner.
+  // Per session, under its lifecycle lock, every copy moves at once; parking's pass after it catches a wake in flight.
   // A rename relabels: when `to` already names someone, both become one authorization identity.
   const sessions = new Set<string>()
   for (const listed of await ctx.records.list()) {
@@ -38,6 +37,18 @@ export async function handleOwnerRename(ctx: ServerContext, req: IncomingMessage
       sessions.add(listed.id)
       for (const entry of renamed.conversations) {
         ctx.cuts.refreshEntry(listed.id, entry)
+      }
+      const live = ctx.registry.get(listed.id)
+      if (live?.info().owner === from) {
+        live.setOwner?.(to)
+      }
+      const config = ctx.parking.configOf(listed.id)
+      if (config?.owner === from) {
+        ctx.parking.remember(listed.id, { ...config, owner: to })
+      }
+      const row = ctx.agents.get(listed.id)
+      if (row && row.owner !== renamed.owner && !ctx.agents.frozen(listed.id)) {
+        await ctx.agents.patch(listed.id, (agent) => ({ ...agent, owner: renamed!.owner }))
       }
     })
   }
