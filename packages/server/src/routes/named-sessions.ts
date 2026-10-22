@@ -267,6 +267,31 @@ export async function reconcileIdentity(ctx: ServerContext, onError: (error: unk
   }
 }
 
+// A startup stamp names an owner in the index for agents from before owners; the record is the authority, so an open
+// record without one takes it, and one that has its own puts it back on the index.
+export async function adoptIndexOwners(ctx: ServerContext, onError: (error: unknown) => void): Promise<void> {
+  for (const agent of ctx.agents.indexed()) {
+    if (agent.owner === undefined || ctx.agents.frozen(agent.id)) {
+      continue
+    }
+    try {
+      await ctx.locks.run([agent.id], async () => {
+        const record = await ctx.records.get(agent.id)
+        if (!record || record.closedAt !== undefined) {
+          return
+        }
+        if (record.owner === undefined) {
+          await writeRecordAuthority(ctx, agent.id, undefined, agent.owner)
+        } else if (record.owner !== agent.owner) {
+          await ctx.agents.patch(agent.id, (stored) => ({ ...stored, owner: record.owner }))
+        }
+      })
+    } catch (error) {
+      onError(error)
+    }
+  }
+}
+
 // The rest of the patch lands first, so a bad name or config never leaves a join the lead accepted and this side dropped.
 export function updateAgent(
   ctx: ServerContext,
@@ -376,7 +401,7 @@ export async function editSettings(ctx: ServerContext, info: SessionInfo, patch:
   return settingsOf(latest?.requested ?? latest?.running)
 }
 
-function settingsOf(config: SessionRunnerConfig | undefined): SessionSettings {
+export function settingsOf(config: SessionRunnerConfig | undefined): SessionSettings {
   const shown = settingsFrom({}, config ?? {}) as SessionSettings
   return typeof config?.agentContextReset === 'boolean' ? { ...shown, agentContextReset: config.agentContextReset } : shown
 }

@@ -233,7 +233,7 @@ export class SessionParkManager {
   }
 
   // No wake overlaps a rename: one in flight could register a runner built from the old record after the rewrite.
-  async renameOwner(from: string, to: string): Promise<number> {
+  async renameOwner(from: string, to: string): Promise<string[]> {
     while (this.#renaming) {
       await this.#renaming
     }
@@ -252,7 +252,7 @@ export class SessionParkManager {
     }
   }
 
-  async #renameOwner(from: string, to: string): Promise<number> {
+  async #renameOwner(from: string, to: string): Promise<string[]> {
     await Promise.allSettled(this.#resuming.values())
     const renamed = new Set<string>()
     for (const [id, config] of this.#configs) {
@@ -281,7 +281,7 @@ export class SessionParkManager {
         renamed.add(listed.id)
       }
     }
-    return renamed.size
+    return [...renamed]
   }
 
   // Dormant records only: a parked one replays its own log on wake, whose last label would win over the record's.

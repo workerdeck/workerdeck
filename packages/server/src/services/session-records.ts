@@ -312,6 +312,39 @@ export function requestedConfig(config: SessionRunnerConfig): SessionRunnerConfi
   return rest
 }
 
+// An owner rename, not a transfer: the same person under a new name, so every copy follows, past conversations too.
+export function withOwnerRenamed(record: SessionRecord, from: string, to: string): SessionRecord | undefined {
+  let changed = false
+  const owned = <T extends { owner?: string }>(value: T): T => {
+    if (value.owner !== from) {
+      return value
+    }
+    changed = true
+    return { ...value, owner: to }
+  }
+  const next: SessionRecord = { ...owned(record) }
+  for (const key of ['requested', 'running'] as const) {
+    if (next[key]) {
+      next[key] = owned(next[key])
+    }
+  }
+  if (next.runtime) {
+    next.runtime = { ...next.runtime, info: owned(next.runtime.info), config: owned(next.runtime.config) }
+  }
+  if (next.cut) {
+    next.cut = { ...next.cut, target: owned(next.cut.target) }
+  }
+  if (next.identity) {
+    next.identity = { ...next.identity, agent: owned(next.identity.agent) }
+  }
+  next.conversations = next.conversations.map((entry) => {
+    const auth = owned(entry.auth)
+    const running = entry.running && owned(entry.running)
+    return auth === entry.auth && running === entry.running ? entry : { ...entry, auth, ...(running ? { running } : {}) }
+  })
+  return changed ? next : undefined
+}
+
 export function freshRecord(id: string): SessionRecord {
   return { id, conversation: 1, conversations: [], createdAt: Date.now() }
 }

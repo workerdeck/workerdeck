@@ -351,7 +351,7 @@ describe('conversation cut under a stable id', () => {
     expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, 'tenant-a')).status).toBe(200)
 
     const forB = await call(base, `/sessions/${id}/conversations`, 'GET', undefined, 'tenant-b')
-    expect(forB.body).toEqual({ conversation: 2, history: [] })
+    expect(forB.body).toEqual({ conversation: 2, history: [], settings: expect.any(Object) })
     expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, 'tenant-b')).status).toBe(404)
     const scoped = await call(
       base,

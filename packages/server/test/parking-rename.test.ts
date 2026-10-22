@@ -43,7 +43,7 @@ describe('owner rename against parking', () => {
     expect(owners(await store.get('s1'))).toEqual({ info: 'ruli', config: 'ruli' })
 
     parking.touch(runner)
-    expect(await parking.renameOwner('ruli', 'tobias')).toBe(1)
+    expect(await parking.renameOwner('ruli', 'tobias')).toEqual(['s1'])
 
     expect(runner.info().owner).toBe('tobias')
     expect(owners(await store.get('s1'))).toEqual({ info: 'tobias', config: 'tobias' })
@@ -82,7 +82,7 @@ describe('owner rename against parking', () => {
     const rename = parking.renameOwner('ruli', 'tobias')
     await new Promise((resolve) => setTimeout(resolve, 20))
     release()
-    expect(await rename).toBe(1)
+    expect(await rename).toEqual(['s1'])
     expect(owners(await store.get('s1'))).toEqual({ info: 'tobias', config: 'tobias' })
   })
 
@@ -110,7 +110,7 @@ describe('owner rename against parking', () => {
 
     release()
     const runner = await wake
-    expect(await rename).toBe(1)
+    expect(await rename).toEqual(['s1'])
     expect(registry.get('s1')).toBe(runner)
     expect(runner?.info().owner).toBe('tobias')
     expect(owners(await store.get('s1'))).toEqual({ info: 'tobias', config: 'tobias' })
@@ -131,7 +131,7 @@ describe('owner rename against parking', () => {
 
     const rename = parking.renameOwner('ruli', 'tobias')
     const runner = await parking.ensureLive('s1')
-    expect(await rename).toBe(1)
+    expect(await rename).toEqual(['s1'])
     expect(built).toEqual(['tobias'])
     expect(runner?.info().owner).toBe('tobias')
   })

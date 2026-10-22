@@ -713,9 +713,16 @@ describe('settings of the next conversation on every session', () => {
     const { server, base, built } = await gateway(dir)
     const id = await createPlain(base, { model: 'm1', permissionMode: 'plan' })
     await idle(server, id)
+    expect((await call(base, `/sessions/${id}/conversations`)).body.settings).toEqual({
+      cwd: '/tmp',
+      profile: 'claude-a',
+      model: 'm1',
+      permissionMode: 'plan',
+    })
     const edited = await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2', permissionMode: null } }, { generation: 1 })
     expect(edited.status).toBe(200)
     expect(edited.body.settings).toEqual({ cwd: '/tmp', profile: 'claude-a', model: 'm2' })
+    expect((await call(base, `/sessions/${id}/conversations`)).body.settings).toEqual(edited.body.settings)
     expect(edited.body.session).toMatchObject({ id, model: 'm1' })
     const record = (await server.records.get(id))!
     expect(record.requested).toMatchObject({ model: 'm2' })
@@ -804,5 +811,44 @@ describe('settings of the next conversation on every session', () => {
     const job = await createPlain(base, { meta: { jobId: 'j1' } })
     await idle(server, job)
     expect((await call(base, `/sessions/${job}`, 'PATCH', { config: { model: 'm2' } }, { generation: 1 })).status).toBe(409)
+  })
+})
+
+describe('owner authority on the record', () => {
+  it('puts a startup stamp on the record, so the stamped owner can see the session', async () => {
+    const dir = await fixture.stateDir()
+    const unowned = PROFILES.filter((profile) => profile.owner === undefined)
+    const first = await gateway(dir, { owners: true, owner: undefined, profiles: unowned })
+    const id = (await createNamed(first.base, 'Atlas', {}, {}, 'operator')).id
+    await idle(first.server, id)
+    await stop(first.server)
+    expect((await first.server.records.get(id))?.owner).toBeUndefined()
+
+    const { server, base } = await gateway(dir, { owners: true, owner: 'alice', profiles: unowned })
+    await vi.waitFor(async () => expect((await server.records.get(id))?.owner).toBe('alice'))
+    expect((await server.records.get(id))?.requested?.owner ?? 'alice').toBe('alice')
+    const seen = await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'alice' })
+    expect(seen).toMatchObject({ status: 200, body: { session: { owner: 'alice' } } })
+  })
+
+  it('renames the owner on every copy the record holds, past conversations included', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir, { owners: true })
+    const id = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
+    await idle(server, id)
+    expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
+    await idle(server, id)
+
+    const renamed = await call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
+    expect(renamed).toMatchObject({ status: 200, body: { agents: 1, sessions: 1 } })
+    const record = (await server.records.get(id))!
+    expect(JSON.stringify(record)).not.toContain('"alice"')
+    expect(record.owner).toBe('bob')
+    expect(record.conversations.map((entry) => [entry.n, entry.auth.owner])).toEqual([[1, 'bob']])
+
+    expect((await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'alice' })).status).toBe(404)
+    expect((await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'bob' })).status).toBe(200)
+    expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'bob' })).status).toBe(200)
+    expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'alice' })).status).toBe(404)
   })
 })

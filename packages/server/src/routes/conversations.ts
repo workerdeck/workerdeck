@@ -13,6 +13,7 @@ import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { CutGuard } from '../services/conversation-cuts.ts'
 import type { ConversationEntry, SessionRecord } from '../services/session-records.ts'
+import { settingsOf } from './named-sessions.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
 type CutBody = Partial<NewConversationRequest> & Partial<SettlePendingPromptRequest> & { inputRevision?: unknown }
@@ -81,6 +82,7 @@ export async function handleConversations(
         history: visible.map(entrySummary),
         ...(seesCurrent && record?.pendingPrompt ? { pendingPrompt: record.pendingPrompt } : {}),
         ...(seesCurrent && record?.startFailed ? { startFailed: record.startFailed } : {}),
+        ...(seesCurrent && record ? { settings: settingsOf(record.requested ?? record.running) } : {}),
       }
       json(res, 200, body)
       return

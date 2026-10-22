@@ -25,7 +25,7 @@ import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './option
 import { rerollAvatar } from './routes/agents.ts'
 import { createHistoryReader, engineHomeOf } from './services/history-reader.ts'
 import { LifecycleLocks, CUT_IN_PROGRESS } from './services/lifecycle-locks.ts'
-import { reconcileIdentity } from './routes/named-sessions.ts'
+import { adoptIndexOwners, reconcileIdentity } from './routes/named-sessions.ts'
 import { createQueueSocketHub } from './routes/queue-ws.ts'
 import { upgradeSession } from './routes/session-upgrade.ts'
 import { dispatchRoute, httpRoutes } from './routes/table.ts'
@@ -146,8 +146,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     relayOwners: () => relayOwners(),
     relayDefaulted: () => relayDefaulted(),
   })
+  // Async callers only (listen, the relay coming online): `ctx` is built further down.
   const stampOwners = (): Promise<unknown> =>
-    agents.stampOwners((agent) => owners.forProfile(agent.config.profile)).catch((error: unknown) => diagnose(error, 'owners'))
+    agents
+      .stampOwners((agent) => owners.forProfile(agent.config.profile))
+      .then(() => adoptIndexOwners(ctx, (error) => diagnose(error, 'owners')))
+      .catch((error: unknown) => diagnose(error, 'owners'))
 
   const generation = randomUUID()
   const shells = options.shell?.enabled === true ? shellRegistryFor(options.shell, generation) : null

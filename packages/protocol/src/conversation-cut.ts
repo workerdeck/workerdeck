@@ -1,4 +1,4 @@
-import type { ProfileEngine, SessionEvent, SessionInfo } from './index.ts'
+import type { ProfileEngine, SessionEvent, SessionInfo, SessionSettings } from './index.ts'
 
 export const GENERATION_HEADER = 'x-workerdeck-generation'
 
@@ -33,6 +33,8 @@ export type ConversationsResponse = {
   history: ConversationSummary[]
   pendingPrompt?: PendingPromptInfo
   startFailed?: ConversationStartFailure
+  // What the next conversation starts from, for every session, named or not.
+  settings?: SessionSettings
 }
 
 export type ConversationHistoryResponse = { info: SessionInfo; events: SessionEvent[] }

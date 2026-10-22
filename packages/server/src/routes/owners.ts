@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { isOwnerName, type RenameOwnerRequest, type RenameOwnerResponse } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
+import { withOwnerRenamed } from '../services/session-records.ts'
 
 export async function handleOwnerRename(ctx: ServerContext, req: IncomingMessage, res: ServerResponse): Promise<void> {
   requireMethod(req, 'POST')
@@ -20,9 +21,22 @@ export async function handleOwnerRename(ctx: ServerContext, req: IncomingMessage
   if ('status' in agents) {
     fail(agents.status, agents.error)
   }
-  const sessions = await ctx.parking.renameOwner(from, to)
+  const sessions = new Set(await ctx.parking.renameOwner(from, to))
+  for (const record of await ctx.records.list()) {
+    let renamed = false
+    await ctx.locks.run([record.id], () =>
+      ctx.records.transact(record.id, (current) => {
+        const next = current ? withOwnerRenamed(current, from, to) : undefined
+        renamed = next !== undefined
+        return next
+      }),
+    )
+    if (renamed) {
+      sessions.add(record.id)
+    }
+  }
   const stored = await ctx.parking.listInfo()
   ctx.owners.rebuildRetained([...ctx.agents.owners(), ...[...ctx.registry.list(), ...stored].map((info) => info.owner)])
   ctx.teams?.republish()
-  json(res, 200, { agents: agents.renamed, sessions } satisfies RenameOwnerResponse)
+  json(res, 200, { agents: agents.renamed, sessions: sessions.size } satisfies RenameOwnerResponse)
 }
