@@ -91,7 +91,6 @@ const TERMINAL_CLOSES: ReadonlyMap<number, string> = new Map([
   [RELAY_CLOSE.revoked, 'this gateway is not enrolled at the relay'],
   [RELAY_CLOSE.versionMismatch, 'the relay speaks a different wire version'],
   [RELAY_CLOSE.badHello, 'the relay refused the hello frame'],
-  [RELAY_CLOSE.ownersRequired, 'the relay enrolled this gateway with several owners, which needs a newer WorkerDeck'],
 ])
 
 function linkAge(ms: number): string {

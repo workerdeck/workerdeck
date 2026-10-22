@@ -1,15 +1,14 @@
 import { OWNER_NAME, type ContextReading, type ProfileEngine, type SessionStatus } from '@workerdeck/protocol'
 
-export const RELAY_WIRE_VERSION = 1
+export const RELAY_WIRE_VERSION = 2
 
 export const RELAY_OPS = ['send', 'peek'] as const
 export const RELAY_GRANTED_OPS = ['team', 'watch', 'message'] as const
 export const RELAY_ALL_OPS = [...RELAY_OPS, ...RELAY_GRANTED_OPS] as const
 export type RelayOp = (typeof RELAY_ALL_OPS)[number]
 
-// `owners`: entries and team frames carry their own owner, checked against the gateway's enrolled set.
-// `owners-live`: an owner change at the relay reaches a connected gateway as an `owners` frame instead of a reconnect.
-export const RELAY_FEATURES = ['teams', 'owners', 'owners-live'] as const
+// `teams`: the gateway routes team frames; one with teams off leaves it out.
+export const RELAY_FEATURES = ['teams'] as const
 export type RelayFeature = (typeof RELAY_FEATURES)[number]
 
 export const RELAY_OWNER_NAME = OWNER_NAME
@@ -21,8 +20,6 @@ export const RELAY_CLOSE = {
   versionMismatch: 4426,
   replaced: 4409,
   timeout: 4408,
-  ownersRequired: 4412,
-  ownersChanged: 4413,
 } as const
 
 export const RELAY_FRAME_MAX_BYTES = 4 * 1024 * 1024

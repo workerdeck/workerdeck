@@ -197,13 +197,9 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
       const changed = defaulted !== gateway.defaulted || owners.join(',') !== gateway.owners.join(',')
       gateway.owners = owners
       gateway.defaulted = defaulted
-      if (owners.length > 1 && !gateway.features.has('owners')) {
-        drop(gateway, RELAY_CLOSE.ownersRequired, 'several owners need a gateway that names them')
-      } else if (changed && gateway.features.has('owners-live')) {
+      if (changed) {
         log(`relay: ${gateway.name} owners now ${owners.join(', ')}${defaulted ? ' (default)' : ''}`)
         send(gateway.socket, { t: 'owners', ...ownersFacts(owners, defaulted) })
-      } else if (changed) {
-        drop(gateway, RELAY_CLOSE.ownersChanged, 'owners changed')
       }
     }
   }
@@ -228,7 +224,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
       const owner = ownerOf(published.gateway, published.entry)
       return claimed === undefined || claimed === owner ? owner : undefined
     }
-    if (typeof claimed === 'string' && gateway.features.has('owners')) {
+    if (typeof claimed === 'string') {
       return gateway.owners.includes(claimed) ? claimed : undefined
     }
     return gateway.owners.length === 1 ? gateway.owners[0] : undefined
@@ -587,11 +583,6 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     const ceiling = (frame.ceiling as { ops?: unknown } | undefined)?.ops
     const features = Array.isArray(frame.features) ? frame.features.filter(isRelayFeature) : []
     const owners = enrolledOwners(name)
-    if (owners.length > 1 && !features.includes('owners')) {
-      log(`relay: refused ${name}: it is enrolled with several owners and cannot name them`)
-      socket.close(RELAY_CLOSE.ownersRequired, 'several owners need a gateway that names them')
-      return undefined
-    }
     const previous = gateways.get(name)
     if (previous) {
       drop(previous, RELAY_CLOSE.replaced, 'replaced by a newer connection')
@@ -753,7 +744,7 @@ function send(socket: WebSocket, frame: RelayFrame): void {
 // The entry's owner when the gateway may claim it; a gateway enrolled with one owner speaks for it on every entry.
 // Undefined leaves the entry out of every list, route and team decision, so a removed owner takes effect at reload.
 function ownerOf(gateway: Gateway, entry: RelaySessionEntry): string | undefined {
-  const claimed = gateway.features.has('owners') ? entry.owner : undefined
+  const claimed = entry.owner
   if (claimed !== undefined) {
     return gateway.owners.includes(claimed) ? claimed : undefined
   }

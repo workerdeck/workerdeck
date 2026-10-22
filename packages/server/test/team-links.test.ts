@@ -256,7 +256,7 @@ describe('cross-gateway teams, same owner', () => {
       owners: ['operator'],
       ownersDefaulted: true,
       online: true,
-      features: ['teams', 'owners', 'owners-live'],
+      features: ['teams'],
     })
   })
 })

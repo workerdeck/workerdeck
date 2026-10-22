@@ -1604,8 +1604,8 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   so the strings are UI copy. A team is only "some agent has `lead` = me"; there is no team record.
 - **The peers rule is `teamReaches(from.agent, to.agent)` after the scope rule**, a pure function in
   `protocol`. A member is published to the relay only when its team spans gateways
-  (`AgentService.spansGateways`) **and** the connection negotiated `teams` (an older relay would list
-  it to everyone), and only then does a member reach the relay (`reacher` in `peer-relay.ts`).
+  (`AgentService.spansGateways`) **and** the connection negotiated `teams` (a link with teams off
+  would list it to everyone), and only then does a member reach the relay (`reacher` in `peer-relay.ts`).
   Every remote team claim is checked against this gateway's records first
   (`AgentService.vouches`): the agent id must name the gateway the origin or row came from, and a
   claim to be a member of a lead **here** needs that lead's accepted `remoteMembers` entry, and a
@@ -1804,23 +1804,18 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   from the set takes its rows off every list and route at the next reload. `opsBetween`'s
   `crossOperator`, list projection, origins, the invite budget and `TeamResult.owner` (the lead's,
   stamped by the relay) all use the two endpoints' owners, never the sockets'.
-- **Several owners never downgrade to one.** A record with two or more owners keeps its key hash
-  in `ownersHash`, not `hash`, so an older relay reading the file refuses the gateway; a gateway
-  enrolled with several owners that does not offer `owners` is refused at hello (close
-  `ownersRequired`, terminal), and an old gateway whose enrollment gains a second owner is
-  dropped at reload. The other way round, a multi-owner gateway on a relay without `owners`
-  publishes nothing and refuses every peer and team frame (`ownersBlocked` in `peer-relay.ts`).
-  Such a relay answers a peek with no owner; the gateway takes it from the relay's listed row.
-  A join retry or a `team.status` question under the edge's op still holds only for the owner
+- **One enrollment shape, one wire version.** Every `gateways.json` entry is `{hash, enrolledAt,
+  owners?}` (no `owners` = the relay's default owner); an entry in the layout from before 4.0.0
+  (`owner`, `ownersHash`) refuses the relay's start. Relay wire version 2 has owners built in, so
+  a 3.x gateway or relay is refused at hello (`versionMismatch`), never served with one owner
+  standing in for several. A join retry or a `team.status` question under the edge's op still holds only for the owner
   the edge was accepted with (an edge stored without one fits any). A known `team.status` answer
   carries the answering agent's owner, stamped by the relay like `TeamResult.owner` (a claim the
   target may not make falls back to its published entry, never through), so a join recovered
   after a restart stores `remoteLead.owner` too and is refused for an unprompted mover across owners.
-- **An owner change reaches a connected gateway** (`relay owner` / `relay owners`, then reload). A
-  gateway that negotiated `owners-live` gets an `owners` frame (`owner`, `owners`, `defaulted`),
-  calls `host.ownersChanged`, restamps and republishes; one that did not is closed with
-  `ownersChanged` (4413, not terminal) and reconnects into the new `welcome`. Before this a
-  connected gateway kept its old owner until it happened to reconnect.
+- **An owner change reaches a connected gateway** (`relay owner` / `relay owners`, then reload) as
+  an `owners` frame (`owner`, `owners`, `defaulted`); the gateway calls `host.ownersChanged`,
+  restamps and republishes, without a reconnect.
 - **Link drops log their cause.** The relay-client's "connection lost" line carries the close
   code, "after no traffic from the relay" when the heartbeat (2 x `heartbeatMs` + 1 s) terminated
   it, the link's uptime and a timestamp: an event-loop stall on either side looks like a 1006.

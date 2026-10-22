@@ -530,7 +530,7 @@ describe('several owners on one gateway', () => {
     const ruli = fakeGateway([entry('rp')])
     const connMini = await attach(relay, stateDir, 'mini', shared, {
       owners: ['silkweave', 'tobias', 'ruli'],
-      features: ['teams', 'owners'],
+      features: ['teams'],
     })
     const connMac = await attach(relay, stateDir, 'mac', mac, { owner: 'tobias' })
     const connRuli = await attach(relay, stateDir, 'ruli-mbp', ruli, { owner: 'ruli' })
@@ -613,36 +613,7 @@ describe('several owners on one gateway', () => {
     expect((await connRuli.list('rp')).some((row) => row.gateway === 'mini')).toBe(false)
   })
 
-  it('refuses the hello of a gateway enrolled with several owners that cannot name them', async () => {
-    const { stateDir, relay } = await setup(SAME_ONLY)
-    const key = await enrollGateway(stateDir, 'old-mini', { owners: ['silkweave', 'tobias'] })
-    await relay.reload()
-    const lines: string[] = []
-    const connection = connectRelay(
-      {
-        url: relay.url,
-        gateway: 'old-mini',
-        key,
-        features: ['teams'],
-        backoffMinMs: 20,
-        backoffMaxMs: 60_000,
-        log: (line) => lines.push(line),
-      },
-      fakeGateway([]).host,
-    )
-    cleanups.push(() => connection.close())
-    await until(() => lines.some((line) => line.includes('several owners')), 'the refusal logged')
-    expect(connection.state()).not.toBe('online')
-    expect(relay.status().gateways.find((row) => row.name === 'old-mini')?.online).toBe(false)
-  })
 
-  it('drops an old gateway whose enrollment gains a second owner', async () => {
-    const { stateDir, relay } = await setup(SAME_ONLY)
-    await attach(relay, stateDir, 'pi', fakeGateway([entry('p')]), { owner: 'tobias' })
-    await setGatewayOwners(stateDir, 'pi', ['tobias', 'ruli'])
-    await relay.reload()
-    expect(relay.status().gateways.find((row) => row.name === 'pi')?.online).toBe(false)
-  })
 })
 
 describe('enrollment file from before 4.0.0', () => {
@@ -693,7 +664,7 @@ describe('owner changes reach a connected gateway', () => {
     gateway.host.ownersChanged = () => {
       changes += 1
     }
-    const connection = await attach(relay, stateDir, 'mac', gateway, { features: ['teams', 'owners', 'owners-live'] })
+    const connection = await attach(relay, stateDir, 'mac', gateway, { features: ['teams'] })
     expect(connection.owner()).toBe('operator')
     expect(connection.ownersDefaulted()).toBe(true)
 
@@ -706,13 +677,4 @@ describe('owner changes reach a connected gateway', () => {
     expect(connection.state()).toBe('online')
   })
 
-  it('closes a gateway without owners-live so it reconnects under the new owner', async () => {
-    const { stateDir, relay } = await setup(SAME_ONLY)
-    const connection = await attach(relay, stateDir, 'pi', fakeGateway([entry('p')]), { features: ['teams', 'owners'] })
-    expect(connection.ownersDefaulted()).toBe(true)
-    await setGatewayOwner(stateDir, 'pi', 'tobias')
-    await relay.reload()
-    await until(() => connection.state() === 'online' && connection.owner() === 'tobias', 'the reconnect')
-    expect(connection.ownersDefaulted()).toBe(false)
-  })
 })
