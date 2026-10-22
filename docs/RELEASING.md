@@ -1683,7 +1683,9 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   `CoreTranscriptUITests` 4/4 + WorkerDeckKit 57/57, Android unit tests + `assembleDebug`, gatekeeper, paid
   `smoke:cut all` 25/0 on the final tree; WD-Review clean on P1 to P5, D9, M1 and the merged tree (findings H1, M1
   to M3, R1 fixed); hand checks web + VS Code 8/8 (Tobias, 63rd). Push notification rerouting (M3/R1) is
-  build-verified only (no push seam in the UI tests). **Published** [date]: [npm 12/12, Marketplace, migrations].
+  build-verified only (no push seam in the UI tests). **Published** 2026-10-22: npm 12/12 (`workerdeck`, `ui`, `web` live a few minutes after the
+  run), `latest` 4.0.0, Marketplace 4.0.0 a few minutes later; tag `v4.0.0` at `b4f50fa9`. Installs migrate with
+  `_docs/NEXT-MIGRATE.md`.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
