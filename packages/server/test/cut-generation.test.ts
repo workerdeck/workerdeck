@@ -202,7 +202,7 @@ function bearer(token: string): Record<string, string> {
 
 async function idle(server: WorkerServer, id: string): Promise<void> {
   await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'))
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut?.from).not.toBe(0))
+  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined())
 }
 
 async function cut(base: string, id: string, expectedGeneration: number, token?: string): Promise<Call> {

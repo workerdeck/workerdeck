@@ -127,10 +127,10 @@ async function create(base: string, extra: Record<string, unknown> = {}, token?:
   return (res.body.session as SessionInfo).id
 }
 
-// Idle, and the create's first-start intent settled, so a test counting store calls starts from a quiet record.
+// Idle, and no start or cut intent left: a cut's successor runs idle before the cut settles and lifts its gate.
 async function idle(server: WorkerServer, id: string): Promise<void> {
   await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'))
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut?.from).not.toBe(0))
+  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined())
 }
 
 async function stop(server: WorkerServer): Promise<void> {

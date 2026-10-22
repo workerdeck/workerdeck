@@ -117,7 +117,7 @@ async function createNamed(base: string, name: string, extra: Record<string, unk
 
 async function idle(server: WorkerServer, id: string): Promise<void> {
   await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'))
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut?.from).not.toBe(0))
+  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined())
 }
 
 async function stop(server: WorkerServer): Promise<void> {
