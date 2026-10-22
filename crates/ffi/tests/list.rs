@@ -1,6 +1,4 @@
-use wdffi::{
-    ConversationFollow, ConversationSelection, ListError, ListFacet, ListGroupBy, ListSortBy, RowState, SessionList, StepKind, StepShow,
-};
+use wdffi::{ListError, ListFacet, ListGroupBy, ListSortBy, RowState, SessionList, StepKind, StepShow};
 
 fn session(id: &str, status: &str, extra: &str) -> String {
     format!(r#"{{"id":"{id}","status":"{status}","cwd":"/work/app","createdAt":1000,"lastSeq":4{extra}}}"#)
@@ -76,14 +74,13 @@ fn a_toggled_group_stays_collapsed_across_a_restore() {
 }
 
 #[test]
-fn a_session_from_an_older_record_still_lists() {
+fn a_session_of_another_shape_is_skipped_and_counted() {
     let list = SessionList::new(None, None);
-    let stale = idle("old", r#","capabilities":{"interactiveApprovals":true}"#);
-    let skipped = list.set_host("h1".into(), "mac".into(), true, body(&[stale, r#"{"id":"broken"}"#.into(), idle("s2", "")])).unwrap();
-    assert_eq!(skipped, 1);
+    let partial = idle("old", r#","capabilities":{"interactiveApprovals":true}"#);
+    let skipped = list.set_host("h1".into(), "mac".into(), true, body(&[partial, r#"{"id":"broken"}"#.into(), idle("s2", "")])).unwrap();
+    assert_eq!(skipped, 2);
     let ids: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).map(|r| r.session_id).collect();
-    assert_eq!(ids.len(), 2, "{ids:?}");
-    assert!(ids.contains(&"old".to_owned()));
+    assert_eq!(ids, ["s2"]);
 }
 
 #[test]
@@ -92,7 +89,7 @@ fn values_from_a_newer_gateway_read_as_unknown() {
     let newer = session(
         "new",
         "hibernating",
-        r#","pendingPermissionCount":0,"engine":"gemini","permissionMode":"yolo","capabilities":{"resume":true,"toolFilters":"some"},"subagents":[{"toolUseId":"t","status":"paused","startedAt":1,"toolCount":0}]"#,
+        r#","pendingPermissionCount":0,"engine":"gemini","permissionMode":"yolo","subagents":[{"toolUseId":"t","status":"paused","startedAt":1,"toolCount":0}]"#,
     );
     list.set_host("h1".into(), "mac".into(), true, body(&[newer])).unwrap();
     let rows: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).collect();
@@ -153,7 +150,7 @@ fn a_config_set_whole_is_normalized_and_kept() {
     let list = SessionList::new(None, None);
     list.set_config_json(r#"{"groupBy":"gateway","adapters":["codex"],"search":"x"}"#.into());
     let stored: serde_json::Value = serde_json::from_str(&list.config_json()).unwrap();
-    assert_eq!(stored["groupBy"], "project");
+    assert_eq!(stored["groupBy"], "state");
     assert_eq!(stored["adapters"], serde_json::json!(["codex"]));
     list.set_config_json("not json".into());
     let stored: serde_json::Value = serde_json::from_str(&list.config_json()).unwrap();
@@ -272,21 +269,18 @@ fn a_new_agent_seed_waits_for_the_meta_lists_leads_first_and_follows_the_profile
 }
 
 #[test]
-fn an_agent_row_selects_the_agent_and_follows_it_past_rotations() {
+fn a_row_carries_its_conversation_and_every_live_session_offers_a_cut() {
     let list = SessionList::new(None, None);
-    let agent = r#","agent":{"id":"ag","name":"WD-Test"}"#;
-    let old = idle("a", &format!(r#"{agent},"archived":true,"supersededBy":"b""#));
-    list.set_host("h1".into(), "mac".into(), true, body(&[old, idle("c", agent)])).unwrap();
-    let rows: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).map(|r| r.session_id).collect();
-    assert_eq!(rows, ["c"]);
-    let selection = wdffi::selection_of(list.clone(), "h1".into(), "c".into());
-    assert_eq!(selection, ConversationSelection::Agent { gateway: "h1".into(), agent_id: "ag".into() });
-    let pushed = wdffi::selection_of(list.clone(), "h1".into(), "a".into());
-    assert_eq!(pushed, ConversationSelection::Session { gateway: "h1".into(), session_id: "a".into() });
-    let follow = ConversationFollow::new(selection, "c".into());
-    assert_eq!(follow.superseded("d".into(), list.clone()).as_deref(), Some("d"));
-    list.set_host("h1".into(), "mac".into(), true, body(&[idle("f", agent)])).unwrap();
-    assert_eq!(follow.listed(list.clone()).as_deref(), Some("f"));
-    assert_eq!(follow.current(), "f");
-    assert_eq!(ConversationFollow::new(pushed, "a".into()).superseded("b".into(), list), None);
+    let named = r#","agent":{"id":"c","name":"WD-Test"},"conversation":3,"sdkSessionId":"sdk""#;
+    list.set_host("h1".into(), "mac".into(), true, body(&[idle("c", named), idle("p", "")])).unwrap();
+    let rows: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).collect();
+    let agent = rows.iter().find(|r| r.session_id == "c").unwrap();
+    assert_eq!(agent.conversation, 3);
+    assert_eq!(agent.agent_detail.as_deref(), Some("conversation 3"));
+    assert!(agent.can_new_conversation && agent.new_conversation_blocked.is_none());
+    let plain = rows.iter().find(|r| r.session_id == "p").unwrap();
+    assert_eq!(plain.conversation, 1);
+    assert_eq!(plain.new_conversation_blocked.as_deref(), Some("This conversation is still new"));
+    assert_eq!(wdffi::address_of("c".into(), Some(3), Some(agent.conversation)).conversation, None);
+    assert_eq!(wdffi::address_of("c".into(), Some(2), Some(agent.conversation)).conversation, Some(2));
 }

@@ -55,17 +55,6 @@
       [
         {
           "id": "a",
-          "status": "running",
-          "cwd": "/work/alpha",
-          "createdAt": 1760000000000,
-          "lastSeq": 0,
-          "pendingPermissionCount": 0,
-          "archived": true
-        }
-      ],
-      [
-        {
-          "id": "a",
           "status": "idle",
           "cwd": "/work/alpha",
           "createdAt": 1760000000000,
@@ -107,9 +96,6 @@
     {
       "enabled": false,
       "reason": "Finish or stop the current turn first"
-    },
-    {
-      "enabled": true
     },
     {
       "enabled": true

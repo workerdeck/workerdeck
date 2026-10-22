@@ -67,9 +67,6 @@
           "scoped": false,
           "shells": "none",
           "tasks": "all",
-          "collapsedTeams": [
-            "mac:ag-lead"
-          ],
           "expandedTeams": [
             "mac:ag-x"
           ]
@@ -111,7 +108,7 @@
       "states": [],
       "projects": [],
       "scoped": true,
-      "groupBy": "project",
+      "groupBy": "state",
       "sortBy": "recent",
       "subagents": "active",
       "shells": "active",

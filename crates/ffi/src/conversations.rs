@@ -1,88 +1,24 @@
-use crate::list::SessionList;
-use std::sync::{Arc, Mutex, MutexGuard};
-use wd_native::rest::{AgentConversationsResponse, AgentInfo, RetiredAgentsResponse};
-use wd_native::vm::conversations::{self as vm, AgentBinding, Follow};
+use wd_native::rest::{ConversationsResponse, RetiredAgentsResponse};
+use wd_native::vm::conversations::{self as vm, CurrentConversation};
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum ConversationSelection {
-    Agent { gateway: String, agent_id: String },
-    Session { gateway: String, session_id: String },
+// Where a screen points: a session by its stable id, and a past conversation of it by `n`. None is the current one.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SessionAddress {
+    pub id: String,
+    pub conversation: Option<i64>,
 }
 
-impl From<vm::ConversationSelection> for ConversationSelection {
-    fn from(selection: vm::ConversationSelection) -> Self {
-        match selection {
-            vm::ConversationSelection::Agent { gateway, agent_id } => ConversationSelection::Agent { gateway, agent_id },
-            vm::ConversationSelection::Session { gateway, session_id } => ConversationSelection::Session { gateway, session_id },
-        }
+impl From<vm::SessionAddress> for SessionAddress {
+    fn from(address: vm::SessionAddress) -> Self {
+        SessionAddress { id: address.id, conversation: address.conversation }
     }
 }
 
-impl From<ConversationSelection> for vm::ConversationSelection {
-    fn from(selection: ConversationSelection) -> Self {
-        match selection {
-            ConversationSelection::Agent { gateway, agent_id } => vm::ConversationSelection::Agent { gateway, agent_id },
-            ConversationSelection::Session { gateway, session_id } => vm::ConversationSelection::Session { gateway, session_id },
-        }
-    }
-}
-
-// What opening a list row selects: its agent while the row is that agent's current conversation, else the session.
-// A session the list does not hold (a push, a deep link, a history row) is a session selection.
+// The current conversation's own number reads as the current address: a list row, a bookmark or a notification for
+// it opens the live screen, any other n the past conversation read-only.
 #[uniffi::export]
-pub fn selection_of(list: Arc<SessionList>, host_id: String, session_id: String) -> ConversationSelection {
-    match list.info(&host_id, &session_id) {
-        Some(info) => vm::selection_of(&host_id, &info).into(),
-        None => ConversationSelection::Session { gateway: host_id, session_id },
-    }
-}
-
-// One session screen's selection. Each call answers the session to show instead, or None to stay.
-#[derive(uniffi::Object)]
-pub struct ConversationFollow {
-    inner: Mutex<Follow>,
-}
-
-impl ConversationFollow {
-    fn lock(&self) -> MutexGuard<'_, Follow> {
-        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-}
-
-#[uniffi::export]
-impl ConversationFollow {
-    #[uniffi::constructor]
-    pub fn new(selection: ConversationSelection, current: String) -> Arc<Self> {
-        Arc::new(Self { inner: Mutex::new(Follow::new(selection.into(), &current)) })
-    }
-
-    // A session opened from the list, a push or a create: `selection_of` once the list holds it.
-    #[uniffi::constructor]
-    pub fn open(list: Arc<SessionList>, host_id: String, session_id: String) -> Arc<Self> {
-        Arc::new(Self { inner: Mutex::new(Follow::open(&host_id, &session_id, &list.rows())) })
-    }
-
-    pub fn selection(&self) -> ConversationSelection {
-        self.lock().selection().clone().into()
-    }
-
-    pub fn current(&self) -> String {
-        self.lock().current().to_owned()
-    }
-
-    pub fn follows(&self) -> bool {
-        self.lock().follows()
-    }
-
-    pub fn superseded(&self, by: String, list: Arc<SessionList>) -> Option<String> {
-        let rows = list.rows();
-        self.lock().superseded(&by, &rows)
-    }
-
-    pub fn listed(&self, list: Arc<SessionList>) -> Option<String> {
-        let rows = list.rows();
-        self.lock().listed(&rows)
-    }
+pub fn address_of(id: String, conversation: Option<i64>, current: Option<i64>) -> SessionAddress {
+    vm::address_of(&id, conversation, current).into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -91,15 +27,15 @@ pub enum ArchivedKind {
     Deleted,
 }
 
-// `banner` is "Past conversation · <date>", `note` adds "Agent deleted" and/or "Transcript unavailable" (the web's
-// `archivedBannerText`); `current` is Go to current's target while the agent lives on.
+// `banner` is "Past conversation · <date>", `note` adds "Closed" and/or "Transcript unavailable" (the web's
+// `archivedBannerText`); `current` is the session's current conversation, Go to current's target, while it lives on.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct ArchivedView {
     pub kind: ArchivedKind,
     pub banner: String,
     pub note: Option<String>,
     pub at_ms: f64,
-    pub current: Option<String>,
+    pub current: Option<i64>,
     pub unavailable: bool,
 }
 
@@ -114,28 +50,19 @@ impl ArchivedView {
             banner,
             note,
             at_ms: view.at,
-            current: view.current.clone(),
+            current: view.current,
             unavailable: view.unavailable,
         }
     }
 }
 
-#[derive(serde::Deserialize)]
-struct AgentsBody {
-    agents: Vec<AgentInfo>,
-}
-
-fn agents_of(body: &str) -> Option<Vec<AgentInfo>> {
-    serde_json::from_str::<AgentsBody>(body).ok().map(|body| body.agents)
-}
-
-pub(crate) fn agent_bindings(body: &str) -> Option<Vec<AgentBinding>> {
-    agents_of(body).map(|agents| agents.iter().map(AgentBinding::from).collect())
+pub(crate) fn current_conversation(body: &str) -> Option<CurrentConversation> {
+    serde_json::from_str::<ConversationsResponse>(body).ok().map(|response| CurrentConversation::of(&response))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ConversationItem {
-    pub session_id: String,
+    pub n: i64,
     pub date: String,
     pub title: String,
     pub duration: Option<String>,
@@ -143,17 +70,22 @@ pub struct ConversationItem {
     pub unavailable: bool,
 }
 
-// A `GET /agents/:id/conversations` answer as the sheet's rows, newest first. `offset_minutes` is the platform's
-// current UTC offset, for local dates.
+// A `GET /sessions/:id/conversations` answer as the sheet's rows, newest first, the current one on top. `current_title`
+// names the current row (the session's title); `offset_minutes` is the platform's current UTC offset, for local dates.
 #[uniffi::export]
-pub fn agent_conversations(body: String, now_ms: f64, offset_minutes: i32) -> Option<Vec<ConversationItem>> {
-    let response: AgentConversationsResponse = serde_json::from_str(&body).ok()?;
-    let items = vm::conversation_items(&response.conversations, now_ms, offset_minutes);
+pub fn session_conversations(
+    body: String,
+    current_title: Option<String>,
+    now_ms: f64,
+    offset_minutes: i32,
+) -> Option<Vec<ConversationItem>> {
+    let response: ConversationsResponse = serde_json::from_str(&body).ok()?;
+    let rows = vm::conversation_list(&response, current_title.as_deref());
     Some(
-        items
+        vm::conversation_items(&rows, now_ms, offset_minutes)
             .into_iter()
             .map(|item| ConversationItem {
-                session_id: item.session_id,
+                n: item.n,
                 date: item.date,
                 title: item.title,
                 duration: item.duration,
@@ -184,22 +116,57 @@ pub fn past_agents(body: String, now_ms: f64, offset_minutes: i32) -> Option<Vec
     )
 }
 
-// What a live agent asks of the user: `undelivered` is the first message a crash may have kept from the engine (Send
-// again or Dismiss), `start_failed` why a committed new conversation did not start (Retry start). None when neither.
+// What a session asks of the user before its next cut: `uncertain_prompt` is a first message whose delivery is unknown
+// (Send again or Dismiss, bound to `uncertain_n`), `start_failed` why a committed conversation did not start (Retry
+// start, bound to `start_failed_n`). None when neither, or for a body of another shape.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct AgentNotice {
-    pub agent_id: String,
-    pub undelivered: Option<String>,
+pub struct ConversationNotice {
+    pub uncertain_prompt: Option<String>,
+    pub uncertain_n: Option<i64>,
     pub start_failed: Option<String>,
+    pub start_failed_n: Option<i64>,
 }
 
 #[uniffi::export]
-pub fn agent_notice(agents_body: String, agent_id: String) -> Option<AgentNotice> {
-    let agent = agents_of(&agents_body)?.into_iter().find(|agent| agent.id == agent_id)?;
-    if agent.undelivered.is_none() && agent.start_failed.is_none() {
+pub fn conversation_notice(body: String) -> Option<ConversationNotice> {
+    let response: ConversationsResponse = serde_json::from_str(&body).ok()?;
+    let recovery = vm::conversation_recovery(&response);
+    if recovery.start_failed.is_none() && recovery.uncertain_prompt.is_none() {
         return None;
     }
-    Some(AgentNotice { agent_id, undelivered: agent.undelivered, start_failed: agent.start_failed })
+    let (uncertain_n, uncertain_prompt) = recovery.uncertain_prompt.unzip();
+    let (start_failed_n, start_failed) = recovery.start_failed.unzip();
+    Some(ConversationNotice { uncertain_prompt, uncertain_n, start_failed, start_failed_n })
+}
+
+// The 409 a New conversation answers while queued input is unconfirmed (or, from a discard, changed since): the
+// confirmation to show and what `discard_and_cut_call` binds. None for any other answer.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DiscardConfirmation {
+    pub title: String,
+    pub detail: String,
+    pub confirm: String,
+    pub conversation: i64,
+    pub input_revision: String,
+}
+
+#[uniffi::export]
+pub fn discard_confirmation(status: u16, body: String) -> Option<DiscardConfirmation> {
+    let refusal = vm::unconfirmed_input_of(status, &body)?;
+    let text = vm::discard_confirm_text(&refusal);
+    Some(DiscardConfirmation {
+        title: text.title,
+        detail: text.detail,
+        confirm: text.confirm,
+        conversation: refusal.conversation,
+        input_revision: refusal.input_revision,
+    })
+}
+
+// A cut refused until a person settles a first message of unknown delivery: the n Send again and Dismiss bind to.
+#[uniffi::export]
+pub fn uncertain_prompt_conversation(status: u16, body: String) -> Option<i64> {
+    vm::uncertain_prompt_of(status, &body)
 }
 
 #[uniffi::export]

@@ -355,12 +355,8 @@ pub fn normalize_view_config(stored: Option<&Value>) -> ViewConfig {
     config.expanded_teams = parse_enum(stored, "expandedTeams");
     config.collapsed_groups = parse_enum(stored, "collapsedGroups");
     config.earlier_open = parse_enum(stored, "earlierOpen");
-    if let Some(group_by) = stored.get("groupBy").and_then(Value::as_str) {
-        config.group_by = match parse_enum::<GroupBy>(stored, "groupBy") {
-            Some(valid) => valid,
-            None if group_by == "gateway" => GroupBy::Project,
-            None => GroupBy::State,
-        };
+    if let Some(group_by) = parse_enum(stored, "groupBy") {
+        config.group_by = group_by;
     }
     config
 }
@@ -1036,6 +1032,7 @@ pub fn team_members<'a>(row: &SessionRow, rows: &'a [SessionRow]) -> Vec<&'a Ses
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rest::{EngineCapabilities, ProfileEngine};
 
     fn agent_row(host: &str, id: &str, agent: serde_json::Value) -> SessionRow {
         let info: SessionInfo = serde_json::from_value(serde_json::json!({
@@ -1088,9 +1085,10 @@ mod tests {
     #[test]
     fn sleep_needs_the_capability_an_idle_session_and_an_awake_engine() {
         let info = |status: &str, sleeps: bool, asleep: bool| -> SessionInfo {
+            let capabilities = EngineCapabilities { engine_sleep: Some(sleeps), ..ProfileEngine::Claude.capabilities() };
             serde_json::from_value(serde_json::json!({
                 "id": "s", "status": status, "cwd": "/w", "createdAt": 0, "lastSeq": 0, "pendingPermissionCount": 0,
-                "capabilities": { "engineSleep": sleeps }, "engineAsleep": asleep, "sdkSessionId": "sdk",
+                "capabilities": capabilities, "engineAsleep": asleep, "sdkSessionId": "sdk",
             }))
             .unwrap()
         };

@@ -68,8 +68,8 @@ fn a_host_without_agents_gets_a_session_form() {
 
 #[test]
 fn r2_calls_name_their_routes() {
-    let adopt = create_agent_call(NewAgent { adopt: Some("s1".into()), ..Default::default() });
-    assert_eq!((adopt.path.as_str(), adopt.body.as_deref()), ("/agents", Some(r#"{"adopt":"s1"}"#)));
+    let named = name_session_call("s1".into(), None, None, 2);
+    assert_eq!((named.path.as_str(), named.body.as_deref(), named.generation), ("/sessions/s1", Some(r#"{"agent":{}}"#), Some(2)));
     assert_eq!(list_sdk_sessions_call(None, Some(50), None, None).path, "/sdk-sessions?limit=50");
     assert_eq!(get_profile_call("a/b".into()).path, "/profiles/a%2Fb");
 }

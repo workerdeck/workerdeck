@@ -11,7 +11,49 @@
           "lastSeq": 0,
           "pendingPermissionCount": 0,
           "capabilities": {
-            "engineSleep": true
+            "interactiveApprovals": true,
+            "permissionModes": [
+              "default",
+              "acceptEdits",
+              "bypassPermissions",
+              "plan",
+              "dontAsk",
+              "auto"
+            ],
+            "defaultPermissionMode": "default",
+            "resume": true,
+            "resumeBackfill": true,
+            "forkSession": true,
+            "listSessions": true,
+            "contextUsage": true,
+            "rateLimits": true,
+            "mcpStatus": true,
+            "mcpServerActions": true,
+            "sessionMcpServers": true,
+            "toolFilters": "all",
+            "slashCommands": true,
+            "clearContext": true,
+            "skillsList": false,
+            "settingSources": true,
+            "budgets": true,
+            "attachments": [
+              "image",
+              "pdf",
+              "text"
+            ],
+            "reasoningEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "vfs": false,
+            "hostCwd": true,
+            "systemInstructions": true,
+            "engineSleep": true,
+            "backgroundTasks": true,
+            "streaming": "token"
           },
           "sdkSessionId": "sdk"
         }
@@ -25,7 +67,49 @@
           "lastSeq": 0,
           "pendingPermissionCount": 0,
           "capabilities": {
-            "engineSleep": true
+            "interactiveApprovals": true,
+            "permissionModes": [
+              "default",
+              "acceptEdits",
+              "bypassPermissions",
+              "plan",
+              "dontAsk",
+              "auto"
+            ],
+            "defaultPermissionMode": "default",
+            "resume": true,
+            "resumeBackfill": true,
+            "forkSession": true,
+            "listSessions": true,
+            "contextUsage": true,
+            "rateLimits": true,
+            "mcpStatus": true,
+            "mcpServerActions": true,
+            "sessionMcpServers": true,
+            "toolFilters": "all",
+            "slashCommands": true,
+            "clearContext": true,
+            "skillsList": false,
+            "settingSources": true,
+            "budgets": true,
+            "attachments": [
+              "image",
+              "pdf",
+              "text"
+            ],
+            "reasoningEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "vfs": false,
+            "hostCwd": true,
+            "systemInstructions": true,
+            "engineSleep": true,
+            "backgroundTasks": true,
+            "streaming": "token"
           }
         }
       ],
@@ -38,7 +122,49 @@
           "lastSeq": 0,
           "pendingPermissionCount": 0,
           "capabilities": {
-            "engineSleep": true
+            "interactiveApprovals": true,
+            "permissionModes": [
+              "default",
+              "acceptEdits",
+              "bypassPermissions",
+              "plan",
+              "dontAsk",
+              "auto"
+            ],
+            "defaultPermissionMode": "default",
+            "resume": true,
+            "resumeBackfill": true,
+            "forkSession": true,
+            "listSessions": true,
+            "contextUsage": true,
+            "rateLimits": true,
+            "mcpStatus": true,
+            "mcpServerActions": true,
+            "sessionMcpServers": true,
+            "toolFilters": "all",
+            "slashCommands": true,
+            "clearContext": true,
+            "skillsList": false,
+            "settingSources": true,
+            "budgets": true,
+            "attachments": [
+              "image",
+              "pdf",
+              "text"
+            ],
+            "reasoningEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "vfs": false,
+            "hostCwd": true,
+            "systemInstructions": true,
+            "engineSleep": true,
+            "backgroundTasks": true,
+            "streaming": "token"
           },
           "sdkSessionId": "sdk",
           "engineAsleep": true
@@ -53,7 +179,49 @@
           "lastSeq": 0,
           "pendingPermissionCount": 0,
           "capabilities": {
-            "engineSleep": true
+            "interactiveApprovals": true,
+            "permissionModes": [
+              "default",
+              "acceptEdits",
+              "bypassPermissions",
+              "plan",
+              "dontAsk",
+              "auto"
+            ],
+            "defaultPermissionMode": "default",
+            "resume": true,
+            "resumeBackfill": true,
+            "forkSession": true,
+            "listSessions": true,
+            "contextUsage": true,
+            "rateLimits": true,
+            "mcpStatus": true,
+            "mcpServerActions": true,
+            "sessionMcpServers": true,
+            "toolFilters": "all",
+            "slashCommands": true,
+            "clearContext": true,
+            "skillsList": false,
+            "settingSources": true,
+            "budgets": true,
+            "attachments": [
+              "image",
+              "pdf",
+              "text"
+            ],
+            "reasoningEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "vfs": false,
+            "hostCwd": true,
+            "systemInstructions": true,
+            "engineSleep": true,
+            "backgroundTasks": true,
+            "streaming": "token"
           },
           "sdkSessionId": "sdk"
         }

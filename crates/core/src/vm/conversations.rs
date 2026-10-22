@@ -1,133 +1,64 @@
-use crate::rest::{AgentConversation, AgentInfo, ConversationRow, RetiredAgentInfo, SessionInfo, SessionStatus};
-use crate::vm::session_list::SessionRow;
+use crate::rest::{
+    AgentConversation, ConversationRow, ConversationsResponse, PendingPromptState, RetiredAgentInfo, SessionInfo, SessionStatus,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub const NEW_CONVERSATION_HINT: &str = "Previous chat context is not carried over";
 pub const TRANSCRIPT_UNAVAILABLE: &str = "Transcript unavailable";
-pub const AGENT_DELETED: &str = "Agent deleted";
+pub const CLOSED: &str = "Closed";
+pub const UNCONFIRMED_INPUT_CODE: &str = "unconfirmed_input";
+pub const INPUT_CHANGED_CODE: &str = "input_changed";
+pub const UNCERTAIN_PROMPT_CODE: &str = "uncertain_prompt";
 const TURN_REASON: &str = "Finish or stop the current turn first";
 const NEW_REASON: &str = "This conversation is still new";
 const REQUEST_REASON: &str = "Answer the pending request first";
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
-pub enum ConversationSelection {
-    Agent { gateway: String, agent_id: String },
-    Session { gateway: String, session_id: String },
-}
-
-pub fn session_listed(info: &SessionInfo) -> bool {
-    info.archived != Some(true)
-}
-
-pub fn selection_of(gateway: &str, info: &SessionInfo) -> ConversationSelection {
-    match &info.agent {
-        Some(agent) if session_listed(info) => ConversationSelection::Agent { gateway: gateway.to_owned(), agent_id: agent.id.clone() },
-        _ => ConversationSelection::Session { gateway: gateway.to_owned(), session_id: info.id.clone() },
-    }
-}
-
-pub fn follow_target(selection: &ConversationSelection, rows: &[SessionRow]) -> Option<String> {
-    match selection {
-        ConversationSelection::Session { session_id, .. } => Some(session_id.clone()),
-        ConversationSelection::Agent { gateway, agent_id } => rows
-            .iter()
-            .find(|row| &row.host_id == gateway && session_listed(&row.info) && row.info.agent.as_ref().is_some_and(|a| &a.id == agent_id))
-            .map(|row| row.info.id.clone()),
-    }
-}
-
-// The list wins because it resolves every rotation the view missed; the one-hop successor covers a list that lags.
-pub fn follow_step(
-    selection: Option<&ConversationSelection>,
-    shown: &str,
-    rows: Option<&[SessionRow]>,
-    successor: Option<&str>,
-    left: &[String],
-) -> Option<String> {
-    let selection @ ConversationSelection::Agent { .. } = selection? else { return None };
-    let listed = rows.and_then(|rows| follow_target(selection, rows));
-    [listed, successor.map(str::to_owned)].into_iter().flatten().find(|id| id != shown && !left.contains(id))
-}
-
-// `left` keeps a list read before the rotation landed, which still names a left conversation, from sending the
-// screen back. An unresolved follow was opened on a session the list did not hold yet (a push, a fresh create).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Follow {
-    selection: ConversationSelection,
-    current: String,
-    left: Vec<String>,
-    resolved: bool,
-}
-
-impl Follow {
-    pub fn new(selection: ConversationSelection, current: &str) -> Self {
-        Follow { selection, current: current.to_owned(), left: Vec::new(), resolved: true }
-    }
-
-    pub fn open(gateway: &str, current: &str, rows: &[SessionRow]) -> Self {
-        let selection = ConversationSelection::Session { gateway: gateway.to_owned(), session_id: current.to_owned() };
-        let mut follow = Follow { resolved: false, ..Follow::new(selection, current) };
-        follow.resolve(rows);
-        follow
-    }
-
-    fn resolve(&mut self, rows: &[SessionRow]) {
-        if self.resolved {
-            return;
-        }
-        let ConversationSelection::Session { gateway, session_id } = &self.selection else { return };
-        if let Some(row) = rows.iter().find(|row| &row.host_id == gateway && &row.info.id == session_id) {
-            self.selection = selection_of(gateway, &row.info);
-            self.resolved = true;
-        }
-    }
-
-    pub fn selection(&self) -> &ConversationSelection {
-        &self.selection
-    }
-
-    pub fn current(&self) -> &str {
-        &self.current
-    }
-
-    pub fn follows(&self) -> bool {
-        matches!(self.selection, ConversationSelection::Agent { .. })
-    }
-
-    pub fn superseded(&mut self, by: &str, rows: &[SessionRow]) -> Option<String> {
-        self.resolve(rows);
-        let target = follow_step(Some(&self.selection), &self.current, Some(rows), Some(by), &self.left)?;
-        self.move_to(target)
-    }
-
-    pub fn listed(&mut self, rows: &[SessionRow]) -> Option<String> {
-        self.resolve(rows);
-        let target = follow_step(Some(&self.selection), &self.current, Some(rows), None, &self.left)?;
-        self.move_to(target)
-    }
-
-    fn move_to(&mut self, target: String) -> Option<String> {
-        let left = std::mem::replace(&mut self.current, target);
-        self.left.push(left);
-        Some(self.current.clone())
-    }
-}
-
-// What `archived_view` needs of an agent: the gateway's `GET /agents` rows parse into it as they are.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentBinding {
+// Where a view points: a session by its stable id, and a past conversation of it by `n`. Absent `conversation` is the
+// current one, which a cut moves on under the same address.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SessionAddress {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
+    pub conversation: Option<i64>,
 }
 
-impl From<&AgentInfo> for AgentBinding {
-    fn from(agent: &AgentInfo) -> Self {
-        AgentBinding { id: agent.id.clone(), session_id: agent.session_id.clone() }
+impl SessionAddress {
+    pub fn current(id: &str) -> Self {
+        SessionAddress { id: id.to_owned(), conversation: None }
     }
+
+    pub fn key(&self) -> String {
+        address_key(self)
+    }
+
+    pub fn is_historical(&self) -> bool {
+        self.conversation.is_some()
+    }
+}
+
+pub fn address_key(address: &SessionAddress) -> String {
+    match address.conversation {
+        None => address.id.clone(),
+        Some(n) => format!("{}#{n}", address.id),
+    }
+}
+
+pub fn same_address(a: Option<&SessionAddress>, b: Option<&SessionAddress>) -> bool {
+    a.map(|a| &a.id) == b.map(|b| &b.id) && a.and_then(|a| a.conversation) == b.and_then(|b| b.conversation)
+}
+
+// The current conversation's own number reads as the current address, so a row for it never opens a read-only view.
+pub fn address_of(id: &str, conversation: Option<i64>, current: Option<i64>) -> SessionAddress {
+    match conversation {
+        Some(n) if Some(n) != current => SessionAddress { id: id.to_owned(), conversation: Some(n) },
+        _ => SessionAddress::current(id),
+    }
+}
+
+pub fn is_historical(address: Option<&SessionAddress>) -> bool {
+    address.is_some_and(SessionAddress::is_historical)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,22 +73,37 @@ pub struct ArchivedView {
     pub kind: ArchivedKind,
     pub at: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current: Option<String>,
+    pub current: Option<i64>,
     pub unavailable: bool,
 }
 
-// `agents` is None until the gateway's agent list has loaded: a missing agent is not yet a deleted one.
-pub fn archived_view(info: &SessionInfo, agents: Option<&[AgentBinding]>) -> Option<ArchivedView> {
-    if info.archived != Some(true) {
-        return None;
+// What the session's own conversations list says now: its current n, or `retired` once it has none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct CurrentConversation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retired: Option<bool>,
+}
+
+impl CurrentConversation {
+    pub fn of(response: &ConversationsResponse) -> Self {
+        match response.conversation.filter(|_| response.closed != Some(true)) {
+            Some(n) => CurrentConversation { conversation: Some(n), retired: None },
+            None => CurrentConversation { conversation: None, retired: Some(true) },
+        }
     }
-    let agent = info.agent.as_ref().and_then(|of| agents?.iter().find(|entry| entry.id == of.id));
-    let deleted = info.agent.is_some() && agents.is_some() && agent.is_none();
-    let current = agent.and_then(|agent| agent.session_id.clone()).filter(|id| *id != info.id);
+}
+
+pub fn archived_view(address: &SessionAddress, info: Option<&SessionInfo>, current: Option<&CurrentConversation>) -> Option<ArchivedView> {
+    let n = address.conversation?;
+    let info = info?;
+    let retired = current.and_then(|c| c.retired) == Some(true);
+    let now = if retired { None } else { current.and_then(|c| c.conversation) };
     Some(ArchivedView {
-        kind: if deleted { ArchivedKind::Deleted } else { ArchivedKind::Past },
+        kind: if retired { ArchivedKind::Deleted } else { ArchivedKind::Past },
         at: info.created_at,
-        current,
+        current: now.filter(|now| *now != n),
         unavailable: info.transcript.as_deref() == Some("unavailable"),
     })
 }
@@ -165,11 +111,10 @@ pub fn archived_view(info: &SessionInfo, agents: Option<&[AgentBinding]>) -> Opt
 // The web's `archivedBannerText`: the headline always dates the conversation; the note says what else is true.
 pub fn archived_banner(view: &ArchivedView, now_ms: f64, offset_minutes: i32) -> (String, Option<String>) {
     let headline = format!("Past conversation \u{00B7} {}", date_label(view.at, now_ms, offset_minutes));
-    let notes: Vec<&str> =
-        [(view.kind == ArchivedKind::Deleted).then_some(AGENT_DELETED), view.unavailable.then_some(TRANSCRIPT_UNAVAILABLE)]
-            .into_iter()
-            .flatten()
-            .collect();
+    let notes: Vec<&str> = [(view.kind == ArchivedKind::Deleted).then_some(CLOSED), view.unavailable.then_some(TRANSCRIPT_UNAVAILABLE)]
+        .into_iter()
+        .flatten()
+        .collect();
     (headline, (!notes.is_empty()).then(|| notes.join(" \u{00B7} ")))
 }
 
@@ -181,7 +126,7 @@ pub struct NewConversationGate {
 }
 
 pub fn new_conversation_gate(info: Option<&SessionInfo>) -> NewConversationGate {
-    let reason = info.filter(|info| info.archived != Some(true)).and_then(|info| match info.status {
+    let reason = info.and_then(|info| match info.status {
         SessionStatus::Running | SessionStatus::Starting | SessionStatus::Parked => Some(TURN_REASON),
         SessionStatus::AwaitingApproval => Some(REQUEST_REASON),
         SessionStatus::Idle if info.sdk_session_id.is_none() && info.num_turns.unwrap_or(0) == 0 => Some(NEW_REASON),
@@ -190,38 +135,130 @@ pub fn new_conversation_gate(info: Option<&SessionInfo>) -> NewConversationGate 
     NewConversationGate { enabled: reason.is_none(), reason: reason.map(str::to_owned) }
 }
 
-// An agent rotates instead (New conversation); a typed `/clear` still clears within the current conversation.
+// Clear context is a cut on a gateway, named or not; a past conversation's view (status `closed`) has nothing to clear.
 pub fn clear_context_offered(info: &SessionInfo) -> bool {
-    info.agent.is_none() && info.archived != Some(true)
+    !matches!(info.status, SessionStatus::Closed | SessionStatus::Failed)
 }
 
-pub fn conversations_of(session_id: Option<&str>, past_sessions: &[String], conversations: &[AgentConversation]) -> Vec<ConversationRow> {
-    let legacy = past_sessions
-        .iter()
-        .map(String::as_str)
-        .chain(session_id)
-        .filter(|id| !conversations.iter().any(|entry| entry.session_id == *id))
-        .map(|id| AgentConversation { session_id: id.to_owned(), ..AgentConversation::default() });
-    let ordered: Vec<AgentConversation> = legacy.chain(conversations.iter().cloned()).collect();
-    ordered
-        .into_iter()
-        .rev()
-        .map(|conversation| ConversationRow { current: Some(conversation.session_id.as_str()) == session_id, conversation, session: None })
-        .collect()
+// Newest first, the current conversation on top (its start is the previous one's end).
+pub fn conversation_list(response: &ConversationsResponse, current_title: Option<&str>) -> Vec<ConversationRow> {
+    let mut history: Vec<_> = response.history.iter().collect();
+    history.sort_by_key(|entry| std::cmp::Reverse(entry.n));
+    let mut rows = Vec::new();
+    if let Some(n) = response.conversation.filter(|_| response.closed != Some(true)) {
+        rows.push(ConversationRow {
+            conversation: AgentConversation {
+                n,
+                started_at: history.first().map(|entry| entry.ended_at),
+                title: current_title.filter(|title| !title.is_empty()).map(str::to_owned),
+                ..AgentConversation::default()
+            },
+            current: true,
+        });
+    }
+    rows.extend(history.into_iter().map(|entry| ConversationRow {
+        conversation: AgentConversation {
+            n: entry.n,
+            started_at: entry.started_at,
+            ended_at: Some(entry.ended_at),
+            title: entry.title.clone().filter(|title| !title.is_empty()),
+            transcript: entry.transcript.clone(),
+        },
+        current: false,
+    }));
+    rows
 }
 
-pub fn agent_conversations(agent: &AgentInfo) -> Vec<ConversationRow> {
-    conversations_of(agent.session_id.as_deref(), &agent.past_sessions, agent.conversations.as_deref().unwrap_or_default())
+// What a session asks of a person before anything else: Retry start for a committed conversation that did not start,
+// Send again or Dismiss for a first message whose delivery is unknown.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ConversationRecovery {
+    pub start_failed: Option<(i64, String)>,
+    pub uncertain_prompt: Option<(i64, String)>,
 }
 
-pub fn retired_conversations(agent: &RetiredAgentInfo) -> Vec<ConversationRow> {
-    conversations_of(None, &agent.past_sessions, &agent.conversations)
+pub fn conversation_recovery(response: &ConversationsResponse) -> ConversationRecovery {
+    ConversationRecovery {
+        start_failed: response.start_failed.as_ref().map(|failed| (failed.n, failed.error.clone())),
+        uncertain_prompt: response
+            .pending_prompt
+            .as_ref()
+            .filter(|prompt| prompt.state == PendingPromptState::Uncertain)
+            .map(|prompt| (response.conversation.unwrap_or(prompt.n), prompt.text.clone())),
+    }
 }
 
-// One line of an agent's Conversations sheet. The current row opens the agent view; a past row opens read-only.
+// The 409 a cut answers while the engine cannot confirm its queued input was consumed (`unconfirmed_input`), or a
+// discard's when input arrived since (`input_changed`): what the confirmation shows and binds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnconfirmedInput {
+    pub error: String,
+    pub changed: bool,
+    pub conversation: i64,
+    pub input_revision: String,
+    pub pending_input: i64,
+    pub may_include_peer: bool,
+}
+
+pub fn unconfirmed_input_of(status: u16, body: &str) -> Option<UnconfirmedInput> {
+    let body: Value = serde_json::from_str(body).ok().filter(|_| status == 409)?;
+    let changed = match body.get("code")?.as_str()? {
+        UNCONFIRMED_INPUT_CODE => false,
+        INPUT_CHANGED_CODE => true,
+        _ => return None,
+    };
+    Some(UnconfirmedInput {
+        error: body.get("error").and_then(Value::as_str).unwrap_or_default().to_owned(),
+        changed,
+        conversation: body.get("conversation")?.as_i64()?,
+        input_revision: body.get("inputRevision")?.as_str()?.to_owned(),
+        pending_input: body.get("pendingInput").and_then(Value::as_i64).unwrap_or(0),
+        may_include_peer: body.get("mayIncludePeer").and_then(Value::as_bool) != Some(false),
+    })
+}
+
+// A cut refused until a person decides on a prompt that may not have reached the engine: Send again or Dismiss, both
+// bound to the conversation it names.
+pub fn uncertain_prompt_of(status: u16, body: &str) -> Option<i64> {
+    let body: Value = serde_json::from_str(body).ok().filter(|_| status == 409)?;
+    (body.get("code")?.as_str()? == UNCERTAIN_PROMPT_CODE).then_some(())?;
+    body.get("promptConversation")?.as_i64()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscardConfirmText {
+    pub title: String,
+    pub detail: String,
+    pub confirm: String,
+}
+
+// The web's `discardConfirmText`.
+pub fn discard_confirm_text(refusal: &UnconfirmedInput) -> DiscardConfirmText {
+    let count = refusal.pending_input;
+    let what = if count > 0 { format!("{count} message{}", if count == 1 { "" } else { "s" }) } else { "queued input".to_owned() };
+    let unanswered = format!("{} no answer yet", if count <= 1 { "has" } else { "have" });
+    let lead = if refusal.changed {
+        format!("More input arrived: {what} {unanswered}.")
+    } else {
+        format!("{} sent to this session {unanswered}.", capital(&what))
+    };
+    let peer = if refusal.may_include_peer { " Some of it may come from peer agents, who will not get a reply." } else { "" };
+    DiscardConfirmText {
+        title: format!("Discard {what} and start a new conversation?"),
+        detail: format!("{lead} A new conversation drops it for good; none of it is carried over.{peer}"),
+        confirm: "Discard and start".to_owned(),
+    }
+}
+
+fn capital(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
+}
+
+// One line of a session's Conversations sheet. The current row opens the live view; a past row opens `(id, n)` read-only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConversationItem {
-    pub session_id: String,
+    pub n: i64,
     pub date: String,
     pub title: String,
     pub duration: Option<String>,
@@ -238,7 +275,7 @@ pub fn conversation_items(rows: &[ConversationRow], now_ms: f64, offset_minutes:
             let end = entry.ended_at.or(row.current.then_some(now_ms));
             let title = entry.title.as_deref().map(str::trim).filter(|title| !title.is_empty());
             ConversationItem {
-                session_id: entry.session_id.clone(),
+                n: entry.n,
                 date: entry
                     .started_at
                     .or(entry.ended_at)
@@ -268,7 +305,7 @@ pub fn past_agent_items(retired: &[RetiredAgentInfo], now_ms: f64, offset_minute
     sorted
         .into_iter()
         .map(|agent| {
-            let count = retired_conversations(agent).len();
+            let count = agent.conversations.len();
             let plural = if count == 1 { "" } else { "s" };
             PastAgentItem {
                 id: agent.id.clone(),

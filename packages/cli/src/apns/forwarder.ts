@@ -109,6 +109,8 @@ export function buildPush(notification: SessionNotification, hostId: string | un
     // What dates the seq: a wake renumbers the log, so a payload that outlived one must be
     // recognisable as stale rather than scroll the reader to whatever now sits at that number.
     ...(notification.session.epoch === undefined ? {} : { epoch: notification.session.epoch }),
+    // The conversation the seq belongs to: a tap after a cut opens that past conversation, not the current one.
+    ...(notification.session.conversation === undefined ? {} : { conversation: notification.session.conversation }),
     ...(hostId === undefined ? {} : { hostId }),
     ...(notification.request === undefined ? {} : { requestId: notification.request.id }),
   })

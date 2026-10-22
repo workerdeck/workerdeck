@@ -14,10 +14,12 @@ pub fn api_base(base_url: &str) -> String {
     format!("{}/v1", normalize_base_url(base_url))
 }
 
-pub fn socket_url(base_url: &str, session_id: &str, after_seq: i64) -> String {
+// `conversation` opens a past conversation's read-only socket; None attaches the current one.
+pub fn socket_url(base_url: &str, session_id: &str, after_seq: i64, conversation: Option<i64>) -> String {
     let base = api_base(base_url);
     let base = base.strip_prefix("http").map_or(base.clone(), |rest| format!("ws{rest}"));
-    format!("{base}/sessions/{}/ws?afterSeq={after_seq}&truncateResults=1&imageRefs=1", encode_component(session_id))
+    let past = conversation.map_or_else(String::new, |n| format!("&conversation={n}"));
+    format!("{base}/sessions/{}/ws?afterSeq={after_seq}&truncateResults=1&imageRefs=1{past}", encode_component(session_id))
 }
 
 // One picture of a tool result, under the API base: the web's `toolResultImage`. A stale seq 404s, never another call's.
@@ -179,10 +181,11 @@ mod tests {
     #[test]
     fn the_socket_url_swaps_the_scheme_and_encodes_the_id() {
         assert_eq!(
-            socket_url("https://deck.example", "a b", 7),
+            socket_url("https://deck.example", "a b", 7, None),
             "wss://deck.example/v1/sessions/a%20b/ws?afterSeq=7&truncateResults=1&imageRefs=1"
         );
-        assert!(socket_url("10.0.2.2:8790", "s", -1).starts_with("ws://10.0.2.2:8790/v1/"));
+        assert!(socket_url("10.0.2.2:8790", "s", -1, None).starts_with("ws://10.0.2.2:8790/v1/"));
+        assert!(socket_url("https://deck.example", "s", 0, Some(2)).ends_with("&imageRefs=1&conversation=2"));
     }
 
     #[test]

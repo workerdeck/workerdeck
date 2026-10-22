@@ -61,9 +61,6 @@ pub fn agent_ref(agent: &AgentInfo, team: &TeamContext) -> AgentRef {
     if agent.sharing == Some(Sharing::Shared) && agent.lead.is_none() {
         out.shared = Some(true);
     }
-    if !agent.past_sessions.is_empty() {
-        out.conversation = Some(agent.past_sessions.len() as u32 + 1);
-    }
     out.order = agent.order;
     out
 }

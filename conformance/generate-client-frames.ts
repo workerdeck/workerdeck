@@ -64,8 +64,7 @@ async function framesFor([name, ...args]: Call): Promise<unknown[]> {
   const client = { openSocket: () => socket, conversationOf: () => undefined, noteConversation: () => {} } as unknown as WorkerDeckClient
   const handle = new SessionHandle(client, 's1', { reconnect: false })
   await new Promise((resolve) => setTimeout(resolve, 0))
-  // The native clients do not stamp a conversation yet (protocol 2 native work): the goldens pin the untokened frames.
-  socket.onmessage?.({ data: JSON.stringify({ type: 'attached', protocolVersion: 2, session: { id: 's1' }, replayingFrom: 0 }) })
+  socket.onmessage?.({ data: JSON.stringify({ type: 'attached', protocolVersion: 2, session: { id: 's1', conversation: 3 }, replayingFrom: 0 }) })
   const method = (handle as unknown as Record<string, (...rest: unknown[]) => void>)[name]
   method.apply(handle, args)
   handle.detach()

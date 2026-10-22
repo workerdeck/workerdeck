@@ -562,10 +562,11 @@ mod tests {
         assert!(claude.files && claude.mcp && claude.mcp_can_manage && !claude.skills);
         assert_eq!(claude.engine, "claude");
         assert_eq!(claude.cwd.as_deref(), Some("/w"));
-        let reported = SessionExtras::read(
-            r#"{"session":{"id":"s","status":"idle","cwd":"/w","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"engine":"codex","profile":"p","capabilities":{"mcpStatus":true}}}"#,
-        )
-        .unwrap();
+        let mut capabilities = crate::rest::ProfileEngine::Claude.capabilities();
+        (capabilities.mcp_status, capabilities.mcp_server_actions, capabilities.skills_list) = (true, false, false);
+        let session = serde_json::json!({"id": "s", "status": "idle", "cwd": "/w", "createdAt": 1, "lastSeq": 0, "pendingPermissionCount": 0,
+            "engine": "codex", "profile": "p", "capabilities": capabilities});
+        let reported = SessionExtras::read(&serde_json::json!({ "session": session }).to_string()).unwrap();
         assert!(reported.mcp && !reported.mcp_can_manage && !reported.skills);
         assert_eq!((reported.engine.as_str(), reported.profile.as_deref()), ("codex", Some("p")));
         assert_eq!(SessionExtras::read("{}"), None);

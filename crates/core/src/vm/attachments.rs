@@ -163,7 +163,7 @@ impl Attachments {
     }
 
     // None without a session to upload into: the file is staged as failed, so the send stays blocked.
-    pub fn add(&mut self, session_id: Option<&str>, name: &str, media_type: &str) -> Option<Upload> {
+    pub fn add(&mut self, target: Option<(&str, i64)>, name: &str, media_type: &str) -> Option<Upload> {
         self.next += 1;
         let id = self.next;
         self.items.push(Attachment {
@@ -173,23 +173,24 @@ impl Attachments {
             state: AttachmentState::Uploading,
             announce: true,
         });
-        self.start(id, session_id)
+        self.start(id, target)
     }
 
-    pub fn retry(&mut self, id: u64, session_id: Option<&str>) -> Option<Upload> {
+    pub fn retry(&mut self, id: u64, target: Option<(&str, i64)>) -> Option<Upload> {
         let item = self.items.iter_mut().find(|a| a.id == id && matches!(a.state, AttachmentState::Failed { .. }))?;
         item.state = AttachmentState::Uploading;
         item.announce = false;
-        self.start(id, session_id)
+        self.start(id, target)
     }
 
-    fn start(&mut self, id: u64, session_id: Option<&str>) -> Option<Upload> {
-        let Some(session_id) = session_id else {
+    // `target` is the session and the conversation the file goes up for.
+    fn start(&mut self, id: u64, target: Option<(&str, i64)>) -> Option<Upload> {
+        let Some((session_id, generation)) = target else {
             self.settle(id, Err(NOT_CONNECTED.to_owned()));
             return None;
         };
         let name = &self.items.iter().find(|a| a.id == id)?.name;
-        Some(Upload { id, call: calls::upload_attachment(session_id, name) })
+        Some(Upload { id, call: calls::upload_attachment(session_id, name, generation) })
     }
 
     // Answers whether the item was still staged.
@@ -217,9 +218,9 @@ impl Attachments {
         self.items.retain(|a| a.id != id);
     }
 
-    // Every staged file goes up again into `session_id` under a fresh id, so an answer still in flight for the old
-    // session settles nothing. Answers each new upload with the id it replaces.
-    pub fn retarget(&mut self, session_id: &str) -> Vec<(u64, Upload)> {
+    // Every staged file goes up again into `target` under a fresh id, so an answer still in flight for the old
+    // conversation settles nothing. Answers each new upload with the id it replaces.
+    pub fn retarget(&mut self, target: (&str, i64)) -> Vec<(u64, Upload)> {
         let old: Vec<u64> = self.items.iter().map(|a| a.id).collect();
         let mut moved = Vec::new();
         for id in old {
@@ -229,7 +230,7 @@ impl Attachments {
             item.id = next;
             item.state = AttachmentState::Uploading;
             item.announce = true;
-            if let Some(upload) = self.start(next, Some(session_id)) {
+            if let Some(upload) = self.start(next, Some(target)) {
                 moved.push((id, upload));
             }
         }
@@ -281,9 +282,9 @@ mod tests {
     #[test]
     fn an_upload_moves_from_uploading_to_ready_and_a_failure_is_announced_once() {
         let mut staged = Attachments::default();
-        let first = staged.add(Some("s1"), "a b.png", "image/png").unwrap();
+        let first = staged.add(Some(("s1", 1)), "a b.png", "image/png").unwrap();
         assert_eq!(first.call.path, "/sessions/s1/attachments?name=a%20b.png");
-        let second = staged.add(Some("s1"), "c.pdf", "application/pdf").unwrap();
+        let second = staged.add(Some(("s1", 1)), "c.pdf", "application/pdf").unwrap();
         assert!(staged.is_uploading());
         assert!(staged.uploaded(first.id, Answer::new(200, JSON, r#"{"attachment":{"id":"att-1"}}"#)));
         staged.uploaded(second.id, Answer::new(413, JSON, r#"{"error":"too large"}"#));
@@ -291,8 +292,8 @@ mod tests {
         assert!(staged.has_failure());
         assert_eq!(staged.take_error().as_deref(), Some("too large"));
         assert_eq!(staged.ready_ids(), vec!["att-1"]);
-        let retried = staged.retry(second.id, Some("s1")).unwrap();
-        assert_eq!(staged.retry(first.id, Some("s1")), None);
+        let retried = staged.retry(second.id, Some(("s1", 1))).unwrap();
+        assert_eq!(staged.retry(first.id, Some(("s1", 1))), None);
         staged.uploaded(retried.id, Answer::new(0, None, ""));
         assert_eq!(staged.take_error(), None);
         staged.remove(second.id);
@@ -303,10 +304,10 @@ mod tests {
     #[test]
     fn a_retarget_uploads_every_file_again_under_a_new_id() {
         let mut staged = Attachments::default();
-        let first = staged.add(Some("s1"), "a.png", "image/png").unwrap();
-        let second = staged.add(Some("s1"), "b.pdf", "application/pdf").unwrap();
+        let first = staged.add(Some(("s1", 1)), "a.png", "image/png").unwrap();
+        let second = staged.add(Some(("s1", 1)), "b.pdf", "application/pdf").unwrap();
         staged.uploaded(first.id, Answer::new(200, JSON, r#"{"attachment":{"id":"att-1"}}"#));
-        let moved = staged.retarget("s2");
+        let moved = staged.retarget(("s2", 2));
         assert_eq!(moved.iter().map(|(old, _)| *old).collect::<Vec<_>>(), vec![first.id, second.id]);
         assert!(moved.iter().all(|(old, upload)| upload.id != *old && upload.call.path.starts_with("/sessions/s2/attachments")));
         assert!(staged.ready_ids().is_empty());

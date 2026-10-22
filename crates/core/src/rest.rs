@@ -86,17 +86,6 @@ impl<'de, V: Deserialize<'de>> Deserialize<'de> for Entries<V> {
     }
 }
 
-// A record older or newer than this reader (a parked session from before a capability existed) reads as absent
-// instead of failing the whole session.
-fn lenient<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: serde::de::DeserializeOwned,
-{
-    let value = Value::deserialize(deserializer)?;
-    Ok(serde_json::from_value(value).ok())
-}
-
 fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -175,10 +164,8 @@ pub enum AttachmentKind {
     Unknown,
 }
 
-// Every field defaults to "not supported", so a record from an older gateway (or a newer one that renamed a field)
-// still reads, with the missing capability off.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(rename_all = "camelCase")]
 pub struct EngineCapabilities {
     pub interactive_approvals: bool,
     pub permission_modes: Vec<PermissionMode>,
@@ -579,7 +566,7 @@ pub struct SessionInfo {
     pub profile: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine: Option<ProfileEngine>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<EngineCapabilities>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
@@ -595,6 +582,8 @@ pub struct SessionInfo {
     pub last_seq: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub epoch: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<i64>,
     pub pending_permission_count: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagents: Option<Vec<SubagentInfo>>,
@@ -638,11 +627,7 @@ pub struct SessionInfo {
     pub owner: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_label: Option<StatusLabel>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
-    pub archived: Option<bool>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
-    pub superseded_by: Option<String>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript: Option<String>,
 }
 
@@ -715,7 +700,7 @@ pub struct ProfileInfo {
     pub engine: Option<ProfileEngine>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<ProviderConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defaults: Option<ProfileDefaults>,
@@ -723,7 +708,7 @@ pub struct ProfileInfo {
     pub models: Option<Vec<ModelOption>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_model: Option<String>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<EngineCapabilities>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub available: Option<bool>,
@@ -823,13 +808,8 @@ pub struct AgentInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
-    pub past_sessions: Vec<String>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
-    pub conversations: Option<Vec<AgentConversation>>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
     pub undelivered: Option<String>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_failed: Option<String>,
     pub config: AgentConfig,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -845,14 +825,14 @@ pub struct AgentInfo {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentConversation {
-    pub session_id: String,
+    pub n: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript: Option<String>,
 }
 
@@ -862,14 +842,71 @@ pub struct ConversationRow {
     #[serde(flatten)]
     pub conversation: AgentConversation,
     pub current: bool,
-    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
-    pub session: Option<SessionInfo>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PendingPromptState {
+    Pending,
+    Sending,
+    Uncertain,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingPromptInfo {
+    pub text: String,
+    pub n: i64,
+    pub state: PendingPromptState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConversationStartFailure {
+    pub n: i64,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentConversationsResponse {
-    pub conversations: Vec<ConversationRow>,
+pub struct ConversationSummary {
+    pub n: i64,
+    pub engine: ProfileEngine,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    pub cwd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<f64>,
+    pub ended_at: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<String>,
+}
+
+// `GET /sessions/:id/conversations`: `conversation` is the current one, absent (or `closed`) once the session ended.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationsResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed: Option<bool>,
+    pub history: Vec<ConversationSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_prompt: Option<PendingPromptInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_failed: Option<ConversationStartFailure>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NewConversationResponse {
+    pub session: SessionInfo,
+    pub conversation: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -882,9 +919,6 @@ pub struct RetiredAgentInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
     pub retired_at: f64,
-    #[serde(default)]
-    pub past_sessions: Vec<String>,
-    #[serde(default)]
     pub conversations: Vec<AgentConversation>,
 }
 

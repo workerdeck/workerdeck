@@ -1,5 +1,5 @@
 use crate::protocol::{
-    AttachedFrame, ClientFrame, Event, Frame, PROTOCOL_VERSION, PermissionBehavior, SHELL_INPUT_MAX, ShellAttachedFrame, decode_frame,
+    Ack, AttachedFrame, ClientFrame, Event, Frame, PROTOCOL_VERSION, PermissionBehavior, SHELL_INPUT_MAX, ShellAttachedFrame, decode_frame,
 };
 use crate::rest::PermissionMode;
 use serde_json::{Map, Value};
@@ -51,7 +51,17 @@ pub enum Signal {
     ShellAttached(Box<ShellAttachedFrame>),
     ShellOutput { shell_id: String, data: String },
     ShellDetached { shell_id: String, reason: String },
+    // A prompt the gateway refused before the engine saw it: the text is the sender's to resubmit.
+    Undelivered(Undelivered),
     Finished,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Undelivered {
+    pub client_id: String,
+    pub text: String,
+    pub attachment_ids: Vec<String>,
+    pub uncertain: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -63,7 +73,8 @@ enum Phase {
 }
 
 struct Queued {
-    text: String,
+    frame: ClientFrame,
+    generation: Option<i64>,
     client_id: Option<String>,
 }
 
@@ -74,8 +85,9 @@ pub struct SessionConnection {
     retries: u32,
     outbox: VecDeque<Queued>,
     unacked: VecDeque<Queued>,
-    acks: bool,
     attached: bool,
+    conversation: Option<i64>,
+    history: bool,
     ever_connected: bool,
     nonce: String,
     prompts: u64,
@@ -87,8 +99,9 @@ pub struct SessionConnection {
 }
 
 impl SessionConnection {
-    // `nonce` is the host's randomness: unique per connection object, it prefixes every prompt's clientId.
-    pub fn new(after_seq: i64, reconnect: bool, nonce: String) -> Self {
+    // `nonce` is the host's randomness: unique per connection object, it prefixes every prompt's clientId. `history` is
+    // a past conversation's number: a read-only socket whose token never moves.
+    pub fn new(after_seq: i64, reconnect: bool, nonce: String, history: Option<i64>) -> Self {
         SessionConnection {
             last_seq: after_seq,
             reconnect,
@@ -96,8 +109,9 @@ impl SessionConnection {
             retries: 0,
             outbox: VecDeque::new(),
             unacked: VecDeque::new(),
-            acks: false,
             attached: false,
+            conversation: history,
+            history: history.is_some(),
             ever_connected: false,
             nonce,
             prompts: 0,
@@ -133,6 +147,11 @@ impl SessionConnection {
         }
     }
 
+    // The conversation new commands are written for: the last attach's, or the past one a history socket shows.
+    pub fn conversation(&self) -> Option<i64> {
+        self.conversation
+    }
+
     pub fn queued(&self) -> usize {
         self.outbox.len() + self.unacked.len()
     }
@@ -154,12 +173,8 @@ impl SessionConnection {
         self.retries = 0;
         self.in_flight = None;
         self.attached = false;
-        if self.acks {
-            while let Some(prompt) = self.unacked.pop_back() {
-                self.outbox.push_front(prompt);
-            }
-        } else {
-            self.unacked.clear();
+        while let Some(prompt) = self.unacked.pop_back() {
+            self.outbox.push_front(prompt);
         }
         self.signals.push(Signal::ConnectionChange(true));
         self.flush();
@@ -202,7 +217,6 @@ impl SessionConnection {
         }
         if let Some(sent) = self.outbox.pop_front()
             && sent.client_id.is_some()
-            && (self.acks || !self.attached)
         {
             self.unacked.push_back(sent);
         }
@@ -230,18 +244,20 @@ impl SessionConnection {
                 }
             }
             Frame::Attached(attached) => {
-                self.acks = attached.acks == Some(true);
                 self.attached = true;
-                if !self.acks {
-                    self.unacked.clear();
+                if !self.history
+                    && let Some(conversation) = attached.session.conversation
+                {
+                    self.conversation = Some(conversation);
                 }
                 let server_version = attached.protocol_version;
                 self.signals.push(Signal::Attached(attached));
                 if server_version != PROTOCOL_VERSION {
                     self.signals.push(Signal::ProtocolMismatch { server_version });
                 }
+                self.flush();
             }
-            Frame::Ack { client_id } => self.unacked.retain(|prompt| prompt.client_id.as_deref() != Some(client_id.as_str())),
+            Frame::Ack(ack) => self.acked(ack),
             Frame::ToolCallRequest(request) => self.enqueue(ClientFrame::ToolCallError {
                 execution_id: request.execution_id,
                 reason: "unsupported".into(),
@@ -253,6 +269,24 @@ impl SessionConnection {
             Frame::ShellOutput { shell_id, data } => self.signals.push(Signal::ShellOutput { shell_id, data }),
             Frame::ShellDetached { shell_id, reason } => self.signals.push(Signal::ShellDetached { shell_id, reason }),
             Frame::ToolCallCanceled { .. } | Frame::Unknown => {}
+        }
+    }
+
+    fn acked(&mut self, ack: Ack) {
+        let Some(at) = self.unacked.iter().position(|prompt| prompt.client_id.as_deref() == Some(ack.client_id.as_str())) else {
+            return;
+        };
+        let Some(prompt) = self.unacked.remove(at) else { return };
+        if !(ack.not_delivered || ack.uncertain) {
+            return;
+        }
+        if let ClientFrame::UserMessage { text, attachment_ids, .. } = prompt.frame {
+            self.signals.push(Signal::Undelivered(Undelivered {
+                client_id: ack.client_id,
+                text,
+                attachment_ids: attachment_ids.unwrap_or_default(),
+                uncertain: ack.uncertain,
+            }));
         }
     }
 
@@ -404,18 +438,26 @@ impl SessionConnection {
         if self.phase == Phase::Finished {
             return;
         }
-        self.outbox.push_back(Queued { text: frame.encode(), client_id });
+        self.outbox.push_back(Queued { frame, generation: self.conversation, client_id });
         self.flush();
     }
 
+    // A command is stamped with the conversation it was written for and never restamped, so a resend after a cut is
+    // refused instead of landing in the next conversation. One written before any attach waits for the attach.
     fn flush(&mut self) {
         if self.phase != Phase::Connected || self.in_flight.is_some() {
             return;
         }
-        let Some(queued) = self.outbox.front() else { return };
+        let Some(queued) = self.outbox.front_mut() else { return };
+        if queued.generation.is_none() {
+            if !self.attached {
+                return;
+            }
+            queued.generation = self.conversation;
+        }
         let id = self.next_send;
         self.next_send += 1;
         self.in_flight = Some(id);
-        self.effects.push(Effect::Send { id, text: queued.text.clone() });
+        self.effects.push(Effect::Send { id, text: queued.frame.encode_for(queued.generation) });
     }
 }

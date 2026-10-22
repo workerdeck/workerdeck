@@ -7,6 +7,7 @@
           "mac:old": {
             "itemCount": 1,
             "activity": 1,
+            "prose": 1,
             "turns": 1,
             "seenAt": 1756544000000
           },
@@ -128,20 +129,14 @@
         true,
         false,
         true,
-        false,
         true,
+        false,
         false,
         true,
         true
       ],
       "writes": [
         {
-          "mac:legacy": {
-            "itemCount": 4,
-            "activity": 9,
-            "turns": 2,
-            "seenAt": 1759999999000
-          },
           "mac:s1": {
             "itemCount": 3,
             "activity": 5,
@@ -151,12 +146,6 @@
           }
         },
         {
-          "mac:legacy": {
-            "itemCount": 4,
-            "activity": 9,
-            "turns": 2,
-            "seenAt": 1759999999000
-          },
           "mac:s1": {
             "itemCount": 3,
             "activity": 5,
@@ -166,12 +155,6 @@
           }
         },
         {
-          "mac:legacy": {
-            "itemCount": 4,
-            "activity": 9,
-            "turns": 2,
-            "seenAt": 1759999999000
-          },
           "mac:s1": {
             "itemCount": 3,
             "activity": 5,
@@ -181,28 +164,28 @@
           }
         },
         {
-          "mac:legacy": {
-            "itemCount": 4,
-            "activity": 9,
-            "prose": 0,
-            "turns": 2,
-            "seenAt": 1760000000010
-          },
           "mac:s1": {
             "itemCount": 3,
             "activity": 5,
             "prose": 4,
             "turns": 3,
             "seenAt": 1760000062500
+          },
+          "mac:legacy": {
+            "itemCount": 0,
+            "activity": 9,
+            "prose": 0,
+            "turns": 0,
+            "seenAt": 1760000000000
           }
         },
         {
           "mac:legacy": {
-            "itemCount": 4,
+            "itemCount": 0,
             "activity": 9,
             "prose": 0,
-            "turns": 2,
-            "seenAt": 1760000000010
+            "turns": 0,
+            "seenAt": 1760000000000
           }
         },
         {

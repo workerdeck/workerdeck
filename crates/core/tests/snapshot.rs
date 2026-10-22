@@ -40,7 +40,7 @@ impl<'a> Reader<'a> {
 }
 
 fn session() -> LiveSession {
-    let mut live = LiveSession::new(0, true, "n".into(), METRICS);
+    let mut live = LiveSession::new(0, true, "n".into(), METRICS, None);
     live.opened();
     live.received(
         &json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,

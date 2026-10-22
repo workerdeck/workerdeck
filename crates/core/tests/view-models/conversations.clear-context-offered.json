@@ -29,19 +29,18 @@
       [
         {
           "id": "b",
-          "status": "idle",
+          "status": "closed",
           "cwd": "/work/alpha",
           "createdAt": 1760000000000,
           "lastSeq": 0,
-          "pendingPermissionCount": 0,
-          "archived": true
+          "pendingPermissionCount": 0
         }
       ]
     ]
   },
   "output": [
     true,
-    false,
+    true,
     false
   ]
 }

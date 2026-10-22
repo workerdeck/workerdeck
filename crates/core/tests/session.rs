@@ -18,7 +18,7 @@ struct Wire {
 impl Wire {
     fn new(after_seq: i64, reconnect: bool) -> Self {
         let mut wire = Wire {
-            conn: SessionConnection::new(after_seq, reconnect, "nonce".into()),
+            conn: SessionConnection::new(after_seq, reconnect, "nonce".into(), None),
             opens: Vec::new(),
             sent: Vec::new(),
             pending: Vec::new(),
@@ -31,9 +31,16 @@ impl Wire {
         wire
     }
 
-    fn connected(after_seq: i64, reconnect: bool) -> Self {
+    fn opened(after_seq: i64, reconnect: bool) -> Self {
         let mut wire = Wire::new(after_seq, reconnect);
         wire.open();
+        wire
+    }
+
+    // Open and attached to conversation 3: commands go out at once, stamped with it.
+    fn connected(after_seq: i64, reconnect: bool) -> Self {
+        let mut wire = Wire::opened(after_seq, reconnect);
+        wire.push(&attached_frame(PROTOCOL_VERSION));
         wire
     }
 
@@ -114,7 +121,19 @@ impl Wire {
             .collect()
     }
 
+    // Without the conversation token, which `generations` reads.
     fn sent_json(&self) -> Vec<Value> {
+        self.sent
+            .iter()
+            .map(|text| {
+                let mut frame: Value = serde_json::from_str(text).unwrap();
+                frame.as_object_mut().unwrap().remove("generation");
+                frame
+            })
+            .collect()
+    }
+
+    fn sent_raw(&self) -> Vec<Value> {
         self.sent.iter().map(|text| serde_json::from_str(text).unwrap()).collect()
     }
 }
@@ -130,6 +149,7 @@ fn label(signal: &Signal) -> String {
         Signal::ShellAttached(frame) => format!("shell_attached {}", frame.shell_id),
         Signal::ShellOutput { shell_id, data } => format!("shell_output {shell_id} {data}"),
         Signal::ShellDetached { shell_id, reason } => format!("shell_detached {shell_id} {reason}"),
+        Signal::Undelivered(prompt) => format!("undelivered {} {}", prompt.text, prompt.uncertain),
         Signal::Finished => "finished".into(),
     }
 }
@@ -138,7 +158,7 @@ fn attached_frame(protocol_version: i64) -> String {
     format!(
         r#"{{"type":"attached","protocolVersion":{protocol_version},"replayingFrom":0,
    "session":{{"id":"s1","status":"running","cwd":"/repo","createdAt":1,"lastSeq":0,
-   "pendingPermissionCount":0}}}}"#
+   "conversation":3,"pendingPermissionCount":0}}}}"#
     )
 }
 
@@ -152,7 +172,7 @@ fn encoded(frame: ClientFrame) -> Value {
 
 #[test]
 fn emits_attached_frame_on_connect() {
-    let mut wire = Wire::connected(0, false);
+    let mut wire = Wire::opened(0, false);
     assert!(wire.has("connection true"));
     wire.push(&attached_frame(PROTOCOL_VERSION));
     let Signal::Attached(frame) = &wire.signals[1] else { panic!("expected attached, got {:?}", wire.labels()) };
@@ -201,6 +221,8 @@ fn flushes_queued_commands_in_order_on_open() {
     wire.act(|c| c.set_permission_mode(PermissionMode::AcceptEdits));
     assert!(wire.sent.is_empty());
     wire.open();
+    assert!(wire.sent.is_empty());
+    wire.push(&attached_frame(PROTOCOL_VERSION));
     assert_eq!(
         wire.sent_json(),
         [
@@ -386,6 +408,8 @@ fn the_outbox_survives_a_reconnect_and_pops_only_on_success() {
     wire.ack(true);
     wire.push(&attached_frame(PROTOCOL_VERSION));
     assert_eq!(wire.sent_json(), [json!({"type": "interrupt"}), json!({"type": "user_message", "text": "later", "clientId": "nonce.1"})]);
+    assert_eq!(wire.conn.queued(), 1);
+    wire.push(r#"{"type":"ack","clientId":"nonce.1"}"#);
     assert_eq!(wire.conn.queued(), 0);
 }
 
@@ -402,19 +426,17 @@ fn a_late_ack_after_a_drop_still_pops() {
     assert!(wire.pending.is_empty());
 }
 
-fn acking_gateway(wire: &mut Wire) {
-    let attached = attached_frame(PROTOCOL_VERSION).replace(r#""replayingFrom":0"#, r#""replayingFrom":0,"acks":true"#);
-    wire.push(&attached);
-}
-
 fn prompt_texts(wire: &Wire) -> Vec<String> {
     wire.sent_json().iter().filter(|f| f["type"] == "user_message").map(|f| f["text"].as_str().unwrap().to_owned()).collect()
+}
+
+fn generations(wire: &Wire) -> Vec<Option<i64>> {
+    wire.sent.iter().map(|text| serde_json::from_str::<Value>(text).unwrap()["generation"].as_i64()).collect()
 }
 
 #[test]
 fn an_unacked_prompt_is_resent_after_a_reconnect_before_newer_input() {
     let mut wire = Wire::connected(0, true);
-    acking_gateway(&mut wire);
     wire.act(|c| c.send("acked".into(), Vec::new()));
     wire.act(|c| c.send("lost".into(), Vec::new()));
     wire.push(r#"{"type":"ack","clientId":"nonce.1"}"#);
@@ -431,26 +453,65 @@ fn an_unacked_prompt_is_resent_after_a_reconnect_before_newer_input() {
 }
 
 #[test]
-fn a_gateway_without_acks_never_gets_a_resend() {
-    let mut wire = Wire::connected(0, true);
-    wire.push(&attached_frame(PROTOCOL_VERSION));
-    wire.act(|c| c.send("once".into(), Vec::new()));
-    assert_eq!(wire.conn.queued(), 0);
+fn a_command_written_before_any_attach_waits_for_it_and_carries_its_conversation() {
+    let mut wire = Wire::opened(0, true);
+    wire.act(|c| c.send("early".into(), Vec::new()));
+    wire.act(|c| c.interrupt());
+    assert!(wire.sent.is_empty());
     wire.drop_socket(0.0);
     wire.tick(0.5);
     wire.open();
-    assert_eq!(prompt_texts(&wire), ["once"]);
+    assert!(wire.sent.is_empty());
+    wire.push(&attached_frame(PROTOCOL_VERSION));
+    assert_eq!(prompt_texts(&wire), ["early"]);
+    assert_eq!(generations(&wire), [Some(3), Some(3)]);
+    assert_eq!(wire.conn.conversation(), Some(3));
 }
 
 #[test]
-fn a_drop_before_attached_never_resends() {
+fn a_command_keeps_the_conversation_it_was_written_for_across_a_cut() {
     let mut wire = Wire::connected(0, true);
-    wire.act(|c| c.send("once".into(), Vec::new()));
+    wire.act(|c| c.send("for three".into(), Vec::new()));
     wire.drop_socket(0.0);
+    wire.act(|c| c.interrupt());
     wire.tick(0.5);
     wire.open();
-    assert_eq!(prompt_texts(&wire), ["once"]);
+    wire.push(&attached_frame(PROTOCOL_VERSION).replace(r#""conversation":3"#, r#""conversation":4"#));
+    wire.act(|c| c.send("for four".into(), Vec::new()));
+    assert_eq!(prompt_texts(&wire), ["for three", "for three", "for four"]);
+    assert_eq!(generations(&wire), [Some(3), Some(3), Some(3), Some(4)]);
+}
+
+#[test]
+fn a_refused_prompt_comes_back_to_the_sender() {
+    let mut wire = Wire::connected(0, true);
+    wire.act(|c| c.send("one".into(), vec!["att".into()]));
+    wire.act(|c| c.send("two".into(), Vec::new()));
+    wire.act(|c| c.send("three".into(), Vec::new()));
+    wire.push(r#"{"type":"ack","clientId":"nonce.1","notDelivered":true}"#);
+    wire.push(r#"{"type":"ack","clientId":"nonce.2","uncertain":true}"#);
+    wire.push(r#"{"type":"ack","clientId":"nonce.3"}"#);
+    let back: Vec<_> = wire
+        .signals
+        .iter()
+        .filter_map(|signal| match signal {
+            Signal::Undelivered(prompt) => Some((prompt.text.as_str(), prompt.attachment_ids.clone(), prompt.uncertain)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(back, [("one", vec!["att".to_owned()], false), ("two", Vec::new(), true)]);
     assert_eq!(wire.conn.queued(), 0);
+}
+
+#[test]
+fn a_history_socket_stays_on_its_past_conversation() {
+    let mut wire = Wire { conn: SessionConnection::new(0, false, "nonce".into(), Some(1)), ..Wire::new(0, false) };
+    wire.pump();
+    wire.open();
+    wire.act(|c| c.interrupt());
+    wire.push(&attached_frame(PROTOCOL_VERSION));
+    assert_eq!(wire.conn.conversation(), Some(1));
+    assert_eq!(generations(&wire), [Some(1)]);
 }
 
 #[test]
@@ -474,18 +535,11 @@ fn an_unknown_event_type_decodes_as_unknown_and_keeps_its_seq() {
 }
 
 #[test]
-fn session_superseded_names_its_successor() {
-    let json = br#"{"type":"event","event":{"type":"session_superseded","successor":"b","seq":7,"ts":1}}"#;
-    let Some(Frame::Event(event)) = decode_frame(json) else { panic!("expected an event") };
-    assert!(matches!(event.body, wd_native::protocol::Body::SessionSuperseded(ref id) if id == "b"));
-    let json = br#"{"type":"event","event":{"type":"session_superseded","seq":8,"ts":1}}"#;
-    let Some(Frame::Event(event)) = decode_frame(json) else { panic!("expected an event") };
-    assert!(matches!(event.body, wd_native::protocol::Body::Unknown));
-}
-
-#[test]
 fn decodes_an_ack_frame() {
-    assert!(matches!(decode_frame(br#"{"type":"ack","clientId":"n.1"}"#), Some(Frame::Ack { client_id }) if client_id == "n.1"));
+    let Some(Frame::Ack(ack)) = decode_frame(br#"{"type":"ack","clientId":"n.1"}"#) else { panic!("expected an ack") };
+    assert_eq!((ack.client_id.as_str(), ack.not_delivered, ack.uncertain), ("n.1", false, false));
+    let Some(Frame::Ack(ack)) = decode_frame(br#"{"type":"ack","clientId":"n.2","notDelivered":true}"#) else { panic!("expected an ack") };
+    assert!(ack.not_delivered && !ack.uncertain);
 }
 
 #[test]
@@ -500,7 +554,7 @@ fn close_session_while_disconnected_detaches_at_once() {
 
 #[test]
 fn without_reconnect_a_drop_finishes() {
-    let mut wire = Wire::connected(0, false);
+    let mut wire = Wire::opened(0, false);
     wire.drop_socket(0.0);
     assert_eq!(wire.labels(), ["connection true", "connection false", "finished"]);
     assert_eq!(wire.wake, None);
@@ -532,7 +586,7 @@ fn write_shell_splits_a_long_paste_into_ordered_frames() {
 
 #[test]
 fn shell_frames_reach_the_app() {
-    let mut wire = Wire::connected(0, false);
+    let mut wire = Wire::opened(0, false);
     wire.push(r#"{"type":"shell_output","shellId":"sh_1","data":"hi"}"#);
     wire.push(r#"{"type":"shell_detached","shellId":"sh_1","reason":"exited"}"#);
     assert_eq!(wire.labels()[1..], ["shell_output sh_1 hi", "shell_detached sh_1 exited"]);
@@ -732,6 +786,6 @@ fn client_frames_match_the_typescript_client() {
             "closeSession" => wire.act(|c| c.close_session()),
             other => panic!("no Rust command for {other}"),
         }
-        assert_eq!(&Value::Array(wire.sent_json()), &entry["frames"], "{call} {args:?}");
+        assert_eq!(&Value::Array(wire.sent_raw()), &entry["frames"], "{call} {args:?}");
     }
 }

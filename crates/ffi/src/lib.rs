@@ -26,8 +26,9 @@ mod usage;
 pub use bookmarks::{Bookmarks, RowMenu};
 pub use composer::Composer;
 pub use conversations::{
-    AgentNotice, ArchivedKind, ArchivedView, ConversationFollow, ConversationItem, ConversationSelection, PastAgent, agent_conversations,
-    agent_notice, delete_agent_message, delete_agent_title, new_conversation_hint, past_agents, selection_of,
+    ArchivedKind, ArchivedView, ConversationItem, ConversationNotice, DiscardConfirmation, PastAgent, SessionAddress, address_of,
+    conversation_notice, delete_agent_message, delete_agent_title, discard_confirmation, new_conversation_hint, past_agents,
+    session_conversations, uncertain_prompt_conversation,
 };
 pub use create_form::{CreateForm, CreateFormFields, CreateFormState, FormLead, FormProfile};
 pub use extras::{
@@ -88,7 +89,8 @@ pub enum Effect {
     Send { id: u64, text: String },
     Close,
     WakeAt { at: f64 },
-    Request { id: u64, method: String, path: String, scoped: bool },
+    // `generation`, when set, goes out as `generation_header()`.
+    Request { id: u64, method: String, path: String, scoped: bool, generation: Option<i64> },
     OpenSubagent { task_id: String },
     OpenShell { shell_id: String },
     Changed { changed: Changed },
@@ -101,7 +103,9 @@ impl From<live::Effect> for Effect {
             live::Effect::Send { id, text } => Effect::Send { id, text },
             live::Effect::Close => Effect::Close,
             live::Effect::WakeAt(at) => Effect::WakeAt { at },
-            live::Effect::Request { id, method, path, scoped } => Effect::Request { id, method: method.to_owned(), path, scoped },
+            live::Effect::Request { id, method, path, scoped, generation } => {
+                Effect::Request { id, method: method.to_owned(), path, scoped, generation }
+            }
             live::Effect::OpenSubagent { task_id } => Effect::OpenSubagent { task_id },
             live::Effect::OpenShell { shell_id } => Effect::OpenShell { shell_id },
             live::Effect::Changed(c) => Effect::Changed {
@@ -208,14 +212,15 @@ pub struct SessionChrome {
     pub permission_mode: Option<String>,
     pub mode_label: Option<String>,
     pub can_run_shell: bool,
-    pub can_clear_context: bool,
+    pub can_new_conversation: bool,
     pub queued: u32,
     pub can_sleep: bool,
     pub send_now_at: Option<i64>,
     pub cwd: Option<String>,
     pub attachment_kinds: Vec<String>,
-    pub archived: bool,
-    pub superseded_by: Option<String>,
+    pub historical: bool,
+    // The conversation this screen attached to: the token every mutating call for the session carries.
+    pub conversation: Option<i64>,
     pub agent_id: Option<String>,
     pub agent_name: Option<String>,
     pub new_conversation_blocked: Option<String>,
@@ -234,14 +239,14 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
             permission_mode: c.permission_mode,
             mode_label: c.mode_label,
             can_run_shell: c.can_run_shell,
-            can_clear_context: c.can_clear_context,
+            can_new_conversation: c.can_new_conversation,
             queued: c.queued,
             can_sleep: c.can_sleep,
             send_now_at: c.send_now_at,
             cwd: c.cwd,
             attachment_kinds: c.attachment_kinds,
-            archived: c.archived,
-            superseded_by: c.superseded_by,
+            historical: c.historical,
+            conversation: c.conversation,
             agent_id: c.agent_id,
             agent_name: c.agent_name,
             new_conversation_blocked: c.new_conversation_blocked,
@@ -349,8 +354,9 @@ fn parse<T: serde::de::DeserializeOwned>(json: Option<String>) -> Option<T> {
 #[uniffi::export]
 impl Session {
     #[uniffi::constructor]
-    pub fn new(after_seq: i64, reconnect: bool, nonce: String, metrics: Metrics) -> Arc<Self> {
-        let live = LiveSession::new(after_seq, reconnect, nonce, metrics.into());
+    // `history`: a past conversation's n, shown read-only over `socket_url(.., Some(n))`; None is the current one.
+    pub fn new(after_seq: i64, reconnect: bool, nonce: String, metrics: Metrics, history: Option<i64>) -> Arc<Self> {
+        let live = LiveSession::new(after_seq, reconnect, nonce, metrics.into(), history);
         Arc::new(Session {
             inner: Mutex::new(live),
             viewport: Mutex::new(Viewport::default()),
@@ -532,6 +538,16 @@ impl Session {
         })
     }
 
+    // Prompts the gateway refused before the engine saw them, oldest first: their text is the sender's to resubmit;
+    // `uncertain` says an earlier attempt may still have run.
+    pub fn take_undelivered(&self) -> Vec<Undelivered> {
+        self.live()
+            .take_undelivered()
+            .into_iter()
+            .map(|prompt| Undelivered { text: prompt.text, attachment_ids: prompt.attachment_ids, uncertain: prompt.uncertain })
+            .collect()
+    }
+
     // A dormant wake renumbers the log, so a push's seq names a row only within its epoch.
     pub fn session_epoch(&self) -> Option<i64> {
         self.live().session_info().and_then(|info| info.epoch)
@@ -611,11 +627,11 @@ impl Session {
         self.live().queued() as u32
     }
 
-    // The banner over a read-only conversation, None while the session is live. `agents_body` is a `GET /agents`
-    // answer; None (not read yet, or refused) never calls the agent deleted.
-    pub fn archived_view(&self, agents_body: Option<String>, now_ms: f64, offset_minutes: i32) -> Option<ArchivedView> {
-        let agents = agents_body.and_then(|body| conversations::agent_bindings(&body));
-        let view = self.live().archived_view(agents.as_deref())?;
+    // The banner over a past conversation, None on the current one. `conversations_body` is the session's
+    // `conversations_call` answer; None (not read yet, or refused) never calls the session closed.
+    pub fn archived_view(&self, conversations_body: Option<String>, now_ms: f64, offset_minutes: i32) -> Option<ArchivedView> {
+        let current = conversations_body.and_then(|body| conversations::current_conversation(&body));
+        let view = self.live().archived_view(current.as_ref())?;
         Some(ArchivedView::of(&view, now_ms, offset_minutes))
     }
 
@@ -793,9 +809,23 @@ pub fn api_base(base_url: String) -> String {
     wd_native::vm::gateway::api_base(&base_url)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Undelivered {
+    pub text: String,
+    pub attachment_ids: Vec<String>,
+    pub uncertain: bool,
+}
+
+// `conversation` opens a past conversation's read-only socket; None attaches the current one.
 #[uniffi::export]
-pub fn socket_url(base_url: String, session_id: String, after_seq: i64) -> String {
-    wd_native::vm::gateway::socket_url(&base_url, &session_id, after_seq)
+pub fn socket_url(base_url: String, session_id: String, after_seq: i64, conversation: Option<i64>) -> String {
+    wd_native::vm::gateway::socket_url(&base_url, &session_id, after_seq, conversation)
+}
+
+// The header a call's `generation` goes out under.
+#[uniffi::export]
+pub fn generation_header() -> String {
+    wd_native::rest::calls::GENERATION_HEADER.to_owned()
 }
 
 #[uniffi::export]

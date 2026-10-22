@@ -19,8 +19,20 @@ pub enum Frame {
     ProtocolError(String),
     ShellAttached(Box<ShellAttachedFrame>),
     ShellDetached { shell_id: String, reason: String },
-    Ack { client_id: String },
+    Ack(Ack),
     Unknown,
+}
+
+// `not_delivered`: refused before the engine saw it, the text is the sender's to resubmit. `uncertain`: refused now, and
+// whether an earlier attempt ran is no longer known. Neither: it ran.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ack {
+    pub client_id: String,
+    #[serde(default)]
+    pub not_delivered: bool,
+    #[serde(default)]
+    pub uncertain: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -33,8 +45,6 @@ pub struct AttachedFrame {
     pub shell: Option<bool>,
     #[serde(default)]
     pub pricing_overrides: Option<Value>,
-    #[serde(default)]
-    pub acks: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -149,7 +159,16 @@ pub enum ClientFrame {
 
 impl ClientFrame {
     pub fn encode(&self) -> String {
-        serde_json::to_string(self).unwrap_or_default()
+        self.encode_for(None)
+    }
+
+    // `generation`: the conversation the frame was written for; the gateway refuses it once that one has ended.
+    pub fn encode_for(&self, generation: Option<i64>) -> String {
+        let Ok(Value::Object(mut frame)) = serde_json::to_value(self) else { return String::new() };
+        if let Some(generation) = generation {
+            frame.insert("generation".to_owned(), Value::from(generation));
+        }
+        Value::Object(frame).to_string()
     }
 }
 
@@ -338,7 +357,6 @@ pub enum Body {
     FileDelivered { path: String, bytes: f64, description: Option<String> },
     SessionError(String),
     SessionClosed(String),
-    SessionSuperseded(String),
     Unknown,
 }
 
@@ -601,12 +619,6 @@ struct RawCanceled {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawAck {
-    client_id: String,
-}
-
-#[derive(Deserialize)]
 struct RawProtocolError {
     message: String,
 }
@@ -641,7 +653,7 @@ fn decode_cold_frame(ty: &str, line: &[u8]) -> Option<Frame> {
             Frame::ToolCallCanceled { execution_id: raw.execution_id, reason: raw.reason }
         }
         "protocol_error" => Frame::ProtocolError(serde_json::from_slice::<RawProtocolError>(line).ok()?.message),
-        "ack" => Frame::Ack { client_id: serde_json::from_slice::<RawAck>(line).ok()?.client_id },
+        "ack" => Frame::Ack(serde_json::from_slice(line).ok()?),
         "shell_attached" => Frame::ShellAttached(Box::new(serde_json::from_slice(line).ok()?)),
         "shell_detached" => {
             let raw: RawShellDetached = serde_json::from_slice(line).ok()?;
@@ -884,7 +896,6 @@ fn decode_cold(ty: &str, e: &Value) -> Option<Body> {
         }
         "session_error" => Body::SessionError(text(e, "message")?),
         "session_closed" => Body::SessionClosed(text(e, "reason")?),
-        "session_superseded" => Body::SessionSuperseded(text(e, "successor")?),
         _ => Body::Unknown,
     })
 }

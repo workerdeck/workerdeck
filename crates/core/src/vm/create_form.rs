@@ -1,4 +1,4 @@
-use crate::rest::calls::{self, HttpCall, NewAgent, NewSession, SdkSessionQuery, SettingSource};
+use crate::rest::calls::{self, HttpCall, NewAgent, NewSession, SdkSessionQuery, SessionAgent, SettingSource};
 use crate::rest::{AgentConfig, EngineCapabilities, ModelOption, PermissionMode, ProfileEngine, ProfileInfo, Sharing};
 use crate::vm::model_menu::model_matches;
 use crate::vm::pickers::{ModePicker, ModelPicker, PickerRow, mode_label, mode_rows};
@@ -359,6 +359,9 @@ impl CreateForm {
             reasoning_effort: (!effort.is_empty() && self.effort_options().contains(effort)).then(|| effort.clone()),
             include_partial_messages: Some(f.partial_messages),
             meta: stored_title.map(|title| Map::from_iter([("title".to_owned(), json!(title))])),
+            agent: non_empty(&f.agent_name)
+                .filter(|_| self.agent.is_none())
+                .map(|name| SessionAgent { name: Some(name), ..SessionAgent::default() }),
         }
     }
 
@@ -387,7 +390,6 @@ impl CreateForm {
             }),
             prompt: session.prompt,
             lead: f.lead.clone(),
-            adopt: None,
             sharing: f.sharing.filter(|_| f.lead.is_none() && seed.is_some_and(|s| s.allow_shared)),
             cross_owner: cross_owner.then_some(true),
         }

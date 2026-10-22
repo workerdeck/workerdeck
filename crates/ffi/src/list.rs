@@ -6,8 +6,7 @@ use wd_native::planner::fmt_cost;
 use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, ProjectIcon, SessionInfo, Sharing};
 use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
 use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
-use wd_native::vm::conversations::new_conversation_gate;
-use wd_native::vm::conversations::session_listed;
+use wd_native::vm::conversations::{clear_context_offered, new_conversation_gate};
 use wd_native::vm::create_form::{AgentSeed as FormSeed, SeedLead};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
 use wd_native::vm::session_list::{
@@ -15,7 +14,7 @@ use wd_native::vm::session_list::{
     normalize_view_config,
 };
 use wd_native::vm::steps;
-use wd_native::vm::watermarks::{Seen, Watermark, Watermarks, unseen_count};
+use wd_native::vm::watermarks::{Seen, Watermarks, unseen_count};
 
 #[derive(Debug, uniffi::Error)]
 pub enum ListError {
@@ -178,7 +177,10 @@ pub struct ListRow {
     pub session_status: String,
     pub pending_permissions: u32,
     pub running_agents: u32,
-    // Why New conversation waits (a turn or a request in flight); None offers it. Agents only.
+    // The session's current conversation: the token its card's actions carry.
+    pub conversation: i64,
+    // New conversation is offered to every live session; `new_conversation_blocked` says why it waits.
+    pub can_new_conversation: bool,
     pub new_conversation_blocked: Option<String>,
 }
 
@@ -385,7 +387,7 @@ impl State {
     fn rows(&self) -> Vec<SessionRow> {
         let mut out = Vec::new();
         for host in &self.hosts {
-            for info in host.sessions.iter().filter(|info| session_listed(info)) {
+            for info in &host.sessions {
                 let mark = self.marks.get(&host.id, &info.id);
                 out.push(SessionRow {
                     host_id: host.id.clone(),
@@ -506,7 +508,7 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         shared: info.agent.as_ref().is_some_and(|a| a.shared == Some(true)),
         agent_detail: info.agent.as_ref().map(|a| {
             let team = a.lead.as_ref().and(a.team.as_ref()).map(|t| format!("{t} team"));
-            let conversation = format!("conversation {}", a.conversation.unwrap_or(1));
+            let conversation = format!("conversation {}", a.conversation.map(i64::from).or(info.conversation).unwrap_or(1));
             team.into_iter().chain([conversation]).collect::<Vec<_>>().join(" \u{00B7} ")
         }),
         owner: info.owner.clone(),
@@ -527,7 +529,9 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         session_status: serde_json::to_value(info.status).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default(),
         pending_permissions: info.pending_permission_count,
         running_agents: vm::running_subagents(info).len() as u32,
-        new_conversation_blocked: info.agent.as_ref().and_then(|_| new_conversation_gate(Some(info)).reason),
+        conversation: info.conversation.unwrap_or(1),
+        can_new_conversation: clear_context_offered(info),
+        new_conversation_blocked: new_conversation_gate(Some(info)).reason,
     }
 }
 
@@ -549,14 +553,6 @@ pub struct SessionList {
 impl SessionList {
     fn state(&self) -> std::sync::MutexGuard<'_, State> {
         self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
-    pub(crate) fn rows(&self) -> Vec<SessionRow> {
-        self.state().rows()
-    }
-
-    pub(crate) fn info(&self, host_id: &str, session_id: &str) -> Option<SessionInfo> {
-        self.state().find(host_id, session_id).cloned()
     }
 
     // `agent_seed` for the create form, each lead with its owner so a cross-owner join can say so.
@@ -582,13 +578,12 @@ impl SessionList {
     #[uniffi::constructor]
     pub fn new(config_json: Option<String>, marks_json: Option<String>) -> std::sync::Arc<Self> {
         let stored = config_json.and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok());
-        let marks = marks_json.and_then(|json| serde_json::from_str::<Entries<Watermark>>(&json).ok()).unwrap_or_default();
         std::sync::Arc::new(SessionList {
             inner: Mutex::new(State {
                 hosts: Vec::new(),
                 relay_hosts: Entries::new(),
                 config: normalize_view_config(stored.as_ref()),
-                marks: Watermarks::new(marks),
+                marks: Watermarks::from_json(marks_json.as_deref()),
                 avatars: AvatarLoads::default(),
                 selected: None,
                 linger_ends: None,
