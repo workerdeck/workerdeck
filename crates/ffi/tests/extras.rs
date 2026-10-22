@@ -10,10 +10,10 @@ fn refused(status: u16) -> HttpAnswer {
 
 #[test]
 fn r3_calls_name_their_routes() {
-    let get = |path: &str| HttpCall { method: "GET".into(), path: path.into(), body: None };
-    assert_eq!(upload_attachment_call("s".into(), "a.png".into()).path, "/sessions/s/attachments?name=a.png");
+    let get = |path: &str| HttpCall { method: "GET".into(), path: path.into(), body: None, generation: None };
+    assert_eq!(upload_attachment_call("s".into(), "a.png".into(), 1).path, "/sessions/s/attachments?name=a.png");
     assert_eq!(attachment_call("s".into(), "at".into()), get("/sessions/s/attachments/at"));
-    assert_eq!(mcp_action_call("s".into(), "x".into(), McpAction::Enable).body.as_deref(), Some(r#"{"action":"enable"}"#));
+    assert_eq!(mcp_action_call("s".into(), "x".into(), McpAction::Enable, 1).body.as_deref(), Some(r#"{"action":"enable"}"#));
     assert_eq!(list_shells_call("s".into()), get("/sessions/s/shells"));
     assert_eq!(get_shell_call("s".into(), "x".into()), get("/sessions/s/shells/x"));
     assert_eq!(

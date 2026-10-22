@@ -18,21 +18,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import bi.atomic.workerdeck.app.ui.Wd
-import bi.atomic.workerdeck.core.ffi.AgentNotice
+import bi.atomic.workerdeck.core.ffi.ConversationNotice
 import bi.atomic.workerdeck.core.ffi.ArchivedView
 
-// The agent-conversation lines above a transcript: a read-only conversation's banner, a first message a crash may
-// have kept from the engine, a new conversation that did not start, and the wait for one that is starting.
+// The conversation lines above a transcript: a past conversation's banner, a first message whose delivery is unknown,
+// and a new conversation that did not start.
 @Composable
 fun ConversationBars(
     archived: ArchivedView?,
-    notice: AgentNotice?,
-    starting: Boolean,
-    onGoToCurrent: ((String) -> Unit)?,
+    notice: ConversationNotice?,
+    onGoToCurrent: (() -> Unit)?,
     onSettle: (Boolean) -> Unit,
     onRetryStart: () -> Unit,
 ) {
@@ -45,11 +43,10 @@ fun ConversationBars(
                 Text(view.banner, style = small, color = colors.secondary)
                 view.note?.let { Text(it, style = small, color = colors.tertiary) }
             }
-            val current = view.current
-            if (current != null && onGoToCurrent != null) BarButton("Go to current") { onGoToCurrent(current) }
+            if (view.current != null && onGoToCurrent != null) BarButton("Go to current", onGoToCurrent)
         }
     }
-    notice?.undelivered?.let { text ->
+    notice?.uncertainPrompt?.let { text ->
         Bar("undelivered-bar") {
             Column(Modifier.weight(1f)) {
                 Text("The first message may not have been delivered", style = small, color = colors.secondary)
@@ -69,15 +66,6 @@ fun ConversationBars(
             }
             BarButton("Retry start", onRetryStart)
         }
-    }
-    if (starting) {
-        Text(
-            "Starting a new conversation…",
-            style = small,
-            color = colors.secondary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("handover-starting"),
-        )
     }
 }
 
@@ -100,5 +88,28 @@ private fun Bar(tag: String, content: @Composable RowScope.() -> Unit) {
 private fun BarButton(label: String, onClick: () -> Unit) {
     OutlinedButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 10.dp), modifier = Modifier.height(32.dp)) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = Wd.colors.accent)
+    }
+}
+
+// A prompt the gateway handed back, above the composer: its text, why, and Insert (into whatever draft is there) or
+// Dismiss. Attachments it carried are not kept once sent, so the bar says to add them again.
+@Composable
+fun ReturnedBar(prompt: Returned, waiting: Int, onInsert: () -> Unit, onDismiss: () -> Unit) {
+    val colors = Wd.colors
+    val small = MaterialTheme.typography.bodySmall
+    Bar("returned-prompt") {
+        Column(Modifier.weight(1f)) {
+            Text(if (prompt.uncertain) "This message may not have arrived" else "This message did not arrive", style = small, color = colors.secondary)
+            Text(prompt.text, style = small, color = colors.tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val notes = listOfNotNull(
+                "${prompt.attachments} attachment(s) not kept: add them again".takeIf { prompt.attachments > 0 },
+                "$waiting more waiting".takeIf { waiting > 0 },
+            )
+            if (notes.isNotEmpty()) Text(notes.joinToString(" · "), style = small, color = colors.tertiary)
+        }
+        BarButton("Insert", onInsert)
+        TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp), modifier = Modifier.height(36.dp)) {
+            Text("Dismiss", style = small, color = colors.secondary)
+        }
     }
 }

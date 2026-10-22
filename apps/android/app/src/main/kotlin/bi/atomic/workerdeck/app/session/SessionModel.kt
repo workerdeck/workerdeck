@@ -1,7 +1,8 @@
 package bi.atomic.workerdeck.app.session
 
 import bi.atomic.workerdeck.app.gateway.Transport
-import bi.atomic.workerdeck.app.sessions.AgentCalls
+import bi.atomic.workerdeck.app.sessions.ConversationCalls
+import bi.atomic.workerdeck.app.sessions.CutAnswer
 import bi.atomic.workerdeck.app.sessions.describe
 import bi.atomic.workerdeck.app.sessions.offsetMinutes
 import bi.atomic.workerdeck.core.LayoutRow
@@ -9,7 +10,8 @@ import bi.atomic.workerdeck.core.ShellGrid
 import bi.atomic.workerdeck.core.SessionWorker
 import bi.atomic.workerdeck.core.Snapshots
 import bi.atomic.workerdeck.core.TranscriptLine
-import bi.atomic.workerdeck.core.ffi.AgentNotice
+import bi.atomic.workerdeck.core.ffi.ConversationNotice
+import bi.atomic.workerdeck.core.ffi.DiscardConfirmation
 import bi.atomic.workerdeck.core.ffi.ArchivedView
 import bi.atomic.workerdeck.core.ffi.CatchUp
 import bi.atomic.workerdeck.core.ffi.Changed
@@ -36,7 +38,7 @@ import bi.atomic.workerdeck.core.ffi.McpServers
 import bi.atomic.workerdeck.core.ffi.SessionExtras
 import bi.atomic.workerdeck.core.ffi.SessionUsageView
 import bi.atomic.workerdeck.core.ffi.SkillSection
-import bi.atomic.workerdeck.core.ffi.agentNotice
+import bi.atomic.workerdeck.core.ffi.conversationNotice
 import bi.atomic.workerdeck.core.ffi.getSessionCall
 import bi.atomic.workerdeck.core.ffi.listProfilesCall
 import bi.atomic.workerdeck.core.ffi.sessionExtras
@@ -56,6 +58,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -93,8 +96,13 @@ sealed interface Entry {
     data class Reveal(val toolUseId: String) : Entry
 }
 
-// What `GET /agents` says about this conversation: the archived banner, or what its live agent asks of the user.
-data class AgentView(val archived: ArchivedView? = null, val notice: AgentNotice? = null)
+// What the session's conversations list says: a past conversation's banner, or what the current one asks of the user.
+data class ConversationView(val archived: ArchivedView? = null, val notice: ConversationNotice? = null)
+
+// A prompt the gateway handed back (refused before the engine saw it, or of unknown delivery). It waits above the
+// composer until the reader inserts or dismisses it; sent attachments are not kept, so `attachments` says how many to
+// add again.
+data class Returned(val id: Long, val text: String, val uncertain: Boolean, val attachments: Int)
 
 data class Jump(val row: Int, val nonce: Long, val top: Boolean = false)
 
@@ -118,16 +126,17 @@ data class ShellView(val id: String, val sized: Boolean = false, val grid: Shell
 // leaves. Everything that touches the session, the socket and the window runs on the worker's thread; effects arrive
 // there too, so `handle` and the readers call the session directly.
 // `recap` is the read mark taken when the session was opened: fixed for the screen's life, so the seam does not walk.
+// `history` is a past conversation's n, shown read-only; null is the session's current conversation.
 class SessionModel(
     private val client: Transport,
     private val sessionId: String,
     metrics: Metrics,
     entry: Entry? = null,
     recap: ReadMark? = null,
-    carried: ComposerModel? = null,
+    val history: Long? = null,
 ) : AutoCloseable, PromptActions {
     private var pending = entry
-    private val session = Session(0, true, UUID.randomUUID().toString(), metrics)
+    private val session = Session(0, true, UUID.randomUUID().toString(), metrics, history)
     private val state = MutableStateFlow(SessionUi())
     private val worker = SessionWorker(session, onFailure = ::failed, onEffects = ::handle)
     val ui: StateFlow<SessionUi> = state
@@ -148,22 +157,20 @@ class SessionModel(
     private val seenState = MutableStateFlow<SeenCounts?>(null)
     val seen: StateFlow<SeenCounts?> = seenState
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val agentCalls = AgentCalls(client)
-    private val agentState = MutableStateFlow(AgentView())
-    val agent: StateFlow<AgentView> = agentState
-    private var agentReadKey: Pair<Boolean, String?>? = null
+    private val calls = ConversationCalls(client)
+    private val conversationState = MutableStateFlow(ConversationView())
+    val conversation: StateFlow<ConversationView> = conversationState
+    private var conversationReadKey: Pair<Long?, String>? = null
     private val actionErrorState = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = actionErrorState
-    private val successorState = MutableStateFlow<String?>(null)
-    val successor: StateFlow<String?> = successorState
-    val composer = carried?.also { it.retarget(sessionId, scope) } ?: ComposerModel(sessionId, client, scope)
-    @Volatile private var composerReleased = false
-
-    // The successor's screen takes the draft's files over; this model stops feeding and closing them.
-    fun releaseComposer(): ComposerModel {
-        composerReleased = true
-        return composer
-    }
+    private val discardState = MutableStateFlow<DiscardConfirmation?>(null)
+    val discard: StateFlow<DiscardConfirmation?> = discardState
+    private val settleState = MutableStateFlow<Long?>(null)
+    val settleCut: StateFlow<Long?> = settleState
+    private val returnedState = MutableStateFlow<List<Returned>>(emptyList())
+    val returned: StateFlow<List<Returned>> = returnedState
+    private var nextReturned = 0L
+    val composer = ComposerModel(sessionId, client, scope)
 
     fun hostImagePath(path: String): HostImageFetch = session.hostImagePath(sessionId, path)
     private var socket: WebSocket? = null
@@ -183,7 +190,7 @@ class SessionModel(
         }
     }
 
-    fun mcpServers(): McpModel = McpModel(McpServers(sessionId, extrasState.value.mcpCanManage), client)
+    fun mcpServers(): McpModel = McpModel(McpServers(sessionId, extrasState.value.mcpCanManage), client, current() ?: 1)
 
     fun resize(metrics: Metrics) = worker.act { it.resize(metrics) }
 
@@ -222,42 +229,62 @@ class SessionModel(
 
     fun interrupt() = worker.act { it.interrupt() }
 
-    fun clearContext() = worker.act { it.clearContext() }
+    private fun current(): Long? = state.value.chrome?.conversation
 
-    // The answer names the new conversation; following it at once beats waiting for the old socket's superseded frame.
+    // The cut: the gateway closes this socket and the reattach shows conversation n+1 under the same id. Input the
+    // engine cannot confirm asks before it is discarded; a first message of unknown delivery is settled first.
     fun newConversation() {
         val chrome = state.value.chrome ?: return
-        val agentId = chrome.agentId ?: return
-        if (chrome.newConversationBlocked != null) return
-        agentAction("Could not start a new conversation") {
-            agentCalls.restart(agentId, sessionId).map { next -> if (next != null && next != sessionId) successorState.value = next }
-        }
+        val n = chrome.conversation ?: return
+        if (!chrome.canNewConversation || chrome.newConversationBlocked != null) return
+        scope.launch { cutAnswered(calls.newConversation(sessionId, n)) }
     }
 
-    // The conversation is archived under the screen, which reattaches to show it read-only with the deleted banner.
-    fun deleteAgent(onDeleted: () -> Unit) {
-        val agentId = state.value.chrome?.agentId ?: return
-        agentAction("Could not delete the agent") {
-            agentCalls.delete(agentId, sessionId).map {
-                reconnect()
-                onDeleted()
+    fun discardAndCut(confirmation: DiscardConfirmation) {
+        discardState.value = null
+        scope.launch { cutAnswered(calls.discardAndCut(sessionId, confirmation)) }
+    }
+
+    fun discardDismissed() {
+        discardState.value = null
+    }
+
+    private fun cutAnswered(answer: CutAnswer) {
+        when (answer) {
+            CutAnswer.Done -> readConversations()
+            is CutAnswer.Discard -> discardState.value = answer.confirmation
+            is CutAnswer.Settle -> settleState.value = answer.conversation
+            is CutAnswer.Failed -> {
+                actionErrorState.value = "Could not start a new conversation: ${answer.message}"
+                readConversations()
             }
         }
     }
 
-    fun settleUndelivered(send: Boolean) {
-        val agentId = agentState.value.notice?.agentId ?: return
-        agentAction(if (send) "Could not send it again" else "Could not dismiss it") {
-            agentCalls.settleUndelivered(agentId, send).map { readAgents() }
-        }
+    // A named session leaves to Past agents; the screen closes with it.
+    fun deleteAgent(onDeleted: () -> Unit) {
+        val agentId = state.value.chrome?.agentId ?: return
+        val n = current() ?: return
+        act("Could not delete the agent") { calls.delete(agentId, n).map { onDeleted() } }
+    }
+
+    // Send again or Dismiss for a first message of unknown delivery: from the bar (its n), or from a refused cut.
+    fun settle(send: Boolean, conversation: Long? = conversationState.value.notice?.uncertainN) {
+        settleState.value = null
+        val n = conversation ?: return
+        act(if (send) "Could not send it again" else "Could not dismiss it") { calls.settle(sessionId, send, n).map { readConversations() } }
+    }
+
+    fun settleDismissed() {
+        settleState.value = null
     }
 
     fun retryStart() {
-        val agentId = state.value.chrome?.agentId ?: return
-        agentAction("Could not start the conversation") {
-            agentCalls.retryStart(agentId).map {
+        val n = conversationState.value.notice?.startFailedN ?: return
+        act("Could not start the conversation") {
+            calls.retryStart(sessionId, n).map {
                 reconnect()
-                readAgents()
+                readConversations()
             }
         }
     }
@@ -266,27 +293,35 @@ class SessionModel(
         actionErrorState.value = null
     }
 
-    private fun agentAction(failure: String, call: suspend () -> Result<Unit>) {
+    // Inserted into the draft or dismissed: either way it leaves the queue.
+    fun settleReturned(id: Long) {
+        returnedState.update { list -> list.filter { it.id != id } }
+    }
+
+    private fun act(failure: String, call: suspend () -> Result<Unit>) {
         scope.launch { call().onFailure { actionErrorState.value = "$failure: ${describe(it)}" } }
     }
 
-    // One `GET /agents` serves both reads, keyed on archived and agent id; a refused read never reads as deleted.
-    private fun readAgents() {
-        val chrome = state.value.chrome
-        val agentId = chrome?.agentId
-        if (chrome == null || (!chrome.archived && agentId == null)) {
-            agentState.value = AgentView()
-            return
-        }
+    // One read of the session's own conversations list serves both: where a past conversation stands (Go to current, a
+    // closed session), and what the current one asks of the user. A refused read never reads as closed.
+    private fun readConversations() {
         scope.launch {
-            val body = agentCalls.agents()
+            val body = calls.conversationsBody(sessionId)
             worker.act { session ->
                 val now = System.currentTimeMillis()
                 val archived = session.archivedView(body, now.toDouble(), offsetMinutes(now))
-                agentState.value = AgentView(archived, body?.let { agentId?.let { id -> agentNotice(it, id) } })
+                val notice = if (history == null) body?.let { conversationNotice(it) } else null
+                conversationState.value = ConversationView(archived, notice)
                 emptyList()
             }
         }
+    }
+
+    private fun readUndelivered() {
+        val back = session.takeUndelivered()
+        if (back.isEmpty()) return
+        val added = back.map { Returned(nextReturned++, it.text, it.uncertain, it.attachmentIds.size) }
+        returnedState.update { it + added }
     }
 
     fun openShell(id: String, cols: Int, rows: Int) = worker.act {
@@ -401,7 +436,7 @@ class SessionModel(
             emptyList()
         }
         worker.close()
-        if (!composerReleased) composer.close()
+        composer.close()
     }
 
     // The core panicked and the worker stopped: nothing more will arrive, so the screen says so and drops the socket.
@@ -425,7 +460,7 @@ class SessionModel(
                     socket?.close(1000, null)
                     socket = null
                 }
-                is Effect.Request -> client.request(sessionId, effect.method, effect.path, effect.scoped) { status, body ->
+                is Effect.Request -> client.request(sessionId, effect.method, effect.path, effect.scoped, effect.generation) { status, body ->
                     worker.act { it.responded(effect.id, status.toUShort(), body) }
                 }
                 is Effect.Changed -> changed(effect.changed)
@@ -439,7 +474,7 @@ class SessionModel(
     private fun open(afterSeq: Long) {
         val mine = ++generation
         socket?.cancel()
-        socket = client.socket(sessionId, afterSeq, object : WebSocketListener() {
+        socket = client.socket(sessionId, afterSeq, history, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (mine == generation) worker.opened()
             }
@@ -490,7 +525,8 @@ class SessionModel(
                 skills = skillSections(session.skills()),
                 canRunShell = session.canRunShell(),
             )
-            if (!composerReleased) composer.read(session)
+            composer.read(session)
+            readUndelivered()
         }
         if (changed.prompt) ui = ui.copy(prompt = session.prompt())
         if ((changed.prompt || changed.transcript) && ui.prompt?.kind == PromptKind.PLAN) {
@@ -501,10 +537,10 @@ class SessionModel(
         if (changed.transcript) ui = ui.copy(catchUp = session.catchUp())
         state.value = ui
         ui.chrome?.let { chrome ->
-            val key = chrome.archived to chrome.agentId
-            if (key != agentReadKey) {
-                agentReadKey = key
-                readAgents()
+            val key = chrome.conversation to chrome.status
+            if (key != conversationReadKey) {
+                conversationReadKey = key
+                readConversations()
             }
         }
         if (ui.connection == ConnectionState.LIVE && ui.progress == null && (changed.transcript || changed.chrome || seenState.value == null)) {

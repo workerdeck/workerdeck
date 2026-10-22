@@ -20,8 +20,16 @@ struct Host {
 
 impl Host {
     fn new() -> Self {
-        let mut host =
-            Host { live: LiveSession::new(0, true, "n".into(), METRICS), effects: Vec::new(), sent: Vec::new(), opens: Vec::new() };
+        Host::showing(None)
+    }
+
+    fn showing(history: Option<i64>) -> Self {
+        let mut host = Host {
+            live: LiveSession::new(0, true, "n".into(), METRICS, history),
+            effects: Vec::new(),
+            sent: Vec::new(),
+            opens: Vec::new(),
+        };
         host.drain();
         host
     }
@@ -59,7 +67,7 @@ impl Host {
 
     fn attach(&mut self, replaying_from: i64, last_seq: i64, created_at: f64, now: f64) {
         self.frame(
-            json!({"type": "attached", "protocolVersion": 2, "replayingFrom": replaying_from, "acks": true,
+            json!({"type": "attached", "protocolVersion": 2, "replayingFrom": replaying_from, 
                 "session": {"id": "s1", "status": "running", "cwd": "/repo", "createdAt": created_at, "lastSeq": last_seq, "pendingPermissionCount": 0}}),
             now,
         );
@@ -103,6 +111,15 @@ impl Host {
             _ => acc,
         })
     }
+}
+
+// A whole capability record, as a protocol 2 gateway sends it, with `overrides` on top.
+fn caps(overrides: Value) -> Value {
+    let mut record = serde_json::to_value(wd_native::rest::ProfileEngine::Claude.capabilities()).unwrap();
+    for (key, value) in overrides.as_object().unwrap() {
+        record[key] = value.clone();
+    }
+    record
 }
 
 fn event_frame(seq: i64, body: Value) -> Value {
@@ -562,7 +579,7 @@ fn requests(effects: Vec<Effect>) -> Vec<(u64, &'static str, String)> {
     effects
         .into_iter()
         .filter_map(|effect| match effect {
-            Effect::Request { id, method, path, scoped: true } => Some((id, method, path)),
+            Effect::Request { id, method, path, scoped: true, .. } => Some((id, method, path)),
             _ => None,
         })
         .collect()
@@ -630,14 +647,14 @@ fn a_session_without_reported_models_offers_its_profile_catalog_and_switches_ove
     let mut host = Host::new();
     host.open();
     host.frame(
-        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, 
             "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "profile": "codex",
                 "model": "gpt-5.6", "effort": "high", "permissionMode": "default", "canBypassPermissions": false,
-                "capabilities": {"permissionModes": ["default", "bypassPermissions", "acceptEdits"], "reasoningEfforts": ["low", "high"]}}}),
+                "capabilities": caps(json!({"permissionModes": ["default", "bypassPermissions", "acceptEdits"], "reasoningEfforts": ["low", "high"]}))}}),
         0.0,
     );
     let catalog = host.take().into_iter().find_map(|effect| match effect {
-        Effect::Request { id, method: "GET", path, scoped: false } if path == "/profiles" => Some(id),
+        Effect::Request { id, method: "GET", path, scoped: false, .. } if path == "/profiles" => Some(id),
         _ => None,
     });
     let id = catalog.expect("the catalog is fetched once the profile is known");
@@ -669,11 +686,11 @@ fn a_session_without_reported_models_offers_its_profile_catalog_and_switches_ove
 
 #[test]
 fn a_failed_catalog_fetch_is_retried_on_the_next_attach_but_a_missing_route_is_not() {
-    let attached = json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
+    let attached = json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, 
         "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "profile": "codex"}});
     let catalog = |effects: Vec<Effect>| {
         effects.into_iter().find_map(|effect| match effect {
-            Effect::Request { id, method: "GET", path, scoped: false } if path == "/profiles" => Some(id),
+            Effect::Request { id, method: "GET", path, scoped: false, .. } if path == "/profiles" => Some(id),
             _ => None,
         })
     };
@@ -707,9 +724,9 @@ fn sleep_stays_off_from_the_send_until_the_session_answers_and_lists_flag_the_ch
     let mut host = Host::new();
     host.open();
     host.frame(
-        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, 
             "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "sdkSessionId": "sdk",
-                "capabilities": {"engineSleep": true, "attachments": ["image"]}}}),
+                "capabilities": caps(json!({"engineSleep": true, "attachments": ["image"]}))}}),
         0.0,
     );
     host.frame(event_frame(1, json!({"type": "status_changed", "status": "idle"})), 1.0);
@@ -738,110 +755,108 @@ fn sleep_stays_off_from_the_send_until_the_session_answers_and_lists_flag_the_ch
     assert_eq!(host.live.commands()[0].argument_hint.as_deref(), Some("<pr>"));
 }
 
-fn attach_archived(host: &mut Host, replaying_from: i64, last_seq: i64, epoch: i64, now: f64) {
+fn attach_past(host: &mut Host, replaying_from: i64, last_seq: i64, now: f64) {
     host.frame(
-        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": replaying_from, "acks": true,
-            "session": {"id": "s1", "status": "closed", "cwd": "/repo", "createdAt": 1.0, "lastSeq": last_seq, "epoch": epoch,
-                "pendingPermissionCount": 0, "archived": true, "supersededBy": "s2"}}),
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": replaying_from,
+            "session": {"id": "s1", "status": "closed", "cwd": "/repo", "createdAt": 1.0, "lastSeq": last_seq, "epoch": 1,
+                "pendingPermissionCount": 0, "agent": {"id": "s1", "name": "WD-Test"}}}),
         now,
     );
 }
 
 #[test]
-fn a_live_session_superseded_event_reaches_the_chrome() {
-    let mut host = Host::new();
+fn a_past_conversation_draws_read_only_and_never_offers_a_cut() {
+    let mut host = Host::showing(Some(1));
     host.open();
-    host.attach(0, 0, 1.0, 0.0);
-    host.take();
-    assert_eq!(host.live.chrome().superseded_by, None);
-    host.frame(event_frame(1, json!({"type": "session_superseded", "successor": "s2"})), 1.0);
-    assert!(host.changed().chrome);
-    assert_eq!(host.live.superseded_by(), Some("s2"));
-    assert_eq!(host.live.chrome().superseded_by.as_deref(), Some("s2"));
-    assert!(!host.live.chrome().archived);
-    assert!(host.live.state().items.is_empty());
-}
-
-#[test]
-fn an_archive_attach_names_its_successor_and_draws_read_only() {
-    let mut host = Host::new();
-    host.open();
-    attach_archived(&mut host, 0, 0, 1, 0.0);
+    attach_past(&mut host, 0, 0, 0.0);
     let chrome = host.live.chrome();
-    assert!(chrome.archived);
+    assert!(chrome.historical);
     assert!(!chrome.enabled);
-    assert_eq!(chrome.superseded_by.as_deref(), Some("s2"));
+    assert!(!chrome.can_new_conversation);
+    assert_eq!(chrome.agent_id, None);
+    assert_eq!(chrome.conversation, Some(1));
 }
 
 #[test]
-fn a_session_first_seen_archived_is_another_log() {
-    let mut host = Host::new();
+fn a_past_conversation_resumes_its_replay_on_a_reconnect() {
+    let mut host = Host::showing(Some(1));
     host.open();
-    host.attach(0, 0, 1.0, 0.0);
+    attach_past(&mut host, 0, 15, 0.0);
     host.events("basic-turn", 1.0);
     host.live.closed(2.0);
     host.live.tick(2.5);
     host.drain();
     host.open();
-    attach_archived(&mut host, 15, 40, 1, 3.0);
-    assert_eq!(host.opens.last(), Some(&0));
-    assert!(host.live.state().items.is_empty());
-}
-
-#[test]
-fn an_archive_attach_with_a_new_epoch_resets_but_the_same_epoch_resumes() {
-    let mut host = Host::new();
-    host.open();
-    attach_archived(&mut host, 0, 15, 1, 0.0);
-    host.events("basic-turn", 1.0);
-    host.live.closed(2.0);
-    host.live.tick(2.5);
-    host.drain();
-    host.open();
-    attach_archived(&mut host, 15, 15, 1, 3.0);
+    attach_past(&mut host, 15, 15, 3.0);
     assert_eq!(host.opens.last(), Some(&15));
     assert!(!host.live.state().items.is_empty());
-    host.live.closed(4.0);
-    host.live.tick(4.5);
-    host.drain();
-    host.open();
-    attach_archived(&mut host, 15, 15, 2, 5.0);
-    assert_eq!(host.opens.last(), Some(&0));
-    assert!(host.live.state().items.is_empty());
 }
 
 #[test]
-fn an_agent_session_offers_new_conversation_instead_of_clear_context() {
+fn every_live_session_offers_new_conversation_and_says_why_it_waits() {
     let mut host = Host::new();
     host.open();
     host.frame(
-        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0,
             "session": {"id": "s1", "status": "running", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0,
-                "capabilities": {"clearContext": true}, "agent": {"id": "ag", "name": "WD-Test"}}}),
+                "conversation": 2, "agent": {"id": "s1", "name": "WD-Test"}}}),
         0.0,
     );
     let chrome = host.live.chrome();
-    assert!(!chrome.can_clear_context);
-    assert_eq!(chrome.agent_id.as_deref(), Some("ag"));
+    assert!(chrome.can_new_conversation);
+    assert_eq!(chrome.conversation, Some(2));
+    assert_eq!(chrome.agent_id.as_deref(), Some("s1"));
     assert_eq!(chrome.agent_name.as_deref(), Some("WD-Test"));
     assert_eq!(chrome.new_conversation_blocked.as_deref(), Some("Finish or stop the current turn first"));
     assert_eq!(host.live.archived_view(None), None);
+    let mut plain = Host::new();
+    plain.open();
+    plain.attach(0, 0, 1.0, 0.0);
+    assert!(plain.live.chrome().can_new_conversation);
 }
 
 #[test]
-fn an_archived_agent_conversation_reads_as_deleted_once_the_agents_are_known() {
-    use wd_native::vm::conversations::{AgentBinding, ArchivedKind};
+fn a_past_conversation_names_the_current_one_and_a_closed_session() {
+    use wd_native::vm::conversations::{ArchivedKind, CurrentConversation};
+    let mut host = Host::showing(Some(1));
+    host.open();
+    attach_past(&mut host, 0, 0, 0.0);
+    assert_eq!(host.live.archived_view(None).unwrap().kind, ArchivedKind::Past);
+    let moved = CurrentConversation { conversation: Some(3), retired: None };
+    assert_eq!(host.live.archived_view(Some(&moved)).unwrap().current, Some(3));
+    let closed = CurrentConversation { conversation: None, retired: Some(true) };
+    assert_eq!(host.live.archived_view(Some(&closed)).unwrap().kind, ArchivedKind::Deleted);
+}
+
+#[test]
+fn a_refused_prompt_is_handed_back_once() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.live.send("hello".into(), Vec::new());
+    host.drain();
+    host.take();
+    host.frame(json!({"type": "ack", "clientId": "n.1", "notDelivered": true}), 1.0);
+    assert!(host.changed().chrome);
+    let back = host.live.take_undelivered();
+    assert_eq!(back.iter().map(|p| p.text.as_str()).collect::<Vec<_>>(), ["hello"]);
+    assert!(host.live.take_undelivered().is_empty());
+}
+
+#[test]
+fn a_kill_names_the_conversation_it_was_meant_for() {
     let mut host = Host::new();
     host.open();
     host.frame(
-        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0, "acks": true,
-            "session": {"id": "s1", "status": "closed", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0,
-                "archived": true, "agent": {"id": "ag", "name": "WD-Test"}}}),
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": 0,
+            "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "conversation": 4}}),
         0.0,
     );
-    assert_eq!(host.live.chrome().agent_id, None);
-    assert_eq!(host.live.archived_view(None).unwrap().kind, ArchivedKind::Past);
-    assert_eq!(host.live.archived_view(Some(&[])).unwrap().kind, ArchivedKind::Deleted);
-    let alive = [AgentBinding { id: "ag".into(), session_id: Some("s2".into()) }];
-    assert_eq!(host.live.archived_view(Some(&alive)).unwrap().current.as_deref(), Some("s2"));
+    host.take();
+    host.live.kill_shell("sh_1");
+    let generation = host.live.take_effects().into_iter().find_map(|effect| match effect {
+        Effect::Request { method: "POST", generation, .. } => Some(generation),
+        _ => None,
+    });
+    assert_eq!(generation, Some(Some(4)));
 }

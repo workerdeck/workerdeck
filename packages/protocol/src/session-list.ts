@@ -181,14 +181,10 @@ export function sessionKey(row: Pick<SessionRow, 'hostId' | 'info'>): string {
   return `${row.hostId}:${row.info.id}`
 }
 
-// A stored `groupBy: 'gateway'` predates the merge into project groups, which name their gateway once there is more than one.
-// A stored `collapsedTeams` is dropped, not migrated: it held the inverse of `expandedTeams`.
+// A stored value this reader does not know falls back to the default; unknown keys stay unread.
 export function normalizeViewConfig(stored: Partial<ViewConfig> | undefined): ViewConfig {
-  const { collapsedTeams: _dropped, ...config } = { ...DEFAULT_VIEW_CONFIG, ...stored } as ViewConfig & { collapsedTeams?: unknown }
-  const groupBy = config.groupBy as string
-  return GROUP_BY.includes(groupBy as GroupBy)
-    ? config
-    : { ...config, groupBy: groupBy === 'gateway' ? 'project' : DEFAULT_VIEW_CONFIG.groupBy }
+  const config = { ...DEFAULT_VIEW_CONFIG, ...stored }
+  return GROUP_BY.includes(config.groupBy) ? config : { ...config, groupBy: DEFAULT_VIEW_CONFIG.groupBy }
 }
 
 export function adaptersOf(rows: readonly SessionRow[]): string[] {

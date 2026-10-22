@@ -11,9 +11,12 @@ final class McpServersModel {
   private(set) var revision = 0
   private let servers: McpServers
   private let transport: HostTransport
+  // The conversation the screen is attached to: an action names it, and a stale one is refused.
+  private let generation: Int64
 
-  init(servers: McpServers, transport: @escaping HostTransport) {
+  init(servers: McpServers, generation: Int64, transport: @escaping HostTransport) {
     self.servers = servers
+    self.generation = generation
     self.transport = transport
   }
 
@@ -35,7 +38,7 @@ final class McpServersModel {
   }
 
   func perform(_ name: String, _ action: McpAction) async {
-    if let refetch = servers.actionAnswered(answer: await transport(servers.actionCall(server: name, action: action))) {
+    if let refetch = servers.actionAnswered(answer: await transport(servers.actionCall(server: name, action: action, generation: generation))) {
       servers.answered(answer: await transport(refetch))
     }
     revision &+= 1

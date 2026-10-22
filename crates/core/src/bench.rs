@@ -215,7 +215,7 @@ pub fn dump_vt(shell_path: &str) -> String {
     out
 }
 
-const ATTACHED: &str = r#"{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","status":"running","cwd":"/w","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"#;
+const ATTACHED: &str = r#"{"type":"attached","protocolVersion":2,"replayingFrom":0,"session":{"id":"s1","status":"running","cwd":"/w","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"#;
 const VISIBLE_ROWS: usize = 20;
 
 // The FFI workload without the FFI: what `LiveSession` itself costs per frame, so a device run can tell binding
@@ -227,7 +227,7 @@ pub fn run_live(session_path: &str) -> String {
     let data = std::fs::read_to_string(session_path).expect("fixture");
     let lines: Vec<&str> = data.lines().filter(|line| !line.is_empty()).collect();
     let (replay, tail) = lines.split_at(lines.len() - STREAM_TAIL);
-    let mut live = LiveSession::new(0, true, "bench".into(), Metrics { cell: 19.8, line: 44.0, width: 1080.0, font_size: 32.0 });
+    let mut live = LiveSession::new(0, true, "bench".into(), Metrics { cell: 19.8, line: 44.0, width: 1080.0, font_size: 32.0 }, None);
     live.opened();
     live.received(ATTACHED, 0.0);
     live.take_effects();

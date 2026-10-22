@@ -1,6 +1,6 @@
 use crate::controller::replay::{ReplayHold, initial_replay_target};
 use crate::controller::seq_index::TranscriptSeqIndex;
-use crate::controller::session::{self as connection, SessionConnection, Signal};
+use crate::controller::session::{self as connection, SessionConnection, Signal, Undelivered};
 use crate::controller::shell::{ShellAction, ShellSession};
 use crate::controller::transcript::{self as view, Navigation, TranscriptView, Update};
 use crate::expansion::TermPress;
@@ -14,7 +14,9 @@ use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
 use crate::vm::composer_lists::{Skill, SlashCommand, skills, slash_commands};
-use crate::vm::conversations::{AgentBinding, ArchivedView, archived_view, clear_context_offered, new_conversation_gate};
+use crate::vm::conversations::{
+    ArchivedView, CurrentConversation, SessionAddress, archived_view, clear_context_offered, new_conversation_gate,
+};
 use crate::vm::pickers::{ModePicker, ModelPicker, PickerSource, mode_picker, model_picker};
 use crate::vm::prompt::{Prompt, PromptBody, Selection, answered_input, prompt_for};
 use crate::vm::session_chrome::{SessionChrome, session_chrome};
@@ -53,8 +55,8 @@ pub enum Effect {
     Close,
     WakeAt(f64),
     // A REST call the platform answers with `responded`; `path` is under the session's own (`/sessions/:id`) when
-    // `scoped`, else under the API base.
-    Request { id: u64, method: &'static str, path: String, scoped: bool },
+    // `scoped`, else under the API base. `generation` rides as the conversation header on a mutating call.
+    Request { id: u64, method: &'static str, path: String, scoped: bool, generation: Option<i64> },
     OpenSubagent { task_id: String },
     OpenShell { shell_id: String },
     Changed(Changed),
@@ -105,14 +107,16 @@ pub struct LiveSession {
     catalog: Vec<ModelOption>,
     catalog_requested: bool,
     finished: bool,
-    superseded_by: Option<String>,
+    history: Option<i64>,
+    undelivered: Vec<Undelivered>,
     effects: Vec<Effect>,
 }
 
 impl LiveSession {
-    pub fn new(after_seq: i64, reconnect: bool, nonce: String, metrics: Metrics) -> Self {
+    // `history`: a past conversation's number, shown read-only; None is the session's current conversation.
+    pub fn new(after_seq: i64, reconnect: bool, nonce: String, metrics: Metrics, history: Option<i64>) -> Self {
         let mut session = LiveSession {
-            conn: SessionConnection::new(after_seq, reconnect, nonce),
+            conn: SessionConnection::new(after_seq, reconnect, nonce, history),
             state: TranscriptState::default(),
             buffer: None,
             hold: None,
@@ -147,7 +151,8 @@ impl LiveSession {
             catalog: Vec::new(),
             catalog_requested: false,
             finished: false,
-            superseded_by: None,
+            history,
+            undelivered: Vec::new(),
             effects: Vec::new(),
         };
         session.pump();
@@ -259,37 +264,48 @@ impl LiveSession {
         let effort = self.picker_source().shown_effort();
         let mut chrome = session_chrome(&self.state, self.init_model(), self.can_run_shell(), self.queued() as u32, effort);
         chrome.can_sleep &= self.sleep_sent_at != Some(self.state.last_seq);
-        chrome.archived = self.archived();
-        chrome.enabled &= !chrome.archived;
-        chrome.superseded_by = self.superseded_by.clone();
+        chrome.historical = self.historical();
+        chrome.enabled &= !chrome.historical;
+        chrome.conversation = self.conversation();
         if let Some(info) = self.session_info() {
-            chrome.can_clear_context &= clear_context_offered(info);
+            let status = serde_json::from_value(Value::String(chrome.status.clone())).unwrap_or(info.status);
+            let live = SessionInfo {
+                status,
+                sdk_session_id: self.state.sdk_session_id.clone().or_else(|| info.sdk_session_id.clone()),
+                ..info.clone()
+            };
+            chrome.can_new_conversation = !chrome.historical && clear_context_offered(&live);
             chrome.agent_name = info.agent.as_ref().map(|agent| agent.name.clone());
-            chrome.agent_id = info.agent.as_ref().filter(|_| !chrome.archived).map(|agent| agent.id.clone());
-            if chrome.agent_id.is_some() {
-                let status = serde_json::from_value(Value::String(chrome.status.clone())).unwrap_or(info.status);
-                let live = SessionInfo {
-                    status,
-                    sdk_session_id: self.state.sdk_session_id.clone().or_else(|| info.sdk_session_id.clone()),
-                    ..info.clone()
-                };
+            chrome.agent_id = info.agent.as_ref().filter(|_| !chrome.historical).map(|agent| agent.id.clone());
+            if chrome.can_new_conversation {
                 chrome.new_conversation_blocked = new_conversation_gate(Some(&live)).reason;
             }
         }
         chrome
     }
 
-    pub fn archived_view(&self, agents: Option<&[AgentBinding]>) -> Option<ArchivedView> {
-        archived_view(self.session_info()?, agents)
+    // `current` is the session's own conversations list once read: None never calls the session closed.
+    pub fn archived_view(&self, current: Option<&CurrentConversation>) -> Option<ArchivedView> {
+        let info = self.session_info()?;
+        archived_view(&SessionAddress { id: info.id.clone(), conversation: self.history }, Some(info), current)
     }
 
-    pub fn archived(&self) -> bool {
-        self.session_info().is_some_and(|info| info.archived == Some(true))
+    pub fn historical(&self) -> bool {
+        self.history.is_some()
     }
 
-    // The conversation that replaced this one: from the live `session_superseded`, or an archive attach naming it.
-    pub fn superseded_by(&self) -> Option<&str> {
-        self.superseded_by.as_deref()
+    pub fn history(&self) -> Option<i64> {
+        self.history
+    }
+
+    // The token every mutating call for this session carries: the conversation this screen attached to.
+    pub fn conversation(&self) -> Option<i64> {
+        self.conn.conversation()
+    }
+
+    // Prompts the gateway refused before the engine saw them, oldest first: the sender's to resubmit.
+    pub fn take_undelivered(&mut self) -> Vec<Undelivered> {
+        std::mem::take(&mut self.undelivered)
     }
 
     pub fn commands(&self) -> Vec<SlashCommand> {
@@ -478,6 +494,7 @@ impl LiveSession {
 
     fn request(&mut self, pending: Pending) {
         let mut scoped = true;
+        let generation = matches!(pending, Pending::Kill(_)).then(|| self.conversation()).flatten();
         let (method, path) = match &pending {
             Pending::Result(call_id) => {
                 let Some(seq) = self.result_seq(call_id) else {
@@ -495,7 +512,7 @@ impl LiveSession {
         };
         self.next_request += 1;
         self.requests.insert(self.next_request, pending);
-        self.effects.push(Effect::Request { id: self.next_request, method, path, scoped });
+        self.effects.push(Effect::Request { id: self.next_request, method, path, scoped, generation });
     }
 
     // A 404 on a shell means the gateway no longer knows it; any other failure leaves the row as it was, and a
@@ -787,6 +804,10 @@ impl LiveSession {
                     self.verify(shell_id);
                 }
             }
+            Signal::Undelivered(prompt) => {
+                self.undelivered.push(prompt);
+                self.changed.chrome = true;
+            }
             Signal::Finished => {
                 self.finished = true;
                 self.changed.chrome = true;
@@ -812,9 +833,6 @@ impl LiveSession {
             return true;
         }
         let held = held.session.as_deref();
-        if frame.session.archived == Some(true) && held.and_then(|session| session.archived) != Some(true) {
-            return true;
-        }
         let epoch = held.and_then(|session| session.epoch);
         if frame.session.epoch.is_some() && epoch.is_some() && frame.session.epoch != epoch {
             return true;
@@ -833,11 +851,6 @@ impl LiveSession {
             return;
         }
         self.end_hold();
-        if frame.session.archived == Some(true)
-            && let Some(successor) = &frame.session.superseded_by
-        {
-            self.superseded_by = Some(successor.clone());
-        }
         seed_from_session_info(&mut self.state, &frame.session);
         self.dirty = true;
         self.changed.chrome = true;
@@ -867,10 +880,6 @@ impl LiveSession {
                 }
             }
             Body::SystemInit { model, .. } if self.init_model.is_none() => self.init_model = Some(model.clone()),
-            Body::SessionSuperseded(successor) => {
-                self.superseded_by = Some(successor.clone());
-                self.changed.chrome = true;
-            }
             _ => {}
         }
         let seq = event.seq;

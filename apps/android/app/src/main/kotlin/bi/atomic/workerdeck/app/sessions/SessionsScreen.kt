@@ -119,7 +119,7 @@ fun SessionsScreen(
     model: SessionsModel,
     gateways: List<Gateway>,
     onOpen: (hostId: String, sessionId: String, title: String, entry: Entry?) -> Unit,
-    onOpenPast: (hostId: String, sessionId: String, title: String) -> Unit,
+    onOpenPast: (hostId: String, sessionId: String, title: String, conversation: Long) -> Unit,
     onAdd: () -> Unit,
     onForget: (Gateway) -> Unit,
     onNew: (hostId: String, agent: Boolean) -> Unit,
@@ -130,6 +130,7 @@ fun SessionsScreen(
     val scope = rememberCoroutineScope()
     var deleting by remember { mutableStateOf<ListRow?>(null) }
     var history by remember { mutableStateOf<ConversationsTarget?>(null) }
+    val discard by model.discard.collectAsStateWithLifecycle()
     var pastOpen by remember { mutableStateOf(false) }
     LaunchedEffect(ui.notice) {
         ui.notice?.let {
@@ -184,12 +185,12 @@ fun SessionsScreen(
                                     ui.avatars,
                                     onOpen = { onOpen(row.hostId, row.sessionId, row.title, it) },
                                     onOpenMember = { onOpen(it.hostId, it.sessionId, it.title, null) },
-                                    onStopStep = { model.stopStep(row.hostId, row.sessionId, it) },
+                                    onStopStep = { model.stopStep(row.hostId, row.sessionId, row.conversation, it) },
                                     onToggleTeam = { model.toggleTeam(row.hostId, row.sessionId) },
-                                    onSleep = { model.sleep(row.hostId, row.sessionId) },
-                                    onNewConversation = { model.restart(row) },
+                                    onSleep = { model.sleep(row.hostId, row.sessionId, row.conversation) },
+                                    onNewConversation = { model.newConversation(row) },
                                     onConversations = {
-                                        history = row.agentId?.let { ConversationsTarget(row.hostId, it, row.agent ?: row.title, retired = false) }
+                                        history = ConversationsTarget(row.hostId, row.sessionId, row.agent ?: row.title, row.title, retired = false)
                                     },
                                     onDelete = { deleting = row },
                                 )
@@ -215,13 +216,24 @@ fun SessionsScreen(
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
         )
     }
+    discard?.let { pending ->
+        AlertDialog(
+            onDismissRequest = model::discardDismissed,
+            title = { Text(pending.confirmation.title) },
+            text = { Text(pending.confirmation.detail) },
+            confirmButton = {
+                TextButton(onClick = { model.discardAndCut(pending) }) { Text(pending.confirmation.confirm, color = Wd.colors.red) }
+            },
+            dismissButton = { TextButton(onClick = model::discardDismissed) { Text("Cancel") } },
+        )
+    }
     if (pastOpen) {
         PastAgentsSheet(
             ui.pastAgents,
             showGateway = { id -> gateways.takeIf { it.size > 1 }?.firstOrNull { it.id == id }?.name },
             onPick = { entry ->
                 pastOpen = false
-                history = ConversationsTarget(entry.hostId, entry.agent.id, entry.agent.name, retired = true)
+                history = ConversationsTarget(entry.hostId, entry.agent.id, entry.agent.name, null, retired = true)
             },
             onDismiss = { pastOpen = false },
         )
@@ -229,14 +241,14 @@ fun SessionsScreen(
     history?.let { target ->
         ConversationsSheet(
             target,
-            load = { model.conversations(target.hostId, target.agentId) },
-            onOpen = { sessionId, title ->
+            load = { model.conversations(target.hostId, target.sessionId, target.title) },
+            onOpen = { title ->
                 history = null
-                onOpen(target.hostId, sessionId, title, null)
+                onOpen(target.hostId, target.sessionId, title, null)
             },
-            onOpenPast = { sessionId, title ->
+            onOpenPast = { n, title ->
                 history = null
-                onOpenPast(target.hostId, sessionId, title)
+                onOpenPast(target.hostId, target.sessionId, title, n)
             },
             onDismiss = { history = null },
         )
@@ -451,7 +463,7 @@ private fun SessionRow(
             Modifier
                 .fillMaxWidth()
                 .testTag("session-row")
-                .combinedClickable(onClick = { onOpen(null) }, onLongClick = if (row.canSleep || agent) ({ menu = true }) else null)
+                .combinedClickable(onClick = { onOpen(null) }, onLongClick = { menu = true })
                 .alpha(if (!row.asleep) 1f else if (agent) 0.6f else 0.55f),
         ) {
             if (member) {
@@ -506,7 +518,7 @@ private fun SessionRow(
             HorizontalDivider(Modifier.padding(start = GUTTER + indent + column + 10.dp), thickness = 0.5.dp, color = colors.separator)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, offset = DpOffset(GUTTER + indent, 0.dp)) {
-            if (agent) {
+            if (row.canNewConversation) {
                 DropdownMenuItem(
                     text = {
                         Column {
@@ -520,14 +532,14 @@ private fun SessionRow(
                         onNewConversation()
                     },
                 )
-                DropdownMenuItem(
-                    text = { Text("Conversations…") },
-                    onClick = {
-                        menu = false
-                        onConversations()
-                    },
-                )
             }
+            DropdownMenuItem(
+                text = { Text("Conversations…") },
+                onClick = {
+                    menu = false
+                    onConversations()
+                },
+            )
             if (row.canSleep) {
                 DropdownMenuItem(
                     text = { Text("Sleep") },

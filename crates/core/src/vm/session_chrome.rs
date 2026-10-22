@@ -16,7 +16,8 @@ pub struct SessionChrome {
     pub permission_mode: Option<String>,
     pub mode_label: Option<String>,
     pub can_run_shell: bool,
-    pub can_clear_context: bool,
+    // A cut is offered to every live session on a gateway, named or not; `new_conversation_blocked` says why it waits.
+    pub can_new_conversation: bool,
     pub queued: u32,
     pub can_sleep: bool,
     // When (epoch ms) Send now shows: `SEND_NOW_AFTER_MS` after the oldest running top-level call the engine can move
@@ -24,9 +25,8 @@ pub struct SessionChrome {
     pub send_now_at: Option<i64>,
     pub cwd: Option<String>,
     pub attachment_kinds: Vec<String>,
-    pub archived: bool,
-    pub superseded_by: Option<String>,
-    // An agent's current conversation: New conversation replaces Clear context, and says why while it waits.
+    pub historical: bool,
+    pub conversation: Option<i64>,
     pub agent_id: Option<String>,
     pub agent_name: Option<String>,
     pub new_conversation_blocked: Option<String>,
@@ -83,7 +83,7 @@ pub fn session_chrome(
         mode_label: permission_mode.as_deref().and_then(mode_short_label).map(str::to_owned),
         permission_mode,
         can_run_shell,
-        can_clear_context: state.capabilities.as_ref().is_some_and(|c| c.clear_context == Some(true)),
+        can_new_conversation: false,
         queued,
         can_sleep: state.capabilities.as_ref().is_some_and(|c| c.engine_sleep == Some(true))
             && state.status == Some(SessionStatus::Idle)
@@ -111,8 +111,8 @@ pub fn session_chrome(
                     .collect()
             })
             .unwrap_or_default(),
-        archived: false,
-        superseded_by: None,
+        historical: false,
+        conversation: None,
         agent_id: None,
         agent_name: None,
         new_conversation_blocked: None,
@@ -278,18 +278,5 @@ mod tests {
         assert!(chrome.can_run_shell);
         assert_eq!(chrome.queued, 3);
         assert_eq!(with_status(None).model, None);
-    }
-
-    #[test]
-    fn clear_context_follows_the_capability() {
-        use crate::rest::EngineCapabilities;
-        let with = |clear: Option<bool>| TranscriptState {
-            capabilities: Some(EngineCapabilities { clear_context: clear, ..EngineCapabilities::default() }),
-            ..TranscriptState::default()
-        };
-        assert!(session_chrome(&with(Some(true)), None, false, 0, None).can_clear_context);
-        assert!(!session_chrome(&with(Some(false)), None, false, 0, None).can_clear_context);
-        assert!(!session_chrome(&with(None), None, false, 0, None).can_clear_context);
-        assert!(!with_status(None).can_clear_context);
     }
 }

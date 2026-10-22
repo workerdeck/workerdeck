@@ -218,6 +218,13 @@ describe('live activity projection', () => {
     expect(contentHash(one)).toBe(contentHash(two))
     expect(contentHash({ ...one, headline: 'different' })).not.toBe(contentHash(one))
   })
+
+  it('names the conversation its request belongs to, without spending a push on it', () => {
+    const state = projectContentState({ info: session({ conversation: 3 }), startedAtMs: STARTED })
+    expect(state.conversation).toBe(3)
+    expect(contentHash(state)).toBe(contentHash({ ...state, conversation: 4 }))
+    expect(projectContentState({ info: session(), startedAtMs: STARTED })).not.toHaveProperty('conversation')
+  })
 })
 
 describe('live activity push', () => {

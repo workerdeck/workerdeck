@@ -9,7 +9,6 @@ import WorkerDeckKit
 struct CoreComposer: View {
   let model: CoreSessionModel
   let scroll: TranscriptScrollModel
-  private let carry: ComposerCarry?
 
   @State private var composer: ComposerModel
   @State private var draft = ""
@@ -25,21 +24,17 @@ struct CoreComposer: View {
   private static let cell: CGFloat = 32
   private static let gap: CGFloat = 8
 
-  init(model: CoreSessionModel, scroll: TranscriptScrollModel, services: CoreComposerServices, carry: ComposerCarry? = nil) {
+  init(model: CoreSessionModel, scroll: TranscriptScrollModel, services: CoreComposerServices) {
     self.model = model
     self.scroll = scroll
-    self.carry = carry
-    let carried = carry?.model.flatMap { $0.core === model.composer ? $0 : nil }
-    let composer = carried ?? ComposerModel(core: model.composer, services: services)
-    carry?.model = composer
-    _composer = State(initialValue: composer)
-    _draft = State(initialValue: carry?.draft ?? "")
+    _composer = State(initialValue: ComposerModel(core: model.composer, services: services))
   }
 
   var body: some View {
     _ = model.ui.composer.revision
     let view = composer.view(draft: draft, now: now)
     return VStack(spacing: 0) {
+      returnedBar
       if view.suggestionsOpen {
         PromptSuggestionList(suggestions: composer.suggestions, onAccept: accept)
       }
@@ -107,7 +102,21 @@ struct CoreComposer: View {
       apply(composerInsert(draft: draft, text: text))
     }
     .task { await composer.pollPeers() }
-    .onChange(of: draft) { _, text in carry?.draft = text }
+    .onChange(of: model.ui.composer.reuploadCount) { _, _ in composer.reupload(model.ui.composer.reuploads) }
+  }
+
+  // The oldest returned prompt, until the reader inserts it (into whatever draft is there) or dismisses it.
+  @ViewBuilder
+  var returnedBar: some View {
+    if let prompt = model.ui.composer.returned.first {
+      CoreReturnedBar(
+        prompt: prompt, waiting: model.ui.composer.returned.count - 1,
+        onInsert: {
+          apply(composerInsert(draft: draft, text: prompt.text))
+          model.settleReturned(prompt.id)
+        },
+        onDismiss: { model.settleReturned(prompt.id) })
+    }
   }
 
   @ViewBuilder
@@ -292,5 +301,41 @@ private struct ComposerGlyphCellStyle: ButtonStyle {
           .overlay(shape.fill(configuration.isPressed ? TerminalPalette.pressedCell : .clear))
           .overlay(shape.strokeBorder(filled ? TerminalPalette.cellStroke : .clear, lineWidth: 0.7)))
       .contentShape(Rectangle())
+  }
+}
+
+// A prompt the gateway handed back, above the composer: its text, why, and Insert or Dismiss. Attachments it carried
+// are not kept once sent, so the bar says to add them again.
+struct CoreReturnedBar: View {
+  let prompt: ReturnedPrompt
+  let waiting: Int
+  let onInsert: () -> Void
+  let onDismiss: () -> Void
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 8) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(prompt.uncertain ? "This message may not have arrived" : "This message did not arrive")
+          .font(.caption.weight(.semibold))
+        Text(prompt.text).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+        if prompt.attachments > 0 || waiting > 0 {
+          Text(notes).font(.caption2).foregroundStyle(.tertiary)
+        }
+      }
+      Spacer(minLength: 0)
+      Button("Insert", action: onInsert).font(.caption).buttonStyle(.bordered)
+      Button("Dismiss", action: onDismiss).font(.caption)
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("returned-prompt")
+  }
+
+  private var notes: String {
+    [
+      prompt.attachments > 0 ? "\(prompt.attachments) attachment(s) not kept: add them again" : nil,
+      waiting > 0 ? "\(waiting) more waiting" : nil,
+    ].compactMap { $0 }.joined(separator: " \u{00B7} ")
   }
 }

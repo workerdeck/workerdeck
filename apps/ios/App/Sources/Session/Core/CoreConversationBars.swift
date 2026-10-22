@@ -1,13 +1,12 @@
 import SwiftUI
 @preconcurrency import WorkerDeckSession
 
-// The agent-conversation lines above a transcript: a read-only conversation's banner, a first message a crash may
-// have kept from the engine, a new conversation that did not start, and the wait for one that is starting.
+// The conversation lines above a transcript: a past conversation's banner, a first message whose delivery is unknown,
+// and a new conversation that did not start.
 struct CoreConversationBars: View {
   let archived: ArchivedView?
-  let notice: AgentNotice?
-  let starting: Bool
-  let goToCurrent: ((String) -> Void)?
+  let notice: ConversationNotice?
+  let goToCurrent: (() -> Void)?
   let settle: (Bool) -> Void
   let retryStartNow: () -> Void
 
@@ -20,14 +19,14 @@ struct CoreConversationBars: View {
           if let note = archived.note { Text(note).foregroundStyle(.tertiary) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        if let current = archived.current, let goToCurrent {
-          Button("Go to current") { goToCurrent(current) }
+        if archived.current != nil, let goToCurrent {
+          Button("Go to current") { goToCurrent() }
             .buttonStyle(.bordered)
             .controlSize(.small)
         }
       }
     }
-    if let text = notice?.undelivered {
+    if let text = notice?.uncertainPrompt {
       bar(identifier: "undelivered-bar") {
         VStack(alignment: .leading, spacing: 2) {
           Text("The first message may not have been delivered")
@@ -48,14 +47,6 @@ struct CoreConversationBars: View {
         Button("Retry start", action: retryStartNow).buttonStyle(.bordered).controlSize(.small)
       }
     }
-    if starting {
-      Text("Starting a new conversation…")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity)
-        .padding(.top, 8)
-        .accessibilityIdentifier("handover-starting")
-    }
   }
 
   private func bar<Content: View>(identifier: String, @ViewBuilder _ content: () -> Content) -> some View {
@@ -69,5 +60,46 @@ struct CoreConversationBars: View {
       .padding(.top, 6)
       .accessibilityElement(children: .contain)
       .accessibilityIdentifier(identifier)
+  }
+}
+
+// The asks around a cut: discard input the engine cannot confirm, settle a first message of unknown delivery, and
+// delete a named session.
+struct CoreConversationDialogs: ViewModifier {
+  @Binding var discard: DiscardConfirmation?
+  @Binding var settleCut: Int64?
+  @Binding var confirmDelete: Bool
+  let agentName: String?
+  let onDiscard: (DiscardConfirmation) -> Void
+  let onSettle: (Bool, Int64) -> Void
+  let onDelete: () -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .confirmationDialog(
+        discard?.title ?? "", isPresented: Binding(get: { discard != nil }, set: { if !$0 { discard = nil } }),
+        titleVisibility: .visible, presenting: discard
+      ) { confirmation in
+        Button(confirmation.confirm, role: .destructive) { onDiscard(confirmation) }
+      } message: { confirmation in
+        Text(confirmation.detail)
+      }
+      .confirmationDialog(
+        "The first message may not have arrived",
+        isPresented: Binding(get: { settleCut != nil }, set: { if !$0 { settleCut = nil } }),
+        titleVisibility: .visible, presenting: settleCut
+      ) { n in
+        Button("Send again") { onSettle(true, n) }
+        Button("Dismiss", role: .destructive) { onSettle(false, n) }
+      } message: { _ in
+        Text("A new conversation waits until you decide on it.")
+      }
+      .confirmationDialog(
+        deleteAgentTitle(name: agentName ?? "this agent"), isPresented: $confirmDelete, titleVisibility: .visible
+      ) {
+        Button("Delete agent", role: .destructive, action: onDelete)
+      } message: {
+        Text(deleteAgentMessage(name: agentName ?? "This agent"))
+      }
   }
 }

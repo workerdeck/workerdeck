@@ -1,8 +1,7 @@
 export type Watermark = {
   itemCount: number
   activity: number
-  // Optional because a mark persisted before prose counting has none; `unseenCount` reads that as caught up.
-  prose?: number
+  prose: number
   turns: number
   seenAt: number
 }
@@ -26,7 +25,8 @@ export class Watermarks {
 
   constructor(store: WatermarkStore) {
     this.#store = store
-    this.#cache = { ...store.read() }
+    // A stored mark of another shape is dropped: its session reads as caught up until the next visit marks it.
+    this.#cache = Object.fromEntries(Object.entries(store.read() ?? {}).filter(([, mark]) => typeof mark?.prose === 'number'))
   }
 
   get(hostId: string, sessionId: string): Watermark | undefined {
@@ -48,7 +48,7 @@ export class Watermarks {
     const next: Watermark = {
       itemCount: Math.max(previous?.itemCount ?? 0, seen.itemCount ?? 0),
       activity: Math.max(previous?.activity ?? 0, seen.activity ?? 0),
-      prose: seen.prose === undefined ? previous?.prose : Math.max(previous?.prose ?? 0, seen.prose),
+      prose: Math.max(previous?.prose ?? 0, seen.prose ?? 0),
       turns: Math.max(previous?.turns ?? 0, seen.turns ?? 0),
       seenAt: now,
     }
@@ -91,5 +91,5 @@ export function unseenCount(mark: Watermark | undefined, info: { proseCount?: nu
   if (!mark || info.proseCount === undefined) {
     return 0
   }
-  return Math.max(0, info.proseCount - (mark.prose ?? info.proseCount))
+  return Math.max(0, info.proseCount - mark.prose)
 }

@@ -35,16 +35,17 @@ impl Bookmarks {
         Arc::new(Bookmarks { inner: Mutex::new(bookmarks::Bookmarks::from_json(json.as_deref())) })
     }
 
-    pub fn for_session(&self, host_id: String, session_id: String) -> Vec<String> {
-        self.marks().for_session(&host_id, &session_id).to_vec()
+    // Marks belong to one conversation of the session: `conversation` is the one the screen shows.
+    pub fn for_session(&self, host_id: String, session_id: String, conversation: i64) -> Vec<String> {
+        self.marks().for_session(&host_id, &session_id, conversation).to_vec()
     }
 
-    pub fn contains(&self, host_id: String, session_id: String, item_id: String) -> bool {
-        self.marks().contains(&host_id, &session_id, &item_id)
+    pub fn contains(&self, host_id: String, session_id: String, conversation: i64, item_id: String) -> bool {
+        self.marks().contains(&host_id, &session_id, conversation, &item_id)
     }
 
-    pub fn toggle(&self, host_id: String, session_id: String, item_id: String) -> bool {
-        self.marks().toggle(&host_id, &session_id, &item_id)
+    pub fn toggle(&self, host_id: String, session_id: String, conversation: i64, item_id: String) -> bool {
+        self.marks().toggle(&host_id, &session_id, conversation, &item_id)
     }
 
     pub fn remove_host(&self, host_id: String) -> bool {

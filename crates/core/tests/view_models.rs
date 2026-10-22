@@ -9,7 +9,7 @@ use wd_native::rest::{AgentInfo, ByModel, ChecklistItem, Entries, ModelOption, S
 use wd_native::transcript::{
     TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
-use wd_native::vm::conversations::{self, ConversationSelection};
+use wd_native::vm::conversations::{self, CurrentConversation, SessionAddress};
 use wd_native::vm::session_list::{self as sl, CustomGroup, SessionRow, ViewConfig};
 use wd_native::vm::status_label::StatusLabelRead;
 use wd_native::vm::watermarks::{Watermark, Watermarks};
@@ -228,7 +228,7 @@ fn usage_fn(fn_name: &str, a: &Args) -> Value {
 fn watermarks_fn(fn_name: &str, a: &Args) -> Value {
     match fn_name {
         "watermarkScript" => {
-            let mut marks = Watermarks::new(a.get::<Entries<Watermark>>(0));
+            let mut marks = Watermarks::from_json(Some(&a.get::<Value>(0).to_string()));
             let mut writes = Vec::new();
             let mut results = Vec::new();
             for op in a.raw(1).as_array().unwrap() {
@@ -399,16 +399,10 @@ fn transcript_fn(fn_name: &str, a: &Args) -> Value {
 
 fn conversations_fn(fn_name: &str, a: &Args) -> Value {
     match fn_name {
-        "sessionListed" => out(conversations::session_listed(&a.info(0))),
-        "selectionOf" => out(conversations::selection_of(&a.str(0).unwrap(), &a.info(1))),
-        "followTarget" => {
-            let selection: ConversationSelection = a.get(0);
-            let rows: Vec<SessionRow> = a.get(1);
-            out(conversations::follow_target(&selection, &rows))
-        }
         "archivedView" => {
-            let agents: Option<Vec<conversations::AgentBinding>> = a.opt(1);
-            out(conversations::archived_view(&a.info(0), agents.as_deref()))
+            let address: SessionAddress = a.get(0);
+            let current: Option<CurrentConversation> = a.opt(2);
+            out(conversations::archived_view(&address, Some(&a.info(1)), current.as_ref()))
         }
         "newConversationGate" => out(conversations::new_conversation_gate(Some(&a.info(0)))),
         "clearContextOffered" => out(conversations::clear_context_offered(&a.info(0))),

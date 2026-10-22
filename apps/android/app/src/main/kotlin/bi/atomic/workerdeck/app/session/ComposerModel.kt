@@ -8,6 +8,7 @@ import bi.atomic.workerdeck.core.ffi.ComposerView
 import bi.atomic.workerdeck.core.ffi.DraftEdit
 import bi.atomic.workerdeck.core.ffi.HttpAnswer
 import bi.atomic.workerdeck.core.ffi.Outgoing
+import bi.atomic.workerdeck.core.ffi.Reupload
 import bi.atomic.workerdeck.core.ffi.Session
 import bi.atomic.workerdeck.core.ffi.Suggestion
 import bi.atomic.workerdeck.core.ffi.TokenSpan
@@ -35,7 +36,7 @@ data class ComposerUi(
 )
 
 // The core `Composer` plus what only the app can do: wait, move bytes, keep thumbnails. Every rule is the core's.
-class ComposerModel(sessionId: String, private val transport: Transport, private var scope: CoroutineScope) : AutoCloseable {
+class ComposerModel(sessionId: String, private val transport: Transport, private val scope: CoroutineScope) : AutoCloseable {
     private val core = CoreComposer(sessionId)
     private val state = MutableStateFlow(ComposerUi())
     val ui: StateFlow<ComposerUi> = state
@@ -43,7 +44,7 @@ class ComposerModel(sessionId: String, private val transport: Transport, private
     @Volatile private var search: Job? = null
 
     fun read(session: Session) {
-        core.readSession(session)
+        reupload(core.readSession(session))
         changed()
     }
 
@@ -140,11 +141,9 @@ class ComposerModel(sessionId: String, private val transport: Transport, private
         state.update { it.copy(revision = it.revision + 1, chips = core.attachments(), thumbnails = it.thumbnails - id) }
     }
 
-    // The screen moved on to the agent's next conversation: the files go up again there, under the ids the core hands out.
-    fun retarget(sessionId: String, scope: CoroutineScope) {
-        this.scope = scope
-        search?.cancel()
-        val moves = core.retarget(sessionId)
+    // The session moved on to its next conversation: the files go up again there, under the ids the core hands out.
+    private fun reupload(moves: List<Reupload>) {
+        if (moves.isEmpty()) return
         val thumbnails = state.value.thumbnails.toMutableMap()
         for (move in moves) {
             val picked = staged.remove(move.replaces)

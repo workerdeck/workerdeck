@@ -47,7 +47,7 @@ describe('Watermarks.mark', () => {
 
   it('prunes marks older than 30 days on write', () => {
     const now = 100 * 24 * 60 * 60 * 1000
-    const s = store({ 'mac:ancient': { itemCount: 1, activity: 1, turns: 1, seenAt: 0 } })
+    const s = store({ 'mac:ancient': { itemCount: 1, activity: 1, prose: 1, turns: 1, seenAt: 0 } })
     const marks = new Watermarks(s.seam)
     marks.mark('mac', 'fresh', { activity: 1 }, now)
     expect(Object.keys(s.data)).toEqual(['mac:fresh'])
@@ -81,8 +81,11 @@ describe('unseenCount', () => {
     expect(unseenCount(read, { proseCount: 5 })).toBe(1)
   })
 
-  it('reads a mark persisted before prose counting as caught up, not as a whole unread history', () => {
-    expect(unseenCount({ itemCount: 40, activity: 40, turns: 5, seenAt: 0 }, { proseCount: 12 })).toBe(0)
+  it('drops a stored mark without a prose count, so its session reads as caught up', () => {
+    const stored = { 'mac:a': { itemCount: 40, activity: 40, turns: 5, seenAt: 0 } } as unknown as Record<string, Watermark>
+    const marks = new Watermarks({ read: () => stored, write: () => {} })
+    expect(marks.get('mac', 'a')).toBeUndefined()
+    expect(unseenCount(marks.get('mac', 'a'), { proseCount: 12 })).toBe(0)
   })
 })
 

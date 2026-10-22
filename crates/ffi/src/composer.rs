@@ -300,15 +300,17 @@ impl Composer {
         Arc::new(Self { inner: Mutex::new(core::Composer::new(&session_id)) })
     }
 
-    // After every session update: the chrome, commands and skills the composer reads.
-    pub fn read_session(&self, session: Arc<Session>) {
+    // After every session update: the chrome, commands and skills the composer reads. Answers the staged files that went
+    // up again because the session moved on to its next conversation.
+    pub fn read_session(&self, session: Arc<Session>) -> Vec<Reupload> {
         let (chrome, commands, skills) = {
             let live = session.live();
             (live.chrome(), live.commands(), live.skills())
         };
         let mut composer = self.lock();
-        composer.set_chrome(chrome);
+        let moved = composer.set_chrome(chrome);
         composer.set_lists(commands, skills);
+        moved.into_iter().map(|(replaces, upload)| Reupload { replaces, upload: upload.into() }).collect()
     }
 
     // The body of `list_sessions_call()`; false for another shape, which keeps the last list.
@@ -372,10 +374,6 @@ impl Composer {
 
     pub fn retry_attachment(&self, id: u64) -> Option<Upload> {
         self.lock().retry_attachment(id).map(Into::into)
-    }
-
-    pub fn retarget(&self, session_id: String) -> Vec<Reupload> {
-        self.lock().retarget(&session_id).into_iter().map(|(replaces, upload)| Reupload { replaces, upload: upload.into() }).collect()
     }
 
     // Status 0 for a transport failure.

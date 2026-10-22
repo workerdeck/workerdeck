@@ -71,7 +71,8 @@ import kotlinx.coroutines.launch
 enum class ExtrasSheet { INFO, FILES, MCP, SKILLS }
 
 // Every level of the `/mcp` stack reads the core's last answer; `revision` tells Compose when that answer moved.
-class McpModel(private val servers: McpServers, private val transport: Transport) {
+// `generation` is the conversation the screen is attached to: an action names it, and a stale one is refused.
+class McpModel(private val servers: McpServers, private val transport: Transport, private val generation: Long) {
     private val revisionState = MutableStateFlow(0)
     val revision: StateFlow<Int> = revisionState
     val core: McpServers get() = servers
@@ -84,7 +85,7 @@ class McpModel(private val servers: McpServers, private val transport: Transport
     }
 
     suspend fun perform(server: String, action: McpAction) {
-        servers.actionAnswered(transport.answer(servers.actionCall(server, action)))?.let { servers.answered(transport.answer(it)) }
+        servers.actionAnswered(transport.answer(servers.actionCall(server, action, generation)))?.let { servers.answered(transport.answer(it)) }
         revisionState.update { it + 1 }
     }
 }

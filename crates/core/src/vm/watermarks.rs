@@ -9,8 +9,7 @@ const TOUCH_MS: f64 = 60_000.0;
 pub struct Watermark {
     pub item_count: f64,
     pub activity: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prose: Option<f64>,
+    pub prose: f64,
     pub turns: f64,
     pub seen_at: f64,
 }
@@ -42,6 +41,18 @@ impl Watermarks {
         Watermarks { marks: stored }
     }
 
+    // A stored mark of another shape is dropped: its session reads as caught up until the next visit marks it.
+    pub fn from_json(json: Option<&str>) -> Self {
+        let stored: Entries<serde_json::Value> = json.and_then(|json| serde_json::from_str(json).ok()).unwrap_or_default();
+        let mut marks = Entries::new();
+        for (key, value) in stored.0 {
+            if let Ok(mark) = serde_json::from_value(value) {
+                marks.set(key, mark);
+            }
+        }
+        Watermarks { marks }
+    }
+
     pub fn get(&self, host_id: &str, session_id: &str) -> Option<&Watermark> {
         self.marks.get(&watermark_key(host_id, session_id))
     }
@@ -57,10 +68,7 @@ impl Watermarks {
         let next = Watermark {
             item_count: held(|m| m.item_count).max(seen.item_count.unwrap_or(0.0)),
             activity: held(|m| m.activity).max(seen.activity.unwrap_or(0.0)),
-            prose: match seen.prose {
-                None => previous.and_then(|m| m.prose),
-                Some(prose) => Some(previous.and_then(|m| m.prose).unwrap_or(0.0).max(prose)),
-            },
+            prose: held(|m| m.prose).max(seen.prose.unwrap_or(0.0)),
             turns: held(|m| m.turns).max(seen.turns.unwrap_or(0.0)),
             seen_at: now,
         };
@@ -99,7 +107,7 @@ impl Watermarks {
 
 pub fn unseen_count(mark: Option<&Watermark>, prose_count: Option<f64>) -> f64 {
     match (mark, prose_count) {
-        (Some(mark), Some(count)) => (count - mark.prose.unwrap_or(count)).max(0.0),
+        (Some(mark), Some(count)) => (count - mark.prose).max(0.0),
         _ => 0.0,
     }
 }

@@ -29,6 +29,7 @@ struct SessionListView: View {
   @State private var statusText = ""
   @State private var pendingDelete: ListItem?
   @State private var history: ConversationsTarget?
+  @State private var pendingDiscard: PendingDiscard?
   @State private var pendingCrossing: Crossing?
 
   private struct Crossing {
@@ -90,7 +91,7 @@ struct SessionListView: View {
     }
     // Both an appear and a change: a cold launch from a notification sets the
     // route before this view exists.
-    .task(id: push.pendingRoute) { consumePushRoute() }
+    .task(id: push.pendingRoute) { await consumePushRoute() }
     .sheet(isPresented: $showHostManager) {
       NavigationStack { HostListView() }
     }
@@ -102,7 +103,7 @@ struct SessionListView: View {
   /// Open the session a notification was tapped for. The route names its
   /// gateway; a payload without one (a hand-crafted `simctl push`) falls back to
   /// whichever gateway is showing that session, then to the first host.
-  private func consumePushRoute() {
+  private func consumePushRoute() async {
     guard let route = push.pendingRoute else { return }
     let target =
       route.hostId
@@ -113,13 +114,46 @@ struct SessionListView: View {
       push.clearRoute()
       return
     }
+    var conversation: Int64?
+    var seq = route.seq
+    if let n = route.conversation {
+      // The list may not be loaded yet (a cold launch) or may predate another client's cut, so the notification's n
+      // is weighed against a fresh read of the session's conversations. The route stays pending until that answers;
+      // with no answer after a few tries it opens the session's current screen, without the row it cannot place.
+      let current = await currentConversation(hostId: hostId, sessionId: route.sessionId)
+      guard !Task.isCancelled, push.pendingRoute == route else { return }
+      if let current {
+        conversation = addressOf(id: route.sessionId, conversation: n, current: current.n).conversation
+      } else {
+        seq = nil
+      }
+    }
     // Replaces rather than appends, so Back from a pushed-to session lands on
     // the list however deep the stack happened to be.
     path = [
-      .session(
-        hostId: hostId, sessionId: route.sessionId, seq: route.seq, epoch: route.epoch)
+      .session(hostId: hostId, sessionId: route.sessionId, seq: seq, epoch: route.epoch, conversation: conversation)
     ]
     push.clearRoute()
+  }
+
+  private struct Current { let n: Int64? }
+
+  // The session's current n from its own conversations list (nil n: closed, or out of scope), or nil when no answer
+  // came after a few tries. Waits for the list model on a cold launch.
+  private func currentConversation(hostId: UUID, sessionId: String) async -> Current? {
+    for attempt in 0..<5 {
+      if attempt > 0 { try? await Task.sleep(for: .seconds(2)) }
+      guard !Task.isCancelled else { return nil }
+      guard let client = model?.context(for: hostId)?.client else { continue }
+      let answer = await client.answer(conversationsCall(id: sessionId))
+      guard answer.status == 200 else { continue }
+      let now = Date()
+      let items = sessionConversations(
+        body: answer.body, currentTitle: nil, nowMs: now.timeIntervalSince1970 * 1000,
+        offsetMinutes: SessionListModel.offset(now))
+      return Current(n: items?.first(where: \.current)?.n)
+    }
+    return nil
   }
 
   // MARK: - Destinations
@@ -127,22 +161,17 @@ struct SessionListView: View {
   @ViewBuilder
   private func destination(_ route: SessionRoute) -> some View {
     switch route {
-    case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal, let shell):
+    case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal, let shell, let conversation):
       if let model, let context = model.context(for: hostId) {
-        CoreFollowSession(
-          sessionId: sessionId, hostId: hostId, client: context.client, list: model,
-          entry: SessionRoute.entry(seq: seq, epoch: epoch, subagent: subagent, reveal: reveal, shell: shell))
+        CoreSessionRoute(
+          sessionId: sessionId, hostId: hostId, client: context.client,
+          entry: SessionRoute.entry(seq: seq, epoch: epoch, subagent: subagent, reveal: reveal, shell: shell),
+          conversation: conversation)
       } else {
         missingHost
       }
     case .create(let hostId, let seed):
       createScreen(hostId, seed)
-    case .conversation(let hostId, let sessionId):
-      if let model, let context = model.context(for: hostId) {
-        CoreFollowSession(sessionId: sessionId, hostId: hostId, client: context.client, list: model, entry: nil, pinned: true)
-      } else {
-        missingHost
-      }
     }
   }
 
@@ -296,6 +325,19 @@ struct SessionListView: View {
       Button("Cancel", role: .cancel) { pendingDelete = nil }
     } message: {
       Text(deleteAgentMessage(name: pendingDelete?.row.agent ?? "This agent"))
+    }
+    .confirmationDialog(
+      pendingDiscard?.confirmation.title ?? "",
+      isPresented: Binding(get: { pendingDiscard != nil }, set: { if !$0 { pendingDiscard = nil } }),
+      titleVisibility: .visible, presenting: pendingDiscard
+    ) { pending in
+      Button(pending.confirmation.confirm, role: .destructive) {
+        Task { await model.discardAndCut(pending.row, pending.confirmation) }
+        pendingDiscard = nil
+      }
+      Button("Cancel", role: .cancel) { pendingDiscard = nil }
+    } message: { pending in
+      Text(pending.confirmation.detail)
     }
     .sheet(item: $history) { target in
       ConversationsSheet(target: target, model: model) { route in
@@ -491,8 +533,16 @@ struct SessionListView: View {
         }
       },
       onRename: { beginRename(row) },
-      onRestart: row.row.agentId == nil || row.row.newConversationBlocked != nil
-        ? nil : { Task { await model.restart(row) } })
+      onRestart: !row.row.canNewConversation || row.row.newConversationBlocked != nil
+        ? nil : { newConversation(row, model: model) })
+  }
+
+  private func newConversation(_ row: ListItem, model: SessionListModel) {
+    Task {
+      if let confirmation = await model.newConversation(row) {
+        pendingDiscard = PendingDiscard(row: row, confirmation: confirmation)
+      }
+    }
   }
 
   private func beginRename(_ row: ListItem) {
@@ -581,20 +631,20 @@ struct SessionListView: View {
         }
       }
     }
-    if agent != nil {
+    if row.row.canNewConversation {
       Button {
-        Task { await model.restart(row) }
+        newConversation(row, model: model)
       } label: {
         Label("New conversation", systemImage: "arrow.counterclockwise")
         Text(row.row.newConversationBlocked ?? newConversationHint())
       }
       .disabled(row.row.newConversationBlocked != nil)
-      if let target = ConversationsTarget(row) {
-        Button {
-          history = target
-        } label: {
-          Label("Conversations", systemImage: "clock.arrow.circlepath")
-        }
+    }
+    if let target = ConversationsTarget(row) {
+      Button {
+        history = target
+      } label: {
+        Label("Conversations", systemImage: "clock.arrow.circlepath")
       }
     }
     if row.row.canSleep {
@@ -957,4 +1007,11 @@ private struct RowChrome: ViewModifier {
         }
       }
   }
+}
+
+// A card's New conversation the gateway refused over unconfirmed input: the row it was for and what discarding binds.
+struct PendingDiscard: Identifiable {
+  let row: ListItem
+  let confirmation: DiscardConfirmation
+  var id: String { "\(row.sessionId)#\(confirmation.conversation)" }
 }

@@ -17,7 +17,7 @@ private func corpus(_ name: String) throws -> String {
 }
 
 @Test func aReplayedSessionPlansRows() throws {
-  let session = Session(afterSeq: 0, reconnect: true, nonce: "n", metrics: Metrics(cell: 8, line: 16, width: 800, fontSize: 13))
+  let session = Session(afterSeq: 0, reconnect: true, nonce: "n", metrics: Metrics(cell: 8, line: 16, width: 800, fontSize: 13), history: nil)
   _ = session.opened()
   _ = session.received(text: attached, now: 0)
   _ = session.receivedBatch(frames: try corpus("tool-result-truncated-and-images"), now: 0)

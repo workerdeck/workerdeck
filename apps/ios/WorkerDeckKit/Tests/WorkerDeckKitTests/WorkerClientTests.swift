@@ -167,18 +167,6 @@ struct WorkerClientTests {
     #expect(request.url?.absoluteString == "http://127.0.0.1:8787/v1/sessions/a%2Fb%20c")
   }
 
-  @Test func fetchesSessionFileBytesWithTheKey() async throws {
-    StubStore.shared.install { _ in StubResponse(body: Data("# report".utf8), contentType: "text/markdown") }
-    let client = makeStubClient()
-
-    let (data, _) = try await client.fetch(sessionFileCall(sessionId: "sess 1", path: "/out/my report.md"))
-
-    #expect(String(decoding: data, as: UTF8.self) == "# report")
-    let request = try #require(StubStore.shared.requests.first)
-    #expect(request.url?.absoluteString == "http://127.0.0.1:8787/v1/sessions/sess%201/files/out/my%20report.md")
-    #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer s3cret")
-  }
-
   @Test func buildsSdkSessionQueryString() async throws {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"sdkSessions":[]}"#.utf8)) }
     let client = makeStubClient()
@@ -197,7 +185,7 @@ struct WorkerClientTests {
 
     try await client.perform(
       resolvePermissionCall(
-        sessionId: "sess_1", requestId: "req_1", decision: .deny(message: "not now", interrupt: true)))
+        sessionId: "sess_1", requestId: "req_1", decision: .deny(message: "not now", interrupt: true), generation: 2))
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.httpMethod == "POST")
@@ -247,7 +235,7 @@ struct WorkerClientTests {
     let client = makeStubClient()
 
     let answer = await client.upload(
-      uploadAttachmentCall(sessionId: "s", name: "a b.png"), mediaType: "image/png", data: Data([1, 2, 3]))
+      uploadAttachmentCall(sessionId: "s", name: "a b.png", generation: 2), mediaType: "image/png", data: Data([1, 2, 3]))
 
     #expect(answer.status == 200)
     #expect(uploadedAttachmentId(body: answer.body) == "att_1")
@@ -261,7 +249,7 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(sessionJSON.utf8)) }
     let client = makeStubClient()
 
-    try await client.perform(updateSessionCall(id: "sess_1", patch: SessionPatch(title: .set(value: "Named"))))
+    try await client.perform(updateSessionCall(id: "sess_1", patch: SessionPatch(title: .set(value: "Named")), generation: 2))
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.httpMethod == "PATCH")
@@ -272,11 +260,12 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(sessionJSON.utf8)) }
     let client = makeStubClient()
 
-    try await client.perform(sleepSessionCall(id: "sess_1"))
+    try await client.perform(sleepSessionCall(id: "sess_1", generation: 2))
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.httpMethod == "POST")
     #expect(request.url?.path == "/v1/sessions/sess_1/sleep")
+    #expect(request.value(forHTTPHeaderField: generationHeader()) == "2")
   }
 
   @Test func surfacesARefusedSleep() async throws {
@@ -286,7 +275,7 @@ struct WorkerClientTests {
     let client = makeStubClient()
 
     await #expect(throws: WorkerClientError(message: "session is running", statusCode: 409)) {
-      try await client.perform(sleepSessionCall(id: "sess_1"))
+      try await client.perform(sleepSessionCall(id: "sess_1", generation: 2))
     }
   }
 
@@ -294,8 +283,8 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"ok":true}"#.utf8)) }
     let client = makeStubClient()
 
-    try await client.perform(backgroundTaskCall(sessionId: "sess_1", toolUseId: "tu_1"))
-    try await client.perform(backgroundTaskCall(sessionId: "sess_1"))
+    try await client.perform(backgroundTaskCall(sessionId: "sess_1", toolUseId: "tu_1", generation: 2))
+    try await client.perform(backgroundTaskCall(sessionId: "sess_1", generation: 2))
 
     let paths = StubStore.shared.requests.map { "\($0.httpMethod ?? "") \($0.url?.path ?? "")" }
     #expect(
@@ -314,7 +303,7 @@ struct WorkerClientTests {
       throws: WorkerClientError(
         message: "no foreground task to move to the background", statusCode: 404)
     ) {
-      try await client.perform(backgroundTaskCall(sessionId: "sess_1"))
+      try await client.perform(backgroundTaskCall(sessionId: "sess_1", generation: 2))
     }
   }
 }

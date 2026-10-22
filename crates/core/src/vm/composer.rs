@@ -68,9 +68,16 @@ impl Composer {
         Self { session_id: session_id.to_owned(), ..Self::default() }
     }
 
-    pub fn set_chrome(&mut self, chrome: SessionChrome) {
+    // A session that moved on to its next conversation takes its staged files along: they go up again there, and the
+    // answer names each new upload with the id it replaces.
+    pub fn set_chrome(&mut self, chrome: SessionChrome) -> Vec<(u64, Upload)> {
+        let before = self.chrome.conversation;
         self.completion.set_cwd(chrome.cwd.clone());
         self.chrome = chrome;
+        match self.target().map(|(id, n)| (id.to_owned(), n)) {
+            Some((id, n)) if before.is_some_and(|before| before != n) => self.attachments.retarget((&id, n)),
+            _ => Vec::new(),
+        }
     }
 
     pub fn set_lists(&mut self, commands: Vec<SlashCommand>, skills: Vec<Skill>) {
@@ -200,18 +207,19 @@ impl Composer {
         refusal(media_type, &self.chrome.attachment_kinds)
     }
 
-    pub fn add_attachment(&mut self, name: &str, media_type: &str) -> Option<Upload> {
-        self.attachments.add(Some(&self.session_id).filter(|id| !id.is_empty()).map(String::as_str), name, media_type)
+    // Uploads go to the conversation the screen attached to; none before the first attach.
+    fn target(&self) -> Option<(&str, i64)> {
+        Some(self.session_id.as_str()).filter(|id| !id.is_empty()).zip(self.chrome.conversation)
     }
 
-    // The screen moved to the agent's next conversation: the draft stays with the app, the files go up again there.
-    pub fn retarget(&mut self, session_id: &str) -> Vec<(u64, Upload)> {
-        self.session_id = session_id.to_owned();
-        self.attachments.retarget(session_id)
+    pub fn add_attachment(&mut self, name: &str, media_type: &str) -> Option<Upload> {
+        let target = self.target().map(|(id, n)| (id.to_owned(), n));
+        self.attachments.add(target.as_ref().map(|(id, n)| (id.as_str(), *n)), name, media_type)
     }
 
     pub fn retry_attachment(&mut self, id: u64) -> Option<Upload> {
-        self.attachments.retry(id, Some(&self.session_id).filter(|id| !id.is_empty()).map(String::as_str))
+        let target = self.target().map(|(id, n)| (id.to_owned(), n));
+        self.attachments.retry(id, target.as_ref().map(|(id, n)| (id.as_str(), *n)))
     }
 
     // What a send carries, and the composer reset for the next message; None when nothing can be sent.
@@ -243,13 +251,14 @@ mod tests {
             busy,
             can_run_shell: true,
             attachment_kinds: kinds.iter().map(|k| (*k).to_owned()).collect(),
+            conversation: Some(1),
             ..SessionChrome::default()
         }
     }
 
     fn composer(chrome: SessionChrome) -> Composer {
         let mut composer = Composer::new("s1");
-        composer.set_chrome(chrome);
+        _ = composer.set_chrome(chrome);
         composer
     }
 
@@ -257,9 +266,9 @@ mod tests {
     fn the_gutter_follows_shell_busy_and_attachments() {
         let mut c = composer(chrome(false, &["image"]));
         assert_eq!(c.view("", 0).gutter, Gutter::AddMedia);
-        c.set_chrome(chrome(false, &[]));
+        _ = c.set_chrome(chrome(false, &[]));
         assert_eq!(c.view("", 0).gutter, Gutter::Prompt);
-        c.set_chrome(chrome(true, &["image"]));
+        _ = c.set_chrome(chrome(true, &["image"]));
         assert_eq!(c.view("", 0).gutter, Gutter::Interrupt);
         assert!(c.leading_trigger("$"));
         let view = c.view("ls", 0);
@@ -271,7 +280,7 @@ mod tests {
     fn shell_mode_needs_the_capability_and_backspace_leaves_it() {
         let mut c = composer(SessionChrome { can_run_shell: false, ..chrome(false, &[]) });
         assert!(!c.leading_trigger("$"));
-        c.set_chrome(chrome(false, &[]));
+        _ = c.set_chrome(chrome(false, &[]));
         assert!(!c.leading_trigger("a"));
         assert!(c.leading_trigger("$"));
         assert!(c.shell_mode());
@@ -300,7 +309,7 @@ mod tests {
             Some(Outgoing::Message { text: String::new(), attachment_ids: vec!["att".into()], background: false })
         );
         assert!(c.attachments.is_empty());
-        c.set_chrome(SessionChrome { enabled: false, ..chrome(false, &[]) });
+        _ = c.set_chrome(SessionChrome { enabled: false, ..chrome(false, &[]) });
         assert!(!c.can_send("hi"));
         assert_eq!(c.send("hi", false), None);
     }

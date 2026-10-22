@@ -43,14 +43,17 @@ fun ColumnScope.RowMenuItems(
 }
 
 // One session's bookmarks: the shared store, addressed by gateway id and session id.
-class SessionBookmarks(private val store: BookmarkStore, private val hostId: String, private val sessionId: String) {
+// `conversation` is the one the screen attached to; none yet, and there is nothing to mark.
+class SessionBookmarks(private val store: BookmarkStore, private val hostId: String, private val sessionId: String, private val conversation: Long?) {
     val revision get() = store.revision
 
-    fun contains(itemId: String) = store.contains(hostId, sessionId, itemId)
+    fun contains(itemId: String) = conversation?.let { store.contains(hostId, sessionId, it, itemId) } == true
 
-    fun ids(): List<String> = store.forSession(hostId, sessionId)
+    fun ids(): List<String> = conversation?.let { store.forSession(hostId, sessionId, it) }.orEmpty()
 
-    fun toggle(itemId: String) = store.toggle(hostId, sessionId, itemId)
+    fun toggle(itemId: String) {
+        conversation?.let { store.toggle(hostId, sessionId, it, itemId) }
+    }
 }
 
 @Composable

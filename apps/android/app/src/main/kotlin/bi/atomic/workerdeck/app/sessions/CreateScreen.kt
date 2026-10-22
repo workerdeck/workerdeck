@@ -130,6 +130,10 @@ fun CreateScreen(model: CreateModel, recents: List<String>, onCreated: (Created)
                 Heading("Brief")
                 Field(fields.brief, "Who this agent is and what it works on", lines = 3) { v -> edit { it.copy(brief = v) } }
                 Footer("Optional. Given to the agent as standing instructions in every conversation.")
+            } else {
+                Heading("Name")
+                Field(fields.agentName, "Name (optional)", capitalize = true, tag = "create-name") { v -> edit { it.copy(agentName = v) } }
+                Footer("A named session is an agent: it keeps its name, avatar and conversations.")
             }
 
             Heading("Working directory")

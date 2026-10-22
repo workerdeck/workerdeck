@@ -32,7 +32,9 @@ struct ActivityActionHandler {
       return
     }
 
-    guard let decision = decision(for: action, sessionId: sessionId, hostId: hostId) else {
+    guard let decision = decision(for: action, sessionId: sessionId, hostId: hostId),
+      let conversation = activities.conversation(sessionId: sessionId, hostId: hostId)
+    else {
       // A choice whose input the card could not carry. Nothing sensible to submit, and submitting
       // the label alone would answer with a shape the runner does not read.
       await activities.paint(sessionId: sessionId, hostId: hostId, decision: SessionActivityDecision.failed)
@@ -42,7 +44,8 @@ struct ActivityActionHandler {
     await activities.paint(sessionId: sessionId, hostId: hostId, decision: SessionActivityDecision.sending)
     do {
       try await client.perform(
-        resolvePermissionCall(sessionId: sessionId, requestId: requestId(of: action), decision: decision))
+        resolvePermissionCall(
+          sessionId: sessionId, requestId: requestId(of: action), decision: decision, generation: conversation))
       await activities.paint(sessionId: sessionId, hostId: hostId, decision: SessionActivityDecision.sent)
     } catch let error as WorkerClientError {
       // 404 is answered-or-expired, 409 is parked. Both are the server telling the truth, and its

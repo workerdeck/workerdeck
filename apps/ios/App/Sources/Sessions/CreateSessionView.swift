@@ -43,6 +43,15 @@ struct CreateSessionView: View {
 
       if model.state.isAgent {
         agentSection(model)
+      } else {
+        Section {
+          TextField("Name (optional)", text: $model.fields.agentName)
+            .textInputAutocapitalization(.words)
+            .autocorrectionDisabled()
+            .accessibilityIdentifier("create-name")
+        } footer: {
+          Text("A named session is an agent: it keeps its name, avatar and conversations.")
+        }
       }
 
       Section {

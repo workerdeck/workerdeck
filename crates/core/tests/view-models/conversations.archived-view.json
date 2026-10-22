@@ -4,6 +4,9 @@
     "calls": [
       [
         {
+          "id": "a"
+        },
+        {
           "id": "a",
           "status": "idle",
           "cwd": "/work/alpha",
@@ -15,14 +18,15 @@
             "name": "WD-Test"
           }
         },
-        [
-          {
-            "id": "ag",
-            "sessionId": "a"
-          }
-        ]
+        {
+          "conversation": 2
+        }
       ],
       [
+        {
+          "id": "a",
+          "conversation": 1
+        },
         {
           "id": "a",
           "status": "idle",
@@ -34,55 +38,59 @@
             "id": "ag",
             "name": "WD-Test"
           },
-          "archived": true,
-          "supersededBy": "b",
           "lastActivityAt": 5000
         },
-        [
-          {
-            "id": "ag",
-            "sessionId": "c"
-          }
-        ]
+        {
+          "conversation": 3
+        }
       ],
       [
         {
           "id": "a",
-          "status": "idle",
-          "cwd": "/work/alpha",
-          "createdAt": 1760000000000,
-          "lastSeq": 0,
-          "pendingPermissionCount": 0,
-          "agent": {
-            "id": "ag",
-            "name": "WD-Test"
-          },
-          "archived": true
+          "conversation": 3
         },
-        [
-          {
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
             "id": "ag",
-            "sessionId": "a"
+            "name": "WD-Test"
           }
-        ]
-      ],
-      [
-        {
-          "id": "a",
-          "status": "idle",
-          "cwd": "/work/alpha",
-          "createdAt": 1760000000000,
-          "lastSeq": 0,
-          "pendingPermissionCount": 0,
-          "agent": {
-            "id": "ag",
-            "name": "WD-Test"
-          },
-          "archived": true
         },
-        []
+        {
+          "conversation": 3
+        }
       ],
       [
+        {
+          "id": "a",
+          "conversation": 1
+        },
+        {
+          "id": "a",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "agent": {
+            "id": "ag",
+            "name": "WD-Test"
+          }
+        },
+        {
+          "retired": true
+        }
+      ],
+      [
+        {
+          "id": "a",
+          "conversation": 1
+        },
         {
           "id": "a",
           "status": "idle",
@@ -94,21 +102,22 @@
             "id": "ag",
             "name": "WD-Test"
           },
-          "archived": true,
           "transcript": "unavailable"
         }
       ],
       [
         {
           "id": "p",
+          "conversation": 2
+        },
+        {
+          "id": "p",
           "status": "idle",
           "cwd": "/work/alpha",
           "createdAt": 1760000000000,
           "lastSeq": 0,
-          "pendingPermissionCount": 0,
-          "archived": true
-        },
-        []
+          "pendingPermissionCount": 0
+        }
       ]
     ]
   },
@@ -117,7 +126,7 @@
     {
       "kind": "past",
       "at": 1760000000000,
-      "current": "c",
+      "current": 3,
       "unavailable": false
     },
     {

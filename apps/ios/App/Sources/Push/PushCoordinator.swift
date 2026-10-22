@@ -135,7 +135,7 @@ final class PushCoordinator {
     case UNNotificationDefaultActionIdentifier:
       pendingRoute = PushRoute(
         hostId: payload.hostId, sessionId: payload.sessionId, seq: payload.seq,
-        epoch: payload.epoch)
+        epoch: payload.epoch, conversation: payload.conversation)
     default:
       // Dismissal, or an action identifier from a build that is not this one.
       return
@@ -155,7 +155,8 @@ final class PushCoordinator {
       hostId: value("host").flatMap(UUID.init(uuidString:)),
       sessionId: sessionId,
       seq: value("seq").flatMap(Int.init),
-      epoch: value("epoch").flatMap(Int.init))
+      epoch: value("epoch").flatMap(Int.init),
+      conversation: value("conversation").flatMap(Int64.init))
   }
 
   func clearRoute() {
@@ -167,14 +168,17 @@ final class PushCoordinator {
   /// `permission_decision` command, and the reason the payload carries
   /// `requestId` at all.
   private func resolve(payload: PushPayload, allow: Bool) async {
-    guard let requestId = payload.requestId, let client = client(for: payload.hostId) else {
+    guard let requestId = payload.requestId, let conversation = payload.conversation,
+      let client = client(for: payload.hostId)
+    else {
       return
     }
     do {
       let decision: PermissionDecision =
         allow ? .allow(updatedInputJson: nil) : .deny(message: "Denied from a notification", interrupt: false)
       try await client.perform(
-        resolvePermissionCall(sessionId: payload.sessionId, requestId: requestId, decision: decision))
+        resolvePermissionCall(
+          sessionId: payload.sessionId, requestId: requestId, decision: decision, generation: conversation))
     } catch {
       // It may have expired, or been answered on the desktop a second earlier.
       // Either way the tap deserves an answer rather than silence.
@@ -204,6 +208,7 @@ final class PushCoordinator {
     // notification it failed to answer would have.
     if let seq = payload.seq { content.userInfo["seq"] = seq }
     if let epoch = payload.epoch { content.userInfo["epoch"] = epoch }
+    if let conversation = payload.conversation { content.userInfo["conversation"] = conversation }
     content.threadIdentifier = payload.sessionId
     try? await UNUserNotificationCenter.current().add(
       UNNotificationRequest(

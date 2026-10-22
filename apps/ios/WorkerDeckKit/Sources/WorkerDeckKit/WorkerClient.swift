@@ -79,6 +79,7 @@ public struct WorkerClient: Sendable {
     var request = URLRequest(url: url)
     request.httpMethod = call.method
     request.setValue(mediaType, forHTTPHeaderField: "content-type")
+    applyGeneration(&request, call)
     applyAuth(&request)
     guard let (body, response) = try? await urlSession.upload(for: request, from: data),
       let http = response as? HTTPURLResponse
@@ -95,6 +96,7 @@ public struct WorkerClient: Sendable {
       request.setValue("application/json", forHTTPHeaderField: "content-type")
       request.httpBody = Data(body.utf8)
     }
+    applyGeneration(&request, call)
     applyAuth(&request)
     let (data, response) = try await urlSession.data(for: request)
     guard let http = response as? HTTPURLResponse else {
@@ -110,13 +112,18 @@ public struct WorkerClient: Sendable {
 
   // MARK: - Plumbing
 
+  private func applyGeneration(_ request: inout URLRequest, _ call: HttpCall) {
+    guard let generation = call.generation else { return }
+    request.setValue(String(generation), forHTTPHeaderField: generationHeader())
+  }
+
   private func applyAuth(_ request: inout URLRequest) {
     guard let authKey, !authKey.isEmpty else { return }
     request.setValue("Bearer \(authKey)", forHTTPHeaderField: "Authorization")
   }
 
   private func raw(_ path: String) async throws -> (Data, HTTPURLResponse) {
-    try await fetch(HttpCall(method: "GET", path: path, body: nil))
+    try await fetch(HttpCall(method: "GET", path: path, body: nil, generation: nil))
   }
 
   private func makeURL(_ path: String) throws -> URL {

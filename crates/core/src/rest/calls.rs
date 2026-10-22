@@ -2,26 +2,34 @@ use super::{AgentConfig, PermissionMode, Sharing, encode_component};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
+pub const GENERATION_HEADER: &str = "x-workerdeck-generation";
+
 // One REST request under the API base (`.../v1`): the core names it, the platform moves the bytes. A `body` is JSON
-// and rides with `content-type: application/json`; a non-GET without one goes out with an empty body.
+// and rides with `content-type: application/json`; a non-GET without one goes out with an empty body. `generation`
+// goes out as `GENERATION_HEADER`: the conversation a mutating session call is for, refused once that one ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpCall {
     pub method: &'static str,
     pub path: String,
     pub body: Option<String>,
+    pub generation: Option<i64>,
 }
 
 impl HttpCall {
     fn get(path: String) -> Self {
-        Self { method: "GET", path, body: None }
+        Self { method: "GET", path, body: None, generation: None }
     }
 
     fn post(path: String) -> Self {
-        Self { method: "POST", path, body: None }
+        Self { method: "POST", path, body: None, generation: None }
     }
 
     fn with(method: &'static str, path: String, body: Value) -> Self {
-        Self { method, path, body: Some(body.to_string()) }
+        Self { method, path, body: Some(body.to_string()), generation: None }
+    }
+
+    fn for_conversation(self, generation: i64) -> Self {
+        Self { generation: Some(generation), ..self }
     }
 }
 
@@ -42,6 +50,22 @@ pub struct StatusInput {
 pub struct SessionPatch {
     pub title: Option<Edit<String>>,
     pub status_label: Option<Edit<StatusInput>>,
+    // Names the session (Make agent, a team join), updates a named one's identity; `Clear` un-names it.
+    pub agent: Option<Edit<SessionAgent>>,
+}
+
+// The identity a create or a PATCH names a session with.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionAgent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brief: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lead: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cross_owner: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -98,6 +122,8 @@ pub struct NewSession {
     pub include_partial_messages: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meta: Option<Map<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<SessionAgent>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -106,7 +132,6 @@ pub struct NewAgent {
     pub config: Option<AgentConfig>,
     pub prompt: Option<String>,
     pub lead: Option<String>,
-    pub adopt: Option<String>,
     pub sharing: Option<Sharing>,
     pub cross_owner: Option<bool>,
 }
@@ -159,7 +184,6 @@ pub fn create_agent(request: &NewAgent) -> HttpCall {
     }
     put(&mut body, "prompt", &request.prompt);
     put(&mut body, "lead", &request.lead);
-    put(&mut body, "adopt", &request.adopt);
     if let Some(sharing) = request.sharing.and_then(sharing_name) {
         body.insert("sharing".to_owned(), json!(sharing));
     }
@@ -197,41 +221,78 @@ pub fn get_session(id: &str) -> HttpCall {
     HttpCall::get(session(id))
 }
 
-pub fn update_session(id: &str, patch: &SessionPatch) -> HttpCall {
+// Every call under `/sessions/:id` that changes something names the conversation it is for (`generation`).
+pub fn update_session(id: &str, patch: &SessionPatch, generation: i64) -> HttpCall {
     let mut body = Map::new();
     put_edit(&mut body, "title", &patch.title, |title| json!(title));
     put_edit(&mut body, "statusLabel", &patch.status_label, |label| match &label.emoji {
         Some(emoji) => json!({ "text": label.text, "emoji": emoji }),
         None => json!({ "text": label.text }),
     });
-    HttpCall::with("PATCH", session(id), Value::Object(body))
+    put_edit(&mut body, "agent", &patch.agent, |agent| serde_json::to_value(agent).unwrap_or_else(|_| json!({})));
+    HttpCall::with("PATCH", session(id), Value::Object(body)).for_conversation(generation)
 }
 
-pub fn sleep_session(id: &str) -> HttpCall {
-    HttpCall::post(format!("{}/sleep", session(id)))
+pub fn sleep_session(id: &str, generation: i64) -> HttpCall {
+    HttpCall::post(format!("{}/sleep", session(id))).for_conversation(generation)
 }
 
-pub fn delete_session(id: &str) -> HttpCall {
-    HttpCall { method: "DELETE", path: session(id), body: None }
+// Closes an unnamed session; a named one retires to Past agents with its members released.
+pub fn delete_session(id: &str, generation: i64) -> HttpCall {
+    HttpCall { method: "DELETE", path: session(id), body: None, generation: Some(generation) }
 }
 
-pub fn stop_task(session_id: &str, tool_use_id: &str) -> HttpCall {
-    HttpCall::post(format!("{}/tasks/{}/stop", session(session_id), encode_component(tool_use_id)))
+pub fn stop_task(session_id: &str, tool_use_id: &str, generation: i64) -> HttpCall {
+    HttpCall::post(format!("{}/tasks/{}/stop", session(session_id), encode_component(tool_use_id))).for_conversation(generation)
 }
 
 // No id moves every running foreground call.
-pub fn background_task(session_id: &str, tool_use_id: Option<&str>) -> HttpCall {
+pub fn background_task(session_id: &str, tool_use_id: Option<&str>, generation: i64) -> HttpCall {
     match tool_use_id {
         Some(id) => HttpCall::post(format!("{}/tasks/{}/background", session(session_id), encode_component(id))),
         None => HttpCall::post(format!("{}/tasks/background", session(session_id))),
     }
+    .for_conversation(generation)
 }
 
-pub fn kill_shell(session_id: &str, shell_id: &str) -> HttpCall {
-    HttpCall::post(format!("{}/shells/{}/kill", session(session_id), encode_component(shell_id)))
+pub fn kill_shell(session_id: &str, shell_id: &str, generation: i64) -> HttpCall {
+    HttpCall::post(format!("{}/shells/{}/kill", session(session_id), encode_component(shell_id))).for_conversation(generation)
 }
 
-pub fn resolve_permission(session_id: &str, request_id: &str, decision: &PermissionDecision) -> HttpCall {
+pub fn conversations(id: &str) -> HttpCall {
+    HttpCall::get(format!("{}/conversations", session(id)))
+}
+
+// The cut: conversation n+1 under the same id. `expected_generation` is the conversation the caller is looking at.
+pub fn new_conversation(id: &str, expected_generation: i64, prompt: Option<&str>) -> HttpCall {
+    let mut body = Map::from_iter([("expectedGeneration".to_owned(), json!(expected_generation))]);
+    put(&mut body, "prompt", &prompt.map(str::to_owned));
+    HttpCall::with("POST", format!("{}/conversations", session(id)), Value::Object(body))
+}
+
+// After a person confirmed losing the pending input an `unconfirmed_input` refusal reported.
+pub fn discard_and_cut(id: &str, expected_generation: i64, input_revision: &str, prompt: Option<&str>) -> HttpCall {
+    let mut body = Map::from_iter([
+        ("expectedGeneration".to_owned(), json!(expected_generation)),
+        ("inputRevision".to_owned(), json!(input_revision)),
+    ]);
+    put(&mut body, "prompt", &prompt.map(str::to_owned));
+    HttpCall::with("POST", format!("{}/conversations/discard", session(id)), Value::Object(body))
+}
+
+pub fn retry_conversation_start(id: &str, expected_generation: i64) -> HttpCall {
+    HttpCall::with("POST", format!("{}/conversations/retry", session(id)), json!({ "expectedGeneration": expected_generation }))
+}
+
+pub fn settle_pending_prompt(id: &str, send: bool, expected_generation: i64) -> HttpCall {
+    HttpCall::with(
+        "POST",
+        format!("{}/conversations/pending", session(id)),
+        json!({ "expectedGeneration": expected_generation, "send": send }),
+    )
+}
+
+pub fn resolve_permission(session_id: &str, request_id: &str, decision: &PermissionDecision, generation: i64) -> HttpCall {
     let mut body = Map::new();
     match decision {
         PermissionDecision::Allow { updated_input } => {
@@ -247,6 +308,7 @@ pub fn resolve_permission(session_id: &str, request_id: &str, decision: &Permiss
         }
     }
     HttpCall::with("POST", format!("{}/permissions/{}", session(session_id), encode_component(request_id)), Value::Object(body))
+        .for_conversation(generation)
 }
 
 pub fn list_agents() -> HttpCall {
@@ -273,41 +335,16 @@ fn sharing_name(sharing: Sharing) -> Option<&'static str> {
     }
 }
 
-// `expected_session_id` is the conversation the caller is looking at: a request against one the agent already left is refused.
-pub fn restart_agent(id: &str, prompt: Option<&str>, expected_session_id: Option<&str>) -> HttpCall {
-    let mut body = Map::new();
-    if let Some(prompt) = prompt {
-        body.insert("prompt".to_owned(), json!(prompt));
-    }
-    if let Some(expected) = expected_session_id {
-        body.insert("expectedSessionId".to_owned(), json!(expected));
-    }
-    HttpCall::with("POST", format!("{}/restart", agent(id)), Value::Object(body))
-}
-
-pub fn retire_agent(id: &str, members: Option<RetireMembers>, expected_session_id: Option<&str>) -> HttpCall {
+// `expected_generation` is the conversation the caller is looking at: a delete against one the agent already left is refused.
+pub fn retire_agent(id: &str, members: Option<RetireMembers>, expected_generation: i64) -> HttpCall {
     let mut body = Map::new();
     match members {
         Some(RetireMembers::Release) => _ = body.insert("members".to_owned(), json!("release")),
         Some(RetireMembers::Retire) => _ = body.insert("members".to_owned(), json!("retire")),
         None => {}
     }
-    if let Some(expected) = expected_session_id {
-        body.insert("expectedSessionId".to_owned(), json!(expected));
-    }
+    body.insert("expectedGeneration".to_owned(), json!(expected_generation));
     HttpCall::with("DELETE", agent(id), Value::Object(body))
-}
-
-pub fn retry_agent_start(id: &str) -> HttpCall {
-    HttpCall::with("POST", format!("{}/retry-start", agent(id)), json!({}))
-}
-
-pub fn settle_undelivered(id: &str, send: bool) -> HttpCall {
-    HttpCall::with("POST", format!("{}/undelivered", agent(id)), json!({ "send": send }))
-}
-
-pub fn agent_conversations(id: &str) -> HttpCall {
-    HttpCall::get(format!("{}/conversations", agent(id)))
 }
 
 pub fn retired_agents() -> HttpCall {
@@ -367,8 +404,8 @@ fn query(pairs: &[(&str, Option<String>)]) -> String {
 }
 
 // The body is the file's raw bytes under its own media type, which the platform sends; the answer is `{attachment}`.
-pub fn upload_attachment(session_id: &str, name: &str) -> HttpCall {
-    HttpCall::post(format!("{}/attachments{}", session(session_id), query(&[("name", Some(name.to_owned()))])))
+pub fn upload_attachment(session_id: &str, name: &str, generation: i64) -> HttpCall {
+    HttpCall::post(format!("{}/attachments{}", session(session_id), query(&[("name", Some(name.to_owned()))]))).for_conversation(generation)
 }
 
 pub fn attachment(session_id: &str, attachment_id: &str) -> HttpCall {
@@ -379,8 +416,9 @@ pub fn mcp_servers(session_id: &str) -> HttpCall {
     HttpCall::get(format!("{}/mcp", session(session_id)))
 }
 
-pub fn mcp_action(session_id: &str, server: &str, action: McpAction) -> HttpCall {
+pub fn mcp_action(session_id: &str, server: &str, action: McpAction, generation: i64) -> HttpCall {
     HttpCall::with("POST", format!("{}/mcp/{}", session(session_id), encode_component(server)), json!({ "action": action.name() }))
+        .for_conversation(generation)
 }
 
 fn shell(session_id: &str, shell_id: &str) -> String {
@@ -470,47 +508,59 @@ mod tests {
     use super::*;
 
     fn call(method: &'static str, path: &str, body: Option<&str>) -> HttpCall {
-        HttpCall { method, path: path.to_owned(), body: body.map(str::to_owned) }
+        HttpCall { method, path: path.to_owned(), body: body.map(str::to_owned), generation: None }
+    }
+
+    fn at(method: &'static str, path: &str, body: Option<&str>, generation: i64) -> HttpCall {
+        HttpCall { generation: Some(generation), ..call(method, path, body) }
     }
 
     #[test]
-    fn session_calls_encode_their_ids() {
+    fn session_calls_encode_their_ids_and_name_their_conversation() {
         assert_eq!(list_sessions(), call("GET", "/sessions", None));
         assert_eq!(get_session("a/b c"), call("GET", "/sessions/a%2Fb%20c", None));
-        assert_eq!(sleep_session("s 1"), call("POST", "/sessions/s%201/sleep", None));
-        assert_eq!(delete_session("s?1"), call("DELETE", "/sessions/s%3F1", None));
-        assert_eq!(stop_task("s", "tu/1"), call("POST", "/sessions/s/tasks/tu%2F1/stop", None));
-        assert_eq!(kill_shell("s", "sh#1"), call("POST", "/sessions/s/shells/sh%231/kill", None));
+        assert_eq!(sleep_session("s 1", 2), at("POST", "/sessions/s%201/sleep", None, 2));
+        assert_eq!(delete_session("s?1", 1), at("DELETE", "/sessions/s%3F1", None, 1));
+        assert_eq!(stop_task("s", "tu/1", 3), at("POST", "/sessions/s/tasks/tu%2F1/stop", None, 3));
+        assert_eq!(kill_shell("s", "sh#1", 1), at("POST", "/sessions/s/shells/sh%231/kill", None, 1));
     }
 
     #[test]
     fn background_moves_one_call_or_every_call() {
-        assert_eq!(background_task("s", Some("tu 1")), call("POST", "/sessions/s/tasks/tu%201/background", None));
-        assert_eq!(background_task("s", None), call("POST", "/sessions/s/tasks/background", None));
+        assert_eq!(background_task("s", Some("tu 1"), 1), at("POST", "/sessions/s/tasks/tu%201/background", None, 1));
+        assert_eq!(background_task("s", None, 4), at("POST", "/sessions/s/tasks/background", None, 4));
     }
 
     #[test]
     fn a_session_patch_keeps_all_three_states() {
         let rename = SessionPatch { title: Some(Edit::Set("Named".into())), ..Default::default() };
-        assert_eq!(update_session("s", &rename), call("PATCH", "/sessions/s", Some(r#"{"title":"Named"}"#)));
-        let clear = SessionPatch { title: Some(Edit::Clear), status_label: Some(Edit::Clear) };
-        assert_eq!(update_session("s", &clear).body.as_deref(), Some(r#"{"title":null,"statusLabel":null}"#));
+        assert_eq!(update_session("s", &rename, 2), at("PATCH", "/sessions/s", Some(r#"{"title":"Named"}"#), 2));
+        let clear = SessionPatch { title: Some(Edit::Clear), status_label: Some(Edit::Clear), agent: Some(Edit::Clear) };
+        assert_eq!(update_session("s", &clear, 1).body.as_deref(), Some(r#"{"title":null,"statusLabel":null,"agent":null}"#));
         let status = SessionPatch { status_label: Some(Edit::Set(StatusInput { text: "busy".into(), emoji: None })), ..Default::default() };
-        assert_eq!(update_session("s", &status).body.as_deref(), Some(r#"{"statusLabel":{"text":"busy"}}"#));
-        assert_eq!(update_session("s", &SessionPatch::default()).body.as_deref(), Some("{}"));
+        assert_eq!(update_session("s", &status, 1).body.as_deref(), Some(r#"{"statusLabel":{"text":"busy"}}"#));
+        assert_eq!(update_session("s", &SessionPatch::default(), 1).body.as_deref(), Some("{}"));
+        let join = SessionAgent { lead: Some("ag".into()), cross_owner: Some(true), ..Default::default() };
+        let named = SessionPatch { agent: Some(Edit::Set(join)), ..Default::default() };
+        assert_eq!(update_session("s", &named, 1).body.as_deref(), Some(r#"{"agent":{"lead":"ag","crossOwner":true}}"#));
+        let make = SessionPatch { agent: Some(Edit::Set(SessionAgent::default())), ..Default::default() };
+        assert_eq!(update_session("s", &make, 1).body.as_deref(), Some(r#"{"agent":{}}"#));
     }
 
     #[test]
     fn a_permission_answer_carries_only_what_was_said() {
         let allow = PermissionDecision::Allow { updated_input: None };
-        assert_eq!(resolve_permission("s", "r/1", &allow), call("POST", "/sessions/s/permissions/r%2F1", Some(r#"{"behavior":"allow"}"#)));
+        assert_eq!(
+            resolve_permission("s", "r/1", &allow, 2),
+            at("POST", "/sessions/s/permissions/r%2F1", Some(r#"{"behavior":"allow"}"#), 2)
+        );
         let input = json!({ "answers": { "Q": "A" } }).as_object().cloned();
-        let answered = resolve_permission("s", "r", &PermissionDecision::Allow { updated_input: input }).body;
+        let answered = resolve_permission("s", "r", &PermissionDecision::Allow { updated_input: input }, 1).body;
         assert_eq!(answered.as_deref(), Some(r#"{"behavior":"allow","updatedInput":{"answers":{"Q":"A"}}}"#));
         let deny = PermissionDecision::Deny { message: Some("no".into()), interrupt: Some(false) };
-        assert_eq!(resolve_permission("s", "r", &deny).body.as_deref(), Some(r#"{"behavior":"deny","message":"no","interrupt":false}"#));
+        assert_eq!(resolve_permission("s", "r", &deny, 1).body.as_deref(), Some(r#"{"behavior":"deny","message":"no","interrupt":false}"#));
         let bare = PermissionDecision::Deny { message: None, interrupt: None };
-        assert_eq!(resolve_permission("s", "r", &bare).body.as_deref(), Some(r#"{"behavior":"deny"}"#));
+        assert_eq!(resolve_permission("s", "r", &bare, 1).body.as_deref(), Some(r#"{"behavior":"deny"}"#));
     }
 
     #[test]
@@ -524,24 +574,36 @@ mod tests {
     }
 
     #[test]
-    fn agent_actions_always_send_an_object() {
+    fn agent_actions_name_the_conversation_they_were_meant_for() {
         assert_eq!(list_agents(), call("GET", "/agents", None));
-        assert_eq!(restart_agent("a", None, None), call("POST", "/agents/a/restart", Some("{}")));
-        assert_eq!(restart_agent("a", Some("go"), None).body.as_deref(), Some(r#"{"prompt":"go"}"#));
-        assert_eq!(restart_agent("a", None, Some("s1")).body.as_deref(), Some(r#"{"expectedSessionId":"s1"}"#));
-        assert_eq!(retire_agent("a/1", None, None), call("DELETE", "/agents/a%2F1", Some("{}")));
-        assert_eq!(retire_agent("a", Some(RetireMembers::Release), None).body.as_deref(), Some(r#"{"members":"release"}"#));
-        assert_eq!(retire_agent("a", Some(RetireMembers::Retire), None).body.as_deref(), Some(r#"{"members":"retire"}"#));
+        assert_eq!(retire_agent("a/1", None, 1), call("DELETE", "/agents/a%2F1", Some(r#"{"expectedGeneration":1}"#)));
         assert_eq!(
-            retire_agent("a", Some(RetireMembers::Release), Some("s1")).body.as_deref(),
-            Some(r#"{"members":"release","expectedSessionId":"s1"}"#)
+            retire_agent("a", Some(RetireMembers::Release), 3).body.as_deref(),
+            Some(r#"{"members":"release","expectedGeneration":3}"#)
         );
-        assert_eq!(retry_agent_start("a"), call("POST", "/agents/a/retry-start", Some("{}")));
-        assert_eq!(settle_undelivered("a", true), call("POST", "/agents/a/undelivered", Some(r#"{"send":true}"#)));
-        assert_eq!(agent_conversations("a b"), call("GET", "/agents/a%20b/conversations", None));
+        assert_eq!(
+            retire_agent("a", Some(RetireMembers::Retire), 2).body.as_deref(),
+            Some(r#"{"members":"retire","expectedGeneration":2}"#)
+        );
         assert_eq!(retired_agents(), call("GET", "/agents?retired=1", None));
         assert_eq!(reroll_avatar("a", None), call("POST", "/agents/a/avatar", Some("{}")));
         assert_eq!(reroll_avatar("a", Some("x")).body.as_deref(), Some(r#"{"seed":"x"}"#));
+    }
+
+    #[test]
+    fn conversation_calls_carry_the_expected_generation_in_the_body() {
+        assert_eq!(conversations("a b"), call("GET", "/sessions/a%20b/conversations", None));
+        assert_eq!(new_conversation("s", 2, None), call("POST", "/sessions/s/conversations", Some(r#"{"expectedGeneration":2}"#)));
+        assert_eq!(new_conversation("s", 2, Some("go")).body.as_deref(), Some(r#"{"expectedGeneration":2,"prompt":"go"}"#));
+        assert_eq!(
+            discard_and_cut("s", 3, "r.4", None),
+            call("POST", "/sessions/s/conversations/discard", Some(r#"{"expectedGeneration":3,"inputRevision":"r.4"}"#))
+        );
+        assert_eq!(retry_conversation_start("s", 2), call("POST", "/sessions/s/conversations/retry", Some(r#"{"expectedGeneration":2}"#)));
+        assert_eq!(
+            settle_pending_prompt("s", true, 2),
+            call("POST", "/sessions/s/conversations/pending", Some(r#"{"expectedGeneration":2,"send":true}"#))
+        );
     }
 
     #[test]
@@ -565,8 +627,8 @@ mod tests {
 
     #[test]
     fn a_new_agent_carries_its_config_and_team() {
-        let adopt = NewAgent { adopt: Some("s1".into()), lead: Some("a2".into()), cross_owner: Some(true), ..Default::default() };
-        assert_eq!(create_agent(&adopt), call("POST", "/agents", Some(r#"{"lead":"a2","adopt":"s1","crossOwner":true}"#)));
+        let member = NewAgent { lead: Some("a2".into()), cross_owner: Some(true), ..Default::default() };
+        assert_eq!(create_agent(&member), call("POST", "/agents", Some(r#"{"lead":"a2","crossOwner":true}"#)));
         let config = AgentConfig { cwd: Some("/w".into()), brief: Some("b".into()), ..Default::default() };
         let named = NewAgent { name: Some("Ada".into()), config: Some(config), sharing: Some(Sharing::Shared), ..Default::default() };
         assert_eq!(create_agent(&named).body.as_deref(), Some(r#"{"name":"Ada","config":{"cwd":"/w","brief":"b"},"sharing":"shared"}"#));
@@ -582,7 +644,7 @@ mod tests {
 
     #[test]
     fn session_asset_routes_encode_ids_and_names() {
-        assert_eq!(upload_attachment("s", "a+b c.png"), call("POST", "/sessions/s/attachments?name=a%2Bb%20c.png", None));
+        assert_eq!(upload_attachment("s", "a+b c.png", 2), at("POST", "/sessions/s/attachments?name=a%2Bb%20c.png", None, 2));
         assert_eq!(attachment("s", "at/1"), call("GET", "/sessions/s/attachments/at%2F1", None));
         assert_eq!(produced_file("s", "f 1"), call("GET", "/sessions/s/produced/f%201", None));
         assert_eq!(project_icon("s/1"), call("GET", "/sessions/s%2F1/project/icon", None));
@@ -594,10 +656,10 @@ mod tests {
     fn mcp_and_shell_routes() {
         assert_eq!(mcp_servers("s"), call("GET", "/sessions/s/mcp", None));
         assert_eq!(
-            mcp_action("s", "my server", McpAction::Disable),
-            call("POST", "/sessions/s/mcp/my%20server", Some(r#"{"action":"disable"}"#))
+            mcp_action("s", "my server", McpAction::Disable, 1),
+            at("POST", "/sessions/s/mcp/my%20server", Some(r#"{"action":"disable"}"#), 1)
         );
-        assert_eq!(mcp_action("s", "x", McpAction::Reconnect).body.as_deref(), Some(r#"{"action":"reconnect"}"#));
+        assert_eq!(mcp_action("s", "x", McpAction::Reconnect, 1).body.as_deref(), Some(r#"{"action":"reconnect"}"#));
         assert_eq!(list_shells("s"), call("GET", "/sessions/s/shells", None));
         assert_eq!(get_shell("s", "sh 1"), call("GET", "/sessions/s/shells/sh%201", None));
         assert_eq!(shell_output("s", "x", ShellOutputView::Text, None), call("GET", "/sessions/s/shells/x/output?view=text", None));

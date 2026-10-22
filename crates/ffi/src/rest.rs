@@ -7,11 +7,13 @@ pub struct HttpCall {
     pub method: String,
     pub path: String,
     pub body: Option<String>,
+    // The conversation a mutating session call is for: sent as the `generation_header()`, when set.
+    pub generation: Option<i64>,
 }
 
 impl From<calls::HttpCall> for HttpCall {
     fn from(call: calls::HttpCall) -> Self {
-        Self { method: call.method.to_owned(), path: call.path, body: call.body }
+        Self { method: call.method.to_owned(), path: call.path, body: call.body, generation: call.generation }
     }
 }
 
@@ -137,49 +139,87 @@ pub fn get_session_call(id: String) -> HttpCall {
     calls::get_session(&id).into()
 }
 
+// Every call that changes a session names the conversation the caller is looking at (`generation`, from
+// `SessionChrome.conversation` or the list row's `conversation`); the gateway refuses it once that one ended.
 #[uniffi::export]
-pub fn update_session_call(id: String, patch: SessionPatch) -> HttpCall {
+pub fn update_session_call(id: String, patch: SessionPatch, generation: i64) -> HttpCall {
     let status_label = patch.status_label.map(|e| match e {
         StatusEdit::Set { text, emoji } => Edit::Set(calls::StatusInput { text, emoji }),
         StatusEdit::Clear => Edit::Clear,
     });
-    calls::update_session(&id, &calls::SessionPatch { title: edit(patch.title), status_label }).into()
+    calls::update_session(&id, &calls::SessionPatch { title: edit(patch.title), status_label, agent: None }, generation).into()
+}
+
+// Make agent (no `lead`) or a team join (`lead`, with `cross_owner` for another owner's lead) of an unnamed session:
+// it keeps its id, now named.
+#[uniffi::export(default(lead = None, cross_owner = None))]
+pub fn name_session_call(id: String, lead: Option<String>, cross_owner: Option<bool>, generation: i64) -> HttpCall {
+    let agent = calls::SessionAgent { lead, cross_owner, ..calls::SessionAgent::default() };
+    calls::update_session(&id, &calls::SessionPatch { agent: Some(Edit::Set(agent)), ..Default::default() }, generation).into()
 }
 
 #[uniffi::export]
-pub fn sleep_session_call(id: String) -> HttpCall {
-    calls::sleep_session(&id).into()
+pub fn sleep_session_call(id: String, generation: i64) -> HttpCall {
+    calls::sleep_session(&id, generation).into()
+}
+
+// Closes an unnamed session; a named one retires to Past agents, its members released.
+#[uniffi::export]
+pub fn delete_session_call(id: String, generation: i64) -> HttpCall {
+    calls::delete_session(&id, generation).into()
 }
 
 #[uniffi::export]
-pub fn delete_session_call(id: String) -> HttpCall {
-    calls::delete_session(&id).into()
-}
-
-#[uniffi::export]
-pub fn stop_task_call(session_id: String, tool_use_id: String) -> HttpCall {
-    calls::stop_task(&session_id, &tool_use_id).into()
+pub fn stop_task_call(session_id: String, tool_use_id: String, generation: i64) -> HttpCall {
+    calls::stop_task(&session_id, &tool_use_id, generation).into()
 }
 
 #[uniffi::export(default(tool_use_id = None))]
-pub fn background_task_call(session_id: String, tool_use_id: Option<String>) -> HttpCall {
-    calls::background_task(&session_id, tool_use_id.as_deref()).into()
+pub fn background_task_call(session_id: String, tool_use_id: Option<String>, generation: i64) -> HttpCall {
+    calls::background_task(&session_id, tool_use_id.as_deref(), generation).into()
 }
 
 #[uniffi::export]
-pub fn kill_shell_call(session_id: String, shell_id: String) -> HttpCall {
-    calls::kill_shell(&session_id, &shell_id).into()
+pub fn kill_shell_call(session_id: String, shell_id: String, generation: i64) -> HttpCall {
+    calls::kill_shell(&session_id, &shell_id, generation).into()
 }
 
 #[uniffi::export]
-pub fn resolve_permission_call(session_id: String, request_id: String, decision: PermissionDecision) -> HttpCall {
+pub fn resolve_permission_call(session_id: String, request_id: String, decision: PermissionDecision, generation: i64) -> HttpCall {
     let decision = match decision {
         PermissionDecision::Allow { updated_input_json } => {
             calls::PermissionDecision::Allow { updated_input: updated_input_json.and_then(|json| serde_json::from_str(&json).ok()) }
         }
         PermissionDecision::Deny { message, interrupt } => calls::PermissionDecision::Deny { message, interrupt },
     };
-    calls::resolve_permission(&session_id, &request_id, &decision).into()
+    calls::resolve_permission(&session_id, &request_id, &decision, generation).into()
+}
+
+#[uniffi::export]
+pub fn conversations_call(id: String) -> HttpCall {
+    calls::conversations(&id).into()
+}
+
+// New conversation: n+1 under the same id. A 409 may ask for `discard_confirmation`, or `uncertain_prompt_conversation`.
+#[uniffi::export(default(prompt = None))]
+pub fn new_conversation_call(id: String, expected_generation: i64, prompt: Option<String>) -> HttpCall {
+    calls::new_conversation(&id, expected_generation, prompt.as_deref()).into()
+}
+
+// After a person confirmed a `DiscardConfirmation`: its `conversation` and `input_revision`.
+#[uniffi::export(default(prompt = None))]
+pub fn discard_and_cut_call(id: String, expected_generation: i64, input_revision: String, prompt: Option<String>) -> HttpCall {
+    calls::discard_and_cut(&id, expected_generation, &input_revision, prompt.as_deref()).into()
+}
+
+#[uniffi::export]
+pub fn retry_conversation_start_call(id: String, expected_generation: i64) -> HttpCall {
+    calls::retry_conversation_start(&id, expected_generation).into()
+}
+
+#[uniffi::export]
+pub fn settle_pending_prompt_call(id: String, send: bool, expected_generation: i64) -> HttpCall {
+    calls::settle_pending_prompt(&id, send, expected_generation).into()
 }
 
 #[uniffi::export]
@@ -197,33 +237,13 @@ pub fn update_agent_call(id: String, patch: AgentPatch) -> HttpCall {
     calls::update_agent(&id, &patch).into()
 }
 
-#[uniffi::export(default(prompt = None, expected_session_id = None))]
-pub fn restart_agent_call(id: String, prompt: Option<String>, expected_session_id: Option<String>) -> HttpCall {
-    calls::restart_agent(&id, prompt.as_deref(), expected_session_id.as_deref()).into()
-}
-
-#[uniffi::export(default(members = None, expected_session_id = None))]
-pub fn retire_agent_call(id: String, members: Option<RetireMembers>, expected_session_id: Option<String>) -> HttpCall {
+#[uniffi::export(default(members = None))]
+pub fn retire_agent_call(id: String, members: Option<RetireMembers>, expected_generation: i64) -> HttpCall {
     let members = members.map(|m| match m {
         RetireMembers::Release => calls::RetireMembers::Release,
         RetireMembers::Retire => calls::RetireMembers::Retire,
     });
-    calls::retire_agent(&id, members, expected_session_id.as_deref()).into()
-}
-
-#[uniffi::export]
-pub fn retry_agent_start_call(id: String) -> HttpCall {
-    calls::retry_agent_start(&id).into()
-}
-
-#[uniffi::export]
-pub fn settle_undelivered_call(id: String, send: bool) -> HttpCall {
-    calls::settle_undelivered(&id, send).into()
-}
-
-#[uniffi::export]
-pub fn agent_conversations_call(id: String) -> HttpCall {
-    calls::agent_conversations(&id).into()
+    calls::retire_agent(&id, members, expected_generation).into()
 }
 
 #[uniffi::export]
@@ -247,44 +267,8 @@ pub fn list_profiles_call() -> HttpCall {
 }
 
 #[uniffi::export]
-pub fn session_request_call(session_id: String, method: String, path: String, scoped: bool) -> HttpCall {
-    HttpCall { method, path: calls::session_request_path(&session_id, &path, scoped), body: None }
-}
-
-// An agent made from what already exists (`adopt` a session, join a `lead`); a configured new agent comes from
-// `CreateForm.call`.
-#[derive(Debug, Clone, PartialEq, Eq, Default, uniffi::Record)]
-pub struct NewAgent {
-    #[uniffi(default)]
-    pub name: Option<String>,
-    #[uniffi(default)]
-    pub prompt: Option<String>,
-    #[uniffi(default)]
-    pub lead: Option<String>,
-    #[uniffi(default)]
-    pub adopt: Option<String>,
-    #[uniffi(default)]
-    pub sharing: Option<Sharing>,
-    #[uniffi(default)]
-    pub cross_owner: Option<bool>,
-}
-
-#[uniffi::export]
-pub fn create_agent_call(request: NewAgent) -> HttpCall {
-    let sharing = request.sharing.map(|s| match s {
-        Sharing::Private => wd_native::rest::Sharing::Private,
-        Sharing::Shared => wd_native::rest::Sharing::Shared,
-    });
-    let request = calls::NewAgent {
-        name: request.name,
-        config: None,
-        prompt: request.prompt,
-        lead: request.lead,
-        adopt: request.adopt,
-        sharing,
-        cross_owner: request.cross_owner,
-    };
-    calls::create_agent(&request).into()
+pub fn session_request_call(session_id: String, method: String, path: String, scoped: bool, generation: Option<i64>) -> HttpCall {
+    HttpCall { method, path: calls::session_request_path(&session_id, &path, scoped), body: None, generation }
 }
 
 #[uniffi::export(default(dir = None, limit = None, offset = None, profile = None))]
@@ -333,8 +317,8 @@ pub enum ShellOutputView {
 
 // The platform sends the file's bytes as the body, under its own media type.
 #[uniffi::export]
-pub fn upload_attachment_call(session_id: String, name: String) -> HttpCall {
-    calls::upload_attachment(&session_id, &name).into()
+pub fn upload_attachment_call(session_id: String, name: String, generation: i64) -> HttpCall {
+    calls::upload_attachment(&session_id, &name, generation).into()
 }
 
 #[uniffi::export]
@@ -348,8 +332,8 @@ pub fn mcp_servers_call(session_id: String) -> HttpCall {
 }
 
 #[uniffi::export]
-pub fn mcp_action_call(session_id: String, server: String, action: McpAction) -> HttpCall {
-    calls::mcp_action(&session_id, &server, action.into()).into()
+pub fn mcp_action_call(session_id: String, server: String, action: McpAction, generation: i64) -> HttpCall {
+    calls::mcp_action(&session_id, &server, action.into(), generation).into()
 }
 
 #[uniffi::export]

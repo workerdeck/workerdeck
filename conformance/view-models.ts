@@ -1,4 +1,4 @@
-import { DEFAULT_VIEW_CONFIG, sessionState, unseenCount } from '@workerdeck/protocol'
+import { DEFAULT_VIEW_CONFIG, ENGINE_CAPABILITIES, sessionState, unseenCount } from '@workerdeck/protocol'
 import type {
   AgentInfo,
   AgentRef,
@@ -9,6 +9,7 @@ import type {
   ShellInfo,
   SubagentInfo,
   ViewConfig,
+  Watermark,
   WorkspaceScope,
 } from '@workerdeck/protocol'
 
@@ -293,7 +294,7 @@ const SESSION_LIST: VmCase[] = [
       [{ groupBy: 'gateway' }],
       [{ groupBy: 'banana', sortBy: 'name' }],
       [{ groupBy: 'custom', customGroups: CUSTOM, collapsedGroups: ['custom:g-ops'], earlierOpen: true, subagents: 'all' }],
-      [{ search: 'api', gateways: ['mac'], states: ['working'], scoped: false, shells: 'none', tasks: 'all', collapsedTeams: ['mac:ag-lead'], expandedTeams: ['mac:ag-x'] }],
+      [{ search: 'api', gateways: ['mac'], states: ['working'], scoped: false, shells: 'none', tasks: 'all', expandedTeams: ['mac:ag-x'] }],
     ],
   },
   { module: 'session-list', name: 'adapters', fn: 'adaptersOf', calls: [[ROWS], [[]]] },
@@ -775,8 +776,8 @@ const WATERMARKS: VmCase[] = [
     calls: [
       [
         {
-          'mac:old': { itemCount: 1, activity: 1, turns: 1, seenAt: T0 - 40 * 86_400_000 },
-          'mac:legacy': { itemCount: 4, activity: 9, turns: 2, seenAt: T0 - 1_000 },
+          'mac:old': { itemCount: 1, activity: 1, prose: 1, turns: 1, seenAt: T0 - 40 * 86_400_000 },
+          'mac:legacy': { itemCount: 4, activity: 9, turns: 2, seenAt: T0 - 1_000 } as unknown as Watermark,
         },
         [
           ['mark', 'mac', 's1', { itemCount: 3, activity: 5, prose: 2, turns: 1 }, T0],
@@ -800,7 +801,6 @@ const WATERMARKS: VmCase[] = [
     fn: 'unseenCount',
     calls: [
       [undefined, { proseCount: 5 }],
-      [{ itemCount: 0, activity: 0, turns: 0, seenAt: T0 }, { proseCount: 5 }],
       [{ itemCount: 0, activity: 0, prose: 2, turns: 0, seenAt: T0 }, { proseCount: 5 }],
       [{ itemCount: 0, activity: 0, prose: 9, turns: 0, seenAt: T0 }, { proseCount: 5 }],
       [{ itemCount: 0, activity: 0, prose: 2, turns: 0, seenAt: T0 }, {}],
@@ -1125,6 +1125,8 @@ const PROMPT: VmCase[] = [
 
 const FOLLOWER: AgentRef = { id: 'ag', name: 'WD-Test' }
 
+const SLEEPER: SessionInfo['capabilities'] = { ...ENGINE_CAPABILITIES.claude, engineSleep: true }
+
 const CONVERSATIONS: VmCase[] = [
   {
     module: 'conversations',
@@ -1158,10 +1160,10 @@ const CONVERSATIONS: VmCase[] = [
     name: 'can-sleep',
     fn: 'canSleep',
     calls: [
-      [info('a', { capabilities: { engineSleep: true } as SessionInfo['capabilities'], sdkSessionId: 'sdk' })],
-      [info('a', { capabilities: { engineSleep: true } as SessionInfo['capabilities'] })],
-      [info('a', { capabilities: { engineSleep: true } as SessionInfo['capabilities'], sdkSessionId: 'sdk', engineAsleep: true })],
-      [info('a', { capabilities: { engineSleep: true } as SessionInfo['capabilities'], sdkSessionId: 'sdk', status: 'running' })],
+      [info('a', { capabilities: SLEEPER, sdkSessionId: 'sdk' })],
+      [info('a', { capabilities: SLEEPER })],
+      [info('a', { capabilities: SLEEPER, sdkSessionId: 'sdk', engineAsleep: true })],
+      [info('a', { capabilities: SLEEPER, sdkSessionId: 'sdk', status: 'running' })],
       [info('a', { sdkSessionId: 'sdk' })],
     ],
   },

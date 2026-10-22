@@ -5,7 +5,7 @@ import WorkerDeckKit
 
 // The app's unread memory. The marks live in the core's `SessionList` (the shared watermark rules), which the sessions
 // list draws from too, so a mark the session screen writes clears the list's badge with no second copy to drift. The
-// store keeps the kit's old format, so marks carry over. `revision` is what Observation sees: the core is not observable.
+// store is the JSON text the core writes. `revision` is what Observation sees: the core is not observable.
 @MainActor
 @Observable
 final class UnreadModel {
@@ -17,12 +17,7 @@ final class UnreadModel {
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
-    list = SessionList(configJson: nil, marksJson: defaults.string(forKey: Self.key) ?? Self.legacy(defaults))
-  }
-
-  // The kit stored the map as `Data`; the core reads the same JSON as text.
-  private static func legacy(_ defaults: UserDefaults) -> String? {
-    defaults.data(forKey: key).flatMap { String(data: $0, encoding: .utf8) }
+    list = SessionList(configJson: nil, marksJson: defaults.string(forKey: Self.key))
   }
 
   // Callers own the "genuinely on screen" test: that is a fact about the UI, not about storage.

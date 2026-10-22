@@ -40,7 +40,7 @@ final class AgentAvatarLoader {
     }
   }
 
-  private static func get(_ path: String) -> HttpCall { HttpCall(method: "GET", path: path, body: nil) }
+  private static func get(_ path: String) -> HttpCall { HttpCall(method: "GET", path: path, body: nil, generation: nil) }
 
   private static func slice(_ data: Data, _ durations: [Double]) -> [UIImage]? {
     guard let image = UIImage(data: data)?.cgImage,

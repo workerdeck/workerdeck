@@ -182,6 +182,13 @@
           "cacheWrite1h": 2,
           "cacheRead": 0.1
         },
+        "gpt-6.1-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
         "gpt-6-astra": {
           "input": 10,
           "output": 50,
@@ -382,6 +389,13 @@
           "input": 1,
           "output": 5,
           "cacheWrite5m": 1.25,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
+        "gpt-6.1-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
           "cacheWrite1h": 2,
           "cacheRead": 0.1
         },
@@ -599,6 +613,13 @@
           "input": 1,
           "output": 5,
           "cacheWrite5m": 1.25,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
+        "gpt-6.1-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
           "cacheWrite1h": 2,
           "cacheRead": 0.1
         },
@@ -802,6 +823,13 @@
           "cacheWrite1h": 2,
           "cacheRead": 0.1
         },
+        "gpt-6.1-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
         "gpt-6-astra": {
           "input": 10,
           "output": 50,
@@ -994,6 +1022,13 @@
           "input": 1,
           "output": 5,
           "cacheWrite5m": 1.25,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
+        "gpt-6.1-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
           "cacheWrite1h": 2,
           "cacheRead": 0.1
         },

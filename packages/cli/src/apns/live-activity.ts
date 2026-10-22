@@ -44,6 +44,8 @@ export type ActivityContentState = {
   request?: ActivityRequestState
   epoch?: number
   seq?: number
+  // The conversation `seq` and `request` belong to: the card's answer names it, so a cut since refuses it.
+  conversation?: number
   // Always null on the wire. The app writes a value locally between an intent's tap and the
   // server's answer, and every push from here is what clears it.
   decision: null
@@ -262,15 +264,16 @@ export function projectContentState(options: {
         }),
     ...(info.epoch === undefined ? {} : { epoch: info.epoch }),
     seq: info.lastSeq,
+    ...(info.conversation === undefined ? {} : { conversation: info.conversation }),
     decision: null,
   }
 }
 
-// Hashes what the card *draws*, so a push is only spent on a visible change. `seq` and `epoch` are
+// Hashes what the card *draws*, so a push is only spent on a visible change. `seq`, `epoch` and `conversation` are
 // deep-link freight that moves on every event, `decision` is the phone's; hashing any of them would
 // make every tool call a push and defeat the throttle entirely.
 export function contentHash(state: ActivityContentState): string {
-  const { seq: _seq, epoch: _epoch, decision: _decision, ...drawn } = state
+  const { seq: _seq, epoch: _epoch, conversation: _conversation, decision: _decision, ...drawn } = state
   return createHash('sha256').update(JSON.stringify(drawn)).digest('base64url').slice(0, 22)
 }
 

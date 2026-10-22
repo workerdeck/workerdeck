@@ -56,6 +56,8 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
     /// survives a dormant wake. Same staleness contract as `PushPayload`.
     public var epoch: Int?
     public var seq: Int?
+    /// The conversation `seq` and `request` belong to: a tap opens it, and an answer names it.
+    public var conversation: Int?
     /// Only ever written by an intent, locally, between the tap and the truth.
     /// Every push from the server carries `nil`, which is what clears it.
     public var decision: String?
@@ -73,6 +75,7 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
       request: Request? = nil,
       epoch: Int? = nil,
       seq: Int? = nil,
+      conversation: Int? = nil,
       decision: String? = nil
     ) {
       self.phase = phase
@@ -87,6 +90,7 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
       self.request = request
       self.epoch = epoch
       self.seq = seq
+      self.conversation = conversation
       self.decision = decision
     }
   }

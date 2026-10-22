@@ -103,9 +103,10 @@ impl McpServers {
         calls::mcp_servers(&self.session_id).into()
     }
 
-    pub fn action_call(&self, server: String, action: McpAction) -> HttpCall {
+    // `generation`: the conversation the screen shows (`SessionChrome.conversation`).
+    pub fn action_call(&self, server: String, action: McpAction, generation: i64) -> HttpCall {
         self.lock().acting();
-        calls::mcp_action(&self.session_id, &server, action.into()).into()
+        calls::mcp_action(&self.session_id, &server, action.into(), generation).into()
     }
 
     // The action's answer; a refusal returns the refetch to make, whose answer goes to `answered`.

@@ -1401,18 +1401,33 @@ and stepped in a `TimelineView`, desaturated asleep, a dashed engine tile with n
 `AgentAvatarLoader` fetches what the core list's `avatarFetches` names (per gateway and avatar
 path, retried a minute after a failure) and keeps the decoded frames. A card whose session or team needs an
 answer is tinted orange. Verbs follow the web menu (rename, status, avatar, make agent, add to
-team, leave, dissolve, sharing, new conversation, retire), from the `···`, a long press, and
-swipes (leading rename and new conversation). New agent reuses the New session form with an
-agent section (name, team, sharing, brief). Team moves are **same-gateway only** on the phone;
+team, leave, dissolve, sharing, new conversation, conversations, delete agent), from the `···`, a long
+press, and swipes (leading rename and new conversation). Make agent and a team join name the session in
+place (`name_session_call`, `PATCH /sessions/:id { agent }`). New agent reuses the New session form with an
+agent section (name, team, sharing, brief); New session has an optional name, which creates it named. Team moves are **same-gateway only** on the phone;
 cross-gateway invitations stay on the web and VS Code, and drag-to-team is out. `UIPREVIEW=teams`
 draws every state from canned rows.
 
-- **Agent conversations.** `CoreFollowSession` swaps the screen in place and shows "Starting a new
-  conversation" until the successor's first frame. An archive opens on its own route that never follows:
-  banner from `Session.archived_view` (one `GET /agents` read), Go to current, no composer or actions. Row
-  long-press: Conversations sheet, New conversation (gated, hint as subtitle), Delete agent... (replaces Retire
-  and Close on agent rows); Past agents sit in the filter menu. Send again / Dismiss and Retry start show on the
-  session screen only (the list reads `GET /sessions`). `CoreArchivedUITests` over `UIPREVIEW=corearchived`.
+- **Conversations (protocol 2).** A route is a stable session id and an optional past conversation
+  (`SessionRoute.session(.., conversation:)`, drawn by `CoreSessionRoute`). There is no follow: a cut closes the
+  socket and the same screen reattaches to conversation n+1; Go to current swaps a past conversation for the live
+  screen in place. A past conversation opens read-only over its own socket (`?conversation=n`): banner from
+  `Session.archived_view` over one `GET /sessions/:id/conversations` read, no composer, no actions, no read marks
+  and no catch-up seam. Every card and the session menu offer one New conversation (gated, hint as subtitle) for
+  every live session; an `unconfirmed_input` 409 asks before discard-and-cut (`CoreConversationDialogs`, the
+  list's `PendingDiscard`), and a cut refused over a first message of unknown delivery asks Send again or
+  Dismiss first. Conversations sheet for any session, rows by n; Past agents (filter menu) open every
+  conversation read-only. Send again / Dismiss and Retry start bars show on the session screen only.
+- **Every mutating call names its conversation** (chrome / row `conversation`, sent as the generation header):
+  list actions, the session menu, MCP actions, a notification's or Live Activity's Approve and Deny (the payload
+  and the content state carry `conversation`; without one the approval is not sent). A prompt the gateway hands
+  back (`take_undelivered`) lands in an empty composer with a notice; staged files re-upload when the session
+  moves on.
+- **Bookmarks are per conversation** and notification / Live Activity taps carry n, so an old one opens its
+  past conversation (`address_of`). Read marks and bookmarks are read as UserDefaults strings only; a value of
+  the older `Data` shape reads as nothing (client state may reset). `CoreArchivedUITests` over
+  `UIPREVIEW=corearchived`; fixtures attach with a conversation and a whole capability record, since the core
+  decodes neither partially.
 
 ## `apps/android`
 
@@ -1539,17 +1554,22 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   that never leaves the Android Keystore. Several gateways merge into one list; the gateway menu adds
   and forgets them, a row names its gateway only when there is more than one (core `shows_gateway`),
   and two on one host are named by `host:port` (`gateway_names`). The emulator reaches a loopback
-  gateway at `10.0.2.2`.
+  gateway at `10.0.2.2`. A single-gateway pairing from before multi-gateway is not imported; it is ignored.
 - **Generated, never committed**: the UniFFI Kotlin (`uniffiKotlin`, from the host library's
   metadata) and `libwdffi.so` for arm64-v8a and x86_64 (`cargoNdk`). The JVM unit tests load the
   host build of `libwdffi` through JNA, so they drive the real core without an emulator.
 
-- **Agent conversations.** Mirrors iOS on the same FFI (`sessions/AgentCalls.kt`, `ConversationsSheet.kt`,
-  `session/ConversationBars.kt`): archived banner + Go to current, read-only archive, a past conversation opens
-  a pinned route (extra `"pinned"` part, `SessionsModel.pin`) that never follows, "Starting a new conversation"
-  while the saved `handover` flag is set. Row and session menus: Conversations, New conversation (gated),
-  Delete agent... (Android never had Retire/Close). Past agents sit in the gateway menu. Send again / Dismiss and
-  Retry start on the session screen. The list floats a search field (core `SessionList.setSearch`, cleared at
+- **Conversations (protocol 2).** Mirrors iOS on the same FFI (`sessions/ConversationCalls.kt`,
+  `ConversationsSheet.kt`, `session/ConversationBars.kt`). The saved route is host, session id, title, then
+  the conversation (`current`, or a past one's n) and the entry parts; no follow, no successor, no composer
+  hand-over: a cut reattaches the same `SessionModel`, which re-uploads staged files and puts a handed-back
+  prompt into an empty draft. A past conversation is a `SessionModel(.., history = n)` over its own socket,
+  read-only, with the banner and Go to current, and moves no read mark. Row and session menus: New conversation
+  (every live session, gated), Conversations (any session), Delete agent... on named sessions; the
+  `unconfirmed_input` 409 opens a discard dialog, a cut refused over an uncertain first message asks Send again
+  or Dismiss. Every mutating call carries the conversation (`GatewayClient` sets the generation header).
+  Bookmarks are per conversation (`SessionBookmarks` over the attached n). Past agents sit in the gateway menu.
+  Send again / Dismiss and Retry start on the session screen. The list floats a search field (core `SessionList.setSearch`, cleared at
   launch and by Back first) and the New `+` menu in a bottom bar, like iOS 26; the gateway menu stays on top.
 
 ## `apps/demo`

@@ -28,12 +28,13 @@ enum SessionRoute: Hashable {
   ///   line under a session row - the session opens with that shell's terminal
   ///   already pushed. The third sibling of `subagent` and `reveal` and never
   ///   set with either: three kinds of step, three destinations.
+  /// - Parameter conversation: a past conversation's n, opened read-only (from
+  ///   the Conversations sheet, a bookmark or a notification about it); nil is
+  ///   the session's current conversation.
   case session(
     hostId: UUID, sessionId: String, seq: Int? = nil, epoch: Int? = nil,
-    subagent: String? = nil, reveal: String? = nil, shell: String? = nil)
+    subagent: String? = nil, reveal: String? = nil, shell: String? = nil, conversation: Int64? = nil)
   case create(hostId: UUID, seed: CreateSessionSeed)
-  // A past conversation opened from an agent's history: read-only, and it never follows the agent.
-  case conversation(hostId: UUID, sessionId: String)
 
   // Where a step line under a session row goes. Here rather than at the list,
   // because the preview harness routes its own copy of the same rows: with the

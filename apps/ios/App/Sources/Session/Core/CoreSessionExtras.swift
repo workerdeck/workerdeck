@@ -43,14 +43,17 @@ enum CoreRowMenu {
   ) -> (Int, Bool) -> TerminalRowMenu? {
     { row, inFrame in
       guard let menu = model.rowMenu(row: row, inFrame: inFrame) else { return nil }
+      let conversation = model.ui.chrome?.conversation
       let bookmark = menu.bookmarkItemId.flatMap { id in
-        bookmarks.map { store in
-          TerminalRowMenu.Bookmark(
-            active: store.bookmarks(host: hostId, sessionId: sessionId).contains(id),
-            toggle: {
-              store.toggle(host: hostId, sessionId: sessionId, itemId: id)
-              model.setBookmarks(store.bookmarks(host: hostId, sessionId: sessionId))
-            })
+        bookmarks.flatMap { store in
+          conversation.map { n in
+            TerminalRowMenu.Bookmark(
+              active: store.bookmarks(host: hostId, sessionId: sessionId, conversation: n).contains(id),
+              toggle: {
+                store.toggle(host: hostId, sessionId: sessionId, conversation: n, itemId: id)
+                model.setBookmarks(store.bookmarks(host: hostId, sessionId: sessionId, conversation: n))
+              })
+          }
         }
       }
       let background = menu.backgroundCallId.map { id in { model.backgroundTask(id) } }

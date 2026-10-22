@@ -330,6 +330,11 @@ describe('buildPush', () => {
     expect((woken.payload as Record<string, unknown>).epoch).toBe(3)
   })
 
+  it('names the conversation the seq belongs to, so a tap after a cut opens that one', () => {
+    const cut = buildPush(notification({ preview: 'done', session: { ...session, conversation: 2 } }), undefined)
+    expect((cut.payload as Record<string, unknown>).conversation).toBe(2)
+  })
+
   it('collapses every type per session, one key per kind', () => {
     const types: SessionNotification['type'][] = ['permission_requested', 'turn_completed', 'session_error', 'session_closed']
     const keys = types.map((type) => buildPush(notification({ type }), undefined).collapseId)

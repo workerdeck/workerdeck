@@ -285,4 +285,11 @@ final class ActivityCoordinator {
       .first { $0.attributes.sessionId == sessionId && (hostId == nil || $0.attributes.hostId == hostId) }?
       .content.state.request
   }
+
+  // The conversation the card's request belongs to: its answer names it, so a cut since refuses it.
+  nonisolated func conversation(sessionId: String, hostId: String?) -> Int64? {
+    Activity<SessionActivityAttributes>.activities
+      .first { $0.attributes.sessionId == sessionId && (hostId == nil || $0.attributes.hostId == hostId) }?
+      .content.state.conversation.map(Int64.init)
+  }
 }

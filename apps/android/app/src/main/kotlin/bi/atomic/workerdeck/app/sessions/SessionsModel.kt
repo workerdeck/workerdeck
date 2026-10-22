@@ -7,12 +7,11 @@ import androidx.lifecycle.viewModelScope
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.session.BookmarkStore
-import bi.atomic.workerdeck.core.ffi.ConversationFollow
 import bi.atomic.workerdeck.core.ffi.ConversationItem
-import bi.atomic.workerdeck.core.ffi.ConversationSelection
 import bi.atomic.workerdeck.core.ffi.ListRow
 import bi.atomic.workerdeck.core.ffi.PastAgent
 import bi.atomic.workerdeck.core.ffi.CreateForm
+import bi.atomic.workerdeck.core.ffi.DiscardConfirmation
 import bi.atomic.workerdeck.core.ffi.ListStep
 import bi.atomic.workerdeck.core.ffi.metaCall
 import bi.atomic.workerdeck.core.ffi.StepKind
@@ -51,15 +50,16 @@ data class PastAgentEntry(val hostId: String, val agent: PastAgent)
 
 fun searching(search: String): Boolean = search.trim().isNotEmpty()
 
-data class ConversationsTarget(val hostId: String, val agentId: String, val name: String, val retired: Boolean)
+// Any session, named or not; `retired` is a deleted agent from Past agents, whose every conversation opens read-only.
+data class ConversationsTarget(val hostId: String, val sessionId: String, val name: String, val title: String?, val retired: Boolean)
+
+// A card's New conversation the gateway refused over unconfirmed input: the row it was for and what discarding binds.
+data class PendingDiscard(val row: ListRow, val confirmation: DiscardConfirmation)
 
 fun describe(error: Throwable): String = when (error) {
     is ListException.NotASessionList -> "Not a WorkerDeck gateway, or the auth key is wrong"
     else -> error.message?.takeIf { it.isNotBlank() } ?: "The gateway did not answer"
 }
-
-// The open session screen moves from `from` to `to`, the agent's current conversation.
-data class Retarget(val hostId: String, val from: String, val to: String)
 
 // The list is the core's `SessionList`: this model fetches, persists what the core hands back, and polls.
 class SessionsModel(app: Application) : AndroidViewModel(app) {
@@ -76,9 +76,8 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     private var errors: Map<String, String> = emptyMap()
     private var poll: Job? = null
     private val recaps = mutableMapOf<String, ReadMark?>()
-    private var follow: Pair<String, ConversationFollow>? = null
-    private val retargetState = MutableStateFlow<Retarget?>(null)
-    val retarget: StateFlow<Retarget?> = retargetState
+    private val discardState = MutableStateFlow<PendingDiscard?>(null)
+    val discard: StateFlow<PendingDiscard?> = discardState
 
     // The paired gateways, in pairing order; the list merges them. Re-attaching the same set is a no-op.
     fun attach(gateways: List<Gateway>) {
@@ -122,10 +121,6 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         val reached = answers.filter { it.second.isSuccess }.map { it.first }
         readMetas(reached)
         for (client in reached) if (client.gateway.id !in pastRead) readPastAgents(client.gateway.id)
-        follow?.let { (hostId, follow) ->
-            val from = follow.current()
-            follow.listed(list)?.let { retargetState.value = Retarget(hostId, from, it) }
-        }
         state.value = state.value.copy(groups = draw(), loaded = true, error = errorText())
         fetchAvatars()
     }
@@ -146,7 +141,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun readPastAgents(hostId: String) {
         val client = clients[hostId] ?: return
-        val read = AgentCalls(client).pastAgents()
+        val read = ConversationCalls(client).pastAgents()
         pastRead += hostId
         if (clients[hostId] !== client) return
         val kept = state.value.pastAgents.filter { it.hostId != hostId }
@@ -157,24 +152,44 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { readPastAgents(hostId) }
     }
 
-    suspend fun conversations(hostId: String, agentId: String): List<ConversationItem>? =
-        clients[hostId]?.let { AgentCalls(it).conversations(agentId) }
+    suspend fun conversations(hostId: String, sessionId: String, title: String?): List<ConversationItem>? =
+        clients[hostId]?.let { ConversationCalls(it).conversations(sessionId, title) }
 
-    fun restart(row: ListRow) {
-        val agentId = row.agentId ?: return
-        if (row.newConversationBlocked != null) return
-        agentAct(row, "Could not start a new conversation") { it.restart(agentId, row.sessionId).map {} }
+    // Names the conversation the row showed, so a row read before another client's cut never cuts twice.
+    fun newConversation(row: ListRow) {
+        if (!row.canNewConversation || row.newConversationBlocked != null) return
+        cut(row) { it.newConversation(row.sessionId, row.conversation) }
+    }
+
+    fun discardAndCut(pending: PendingDiscard) {
+        discardState.value = null
+        cut(pending.row) { it.discardAndCut(pending.row.sessionId, pending.confirmation) }
+    }
+
+    fun discardDismissed() {
+        discardState.value = null
+    }
+
+    // Only the session screen settles a first message of unknown delivery, so the list says where to go.
+    private fun cut(row: ListRow, call: suspend (ConversationCalls) -> CutAnswer) {
+        val client = clients[row.hostId] ?: return
+        viewModelScope.launch {
+            when (val answer = call(ConversationCalls(client))) {
+                CutAnswer.Done -> Unit
+                is CutAnswer.Discard -> discardState.value = PendingDiscard(row, answer.confirmation)
+                is CutAnswer.Settle -> state.value = state.value.copy(notice = "Open the session to settle its first message before a new conversation.")
+                is CutAnswer.Failed -> state.value = state.value.copy(notice = "Could not start a new conversation: ${answer.message}")
+            }
+            refresh()
+        }
     }
 
     fun deleteAgent(row: ListRow) {
         val agentId = row.agentId ?: return
-        agentAct(row, "Could not delete the agent") { it.delete(agentId, row.sessionId) }
-    }
-
-    private fun agentAct(row: ListRow, failure: String, call: suspend (AgentCalls) -> Result<Unit>) {
         val client = clients[row.hostId] ?: return
         viewModelScope.launch {
-            call(AgentCalls(client)).onFailure { state.value = state.value.copy(notice = "$failure: ${describe(it)}") }
+            ConversationCalls(client).delete(agentId, row.conversation)
+                .onFailure { state.value = state.value.copy(notice = "Could not delete the agent: ${describe(it)}") }
             refresh()
             readPastAgents(row.hostId)
         }
@@ -253,41 +268,6 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         recaps.clear()
         recaps["$hostId:$sessionId"] = list.since(hostId, sessionId)
         markSeen(hostId, sessionId)
-        follow(hostId, sessionId)
-    }
-
-    // The screen's selection: an agent's card follows the agent to its next conversation, anything else stays put.
-    fun follow(hostId: String, sessionId: String) {
-        if (follow?.let { it.first == hostId && it.second.current() == sessionId } == true) return
-        follow?.second?.close()
-        follow = hostId to ConversationFollow.open(list, hostId, sessionId)
-        retargetState.value = null
-    }
-
-    // A past conversation opened from an agent's history: read-only, and it never follows the agent.
-    fun pin(hostId: String, sessionId: String) {
-        recaps.clear()
-        follow?.second?.close()
-        follow = hostId to ConversationFollow(ConversationSelection.Session(hostId, sessionId), sessionId)
-        retargetState.value = null
-    }
-
-    fun unfollow() {
-        follow?.second?.close()
-        follow = null
-        retargetState.value = null
-    }
-
-    // The shown session said which conversation replaced it; the list is re-read too, in case it moved on since.
-    fun superseded(hostId: String, sessionId: String, by: String) {
-        val (followed, follow) = follow ?: return
-        if (followed != hostId || follow.current() != sessionId) return
-        follow.superseded(by, list)?.let { retargetState.value = Retarget(hostId, sessionId, it) }
-        pullRefresh()
-    }
-
-    fun retargeted() {
-        retargetState.value = null
     }
 
     fun recap(hostId: String, sessionId: String): ReadMark? = recaps["$hostId:$sessionId"]
@@ -326,10 +306,10 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         state.value = state.value.copy(groups = draw())
     }
 
-    fun sleep(hostId: String, sessionId: String) {
+    fun sleep(hostId: String, sessionId: String, conversation: Long) {
         val client = clients[hostId] ?: return
         viewModelScope.launch {
-            runCatching { client.sleep(sessionId) }.fold(
+            runCatching { client.sleep(sessionId, conversation) }.fold(
                 onSuccess = { refresh() },
                 onFailure = { state.value = state.value.copy(notice = "Sleep failed: ${describe(it)}") },
             )
@@ -337,13 +317,13 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     }
 
     // A task stops by its call id, a shell is killed by its own; the list redraws from the gateway's answer.
-    fun stopStep(hostId: String, sessionId: String, step: ListStep) {
+    fun stopStep(hostId: String, sessionId: String, conversation: Long, step: ListStep) {
         val client = clients[hostId] ?: return
         viewModelScope.launch {
             runCatching {
                 when (step.kind) {
-                    StepKind.TASK -> client.stopTask(sessionId, step.toolUseId ?: return@launch)
-                    StepKind.SHELL -> client.killShell(sessionId, step.key)
+                    StepKind.TASK -> client.stopTask(sessionId, step.toolUseId ?: return@launch, conversation)
+                    StepKind.SHELL -> client.killShell(sessionId, step.key, conversation)
                     StepKind.AGENT -> return@launch
                 }
             }.fold(
@@ -366,7 +346,6 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        follow?.second?.close()
         list.close()
     }
 }

@@ -28,7 +28,7 @@ private let metrics = Metrics(cell: 8, line: 16, width: 800, fontSize: 13)
 @Test func aReplayThroughTheWorkerDrawsEveryRow() async throws {
   let collected = Collected()
   let worker = SessionWorker(
-    session: Session(afterSeq: 0, reconnect: true, nonce: "n", metrics: metrics), onEffects: collected.add)
+    session: Session(afterSeq: 0, reconnect: true, nonce: "n", metrics: metrics, history: nil), onEffects: collected.add)
   worker.opened()
   worker.received(attached)
   for frame in try corpus("tool-result-truncated-and-images") { worker.received(frame) }
@@ -46,7 +46,7 @@ private let metrics = Metrics(cell: 8, line: 16, width: 800, fontSize: 13)
 @Test func aClosedWorkerIgnoresLateFrames() async throws {
   let collected = Collected()
   let worker = SessionWorker(
-    session: Session(afterSeq: 0, reconnect: true, nonce: "n", metrics: metrics), onEffects: collected.add)
+    session: Session(afterSeq: 0, reconnect: true, nonce: "n", metrics: metrics, history: nil), onEffects: collected.add)
   worker.close()
   worker.opened()
   worker.received(attached)
@@ -55,7 +55,7 @@ private let metrics = Metrics(cell: 8, line: 16, width: 800, fontSize: 13)
 }
 
 @Test func runsComeBackInUtf16Units() throws {
-  let session = Session(afterSeq: 0, reconnect: true, nonce: "n", metrics: metrics)
+  let session = Session(afterSeq: 0, reconnect: true, nonce: "n", metrics: metrics, history: nil)
   _ = session.opened()
   _ = session.received(text: attached, now: 0)
   let markdown =
