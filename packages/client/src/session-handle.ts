@@ -48,7 +48,6 @@ export class SessionHandle {
   #retries = 0
   #outbox: Array<{ frame: ClientFrame; clientId?: string }> = []
   #unacked = new Map<string, string>()
-  #acks = false
   #everConnected = false
   #attachedHere = false
   #prompts = 0
@@ -213,7 +212,7 @@ export class SessionHandle {
   // A prompt stays until the gateway acks it, so a drop before the ack resends it on the next socket.
   #transmit(ws: WebSocket, payload: string, clientId: string | undefined): void {
     ws.send(payload)
-    if (clientId && (this.#acks || !this.#attachedHere)) {
+    if (clientId) {
       this.#unacked.set(clientId, payload)
     }
   }
@@ -236,9 +235,8 @@ export class SessionHandle {
       this.#everConnected = true
       this.#retries = 0
       this.#events.emit('connectionChange', true)
-      // Only a gateway known to ack runs a resent prompt once; without that knowledge a sent prompt counts as delivered.
       this.#attachedHere = false
-      const resend = this.#acks ? [...this.#unacked] : []
+      const resend = [...this.#unacked]
       this.#unacked.clear()
       for (const [clientId, payload] of resend) {
         this.#transmit(ws, payload, clientId)
@@ -250,15 +248,11 @@ export class SessionHandle {
     ws.onmessage = (msg: MessageEvent) => {
       const frame = JSON.parse(String(msg.data)) as ServerFrame
       if (frame.type === 'attached') {
-        this.#acks = frame.acks === true
         this.#attachedHere = true
         const conversation = (frame.session as Partial<AttachedFrame['session']> | undefined)?.conversation
         if (conversation !== undefined && this.#options.conversation === undefined) {
           this.#conversation = conversation
           this.#client.noteConversation(this.sessionId, conversation)
-        }
-        if (!this.#acks) {
-          this.#unacked.clear()
         }
         this.#flushOutbox(ws)
         this.#events.emit('attached', frame)

@@ -47,10 +47,9 @@ async function attach(wsBase: string, sessionId: string) {
 }
 
 describe('prompt acks', () => {
-  it('advertises acks and answers a prompt with its clientId', async () => {
+  it('answers a prompt with its clientId', async () => {
     const { wsBase, session, runner } = await start()
-    const { ws, collector, attached } = await attach(wsBase, session.id)
-    expect(attached).toMatchObject({ acks: true })
+    const { ws, collector } = await attach(wsBase, session.id)
     ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'hello', clientId: 'c.1' }))
     await collector.waitFor((f) => f.type === 'ack' && f.clientId === 'c.1')
     expect(runner.sent.map((sent) => sent.text)).toEqual(['hello'])

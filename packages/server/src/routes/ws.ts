@@ -56,7 +56,6 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     protocolVersion: PROTOCOL_VERSION,
     session: ctx.projects.withProject(runner.info()),
     replayingFrom: afterSeq,
-    acks: true,
     ...(shellPermitted(ctx.shells, runner, access.operator) ? { shell: true } : {}),
     ...(ctx.pricingOverrides ? { pricingOverrides: ctx.pricingOverrides } : {}),
   })
@@ -196,7 +195,6 @@ export function attachArchive(
     protocolVersion: PROTOCOL_VERSION,
     session: shownEntryInfo(ctx, info),
     replayingFrom: afterSeq,
-    acks: true,
   })
   if (!events) {
     send({ type: 'protocol_error', message: 'this conversation could not be read from the engine store; retrying' })

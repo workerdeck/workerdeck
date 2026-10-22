@@ -286,7 +286,7 @@ describe('SessionHandle prompt acks', () => {
   const prompts = (socket: FakeSocket) =>
     socket.sent.map((raw) => JSON.parse(raw) as { type: string; text: string; clientId?: string }).filter((f) => f.type === 'user_message')
 
-  function connected(acks: boolean) {
+  function connected() {
     const handle = makeClient().attach('s1')
     settle()
     latest().accept()
@@ -295,13 +295,12 @@ describe('SessionHandle prompt acks', () => {
       protocolVersion: 2,
       session: { conversation: 1 },
       replayingFrom: 0,
-      ...(acks ? { acks: true } : {}),
     })
     return handle
   }
 
   it('gives every prompt its own clientId', () => {
-    const handle = connected(true)
+    const handle = connected()
     handle.send('one')
     handle.send('two')
     const [one, two] = prompts(latest())
@@ -311,7 +310,7 @@ describe('SessionHandle prompt acks', () => {
   })
 
   it('resends an unacked prompt after a drop, before anything queued while down, and forgets an acked one', () => {
-    const handle = connected(true)
+    const handle = connected()
     handle.send('acked')
     handle.send('lost')
     const [acked, lost] = prompts(latest())
@@ -328,7 +327,7 @@ describe('SessionHandle prompt acks', () => {
   })
 
   it('keeps the conversation a prompt was written for across a reconnect, and hands a stale refusal back as unsent text', () => {
-    const handle = connected(true)
+    const handle = connected()
     const stale: string[] = []
     handle.on('undeliveredPrompt', ({ text }) => stale.push(text))
     handle.send('for one')
@@ -336,7 +335,7 @@ describe('SessionHandle prompt acks', () => {
     latest().drop()
     vi.advanceTimersByTime(500)
     latest().accept()
-    latest().deliver({ type: 'attached', protocolVersion: 2, session: { conversation: 2 }, replayingFrom: 0, acks: true })
+    latest().deliver({ type: 'attached', protocolVersion: 2, session: { conversation: 2 }, replayingFrom: 0 })
     const [resent] = latest().sent.map((raw) => JSON.parse(raw) as { generation: number; clientId: string })
     expect(resent).toMatchObject({ generation: 1, clientId: written!.clientId })
     latest().deliver({ type: 'ack', clientId: written!.clientId, notDelivered: true })
@@ -352,17 +351,7 @@ describe('SessionHandle prompt acks', () => {
     handle.detach()
   })
 
-  it('never resends to a gateway that does not ack', () => {
-    const handle = connected(false)
-    handle.send('once')
-    latest().drop()
-    vi.advanceTimersByTime(500)
-    latest().accept()
-    expect(prompts(latest())).toEqual([])
-    handle.detach()
-  })
-
-  it('never resends when the socket dropped before the gateway said it acks', () => {
+  it('sends nothing before the attach names the conversation, even across a drop', () => {
     const handle = makeClient().attach('s1')
     settle()
     latest().accept()

@@ -494,9 +494,6 @@ export type AttachedFrame = {
   // `DEFAULT_PRICING` so what it prices for itself matches what this gateway priced. Additive, and an
   // older gateway omits it, which is the same thing as having no overrides.
   pricingOverrides?: PricingOverrides
-  // This gateway answers every `user_message` carrying a `clientId` with an `ack`. Additive; without it a client
-  // treats a sent prompt as delivered.
-  acks?: boolean
 }
 
 export type ToolCallRequestFrame = {
