@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { parseRelayPeerId, readTeamRosters, type TeamFrameKind, type TeamResult, type TeamStatusAnswer } from '@workerdeck/relay-client'
 import { createMemoryAgentStore, type AgentStore, type StoredAgent } from '../src/services/agent-store.ts'
-import { AgentService, isAgentRefusal, legacyOp, normalizeAgent } from '../src/services/agents.ts'
+import { AgentService, isAgentRefusal } from '../src/services/agents.ts'
 import { TeamLinks, type TeamTransport } from '../src/services/team-links.ts'
 
 type Node = { agents: AgentService; teams: TeamLinks; store: AgentStore }
@@ -418,7 +418,8 @@ describe('restart edge cases', () => {
   })
 })
 
-describe('schema 2 migration', () => {
+describe('unconfirmed edges carried over by the migration', () => {
+  const OP = 'v1:0123456789abcdef0123456789abcdef'
   const base = (id: string, extra: Partial<StoredAgent> = {}): StoredAgent => ({
     id,
     name: id,
@@ -429,48 +430,21 @@ describe('schema 2 migration', () => {
     ...extra,
   })
 
-  it('classifies the stored halves deterministically and idempotently', () => {
-    const member = base('M', { lead: 'mac:L', remoteLead: { name: 'AC-Lead', state: 'joined', since: 5 } })
-    const lead = base('L', {
-      remoteMembers: [
-        { agent: 'pi:T', state: 'accepted', at: 1 },
-        { agent: 'pi:I', state: 'invited', at: 1, expiresAt: 9 },
-      ],
-    })
-    const moved = base('X', { lead: 'Y', remoteLead: { name: 'Old', state: 'joined', since: 1 } })
-    const pending = base('P', { pendingJoin: { op: 'o', lead: 'win:Q', at: 1 } })
-
-    expect(normalizeAgent(member, 'win', 7)).toMatchObject({
-      schema: 1,
-      lead: 'mac:L',
-      remoteLead: { name: 'AC-Lead', state: 'unconfirmed', since: 5, op: legacyOp('mac:L', 'win:M') },
-    })
-    expect(normalizeAgent(lead, 'mac', 7).remoteMembers).toEqual([
-      { agent: 'pi:T', state: 'unconfirmed', at: 1, op: legacyOp('mac:L', 'pi:T') },
-      { agent: 'pi:I', state: 'invited', at: 1, expiresAt: 9 },
-    ])
-    expect(normalizeAgent(moved, 'win', 7).remoteLead).toBeUndefined()
-    expect(normalizeAgent(pending, 'win', 7).pendingJoin).toBeUndefined()
-    const once = normalizeAgent(member, 'win', 7)
-    expect(normalizeAgent(once, 'win', 99)).toBe(once)
-  })
-
   it('confirms matching halves on the first status exchange and dissolves a one-sided one, widening nothing before', async () => {
     const mesh = new Mesh()
-    const macStore = createMemoryAgentStore([base('L', { remoteMembers: [{ agent: 'win:M', state: 'accepted', at: 1 }] })])
+    const macStore = createMemoryAgentStore([base('L', { remoteMembers: [{ agent: 'win:M', state: 'unconfirmed', at: 1, op: OP }] })])
     const winStore = createMemoryAgentStore([
-      base('M', { lead: 'mac:L', remoteLead: { name: 'L', state: 'joined', since: 1 } }),
-      base('O', { lead: 'mac:L', remoteLead: { name: 'L', state: 'joined', since: 1 } }),
+      base('M', { lead: 'mac:L', remoteLead: { name: 'L', state: 'unconfirmed', since: 1, op: OP } }),
+      base('O', { lead: 'mac:L', remoteLead: { name: 'L', state: 'unconfirmed', since: 1, op: 'v1:ffffffffffffffffffffffffffffffff' } }),
     ])
     const mac = await mesh.add('mac', macStore)
     const win = await mesh.add('win', winStore)
     expect(mac.agents.get('L')?.remoteMembers?.[0]?.state).toBe('unconfirmed')
     expect(mac.agents.vouches({ id: 'win:M', lead: 'mac:L' }, 'win')).toBe(false)
     expect(mac.agents.relayAgent('none')).toBeUndefined()
-    expect((await winStore.list()).every((record) => record.schema === 1)).toBe(true)
 
     await win.teams.reconcile()
-    expect(win.agents.get('M')?.remoteLead).toMatchObject({ state: 'joined', op: legacyOp('mac:L', 'win:M') })
+    expect(win.agents.get('M')?.remoteLead).toMatchObject({ state: 'joined', op: OP })
     expect(mac.agents.get('L')?.remoteMembers).toMatchObject([{ agent: 'win:M', state: 'accepted' }])
     expect(mac.agents.vouches({ id: 'win:M', lead: 'mac:L' }, 'win')).toBe(true)
     expect(win.agents.get('O')?.lead).toBeUndefined()
@@ -480,12 +454,12 @@ describe('schema 2 migration', () => {
     const mesh = new Mesh()
     const mac = await mesh.add(
       'mac',
-      createMemoryAgentStore([base('L', { remoteMembers: [{ agent: 'win:M', state: 'accepted', at: 1 }] })]),
+      createMemoryAgentStore([base('L', { remoteMembers: [{ agent: 'win:M', state: 'unconfirmed', at: 1, op: OP }] })]),
     )
     const win = await mesh.add(
       'win',
       createMemoryAgentStore([
-        base('M', { lead: 'mac:L', remoteLead: { name: 'L', state: 'joined', since: 1 } }),
+        base('M', { lead: 'mac:L', remoteLead: { name: 'L', state: 'unconfirmed', since: 1, op: OP } }),
         base('C', { lead: 'M' }),
       ]),
     )
@@ -590,7 +564,7 @@ describe('second review', () => {
     const mesh = new Mesh()
     const mac = await mesh.add(
       'mac',
-      createMemoryAgentStore([record('L', { remoteMembers: [{ agent: 'win:M', state: 'accepted', at: 1 }] }), record('K')]),
+      createMemoryAgentStore([record('L', { remoteMembers: [{ agent: 'win:M', state: 'unconfirmed', at: 1, op: 'v1:0123456789abcdef0123456789abcdef' }] }), record('K')]),
     )
     expect(await mac.agents.update('L', { lead: 'K' })).toEqual({ status: 409, error: 'L has team members waiting to be confirmed' })
   })

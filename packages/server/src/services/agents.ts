@@ -142,11 +142,9 @@ export class AgentService {
     this.#now = options.now ?? Date.now
   }
 
-  // Every hydrate normalizes the records to the current schema (idempotent, so an interrupted pass reruns to the same
-  // result) and writes what changed as one store change. A record from a newer schema is loaded but never written.
+  // A record from a newer schema is loaded but never written.
   async hydrate(): Promise<void> {
     const stored = await this.#store.list()
-    const changed: StoredAgent[] = []
     this.#frozen = new Set()
     this.#joining = new Map()
     const agents = new Map<string, StoredAgent>()
@@ -161,17 +159,10 @@ export class AgentService {
         this.#tombstones.set(agent.id, agent)
         continue
       }
-      const next = this.#gateway === undefined ? agent : normalizeAgent(agent, this.#gateway, this.#now())
-      if (next !== agent) {
-        changed.push(next)
+      agents.set(agent.id, agent)
+      if (agent.pendingJoin && this.#gateway !== undefined) {
+        this.#joining.set(agent.id, { lead: agent.pendingJoin.lead, name: agent.name, op: agent.pendingJoin.op, restored: true })
       }
-      agents.set(next.id, next)
-      if (next.pendingJoin && this.#gateway !== undefined) {
-        this.#joining.set(next.id, { lead: next.pendingJoin.lead, name: next.name, op: next.pendingJoin.op, restored: true })
-      }
-    }
-    if (changed.length > 0) {
-      await this.#apply(changed, [])
     }
     this.#agents = agents
     this.#hydrated = true
@@ -371,10 +362,8 @@ export class AgentService {
       roster: _roster,
       retiredAt: _retired,
       ...rest
-    } = agent as StoredAgent & { pending?: unknown; sessionId?: string; pastSessions?: string[]; conversations?: unknown; undelivered?: unknown }
-    const { pending: _handover, sessionId: _session, pastSessions: _past, conversations: _conversations, undelivered: _undelivered, ...identity } =
-      rest
-    const info: AgentInfo = identity
+    } = agent
+    const info: AgentInfo = rest
     if (!this.#avatars) {
       return info
     }
@@ -949,45 +938,6 @@ export class AgentService {
 function tombstoneOf(agent: StoredAgent, at: number): StoredAgent {
   const { lead: _lead, remoteLead: _remote, remoteMembers: _members, pendingJoin: _join, roster: _roster, ...rest } = agent
   return { ...rest, schema: AGENT_SCHEMA, retiredAt: at, updatedAt: at }
-}
-
-// The op both gateways derive for an edge stored before operation ids, without talking to each other.
-export function legacyOp(lead: string, member: string): string {
-  return `v1:${createHash('sha1').update(`${lead}>${member}`).digest('hex').slice(0, 32)}`
-}
-
-// Schema 2. Halves stored before operation ids get the derived op and wait, restricted and unpublished, until the other
-// gateway confirms them; a `remoteLead` an older binary left behind a local or cleared lead is dropped.
-export function normalizeAgent(agent: StoredAgent, gateway: string, now: number): StoredAgent {
-  const next: StoredAgent = { ...agent, schema: AGENT_SCHEMA }
-  const self = `${gateway}:${agent.id}`
-  const leadGateway = agent.lead === undefined ? undefined : parseRelayPeerId(agent.lead)?.gateway
-  if (leadGateway === undefined || leadGateway === gateway) {
-    delete next.remoteLead
-  } else if (agent.remoteLead?.op === undefined) {
-    next.remoteLead = {
-      name: agent.remoteLead?.name ?? agent.lead!,
-      ...(agent.remoteLead?.owner === undefined ? {} : { owner: agent.remoteLead.owner }),
-      state: 'unconfirmed',
-      since: agent.remoteLead?.since ?? now,
-      op: legacyOp(agent.lead!, self),
-    }
-  }
-  if (agent.remoteMembers?.some((member) => member.state === 'accepted' && member.op === undefined)) {
-    next.remoteMembers = agent.remoteMembers.map((member) =>
-      member.state === 'accepted' && member.op === undefined
-        ? { ...member, state: 'unconfirmed', op: legacyOp(self, member.agent) }
-        : member,
-    )
-  }
-  if (agent.sharing !== undefined && !isSharing(agent.sharing)) {
-    delete next.sharing
-  }
-  const pendingRemote = agent.pendingJoin && parseRelayPeerId(agent.pendingJoin.lead)?.gateway
-  if (agent.pendingJoin && (pendingRemote === undefined || pendingRemote === gateway)) {
-    delete next.pendingJoin
-  }
-  return JSON.stringify(next) === JSON.stringify(agent) ? agent : next
 }
 
 function acceptedRemote(agent: StoredAgent | undefined): NonNullable<StoredAgent['remoteMembers']> {
