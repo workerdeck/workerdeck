@@ -356,4 +356,28 @@ describe('peer relay link', () => {
       'a fresh dial',
     )
   })
+
+  it('dials fresh when the carried connection was made on another relay wire version', async () => {
+    const { relay, stateDir } = await relayRig()
+    const key = await enrollGateway(stateDir, 'mac')
+    await relay.reload()
+    const registry = new SessionRegistry()
+    registry.register(new PeerRunner('a1'))
+    const service = createPeerService({ refs: { registry }, projects: new ProjectInfoService() })
+    const options = { url: relay.url, gateway: 'mac', key }
+    const first = createRelayLink(options, service, () => {})
+    await until(() => relay.status().gateways.find((row) => row.name === 'mac')?.sessions === 1, 'first generation')
+    const connectedAt = relay.status().gateways.find((row) => row.name === 'mac')!.connectedAt
+    first.release()
+    first.close()
+    const slot = (globalThis as Record<symbol, { identity: string } | undefined>)[Symbol.for('workerdeck.relay.carried')]!
+    slot.identity = JSON.stringify([relay.url, 'mac', '', 'inline', '', null, null])
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const second = createRelayLink(options, service, () => {})
+    cleanups.push(() => second.close())
+    await until(
+      () => (relay.status().gateways.find((row) => row.name === 'mac')?.connectedAt ?? connectedAt) !== connectedAt,
+      'a fresh dial',
+    )
+  })
 })

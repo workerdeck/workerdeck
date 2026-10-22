@@ -78,7 +78,7 @@ export async function readEnrollments(stateDir: string): Promise<EnrollmentFile>
     throw error
   }
   const parsed = JSON.parse(text) as { version?: unknown; gateways?: unknown }
-  if (parsed.version !== 1 || !parsed.gateways || typeof parsed.gateways !== 'object') {
+  if (parsed.version !== 1 || !parsed.gateways || typeof parsed.gateways !== 'object' || Array.isArray(parsed.gateways)) {
     throw new Error(`${path} is not an enrollment file this relay can read`)
   }
   const gateways: Record<string, Enrollment> = {}

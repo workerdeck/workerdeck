@@ -5,6 +5,7 @@ import { peerOps, qualifyAgent, type AgentRef, type ChecklistItem, type SessionI
 import {
   connectRelay,
   parseRelayPeerId,
+  RELAY_WIRE_VERSION,
   type RelayAgentEntry,
   type RelayConnection,
   type RelayHost,
@@ -84,8 +85,10 @@ function expandHome(path: string): string {
   return path === '~' || path.startsWith('~/') ? `${homedir()}${path.slice(1)}` : path
 }
 
+// The wire version leads: a connection a generation on another wire version dialled is never adopted.
 function identityOf(options: RelayLinkOptions): string {
   return JSON.stringify([
+    RELAY_WIRE_VERSION,
     options.url,
     options.gateway,
     options.keyFile ?? '',

@@ -678,3 +678,13 @@ describe('owner changes reach a connected gateway', () => {
   })
 
 })
+
+describe('a malformed enrollment file at reload', () => {
+  it('keeps the previous enrollments instead of revoking every gateway', async () => {
+    const { stateDir, relay } = await setup({ rules: [{ from: '*', to: '*', allow: ['send', 'peek'] }] })
+    await attach(relay, stateDir, 'pi', fakeGateway([entry('p')]), { owner: 'tobias' })
+    await writeFile(join(stateDir, 'gateways.json'), JSON.stringify({ version: 1, gateways: [] }))
+    await relay.reload()
+    expect(relay.status().gateways.find((row) => row.name === 'pi')?.online).toBe(true)
+  })
+})
