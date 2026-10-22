@@ -79,11 +79,13 @@ export function activate(context: vscode.ExtensionContext): void {
       return
     }
     const info = infoOf(session.host.id, session.sessionId)
+    const shown = surface.vitals?.conversation
+    // The counters are lifetime: a record from after a cut the panel has not drawn counts what it never showed.
+    const behind = shown !== undefined && info?.conversation !== undefined && info.conversation !== shown
     const moved = watermarks.mark(session.host.id, session.sessionId, {
       itemCount: surface.vitals?.itemCount,
-      conversation: surface.vitals?.conversation,
-      activity: info?.activityCount,
-      prose: info?.proseCount,
+      conversation: shown,
+      ...(behind ? {} : { activity: info?.activityCount, prose: info?.proseCount }),
     })
     if (moved) {
       sidebar.refreshUnread()
