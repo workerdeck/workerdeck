@@ -376,8 +376,8 @@ export type SessionCommand =
       type: 'user_message'
       text: string
       attachmentIds?: string[]
-      // Unique per prompt from one client. A gateway that advertises `acks` answers it with an `ack` frame and runs a
-      // repeated id once, so a client may resend an unacked prompt after a reconnect.
+      // Unique per prompt from one client. The gateway answers it with an `ack` frame and runs a repeated id once, so a
+      // client may resend an unacked prompt after a reconnect.
       clientId?: string
     }
   | {
