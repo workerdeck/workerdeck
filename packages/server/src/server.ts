@@ -342,11 +342,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         })
       : undefined
   if (relay) {
-    // A relay from before owners names this gateway's one owner in `owner` alone.
-    relayOwners = () => {
-      const status = relay.status()
-      return status.owners ?? (status.online && status.owner !== undefined ? [status.owner] : [])
-    }
+    relayOwners = () => relay.status().owners ?? []
     relayDefaulted = () => relay.status().ownersDefaulted === true
     teamLinks = new TeamLinks({
       agents,
