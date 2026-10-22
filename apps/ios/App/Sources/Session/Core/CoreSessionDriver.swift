@@ -605,9 +605,8 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       Self.log.notice("session open: \(seconds, format: .fixed(precision: 3)) s, \(self.ui.main.rows.count) rows")
     }
     if ui.connection == .live, ui.progress == nil {
-      if changed.transcript || changed.chrome || ui.seen == nil { ui.seen = session.seen() }
-      // A cut between the notification's conversations read and this attach shows a later conversation: the entry
-      // names a row of the requested one, so it is handed to that conversation's screen instead.
+      // A cut between the notification's read and this attach shows a later conversation: the entry goes to the
+      // requested conversation's screen, and this one publishes no counts, so the later one is never marked read.
       if let expected = expect, let attached = ui.chrome?.conversation {
         expect = nil
         if attached != expected {
@@ -615,6 +614,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
           ui.misplaced = expected
         }
       }
+      if ui.misplaced == nil, changed.transcript || changed.chrome || ui.seen == nil { ui.seen = session.seen() }
       if pending != nil, !ui.main.rows.isEmpty { enter() }
     }
     publish(ui)
