@@ -15,7 +15,7 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Cross-gateway peers (relay) | `pnpm smoke:relay` (models via `WD_SMOKE_CLAUDE_MODEL` / `WD_SMOKE_CODEX_MODEL`, default `haiku` / `gpt-5.6-luna`) | **Yes, a few short turns on each engine** |
 | Agent teams (peers rule, brief as instructions) | `pnpm smoke:teams` (same model env vars as `smoke:relay`) | **Yes, a few short turns: three claude, one codex** |
 | Agent context reset | `pnpm smoke:context-reset [claude\|codex\|all]` (codex model as an extra `gpt-*` arg) | **Yes, two short turns per engine** |
-| Conversation cut | `pnpm smoke:cut [all\|claude]` (own gateway on :8792; reply stamps, early interrupt, typed `/clear`, `context_reset`, claude to codex, engine store) | **Yes, ~8 haiku turns + one codex turn** |
+| Conversation cut | `pnpm smoke:cut [all\|claude]` (own gateway on a free port; reply stamps, early interrupt, typed `/clear`, `context_reset`, claude to codex, engine store) | **Yes, ~8 haiku turns + one codex turn** |
 | Restart, end to end | `pnpm smoke:restart [claude\|codex] [clear] [noprofile] [swept] [all]` | **Yes, two short turns** |
 
 `smoke:sandbox`, `smoke:codex` and `smoke:restart` report through `smoke/lib/report.ts`: a bold

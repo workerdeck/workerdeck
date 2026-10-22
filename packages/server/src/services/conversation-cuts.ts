@@ -96,9 +96,10 @@ export class ConversationCuts {
     }
   }
 
-  // An erased conversation's executions keep their 409, with nothing of the erased payload behind it.
-  forgetEntry(id: string, erased: ConversationEntry): void {
-    this.#remember(id, erased)
+  // A rewritten entry replaces the cached one its executions authorize against: an erase (its 409 kept, nothing of the
+  // erased payload behind it) or an owner rename.
+  refreshEntry(id: string, entry: ConversationEntry): void {
+    this.#remember(id, entry)
   }
 
   endedExecution(executionId: string): EndedExecution | undefined {

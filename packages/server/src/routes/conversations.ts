@@ -207,7 +207,7 @@ function eraseConversation(ctx: ServerContext, id: string, n: number): Promise<E
       ...latest!,
       conversations: latest!.conversations.map((candidate) => (candidate.n === n ? erased : candidate)),
     }))
-    ctx.cuts.forgetEntry(id, erased)
+    ctx.cuts.refreshEntry(id, erased)
     return { erased: entrySummary(erased) }
   })
 }

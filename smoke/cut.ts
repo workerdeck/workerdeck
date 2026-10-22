@@ -7,11 +7,12 @@
 // `context_reset` cuts under the same id and its prompt is answered; a cut can switch claude to codex; and every past
 // conversation is still a session file in the engine's own store, which the gateway never writes.
 //
-// It spawns its OWN gateway on its own port and state dir, with a config naming only its own profiles.
+// It spawns its OWN gateway on a free port and its own state dir, with a config naming only its own profiles.
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createServer } from 'node:net'
 import WebSocket from 'ws'
 import {
   GENERATION_HEADER,
@@ -25,7 +26,13 @@ import { fail, finish, note, ok, step, warn } from './lib/report.ts'
 
 const withCodex = (process.argv[2] ?? 'all') === 'all'
 const WORD = 'ORRERY'
-const PORT = 8792
+// A port free a moment ago, and a child that must still be alive once it answers: never another gateway's.
+const PORT = await new Promise<number>((resolve) => {
+  const probe = createServer().listen(0, '127.0.0.1', () => {
+    const { port } = probe.address() as { port: number }
+    probe.close(() => resolve(port))
+  })
+})
 const base = `http://127.0.0.1:${PORT}/v1`
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'wd-cut-')))
 const stateDir = join(root, 'state')
@@ -127,7 +134,11 @@ async function open(id: string): Promise<Socket> {
     })
   })
   ws.on('error', () => {})
-  const generation = await attached
+  const generation = await Promise.race([
+    attached,
+    closed.then((code) => Promise.reject(new Error(`socket closed (${code}) before attached`))),
+    sleep(20_000).then(() => Promise.reject(new Error('no attached frame within 20s'))),
+  ])
   await sleep(1_000)
   const send = (command: Record<string, unknown>): void => ws.send(JSON.stringify({ ...command, generation }))
   const turn = async (text: string, timeoutMs = 180_000): Promise<string> => {
@@ -178,6 +189,8 @@ async function startGateway(): Promise<void> {
     ],
     { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, WORKERDECK_AUTH_KEY: undefined } },
   )
+  let exited = false
+  child.once('exit', () => (exited = true))
   child.stderr?.on('data', (data) => {
     const line = String(data).trim()
     if (line) {
@@ -186,8 +199,11 @@ async function startGateway(): Promise<void> {
   })
   await waitFor(
     async () => {
+      if (exited) {
+        throw new Error('the gateway exited before it answered')
+      }
       try {
-        return (await fetch(`${base}/sessions`)).ok ? true : undefined
+        return (await fetch(`${base}/sessions`)).ok && !exited ? true : undefined
       } catch {
         return undefined
       }

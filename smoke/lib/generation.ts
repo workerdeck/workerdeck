@@ -3,12 +3,15 @@ import { GENERATION_HEADER, type ConversationsResponse, type ServerFrame } from 
 
 // Protocol 2 refuses an unstamped mutation: every frame names the conversation it meant, read off the `attached` hello.
 // Call it right after constructing the socket, so the hello cannot arrive before the listener.
-export function conversationOf(ws: WebSocket): Promise<number> {
-  return new Promise((resolve) => {
+export function conversationOf(ws: WebSocket, timeoutMs = 20_000): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`no attached frame within ${timeoutMs / 1000}s`)), timeoutMs)
+    ws.once('close', (code) => reject(new Error(`socket closed (${code}) before attached`)))
     const listen = (data: unknown): void => {
       const frame = JSON.parse(String(data)) as ServerFrame
       if (frame.type === 'attached') {
         ws.off('message', listen)
+        clearTimeout(timer)
         resolve(frame.session.conversation ?? 1)
       }
     }

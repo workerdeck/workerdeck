@@ -75,6 +75,7 @@ class Engine extends EngineRunner {
 
 type Hooks = {
   building?: (runner: Engine) => void
+  creating?: (id: string | undefined) => Promise<void> | undefined
   options?: Partial<WorkerServerOptions>
   owners?: boolean
   owner?: string
@@ -90,10 +91,14 @@ async function gateway(dir: string, hooks: Hooks = {}) {
     catalog: { models: [], provenance: 'test' },
     checkAvailability: async () => ({ available: true }),
     createRunner: ({ config, id }) => {
-      const runner = new Engine(id ?? `s${built.length + 1}-${dir.slice(-6)}`, config, engine)
-      built.push(runner)
-      hooks.building?.(runner)
-      return runner
+      const make = (): Engine => {
+        const runner = new Engine(id ?? `s${built.length + 1}-${dir.slice(-6)}`, config, engine)
+        built.push(runner)
+        hooks.building?.(runner)
+        return runner
+      }
+      const paused = hooks.creating?.(id)
+      return paused ? paused.then(make) : make()
     },
   })
   const server: WorkerServer = createWorkerServer({
@@ -850,5 +855,54 @@ describe('owner authority on the record', () => {
     expect((await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'bob' })).status).toBe(200)
     expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'bob' })).status).toBe(200)
     expect((await call(base, `/sessions/${id}/conversations/1`, 'GET', undefined, { token: 'alice' })).status).toBe(404)
+  })
+})
+
+describe('owner rename against a cut and ended executions', () => {
+  it('waits for a cut whose successor is still starting, then renames its live runner and parked config too', async () => {
+    const dir = await fixture.stateDir()
+    const held = deferred()
+    let target = ''
+    let factoryPaused = false
+    const { server, base, built } = await gateway(dir, {
+      owners: true,
+      creating: (id) => {
+        if (id !== target || runnersOf(built, target).length !== 1) {
+          return undefined
+        }
+        factoryPaused = true
+        return held.promise
+      },
+    })
+    target = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
+    await idle(server, target)
+    const cutting = cut(base, target, 1, {}, 'operator')
+    await vi.waitFor(() => expect(factoryPaused).toBe(true))
+    const renaming = call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
+    await tick(60)
+    held.resolve()
+    expect((await cutting).status).toBe(200)
+    expect((await renaming).status).toBe(200)
+    await idle(server, target)
+    expect(server.registry.get(target)?.info().owner).toBe('bob')
+    expect(server.parking.configOf(target)?.owner).toBe('bob')
+    await server.parking.flush()
+    expect(JSON.stringify(await server.records.get(target))).not.toContain('"alice"')
+    expect((await call(base, `/sessions/${target}`, 'GET', undefined, { token: 'bob' })).status).toBe(200)
+  })
+
+  it('authorizes a late result of an ended conversation by the renamed owner at once', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, built } = await gateway(dir, { owners: true })
+    const id = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
+    await idle(server, id)
+    built[0]!.emit({ type: 'execution_dispatched', executionId: 'x-r', toolName: 'tool', backend: 'server', deferred: true } as never)
+    expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
+    await idle(server, id)
+    const result = { status: 'ok', output: { value: 1 } }
+    expect((await call(base, '/executions/x-r/result', 'POST', result, { token: 'alice' })).status).toBe(409)
+    expect((await call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })).status).toBe(200)
+    expect((await call(base, '/executions/x-r/result', 'POST', result, { token: 'bob' })).status).toBe(409)
+    expect((await call(base, '/executions/x-r/result', 'POST', result, { token: 'alice' })).status).toBe(404)
   })
 })
