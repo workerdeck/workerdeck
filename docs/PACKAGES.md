@@ -13,15 +13,14 @@ the Agent SDK. Dependency-free, browser-safe, depends
 on nothing and everything depends on it. Two helpers ride along because every client needs them to agree:
 `errorMessage(e, fallback?)` (an `Error`'s message, else the fallback, else `String(e)`) and
 `resolvePosix(target, cwd)` (a file link's normalized absolute path, or nothing for a relative one
-before the cwd is known; the dashboard's file links and the extension's both resolve through it). `chunkShellInput(data)` splits shell input into frames the gateway accepts (`SHELL_INPUT_MAX`, measured in UTF-8 bytes so it never undercounts the gateway's UTF-16 check, never inside a grapheme); `SessionHandle.writeShell` sends one `shell_input` per chunk, which is what lets a large paste reach a shell. iOS's `SessionHandle.chunk` is the same rule. Breaking → bump `PROTOCOL_VERSION`, which is **2** since the conversation cut (`SessionInfo.conversation`, the `conversation_started` frame, close code `CONVERSATION_ENDED_CLOSE_CODE` 4011, `x-workerdeck-generation`); before that it was **1**:
-it was collapsed from 7 before the public launch, the counter having been climbing through a
-period when every consumer was rebuilt from this repo anyway and nothing in the wild spoke an
-older one. **From the public launch it is locked** - after that a bump is a real promise to
-someone else's build, and the version-mismatch banner (`use-session.ts`, `SessionPanel`, iOS's
-`protocolMismatch`) is what makes it visible. The banner logic is untouched by the reset; only
-the number it compares moved. The lesson the reset paid for: an *additive* field never earns a
-bump (see `proseCount`, `contextUsage`, `project`, `epoch`, 0.18.0's sub-agents) - bumping for one warns
-every operator whose gateway is merely a release behind, about nothing. It also owns the
+before the cwd is known; the dashboard's file links and the extension's both resolve through it). `chunkShellInput(data)` splits shell input into frames the gateway accepts (`SHELL_INPUT_MAX`, measured in UTF-8 bytes so it never undercounts the gateway's UTF-16 check, never inside a grapheme); `SessionHandle.writeShell` sends one `shell_input` per chunk, which is what lets a large paste reach a shell. iOS's `SessionHandle.chunk` is the same rule. Breaking → bump `PROTOCOL_VERSION`, now **2**: the conversation cut changed what a session id
+addresses (`SessionInfo.conversation`, the `conversation_started` frame, close code
+`CONVERSATION_ENDED_CLOSE_CODE` 4011, the `x-workerdeck-generation` token every mutation must
+carry), so an older client would act on the wrong conversation. **It is locked**: a bump is a real
+promise to someone else's build, and the version-mismatch banner (`use-session.ts`, `SessionPanel`,
+iOS's `protocolMismatch`) is what makes it visible. An *additive* field never earns a bump (see
+`proseCount`, `contextUsage`, `project`, `epoch`, sub-agents): bumping for one warns every operator
+whose gateway is merely a release behind, about nothing. It also owns the
 few *rules* both sides must agree on rather than each guess: `transcriptActivity(event)` is
 the row-count rule the react reducer renders by and the runners count with
 (`SessionInfo.activityCount`) - change one, change both. `transcriptProse(event)` is the
@@ -229,7 +228,7 @@ never zero. Bumping for an additive field would raise a mismatch banner on every
 done nothing wrong.
 `EngineCapabilities.clearContext` and the `clear_context` command are the same argument applied
 one level up, and they are the precedent to copy for the next capability-gated *operation*. A new
-optional capability field plus a new `SessionCommand` variant is additive at **7**: an older
+optional capability field plus a new `SessionCommand` variant is additive: an older
 client never sends the command (the field is absent, and absent means false by construction, so
 the control is hidden rather than broken), and an older gateway that somehow receives it answers
 with its existing unknown-command error rather than doing something surprising. The three
@@ -324,8 +323,8 @@ because a namespace import over lucide's ~1,600 measured **927 KB against 77 KB*
 sidebar's own bundle. `projectsOf(rows)` is the filter control's source and returns
 `{key, label}` pairs for the reason `projectKey` exists - the key is what `ViewConfig.projects`
 holds and the label is what a person picks by, so two same-named repos stay two entries wearing
-one word. Protocol
-stays **7**: an optional field, absent meaning no project, which an older client ignores.
+one word. No protocol
+bump: an optional field, absent meaning no project, which an older client ignores.
 
 **The `.workerdeck.json` file grammar.** `{ "name": "WorkerDeck", "icon": "layers" }` or
 `{ "name": "WorkerDeck", "icon": "./docs/assets/icon.png" }` - both keys optional, unknown keys
@@ -443,10 +442,29 @@ an existence oracle for the gateway's filesystem.
 
 ### Agents (`agents.ts`)
 
-`AgentInfo`/`AgentRef` (`SessionInfo.agent`, optional, so protocol stays 1) and the two rules both
+`AgentInfo` (the identity row of a named session, same id as the session) and `AgentRef`
+(`SessionInfo.agent`, the decoration every funnel carries; absent = unnamed), and the two rules both
 sides share: `teamReaches(from, to)` is the peers rule for teams (the gateway enforces it; a client
 may use it to section a `#` picker), and `projectAccent(key)` is the stable per-project colour the
 CLI's avatar provider bakes into backdrops and a client should reuse for group dots.
+
+### Conversations (`conversations.ts`, `conversation-cut.ts`)
+
+The address and the cut, as both sides must read them. `SessionAddress = { id, conversation? }` is
+how every client names what it shows: absent `conversation` is the current one, so a bookmark, a
+route or a tab survives every cut. `addressOf(id, n, current)` collapses the current n to the bare
+id, which keeps one conversation from living under two keys (`addressKey`, `sameAddress`,
+`isHistorical`). `archivedView(address, info, current)` is the past conversation's banner model
+(`past`, or `deleted` once no current conversation exists, with the current n for Go to current).
+`newConversationGate(info)` is whether a cut may be asked for now (idle, not still new) and why not;
+`clearContextOffered(info)` is whether a card offers it at all (any live session, named or not).
+They are two functions because a busy session shows the entry disabled with its reason.
+`conversation-cut.ts` holds the wire of the cut: `GENERATION_HEADER`, the request and response
+bodies of `/sessions/:id/conversations` (`/retry`, `/pending`, `/discard`), `ConversationsResponse`
+(current n, history summaries, `pendingPrompt`, `startFailed`, the next conversation's `settings`),
+and the three 409 codes a client acts on: `unconfirmed_input` and `input_changed`
+(`UnconfirmedInputRefusal`: the set a person confirms before `DiscardAndCutRequest`), and
+`uncertain_prompt` (Send again or Dismiss first). Rules in `docs/GOTCHAS.md` § Conversation cut.
 
 ### Pricing
 
@@ -507,7 +525,10 @@ engine has none. Rules in `docs/GOTCHAS.md` §Reasoning effort.
 `ContextResetDirectory` (a late-bound handle plus a `Symbol.for` slot, like peers). The tool is
 offered right after `set_status` whenever `EngineRunnerConfig.contextReset` is set; core never
 decides the grant or the timing. `Runner.clearContext({ agentReason })` stamps the reason on the
-`conversation_reset` it emits, on all three engines. See `docs/GOTCHAS.md` §Agent context reset.
+`conversation_reset` it emits, on all three engines; that is the standalone path, since behind a
+gateway every clear is a cut that replaces the runner. See `docs/GOTCHAS.md` §Agent context reset.
+`Runner.pendingInput()`, `inputConfirmable()` and `inputSnapshot()` are what the cut reads to refuse
+over unanswered input (claude has all three, codex and provider the count only).
 
 **Status label**: `lib/status-label.ts` defines `set_status`, runner-local like `session_info`
 (the sink is `EngineRunner.setStatusLabel`, which emits `status_label`), offered on every engine
@@ -791,8 +812,8 @@ server option carries `canConnect`, `claudeExecutable`, `codexExecutable`, `code
 
 **Owners** resolve in `services/owners.ts` (`OwnerService`: profile `owner`, the `owner` server
 option, the relay's sole enrolled owner; `multi()` when more than one is configured). The result is
-stamped on the runner config (durable host-only key `owner`) and on the agent record; nothing
-re-resolves a stamped owner. A relay-defaulted owner is read (`ownerFor`, `defaultOwner`) but
+stamped on the runner config (durable host-only key `owner`), the session record and a named
+session's index row; nothing re-resolves a stamped owner. A relay-defaulted owner is read (`ownerFor`, `defaultOwner`) but
 never stamped (`forProfile`, `stampOwner`). `routes/owners.ts` is the operator-only
 `POST /owners/rename`, over `AgentService.renameOwner`, `SessionParkManager.renameOwner` and
 `withOwnerRenamed` on each session record under its lifecycle lock with parking wakes fenced (live runner,
@@ -801,20 +822,22 @@ conversations' frozen owner and cached ended executions follow; a `to` that alre
 The record is the owner authority: a startup stamp on the index lands on the record too
 (`adoptIndexOwners`), and a record that already has one puts it back on the index.
 
-**Agents** live in `services/agents.ts` (`AgentService`: the in-memory index over an `AgentStore`,
-the decorator, the one-level team rule, name suggestions), `services/agent-store.ts` (memory and
-JSON-file stores, `agentStore` option; the CLI wires `<state-dir>/agents.json`; a host store
-may add `apply` to write one transition's records together, both built-ins do),
+**Agents** (named sessions) live in `services/agents.ts` (`AgentService`: the in-memory identity
+index over an `AgentStore`, keyed by the session id, the decorator, the one-level team rule, name
+suggestions), `services/agent-store.ts` (memory and JSON-file stores, `agentStore` option; the CLI
+wires `<state-dir>/agents.json`; a store is `{ list, apply }`, one transition's rows in one write),
+`routes/named-sessions.ts` (create named, naming and un-naming by PATCH, Edit settings, retire,
+startup `reconcileIdentity`),
 `services/avatars.ts` (the `AvatarProvider` seam only: `roll` an opaque recipe, `still` /
 `busy` render it; injected as `avatars`, absent by default, so an embedder pays for no art) and
-`routes/agents.ts` (operator-only `/agents`). Session creation goes through `vetCreateRequest` and `factory.createRunner` like
-`POST /sessions`. Rules in `docs/GOTCHAS.md` §Agents and teams.
+`routes/agents.ts` (operator-only `/agents`, whose lifecycle doors call the same cut). Session
+creation goes through `vetCreateRequest` and `factory.createRunner` like `POST /sessions`. Rules in
+`docs/GOTCHAS.md` § Named sessions and § Agents and teams.
 
 **Agent context reset** lives in `services/context-resets.ts` (`ContextResetService`, the
 directory behind `context_reset`: one `onRegister` watcher per runner, the pending request, the rate
-limits, and the run at the next idle: for a session bound to an agent, `restartAgent` (the code behind
-`POST /agents/:id/restart`, under an operator context carrying the old session's scope), else
-clear-then-prompt). `buildRunner` stamps `config.contextReset`
+limits, and the run at the next idle: the `cut` option the gateway wires to
+`ConversationCuts.clearOnIdle`, for every session; clear-then-prompt only where no cut is wired). `buildRunner` stamps `config.contextReset`
 (a transient host-only key) from request, profile default, then the `agentContextReset` option;
 `false` builds no service at all. Rules in `docs/GOTCHAS.md` §Agent context reset.
 
@@ -853,9 +876,8 @@ one number the gateway cannot discover.
 `ModelRate` in USD per million tokens) are merged over `DEFAULT_PRICING` once at start by
 `mergePricing`, per server instance: the table is passed explicitly to the spend ledger and, as
 `config.pricing`, to every runner's `CostLedger`, so two gateways in one process never price with
-each other's rates. `setPricingOverrides` (protocol) is a deprecated shim over the process-wide
-table that a call naming no table still falls back to; the gateway no longer writes it. Malformed
-entries are dropped with one warning. The accepted subset rides
+each other's rates. There is no process-wide table: a pricing call that names none prices with
+`DEFAULT_PRICING`. Malformed entries are dropped with one warning. The accepted subset rides
 `AttachedFrame.pricingOverrides` so every client merges the same table and prices for itself; the
 bundled table itself never goes over the wire.
 
@@ -1005,52 +1027,28 @@ write or clear carries the conversation it was taken for (parking stamps `info.c
 read back before the runner registers (`requested` = the sanitized config the next conversation starts from).
 A runtime clear is `resumed` (the record stays) or `ended`; an ended session whose record holds nothing beyond its
 first conversation loses the file, one with history or `closedAt` keeps it. **The conversation cut**
-(`ConversationCuts`, `conversation-cuts.ts`) keeps the id and starts conversation n+1: under the per-id lock
-(`locks.run`, `services/lifecycle-locks.ts`), then the parking fence, then short record transactions, it validates
-(idle and no unanswered input, `expectedGeneration`, no job; named sessions cut like any other), writes a `prepared` intent with readback, stops
-the runner quietly (registry watchers evicted first, so no `session_closed` webhook or push; shells killed), and
-commits in one transaction: history entry with frozen `auth`, `conversation + 1`, `running` = the exact target,
-`runtime` = a dormant record with no engine id and the committed epoch, `pendingPrompt`, `cut.phase = committed`. The
-fresh start uses that epoch as is, and the intent stays until the successor is durable (startup awaited up to `agentStartupTimeoutMs`, then a runtime for n+1 read back that names the engine conversation,
-or a live snapshot for an engine without resume); a start that fails, early or late, is a durable `startFailed` for
-Retry start. Recovery before listen rolls `prepared` back, resumes an existing successor or starts `committed` once,
-and turns a `sending` prompt into `uncertain`, never resending it. A closed generation (a hot reload) never stops, builds,
-registers, starts or settles a cut's runner: past every await it re-checks that it is open and, for a settling write,
-that the intent is still the committed one, so the intent stays for the next generation (503 `GENERATION_ENDED`);
-a successor carried with the pending prompt settles only once it names its engine conversation. The write token is required: an untokened runtime
-write is refused (`MissingConversationError`); seeding goes through `bootstrapRuntime`, a hot-reload carry primes the
-token before the runner writes, and the cache only ever moves forward. Every mutating session route requires
-`x-workerdeck-generation`, DELETE included, and every WS command except `shell_attach` / `shell_detach` requires
-`generation` (an untokened attach subscribes but never resizes); both are re-checked under the session's lifecycle
-lock. `POST .../conversations`, `/retry` and `/pending` take `expectedGeneration` in the body and re-authorize the
-caller on the current projection inside the same lock that cuts, retries or sends. A prompt refused before the
-engine saw it (ended or missing conversation, a cut in flight, a refusal) is acked `notDelivered: true`; one
-that may have run never is. A stale resend is refused and never runs, and its ack reports the prompt's retained
-outcome in the conversation it named (`PromptAcks`, keyed by session, n and clientId): ran = a plain ack, refused there
-= `notDelivered`, forgotten (evicted, restarted) = `uncertain`, which react keeps as an `UnsentPrompt` marked uncertain. `packages/client` stamps the token a command was created with and never rewrites it on a
-resend; `useClaudeSession` keeps an undelivered prompt as `unsentPrompts`. An engine that cannot confirm its queued input was consumed (claude before its first stamped reply, an early
-interrupt included) gets 409 `unconfirmed_input` carrying `conversation`, `inputRevision`, `pendingInput` and
-`mayIncludePeer` (`Runner.inputSnapshot`); an interrupt never counts as consumption. Only a person's explicit
-confirmation, `POST .../conversations/discard { expectedGeneration, inputRevision, prompt? }`, cuts past it: under
-the lock it re-checks the conversation, then compares the revision synchronously right before the gate, so any
-input since is 409 `input_changed` (with the new set to confirm) and a match abandons exactly that set. There is
-no force flag, and `context_reset`, typed `/clear` and `clear_context` never discard. An `uncertain` pending prompt holds every cut door (REST, `/discard`, restart, typed `/clear`, `clear_context`, `context_reset`) with 409 `uncertain_prompt` (`UNCERTAIN_PROMPT_CODE`, `UncertainPromptRefusal`) until a person picks Send again or Dismiss (`/pending`), because a cut would overwrite or strip its only durable copy; a cut queued for the next idle that meets one is dropped with a diagnostic. A typed `/clear` sent with a `clientId` is acked with its cut's outcome: just before the announce closes its socket when the cut ran, `notDelivered` when it was refused or a queued one was dropped, never before the outcome is known; a resend whose outcome a restart lost reads `uncertain` once the session moved on.
-Doors: `POST /sessions/:id/conversations` (`/retry`, `/pending`, `/discard`), typed exact
-`/clear` and WS `clear_context` (queued until idle), `context_reset`, and `POST /agents/:id/restart`, named or not.
-Named sessions (create record then index row then start, naming by `PATCH /sessions/:id { agent }`, retire as
-tombstone then close under the members' multi-lock, startup reconciliation, the session list from records) are in
-`docs/GOTCHAS.md` § Agent conversations. History reads
-(`GET .../conversations[/n]`, WS `?conversation=n`) bypass `resolveSession` and authorize on the entry's frozen
-`auth`, and their info is never decorated from the live session (no current agent name, team, shells or owner; an
-absent owner stays absent). `DELETE .../conversations/:n` (operator, lifecycle lock) erases a past entry: n, its
-times, executions and frozen `auth` stay, everything else (engine pointer, snapshot, home, title, cost) goes and it
-reads as `unavailable`; the engine store is never touched and the current conversation is refused (409).
-`PATCH /sessions/:id { config }` edits `requested` for every session under the route's lifecycle lock, vetted as a
-create (`requestedFrom` in `routes/named-sessions.ts`, shared with `PATCH /agents/:id`); it applies at the next cut,
-answers `settings`, and is refused while a cut is in flight and on a job run; an execution of an ended conversation answers 409, authorized on that entry too. A socket is bound to its
-runner and conversation: a command from a replaced runner or with a stale `generation` is refused, and the old
-socket gets `conversation_started` then close 4011 once the commit is durable (a socket that attached while n+1 started is already on it and stays open). A wake that registers a runner while the cut validates refuses the cut (409, try again), so an unvetted runner of n never becomes n+1; an execution result between the stop and the commit answers 409 `a new conversation is starting`, as one during the rest of the cut does. An unnamed `DELETE` appends the
-current conversation to the history and sets `closedAt`. **Parking** is deferred execution's other half and needs `Runner.park()` - which only
+(`ConversationCuts`, `conversation-cuts.ts`) keeps the id and starts conversation n+1. Its pieces:
+`services/lifecycle-locks.ts` (`LifecycleLocks`: the per-id FIFO lock, sorted multi-id runs, the
+counted gate that refuses new work while a cut or a retire runs, `startupTimeoutMs`), the record's
+`cut` intent, `pendingPrompt` and `startFailed`, `routes/conversations.ts` (`GET`, `POST` and
+`DELETE` on `/sessions/:id/conversations[/n]`, `/retry`, `/pending`, `/discard`, the `conversationGuard`
+every door re-runs inside the lock, `historyEvents` over `services/history-reader.ts`), and the
+WS layer (`routes/ws.ts`: a socket bound to its runner and n, `isClearRequest`, `conversation_started`,
+read-only history sockets). `cut(id, request, guard)`, `retryStart`, `settlePendingPrompt` and
+`clearOnIdle` (every door that may arrive mid-turn: typed `/clear`, `clear_context`, `context_reset`)
+take the lock themselves; `closeLocked` (an unnamed `DELETE`: current conversation into the history,
+`closedAt`) expects the caller to hold it. `recover` runs before listen; `firstStarted` settles a
+create's own intent (0 to 1) in the background. `faults` is the test seam for crash points. Doors:
+`POST /sessions/:id/conversations` (`/discard` after an `unconfirmed_input` refusal), typed exact
+`/clear`, WS `clear_context`, `context_reset`, and `POST /agents/:id/restart`, named or not. A
+mutating session route requires `x-workerdeck-generation` and runs under the lifecycle lock;
+`PATCH /sessions/:id { config }` writes `requested` for every session (vetted as a create by
+`requestedFrom`, shared with `PATCH /agents/:id`), applies at the next cut and is refused while a
+cut is in flight and on a job run. Prompt acks (`services/prompt-acks.ts`) key on session, n and
+clientId and retain each outcome, so a stale resend is answered ran (plain ack), `notDelivered` or
+`uncertain`, never run again; only a `NotDelivered` error means "never ran". Every invariant (one
+write, write token, lock order, validation order, discard-and-cut, quiet stop, the engine store,
+recovery) is in `docs/GOTCHAS.md` § Conversation cut; named sessions in § Named sessions. **Parking** is deferred execution's other half and needs `Runner.park()` - which only
 the provider engine has, because claude and codex run behind a binary that owns its process
 state. **Dormancy** is the restart story for those two: a `DormantSessionRecord` holds no
 transcript at all, just the id, the `sdkSessionId` to resume from and the config to rebuild
@@ -1238,10 +1236,20 @@ prompt? })` after `unconfirmedInputOf(error)` read a refusal (`WorkerDeckError` 
 `conversations(id)` and `conversationHistory(id, n)`, `eraseConversation(id, n)`, `updateSessionSettings(id, config)`; `attach(id, { conversation: n })` opens a past
 conversation's read-only socket and never moves the client's conversation token (`buildWsUrl` gets it as a 5th
 argument, which `hostAuth` forwards).
+**The conversation token** is the client's: `noteConversation` records the n every session answer
+and every `attached` hello names, and each mutating REST call sends it as `x-workerdeck-generation`.
+`SessionHandle` stamps `generation` on a command when it is created and never rewrites it, so a
+command queued across a cut is refused by the gateway rather than run on n+1; a frame with no token
+waits in the outbox until the socket's `attached` names one. The client does not act on
+`conversation_started`: the close (4011) reconnects like any other and the next hello carries n+1.
+The `/agents` lifecycle wrappers (`restartAgent`, `retryAgentStart`, `settleUndelivered`,
+`agentConversations`) still exist for their routes; the clients in this repo use the session-level
+calls above.
 `runTeamMove` (`src/team-move.ts`) is the one drop-to-join for every host. It throws only before
 its first change; after that it returns a `TeamMoveOutcome`: `committed` (`yes`, `no`, or `unknown`
-when the join got no answer and may still commit), a kept adoption (never undone: retiring would
-end the session), the invitation it opened across gateways, and siblings whose `order` failed. A
+when the join got no answer and may still commit), `adopted` when it named an unnamed mover by
+PATCH (kept even when the join fails: "The session stays an agent"; the agent id is the session
+id), the invitation it opened across gateways, and siblings whose `order` failed. A
 definite refusal (an HTTP answer below 500) withdraws its own invitation by the invitation's id
 (`withdrawInvitation`, a conditional `DELETE ?invite=`); an unknown join leaves it open (an invite
 that got no answer is reported as `state: 'unknown'` with no id, so nothing is withdrawn), and the
@@ -1393,13 +1401,14 @@ would otherwise re-render the transcript at the shell's output rate. Only `statu
 record and the detach reason are state, and the invariants around the three frames are in
 `docs/GOTCHAS.md` § Shell sessions.
 
-- **Agent conversations.** There is no follow machine: a cut keeps the id, the old socket gets
+- **Conversations.** A cut keeps the id, the old socket gets
   `conversation_started` and close 4011, and the reattach lands on n+1 (a new epoch, so `staleAttach` resyncs).
   `useClaudeSession` takes a bare id (the current conversation) or a protocol `SessionAddress`; one with
   `conversation` attaches that past conversation read-only and caches it under `addressKey`, apart from the
   current one. Drafts and staged files are keyed by the id, so they stay put across a cut. `useArchivedView(client,
   address, info)` builds the past conversation's banner (protocol `archivedView`) from `GET .../conversations`:
   no current conversation there reads as deleted. `conversationReadOnly(readOnly, address)` is true for any past one.
+  The reducer keeps its `conversation_reset` case: a standalone runner (no gateway) still clears in place.
 
 ## `packages/ui`
 
@@ -2065,8 +2074,7 @@ the click so an action cannot also select), which is the opposite of the extensi
 always-on overflow glyph and the right call for each: there are three of them here and a sidebar
 card has room for one. New conversation is the one with
 two gates: the host must pass `onNewConversation`, and the row must be live (`clearContextOffered`) and cuttable
-now (`newConversationGate`). It is the one cut entry on a card (Clear context and New conversation are the same
-cut). Hosts run it through `startNewConversation` with `useDiscardConfirmation` (or their own modal), which turns
+now (`newConversationGate`). It is the one cut entry on a card: there is no separate Clear context. Hosts run it through `startNewConversation` with `useDiscardConfirmation` (or their own modal), which turns
 an `unconfirmed_input` refusal into a confirmed `discardAndCut` and asks again on `input_changed`.
 `SessionPanel`'s typed `/clear` stays a socket command (it queues for idle); a refusal there is plain protocol-error
 text, never inferred into a REST cut, because a `protocol_error` frame names no command and a guess could cut a
@@ -2253,10 +2261,10 @@ cursor-addressed screen under the writer - and resets the screen before writing 
 
 `terminal/live-tool.ts` holds the pure rules for running rows (elapsed after 5 s with non-breaking spaces, the last five tail lines, which rows may be backgrounded) and `height.ts` budgets for them, so the estimate counts the widest elapsed label and the tail. The background action needs `TaskControlProvider`, which `SessionPanel` mounts only when `capabilities.backgroundTasks` and not read-only; the composer's `onSendNow` (⌥↵) appears only while such a call runs.
 
-- **Agent conversations in `SessionPanel`.** `conversation` (beside `sessionId`) shows that past
+- **Past conversations in `SessionPanel`.** `conversation` (beside `sessionId`) shows that past
   conversation, read-only whatever `readOnly` the host passes (`conversationReadOnly`): no composer, approvals,
-  model/mode controls, MCP/Skills/Files entries. It draws `ArchivedBanner` (Past conversation / Agent deleted /
-  Transcript unavailable) with Go to current (the current conversation's n) when the host passes `onGoToCurrent`. Conversation row strings live in `lib/conversations.ts`
+  model/mode controls, MCP/Skills/Files entries. It draws `ArchivedBanner` (Past conversation, with a Closed note
+  once the session has no current conversation, and Transcript unavailable) with Go to current (the current conversation's n) when the host passes `onGoToCurrent`. Conversation row strings live in `lib/conversations.ts`
   (`@workerdeck/ui/format`), shared with VS Code.
 
 ## `packages/web`
@@ -2403,14 +2411,14 @@ then `GatewayMeta.agents.sharing`) and is greyed when the gateway disallows shar
 chosen; joining a lead of another owner needs a ticked "Join across owners" (`crossOwner`).
 `useHostMeta` reads each gateway's `/meta` once a minute for both `relays` and `agentDefaults`. A blank name lets the
 gateway pick one. `CwdField` and `EffortField` are shared with `RunForm`. Card verbs live in
-`SessionCardActions` (`rowActions`, so the dashboard redraws the clear / sleep / close icons
+`SessionCardActions` (`rowActions`, so the dashboard redraws the new conversation / sleep / close icons
 itself), errors as toasts; the `⋯` menu opens with the owner, and a top-level agent gets Share
 with other owners / Make private. Drag to join and the menu's Join both go through `teamMove` in
 `SessionsSidebar`: a cross-owner join asks first (`CrossOwnerDialog`), the outcome's message is
 drawn under the card, and an open invitation adds a toast with a Withdraw invitation action. `useAgentAvatars` fetches each avatar path once per page (a
 failure retries after 60 s); the session header draws `AgentHeading` for an agent.
 
-- **Agent conversations.** The session route takes `conversation=<n>` for a past conversation (read-only);
+- **Conversations.** The session route takes `conversation=<n>` for a past conversation (read-only);
   without it the route is the current one, which a stable id makes reload-safe. Sub-agent and shell frames carry
   `conversation` along. Every card, named or not, has Conversations (the session's `conversations(id)` through
   `conversationList`) and one New conversation entry (quick action and menu) with the discard confirmation
