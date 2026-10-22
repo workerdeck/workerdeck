@@ -1338,10 +1338,10 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
 - **Behind a gateway every reset is a cut, a named session's too.** The turn-end run is
   `ConversationCuts.clearOnIdle(runner, 'context_reset', prompt)`: conversation n+1 under the same
   id, the prompt its first message (`pendingPrompt`), the identity row untouched. It follows every
-  cut rule (§ Conversation cut): it waits for an idle with no unanswered input, never discards, and
-  a failed cut leaves n as it was and goes to `onError`. The reason is not carried into n+1, so no
-  notice row says why the transcript is fresh; the `conversation_reset.agentReason` notice exists
-  only on the standalone path below.
+  cut rule (§ Conversation cut): it waits for an idle with no unanswered input and never discards.
+  A refusal or a rollback before the commit leaves n as it was; a start that fails after the commit
+  keeps n+1 with `startFailed` (§ Conversation cut). Either way the error goes to `onError`. The
+  agent's reason shows as a notice opening the new conversation.
 - **The tool schedules; the gateway runs it.** `context_reset` can only ever be called mid-turn, so
   the handler records `{ prompt, reason }` in `ContextResetService` and answers "scheduled, end your
   turn". It refuses up front, so the agent sees why: not granted, a job run, a reset already
@@ -1481,11 +1481,16 @@ code map in `docs/PACKAGES.md` server.
 - **`generation` is `conversation`; `epoch` is not.** n counts conversations; epoch is the replay
   log's generation and also bumps on every dormant wake. A cut commits `epoch + 1` and the fresh
   start uses it as is, never `rebuildRunner`'s own increment.
-- **Every mutation names its conversation, and is checked again under the lock.** Mutating
-  `/sessions/:id/*` routes (DELETE included) require `x-workerdeck-generation`
-  (`GENERATION_HEADER`), every WS command except `shell_attach` / `shell_detach` carries
-  `generation`, and the cut, retry, pending and `/agents` lifecycle doors take `expectedGeneration`
-  in the body. Missing or stale is 409, never defaulted. A route decides auth and the generation
+- **Every mutation names its conversation, and is checked again under the lock.** Three rules,
+  never defaulted:
+  - ordinary session mutations (`/sessions/:id/*`, `DELETE /sessions/:id` included) carry the
+    `x-workerdeck-generation` header (`GENERATION_HEADER`); missing or stale is 409;
+  - the conversation POSTs (new, `/discard`, `/retry`, `/pending`) and the `/agents/:id` `restart`,
+    `retry-start` and `undelivered` routes take `expectedGeneration` in the body; missing is 400,
+    stale is 409;
+  - `DELETE /sessions/:id/conversations/:n` needs neither, since n is in the path.
+
+  Every WS command except `shell_attach` / `shell_detach` carries `generation`. A route decides auth and the generation
   once before the lifecycle lock and again inside it (the guard closure in
   `routes/conversations.ts`, `expectedConversation` in `routes/sessions.ts`): a call queued behind
   a cut must never land on n+1. A socket is bound to the runner and the n it attached to; after
@@ -1494,11 +1499,13 @@ code map in `docs/PACKAGES.md` server.
 - **Runtime writes carry a write token.** Every parking save or clear names `info.conversation`;
   `SessionRecords` refuses a mismatch (`StaleConversationError`) and a write that names none
   (`MissingConversationError`), so a parking write queued behind a cut can neither bring n's runtime
-  back over n+1 nor clear n+1's. `records.conversationOf` is a cache that moves forward only through
-  a transaction; nothing else may set it except a hot-reload carry (`adoptSession` primes it).
+  back over n+1 nor clear n+1's. `records.conversationOf` is a cache: a serialized `get` or
+  transaction sets it from the record it read or wrote, while `list` and a hot-reload carry
+  (`adoptSession` priming it) are unserialized and may only raise it, never lower it, so a read
+  that started before a commit cannot undo it.
 - **Lock order: lifecycle lock, then parking fence, then a short record transaction.** Never the
-  reverse. A transaction is a synchronous read-merge-write of the latest record and never awaits
-  parking, a runner or another queued op. `LifecycleLocks.run` is not reentrant: `cut`, `retryStart`
+  reverse. A transaction's merge callback is synchronous: it never awaits parking, a runner or
+  another queued op (the transaction itself awaits only the store's own read and write). `LifecycleLocks.run` is not reentrant: `cut`, `retryStart`
   and `settlePendingPrompt` take it themselves, so never call them while holding it; the mutating
   `/sessions/:id` routes hold it, which is why close is `closeLocked`. A multi-id run (retire with
   its members) sorts the ids and acquires them once.
@@ -1535,11 +1542,19 @@ code map in `docs/PACKAGES.md` server.
   no runner option may keep the engine from persisting (`persistSession: false` is pinned out by a
   test). Stopping a runner for sleep, a cut or retire never discards engine state.
 - **The intent stays until the successor is durable.** `cut` is written `prepared` (and read back)
-  before the stop and becomes `committed` with the commit. It is cleared only once a runtime for
-  n+1 that names its engine conversation is read back (or a live snapshot, for an engine without
-  resume), with startup awaited up to `agentStartupTimeoutMs`. A start that fails, early or late,
-  leaves a durable `startFailed: { n, error }`, and Retry start (`/conversations/retry`) starts the
-  same n, never a second cut.
+  before the stop and becomes `committed` with the commit. It is cleared once startup (awaited up to
+  `agentStartupTimeoutMs`) succeeds and `#durability` reads back a runtime for n+1:
+  - a resumable engine whose runner names its engine conversation needs that id in the runtime;
+  - a resumable engine whose runner names none yet is accepted with no engine id, unless a
+    first-message identity is owed (a pending prompt for n+1); an idle start has no conversation
+    to name, and requiring one would fail every cut without a prompt;
+  - an engine without resume needs a `live` runtime; one with neither resume nor `persistLive`
+    has nothing to keep and is accepted at once.
+
+  **Failure before and after the commit differ.** A refusal, or a failure before the commit (rolled
+  back), leaves n as it was. A start that fails after the commit (startup or readback) keeps n+1,
+  the committed intent and a durable `startFailed: { n, error }`, and the door answers 502; Retry
+  start (`/conversations/retry`) starts the same n, never a second cut.
 - **Crash recovery runs before listen** (`cuts.recover`, after `parking.hydrate` and
   `reconcileIdentity`). `prepared` rolls back: nothing was committed, so n resumes. `committed`
   starts n+1 once, and resumes a successor that already names its engine conversation instead of
@@ -1590,7 +1605,8 @@ session, named or not, cuts the same way (§ Conversation cut).
   before the engine's start. The intent stays until the first conversation is durable (the cut's
   startup and readback rules, settled in the background; a later cut waits for it), so a crash
   anywhere is recovered by `cuts.recover` under the same id: a fresh start with a `pending`
-  prompt, never a resend of a `sending` one (it surfaces as `uncertain`, `AgentInfo.undelivered`).
+  prompt, never a resend of a `sending` one (it surfaces as `ConversationsResponse.pendingPrompt`
+  with state `uncertain`).
   A failed start is Retry start. A named create's intent also carries its identity (the index row
   it is about to write, avatar recipe and brief included, held only until the start is durable),
   and its first start never runs without the row: recovery writes a missing row from that copy

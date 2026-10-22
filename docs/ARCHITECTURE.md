@@ -363,8 +363,10 @@ runner registers:
 The old engine conversation stays in the engine's own store, untouched, so `claude --resume` and the
 CLI's stats still see it; n+1 is a fresh engine session. Past conversations are read back from that
 store, read-only (`GET /sessions/:id/conversations/:n`, WS `?conversation=n`), authorized by their
-frozen `auth`. `generation` is n: every mutating call names it (`x-workerdeck-generation`, WS
-`generation`, `expectedGeneration`) and a stale one is a 409, so nothing aimed at n lands on n+1. The
+frozen `auth`. `generation` is n, and a mutation names it so nothing aimed at n lands on n+1:
+ordinary session mutations by the `x-workerdeck-generation` header, the conversation POSTs and the
+agent lifecycle routes by body `expectedGeneration`, WS commands by `generation`; a stale one is a
+409 (erasing a past conversation names n in its path instead). The
 old socket gets `conversation_started` and close 4011; a reconnect to the same id attaches n+1. `epoch`
 is the replay log's generation, not n: a dormant wake bumps it too. A client addresses a
 conversation as `SessionAddress = { id, conversation? }` (absent = current).

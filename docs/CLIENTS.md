@@ -633,9 +633,8 @@ extension only connects to takes its defaults from its own config.
 
 `workerdeck.host.agentContextReset` (`off`, the default, `on` or `never`) reaches the child as
 `--agent-context-reset <value>` when it is not `off`, and is a restart-offer key. An agent-requested
-reset is a cut: the tab stays on the same session id and shows conversation n+1, which starts with
-the agent's prompt; the reason is not drawn. The `The agent cleared its context: <reason>` notice the
-react reducer seeds from `conversation_reset.agentReason` appears only for a standalone runner.
+reset is a cut: the tab stays on the same session id and shows conversation n+1, where the
+agent's reason shows as a notice opening the new conversation, followed by the agent's prompt.
 
 ### Dev harness & CSP
 
