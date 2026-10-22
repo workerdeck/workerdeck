@@ -256,7 +256,7 @@ ran from a **VFS entry** rather than from anything the model says, so it does no
 behaving; it fails on both assertions against a runner without the amend.
 `smoke:context-reset [claude|codex|all]` (paid) drives a real engine through the real `ContextResetService`: the agent calls `context_reset`, the reset lands with its reason after the turn, the prompt opens the fresh conversation, the old context is gone, the gateway tools still answer, and an immediate second reset is refused; any change to `context-resets.ts` or a runner's `clearContext` needs it.
 
-The agent rotation smoke is gone with the handover (agents cut under one id now); a paid smoke of a named session's `context_reset` cut is owed before release.
+`smoke:cut [all|claude]` (paid, own gateway on a free port) drives the conversation cut against the real CLI: reply stamps incl. an early interrupt, the REST cut, a typed `/clear` (queued and acked), `context_reset` on a named session, the engine switch at the cut, and the engine store listing every conversation; any change to `conversation-cuts.ts`, `prompt-acks.ts` or a runner's reply stamping needs it.
 `smoke:background [claude|codex|all]` (paid) proves live `tool_output` on both engines and claude's move to the background: the blocked call returns, a queued message is answered while the command still runs, the completion arrives; any change to `tool-output.ts`, `task-output.ts` or the codex delta mapping needs it.
 Four more the list above omits. `smoke:mcp --probe` is **free** - it connects to the real
 DeepWiki server, asserts the tools come back namespaced, and exits before touching a model;
