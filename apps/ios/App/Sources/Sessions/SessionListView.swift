@@ -91,7 +91,7 @@ struct SessionListView: View {
     }
     // Both an appear and a change: a cold launch from a notification sets the
     // route before this view exists.
-    .task(id: push.pendingRoute) { consumePushRoute() }
+    .task(id: push.pendingRoute) { await consumePushRoute() }
     .sheet(isPresented: $showHostManager) {
       NavigationStack { HostListView() }
     }
@@ -103,7 +103,7 @@ struct SessionListView: View {
   /// Open the session a notification was tapped for. The route names its
   /// gateway; a payload without one (a hand-crafted `simctl push`) falls back to
   /// whichever gateway is showing that session, then to the first host.
-  private func consumePushRoute() {
+  private func consumePushRoute() async {
     guard let route = push.pendingRoute else { return }
     let target =
       route.hostId
@@ -114,16 +114,46 @@ struct SessionListView: View {
       push.clearRoute()
       return
     }
+    var conversation: Int64?
+    var seq = route.seq
+    if let n = route.conversation {
+      // The list may not be loaded yet (a cold launch) or may predate another client's cut, so the notification's n
+      // is weighed against a fresh read of the session's conversations. The route stays pending until that answers;
+      // with no answer after a few tries it opens the session's current screen, without the row it cannot place.
+      let current = await currentConversation(hostId: hostId, sessionId: route.sessionId)
+      guard !Task.isCancelled, push.pendingRoute == route else { return }
+      if let current {
+        conversation = addressOf(id: route.sessionId, conversation: n, current: current.n).conversation
+      } else {
+        seq = nil
+      }
+    }
     // Replaces rather than appends, so Back from a pushed-to session lands on
     // the list however deep the stack happened to be.
-    let current = model?.row(hostId: hostId.uuidString, sessionId: route.sessionId)?.conversation
-    let address = addressOf(id: route.sessionId, conversation: route.conversation, current: current)
     path = [
-      .session(
-        hostId: hostId, sessionId: route.sessionId, seq: route.seq, epoch: route.epoch,
-        conversation: address.conversation)
+      .session(hostId: hostId, sessionId: route.sessionId, seq: seq, epoch: route.epoch, conversation: conversation)
     ]
     push.clearRoute()
+  }
+
+  private struct Current { let n: Int64? }
+
+  // The session's current n from its own conversations list (nil n: closed, or out of scope), or nil when no answer
+  // came after a few tries. Waits for the list model on a cold launch.
+  private func currentConversation(hostId: UUID, sessionId: String) async -> Current? {
+    for attempt in 0..<5 {
+      if attempt > 0 { try? await Task.sleep(for: .seconds(2)) }
+      guard !Task.isCancelled else { return nil }
+      guard let client = model?.context(for: hostId)?.client else { continue }
+      let answer = await client.answer(conversationsCall(id: sessionId))
+      guard answer.status == 200 else { continue }
+      let now = Date()
+      let items = sessionConversations(
+        body: answer.body, currentTitle: nil, nowMs: now.timeIntervalSince1970 * 1000,
+        offsetMinutes: SessionListModel.offset(now))
+      return Current(n: items?.first(where: \.current)?.n)
+    }
+    return nil
   }
 
   // MARK: - Destinations
