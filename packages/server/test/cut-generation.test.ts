@@ -791,7 +791,7 @@ describe('an uncertain prompt holds every cut door', () => {
     socket.ws.close()
   })
 
-  it('refuses the restart of a named session the same way', async () => {
+  it('refuses a new conversation of a named session the same way', async () => {
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir)
     const created = await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'work', agent: { name: 'Named' } })
@@ -799,8 +799,7 @@ describe('an uncertain prompt holds every cut door', () => {
     const id = created.body.session.id as string
     await idle(server, id)
     await uncertain(server, id)
-    const restart = await call(base, `/agents/${id}/restart`, 'POST', { expectedGeneration: 1 })
-    expect(restart).toMatchObject({ status: 409, body: { code: UNCERTAIN_PROMPT_CODE } })
+    expect(await cut(base, id, 1)).toMatchObject({ status: 409, body: { code: UNCERTAIN_PROMPT_CODE } })
     expect((await server.records.get(id))?.pendingPrompt).toMatchObject({ text: 'lost', state: 'uncertain' })
   })
 
