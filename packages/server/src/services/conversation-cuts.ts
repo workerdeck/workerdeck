@@ -94,7 +94,7 @@ export class ConversationCuts {
   close(): void {
     this.#closed = true
     this.#attempts.clear()
-    for (const { leave } of [...this.#queued.values()]) {
+    for (const { leave } of this.#queued.values()) {
       leave(QUEUED_CUT_RELOADED)
     }
   }
