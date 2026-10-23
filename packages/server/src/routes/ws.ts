@@ -15,7 +15,7 @@ import type { ServerContext } from '../context.ts'
 import { bypassDisabled, permissionDecision, refuseJobInput, refusePermissionMode } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import { CUT_IN_PROGRESS } from '../services/lifecycle-locks.ts'
-import { CONVERSATION_ENDED } from '../services/conversation-cuts.ts'
+import { CONVERSATION_ENDED, type CutOutcome } from '../services/conversation-cuts.ts'
 import { mentionsFor } from '../services/peers.ts'
 import type { PromptOutcome } from '../services/prompt-acks.ts'
 import { shownEntryInfo } from './conversations.ts'
@@ -254,7 +254,12 @@ async function clearWithAck(
   }
   clears.set(clientId, settle)
   try {
-    await handleCommand(ctx, frame, bound, (cut) => settle(cut ? 'executed' : 'notDelivered'))
+    await handleCommand(ctx, frame, bound, (cut, why) => {
+      if (why) {
+        report(new Error(`/clear did not run: ${why}`))
+      }
+      settle(cut ? 'executed' : 'notDelivered')
+    })
   } catch (error) {
     report(error)
     settle((ctx.records.conversationOf(runner.id) ?? 1) > conversation ? 'executed' : 'notDelivered')
@@ -265,7 +270,7 @@ function outcomeAck(clientId: string, outcome: PromptOutcome): ServerFrame {
   return outcome === 'executed' ? { type: 'ack', clientId } : { type: 'ack', clientId, notDelivered: true }
 }
 
-async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Bound, onClear?: (cut: boolean) => void): Promise<void> {
+async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Bound, onClear?: CutOutcome): Promise<void> {
   const { attachmentStore, bridge } = ctx
   const { runner, access, client } = bound
   if (ctx.registry.get(runner.id) !== runner && !ctx.locks.gated(runner.id)) {

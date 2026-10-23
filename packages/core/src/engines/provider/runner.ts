@@ -667,6 +667,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
     })
     try {
       this.#unsent = 0
+      const sent = this.#messages.length
       const result = await agent.stream({ messages: [...this.#messages], abortSignal: abort.signal })
       for await (const part of result.fullStream) {
         if (this.core.closed) {
@@ -694,7 +695,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
         return
       }
       addUsage(accum, usage)
-      this.#settleResponse(responseMessages as ModelMessage[], toolCalls, text)
+      this.#settleResponse(sent, responseMessages as ModelMessage[], toolCalls, text)
     } catch (error) {
       if (this.core.closed) {
         return
@@ -708,12 +709,14 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
     }
   }
 
+  // The reply goes where the request ended: a message sent while it streamed stays after it, unanswered, for the next turn.
   #settleResponse(
+    sent: number,
     responseMessages: ModelMessage[],
     toolCalls: readonly { toolCallId: string; toolName: string; input: unknown }[],
     text: string,
   ): void {
-    this.#messages.push(...responseMessages)
+    this.#messages.splice(sent, 0, ...responseMessages)
     const settled = settledToolCallIds(responseMessages)
     for (const call of toolCalls) {
       if (!settled.has(call.toolCallId)) {

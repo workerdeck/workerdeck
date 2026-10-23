@@ -68,6 +68,37 @@ describe('AiSdkRunner', () => {
     expect(runner.info().engine).toBe('provider')
   })
 
+  it('answers a message sent while a turn streams in a turn of its own, after the reply it arrived behind', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    let calls = 0
+    const model = new MockLanguageModelV3({
+      modelId: 'mock-1',
+      doStream: async () => {
+        calls++
+        if (calls === 1) {
+          await gate
+          return streamText('reply A')
+        }
+        return streamText('reply B')
+      },
+    })
+    const { runner, eventsOf } = makeRunner({ languageModel: model })
+    runner.sendMessage('A')
+    await waitFor(() => calls === 1)
+    runner.sendMessage('B')
+    expect(runner.pendingInput()).toBe(1)
+    release()
+    await waitFor(() => eventsOf('turn_result').length === 2)
+    expect(runner.pendingInput()).toBe(0)
+    expect(runner.messages.map((m) => [m.role, typeof m.content === 'string' ? m.content : (m.content as Array<{ text?: string }>)[0]?.text])).toEqual([
+      ['user', 'A'],
+      ['assistant', 'reply A'],
+      ['user', 'B'],
+      ['assistant', 'reply B'],
+    ])
+  })
+
   it('executes local tools inside the loop and emits tool_use + synthetic tool_result', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',

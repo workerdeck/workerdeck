@@ -211,6 +211,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   message-state replay (persist `responseMessages`, append a `ToolResultPart`, re-invoke), not
   resuming a suspended loop. Approvals map to v7's separate `toolApproval` mechanism. v7 is
   ESM-only and needs Node >= 22.
+- **A reply is spliced in where its request ended.** `sendMessage` appends to the history at once,
+  so a message sent while a leg streams sits after that leg's request. `#settleResponse` inserts the
+  response at the request's length, never at the end, so the message stays last, unanswered, and
+  the queued `#runTurn` sees a user message and runs it. Appending at the end made the history end
+  in an assistant message and left the send pending until the next one.
 - `AiSdkRunner` streams every leg (`agent.stream`, never `generate`): `stream_delta` per token
   (suppressed by `includePartialMessages: false`), assistant/tool messages flushed per step. Tests
   must mock `doStream`, not `doGenerate`; only `generateDigest` still consumes `doGenerate`.
@@ -1148,7 +1153,8 @@ dormant wake starts a fresh log.
 - **Refused, never queued.** `sleep()` answers `{ ok: false, reason }` unless the session is `idle`
   with no pending approval, no compaction in flight, no running subagent or CLI-owned background
   task (`task_started` records, which include background Bash: they die with the process), no
-  message buffered in the `InputQueue`, and, on claude, a conversation to resume (`sdkSessionId`).
+  message buffered in the `InputQueue` nor (on a CLI that stamps) one it read and has not answered,
+  and, on claude, a conversation to resume (`sdkSessionId`).
   Held local commands (`$` output) live on the runner, not the query, and are carried to the next
   message as before.
 - **Claude: a query that is no longer `#query` has been put to sleep.** `#pump` drops its messages,
@@ -1550,8 +1556,12 @@ code map in `docs/PACKAGES.md` server.
   that registered a runner while the checks ran refuses the cut (`WOKE_DURING_CUT`): that runner
   was never vetted.
 - **Unconfirmed input is never discarded on its own.** `Runner.pendingInput()` counts input the
-  engine took and has not consumed: claude stamps each send with a uuid and only a top-level reply
-  naming it clears it; nothing is inferred from timing, and an interrupt is never consumption. While
+  engine took and has not consumed: claude stamps each send with a uuid and only a frame naming it
+  clears it; nothing is inferred from timing, and an interrupt is never consumption. A typed turn
+  stamps its first assistant and stream frame only, so a send folded in mid-turn is named on the
+  **result's `user_message_uuids`** and nowhere else; a result's lone `user_message_uuid` is not
+  evidence (it may name a failed delivery), and neither are `queued_turn_count` or a
+  `queued_command` attachment (one is written for a fold an interrupt cancelled). While
   it is non-zero a cut is 409; when the engine cannot confirm consumption the body has code
   `unconfirmed_input`, `conversation`, `inputRevision`, `pendingInput` and `mayIncludePeer`
   (`Runner.inputSnapshot`). Only a person's `POST .../conversations/discard { expectedGeneration,
@@ -1559,8 +1569,18 @@ code map in `docs/PACKAGES.md` server.
   no await between, so any input since answers `input_changed` with the new set to confirm. The
   revision is a per-runner nonce plus the input count, so no sleep, wake or rebuild matches an old
   one. There is no force flag. `context_reset`, typed `/clear` and `clear_context` never discard: a
-  queued one meeting unconfirmed input is dropped with a diagnostic, and `context_reset` refuses up
-  front. Codex and provider have no `inputSnapshot`; they confirm, so they never refuse this way.
+  queued one meeting unconfirmed input is dropped with its reason, and `context_reset` refuses up
+  front.
+- **A queued cut is level-triggered and bounded.** `#queueOnIdle` re-reads the state on every runner
+  event and never waits for one transition: an idle that already happened emits nothing more, and a
+  late receipt can clear pending input while the status stays idle. Idle with nothing pending cuts;
+  idle with pending input waits `stallMs` (10 s) for the turn it should start, then drops with
+  `UNANSWERED_STALLED`; a non-idle status disarms the bound; a gateway close drains every queued cut
+  with `QUEUED_CUT_RELOADED`. Every drop reaches its caller (`CutOutcome` carries the reason): a typed
+  `/clear` gets a `protocol_error` plus a `notDelivered` ack, never silence, and the `context_reset`
+  adapter rejects, so a reset that never ran is never counted against the rate limit. Any new
+  deferred operation follows the same rule: evaluate current state at admission and on every event,
+  and give every wait a bounded idle, terminal and reload outcome. Codex and provider have no `inputSnapshot`; they confirm, so they never refuse this way.
   `pnpm smoke:cut` proves the claude stamping on a real CLI, an early interrupt included.
 - **The stop is quiet.** `#stop` detaches the sockets, evicts the registry watchers **before**
   `close` (so no `session_closed` webhook, push or notification for a session that is not ending),

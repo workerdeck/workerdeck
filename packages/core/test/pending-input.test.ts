@@ -32,8 +32,9 @@ function assistant(answering: string | undefined, n: number): SDKMessage {
   } as unknown as SDKMessage
 }
 
-function result(subtype = 'success'): SDKMessage {
+function result(subtype = 'success', consumed?: string[]): SDKMessage {
   return {
+    ...(consumed ? { user_message_uuid: consumed.at(-1), user_message_uuids: consumed } : {}),
     type: 'result',
     subtype,
     duration_ms: 1,
@@ -78,6 +79,51 @@ describe('claude pendingInput', () => {
     harness.emit(assistant(queued, 2))
     await tick()
     expect(runner.pendingInput()).toBe(0)
+  })
+
+  it('confirms a send folded into a typed turn from the result, the only frame that names it', async () => {
+    const { harness, runner } = await running()
+    runner.sendMessage('first')
+    await tick()
+    const first = harness.captured.inputs[0]!.uuid!
+    harness.emit(assistant(first, 1))
+    await tick()
+    runner.sendMessage('sent mid-turn')
+    await tick()
+    const folded = harness.captured.inputs[1]!.uuid!
+    harness.emit(assistant(undefined, 2))
+    await tick()
+    expect(runner.pendingInput()).toBe(1)
+    harness.emit(result('success', [first, folded]))
+    await tick()
+    expect(runner.pendingInput()).toBe(0)
+  })
+
+  it('never takes a result naming one failed send as proof it was consumed', async () => {
+    const { harness, runner } = await running()
+    runner.sendMessage('first')
+    await tick()
+    harness.emit(assistant(harness.captured.inputs[0]!.uuid!, 1))
+    await tick()
+    runner.sendMessage('lost in delivery')
+    await tick()
+    harness.emit({ ...result('error_during_execution'), user_message_uuid: harness.captured.inputs[1]!.uuid! } as SDKMessage)
+    await tick()
+    expect(runner.pendingInput()).toBe(1)
+  })
+
+  it('refuses to sleep while the CLI holds a send it read but has not answered', async () => {
+    const { harness, runner } = await running()
+    runner.sendMessage('first')
+    await tick()
+    harness.emit(assistant(harness.captured.inputs[0]!.uuid!, 1))
+    harness.emit(result('success', [harness.captured.inputs[0]!.uuid!]))
+    harness.emit({ type: 'system', subtype: 'session_state_changed', state: 'idle', uuid: 'u-idle', session_id: 'sdk-1' } as unknown as SDKMessage)
+    await tick()
+    runner.sendMessage('handed off')
+    await tick()
+    expect(runner.pendingInput()).toBe(1)
+    expect(await runner.sleep()).toMatchObject({ ok: false, reason: 'a message is waiting for the engine' })
   })
 
   it('does not lose a pending message behind many events', async () => {

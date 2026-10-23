@@ -137,6 +137,17 @@ describe('ContextResetService', () => {
     await expect(service.request('s1', REQUEST)).rejects.toThrow(/last reset was 1 minute ago/)
   })
 
+  it('runs a reset asked while the session is already idle, after the reply, never waiting for an idle that came', async () => {
+    const cuts: string[] = []
+    const service = new ContextResetService({ cut: async (sessionId) => void cuts.push(sessionId) })
+    const runner = scriptedRunner('s1')
+    runner.emit({ type: 'status_changed', status: 'idle' })
+    service.watch(runner)
+    await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
+    expect(cuts).toEqual([])
+    await vi.waitFor(() => expect(cuts).toEqual(['s1']))
+  })
+
   it('reports a failed cut and leaves the session as it was', async () => {
     const errors: unknown[] = []
     const service = new ContextResetService({
@@ -319,6 +330,34 @@ describe('context_reset through the gateway', () => {
     expect(inputTexts(first!)).toEqual(['work'])
     const session = await info(base, id)
     expect(session).toMatchObject({ id, conversation: 2 })
+  })
+
+  it('counts a reset only once its cut ran: one that stalls on unanswered input frees the session to ask again', async () => {
+    const harnesses: Array<ReturnType<typeof fakeHarness>> = []
+    const queryFn = (params: Parameters<ReturnType<typeof fakeHarness>['queryFn']>[0]) => {
+      const next = fakeHarness()
+      harnesses.push(next)
+      return next.queryFn(params)
+    }
+    const { base } = await fx.startServer({ queryFn } as ReturnType<typeof fakeHarness>, { agentContextReset: { default: true } })
+    const id = await createSession(base, 'operator', { cwd: fx.tempDir(), prompt: 'work' })
+    await vi.waitFor(() => expect(harnesses).toHaveLength(1))
+    const [first] = harnesses
+    first!.emit(INIT)
+    await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(1))
+    first!.emit(REPLY)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    fx.server().cuts.stallMs = 40
+    const reset = () => gatewayTools(first!).context_reset!.handler(REQUEST, {})
+    expect((await reset()).content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
+    const runner = fx.server().registry.get(id)!
+    runner.sendMessage('from a peer', undefined, { origin: { kind: 'peer', sessionId: 'p', name: 'P', engine: 'claude', hops: [] } })
+    await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(2))
+    first!.emit(RESULT)
+    await vi.waitFor(() => expect(runner.info().status).toBe('idle'))
+    await vi.waitFor(async () => expect((await reset()).content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED), { timeout: 2000 })
+    expect(harnesses).toHaveLength(1)
+    expect(await info(base, id)).toMatchObject({ conversation: 1 })
   })
 
   it("cuts an agent's conversation under its one id: the agent, its name and its id stay, the prompt opens n+1", async () => {

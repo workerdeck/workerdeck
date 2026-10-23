@@ -273,7 +273,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (this.#subagents.list()?.some((sub) => sub.status === 'running')) {
       return 'a subagent or background task is still running'
     }
-    if (this.#input.pending > 0) {
+    // The CLI may hold a send it read but has not answered; a CLI that never names its sends cannot tell, so only
+    // the queue counts there, or such a session could never sleep.
+    if (this.#input.pending > 0 || (this.#stamps && this.#unanswered.length > 0)) {
       return 'a message is waiting for the engine'
     }
     if (!this.#query || !this.#sdkSessionId) {
@@ -616,13 +618,17 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     return { revision: `${this.#inputNonce}.${this.#inputCount}`, pending: this.pendingInput(), peer }
   }
 
-  // The only clearing: a top-level reply that names its sends. Nothing is inferred from turn timing or results.
+  // The only clearing: a frame that names its sends. A typed turn stamps its reply frames once, so a send folded in
+  // mid-turn is named only on the result's list. Nothing is inferred from turn timing.
   #trackAnswers(msg: SDKMessage): void {
-    if ((msg.type !== 'assistant' && msg.type !== 'stream_event') || msg.parent_tool_use_id !== null) {
+    const named = msg.type === 'result' || ((msg.type === 'assistant' || msg.type === 'stream_event') && msg.parent_tool_use_id === null)
+    if (!named) {
       return
     }
     const stamp = msg as { user_message_uuid?: string; user_message_uuids?: string[] }
-    const answered = stamp.user_message_uuids ?? (stamp.user_message_uuid === undefined ? [] : [stamp.user_message_uuid])
+    // A result's lone uuid may name a send that failed delivery; only its list is evidence of consumption.
+    const single = msg.type === 'result' || stamp.user_message_uuid === undefined ? [] : [stamp.user_message_uuid]
+    const answered = stamp.user_message_uuids ?? single
     if (answered.length === 0) {
       return
     }

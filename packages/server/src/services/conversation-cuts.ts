@@ -61,14 +61,20 @@ export const GENERATION_ENDED = 'the gateway is reloading; the next one finishes
 export const UNCERTAIN_PROMPT =
   'a message may not have reached the session; choose Send again or Dismiss for it before starting a new conversation'
 export const WOKE_DURING_CUT = 'the session woke while the new conversation was being prepared; try again'
+export const QUEUED_CUT_RELOADED = 'the gateway reloaded before the session went idle; ask for the new conversation again'
+export const UNANSWERED_STALLED =
+  'the session is idle but holds a message it never confirmed answering; use New conversation to review and discard it'
+
+// Why a queued cut did not happen, for the person who asked; undefined when it did, or when the session simply ended.
+export type CutOutcome = (cut: boolean, reason?: string) => void
 
 export class ConversationCuts {
   #context: ServerContext | undefined
   #sockets = new Map<string, Set<CutSocket>>()
   #ended = new Map<string, EndedExecution>()
   #leaving = new Map<string, string>()
-  #queued = new Map<string, { runner: Runner; leave: () => void }>()
-  #waiting = new Map<string, Array<(cut: boolean) => void>>()
+  #queued = new Map<string, { runner: Runner; leave: (why?: string) => void }>()
+  #waiting = new Map<string, CutOutcome[]>()
   #failedStarts = new Set<string>()
   // The runner whose start may still settle n's intent; a superseded attempt's late settle is a no-op.
   #attempts = new Map<string, Runner>()
@@ -76,6 +82,8 @@ export class ConversationCuts {
   #closed = false
   // Test seam: a step named here throws, standing in for a crash or a refused write at that boundary.
   readonly faults = new Set<CutFault>()
+  // How long a cut queued on an idle session waits for the turn its unanswered input should start.
+  stallMs = 10_000
 
   bind(ctx: ServerContext): void {
     this.#context = ctx
@@ -86,6 +94,14 @@ export class ConversationCuts {
   close(): void {
     this.#closed = true
     this.#attempts.clear()
+    for (const { leave } of [...this.#queued.values()]) {
+      leave(QUEUED_CUT_RELOADED)
+    }
+  }
+
+  // Whether a cut waits on this session's next idle.
+  queued(id: string): boolean {
+    return this.#queued.has(id)
   }
 
   get #ctx(): ServerContext {
@@ -175,7 +191,7 @@ export class ConversationCuts {
     runner: Runner,
     reason: CutReason,
     prompt?: string,
-    outcome?: (cut: boolean) => void,
+    outcome?: CutOutcome,
     agentReason?: string,
   ): Promise<CutResult | undefined> {
     const ctx = this.#ctx
@@ -202,7 +218,7 @@ export class ConversationCuts {
     from: number,
     reason: CutReason,
     prompt: string | undefined,
-    outcome: ((cut: boolean) => void) | undefined,
+    outcome: CutOutcome | undefined,
     agentReason?: string,
   ): void {
     const ctx = this.#ctx
@@ -219,40 +235,71 @@ export class ConversationCuts {
     if (this.#queued.has(id)) {
       return
     }
-    const leave = (): Array<(cut: boolean) => void> => {
+    // Level-triggered: the state is read again on every event and when the stall bound expires, never inferred from
+    // one transition, because a status that is already idle emits nothing more. Idle with unanswered input is a turn
+    // about to start or input the engine took and never confirmed; only the bound tells them apart.
+    let stall: ReturnType<typeof setTimeout> | undefined
+    let stalled = false
+    const drop = (why: string): void => {
+      tell(leave(), false, why)
+      ctx.locks.onError(new Error(`${reason} for ${id} dropped: ${why}`))
+    }
+    const evaluate = (closed = false): void => {
+      if (this.#queued.get(id)?.runner !== runner) {
+        return
+      }
+      if (closed || this.#closed || runner.info().status === 'closed') {
+        tell(leave(), false)
+        return
+      }
+      if (runner.info().status !== 'idle') {
+        clearTimeout(stall)
+        stall = undefined
+        stalled = false
+        return
+      }
+      if (!unanswered(runner)) {
+        const heard = leave()
+        this.cut(id, { expectedGeneration: from, reason, ...(prompt ? { prompt } : {}), ...(agentReason ? { agentReason } : {}) }).then(
+          () => tell(heard, true),
+          (error: unknown) => {
+            const cut = (ctx.records.conversationOf(id) ?? 1) > from
+            tell(heard, cut, cut ? undefined : errorMessage(error))
+            ctx.locks.onError(new Error(`${reason} for ${id} dropped: ${errorMessage(error)}`))
+          },
+        )
+        return
+      }
+      if (runner.inputConfirmable?.() === false) {
+        drop(UNCONFIRMED_INPUT)
+        return
+      }
+      if (stalled) {
+        drop(UNANSWERED_STALLED)
+        return
+      }
+      stall ??= setTimeout(() => {
+        stalled = true
+        evaluate()
+      }, this.stallMs)
+      stall.unref?.()
+    }
+    const leave = (): CutOutcome[] => {
+      clearTimeout(stall)
       this.#queued.delete(id)
       unsubscribe()
       const heard = this.#waiting.get(id) ?? []
       this.#waiting.delete(id)
       return heard
     }
-    const tell = (heard: Array<(cut: boolean) => void>, cut: boolean): void => {
+    const tell = (heard: CutOutcome[], cut: boolean, why?: string): void => {
       for (const listener of heard) {
-        listener(cut)
+        listener(cut, why)
       }
     }
-    const unsubscribe = runner.subscribe((event) => {
-      if (event.type === 'status_changed' && event.status === 'idle' && unanswered(runner) && runner.inputConfirmable?.() === false) {
-        tell(leave(), false)
-        ctx.locks.onError(new Error(`${reason} for ${id} dropped: ${UNCONFIRMED_INPUT}`))
-        return
-      }
-      if (event.type === 'status_changed' && event.status === 'idle' && !unanswered(runner)) {
-        const heard = leave()
-        this.cut(id, { expectedGeneration: from, reason, ...(prompt ? { prompt } : {}), ...(agentReason ? { agentReason } : {}) }).then(
-          () => tell(heard, true),
-          (error: unknown) => {
-            tell(heard, (ctx.records.conversationOf(id) ?? 1) > from)
-            ctx.locks.onError(new Error(`${reason} for ${id} dropped: ${errorMessage(error)}`))
-          },
-        )
-        return
-      }
-      if (event.type === 'session_closed') {
-        tell(leave(), false)
-      }
-    }, runner.info().lastSeq)
-    this.#queued.set(id, { runner, leave: () => tell(leave(), false) })
+    const unsubscribe = runner.subscribe((event) => evaluate(event.type === 'session_closed'), runner.info().lastSeq)
+    this.#queued.set(id, { runner, leave: (why) => tell(leave(), false, why) })
+    evaluate()
   }
 
   async #cut(id: string, request: CutRequest, guard: CutGuard | undefined): Promise<CutResult> {

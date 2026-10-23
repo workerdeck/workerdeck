@@ -10,7 +10,8 @@ export type AgentContextResetOptions = {
 }
 
 export type ContextResetServiceOptions = AgentContextResetOptions & {
-  // A reset is a conversation cut under the same id (named or not), its prompt the first message of the next one.
+  // A reset is a conversation cut under the same id (named or not), its prompt the first message of the next one. Settles
+  // once the cut ran, and rejects when it did not; resolving on admission alone would count a reset that never happened.
   cut?: (sessionId: string, prompt: string, reason: string) => Promise<void>
   onError?: (error: unknown, sessionId: string) => void
   now?: () => number
@@ -83,6 +84,10 @@ export class ContextResetService implements ContextResetDirectory {
     }
     this.#pending.set(sessionId, { prompt: request.prompt, reason: request.reason })
     this.#turnFailed.delete(sessionId)
+    // Asked from outside a turn, the idle it waits for has already happened; the reply still goes out first.
+    if (runner.info().status === 'idle') {
+      setTimeout(() => this.#settle(runner), 0).unref?.()
+    }
     return CONTEXT_RESET_SCHEDULED
   }
 
@@ -119,10 +124,16 @@ export class ContextResetService implements ContextResetDirectory {
       this.#pending.delete(runner.id)
       return
     }
-    if (event.type !== 'status_changed' || event.status !== 'idle') {
+    if (event.type === 'status_changed' && event.status === 'idle') {
+      this.#settle(runner)
+    }
+  }
+
+  #settle(runner: Runner): void {
+    const request = this.#pending.get(runner.id)
+    if (!request || this.#runners.get(runner.id) !== runner || runner.info().status !== 'idle') {
       return
     }
-    const request = this.#pending.get(runner.id)!
     this.#pending.delete(runner.id)
     if (this.#turnFailed.delete(runner.id)) {
       return

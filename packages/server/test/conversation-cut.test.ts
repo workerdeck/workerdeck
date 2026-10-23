@@ -53,6 +53,13 @@ class Engine extends EngineRunner {
     super(id, config)
   }
 
+  // Sends the engine took and never confirmed answering, as a CLI that does not name a folded send leaves them.
+  unconfirmed = 0
+
+  pendingInput(): number {
+    return this.unconfirmed
+  }
+
   override info(): SessionInfo {
     const info = super.info()
     return {
@@ -318,6 +325,39 @@ describe('conversation cut under a stable id', () => {
     expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(2)
     built.at(-1)!.settle()
     await vi.waitFor(async () => expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(3), SETTLE)
+  })
+
+  it('drops a typed /clear that waits on input the engine never confirmed, with an error, never silently', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, wsBase, built } = await gateway(dir)
+    const id = await create(base)
+    await idle(server, id)
+    cutsOf(server).stallMs = 40
+    built[0]!.unconfirmed = 1
+    const ws = new WebSocket(`${wsBase}/sessions/${id}/ws`)
+    const frames = frameCollector(ws)
+    await frames.waitFor((frame) => frame.type === 'attached')
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: '/clear', clientId: 'c1' }))
+    const error = await frames.waitFor((frame) => frame.type === 'protocol_error')
+    expect((error as { message: string }).message).toContain('never confirmed answering')
+    await frames.waitFor((frame) => frame.type === 'ack' && frame.clientId === 'c1' && frame.notDelivered === true)
+
+    built[0]!.busy()
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: '/clear', clientId: 'c2' }))
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(frames.frames.some((frame) => frame.type === 'ack' && frame.clientId === 'c2')).toBe(false)
+    built[0]!.settle()
+    await frames.waitFor((frame) => frame.type === 'ack' && frame.clientId === 'c2' && frame.notDelivered === true)
+    expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(1)
+
+    cutsOf(server).stallMs = 5000
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: '/clear', clientId: 'c3' }))
+    await vi.waitFor(() => expect(cutsOf(server).queued(id)).toBe(true))
+    expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(1)
+    built[0]!.unconfirmed = 0
+    built[0]!.say('a late reply confirms it while the session is already idle')
+    await vi.waitFor(async () => expect((await call(base, `/sessions/${id}/conversations`)).body.conversation).toBe(2), SETTLE)
+    await frames.waitFor((frame) => frame.type === 'ack' && frame.clientId === 'c3' && !frame.notDelivered)
   })
 
   it('refuses a late execution result for an ended conversation with its own error', async () => {
