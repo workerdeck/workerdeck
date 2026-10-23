@@ -30,6 +30,7 @@ export type StatusBadge =
   | 'model'
   | 'effort'
   | 'mode'
+  | 'thinking'
 
 const TICK_MS = 30_000
 
@@ -91,6 +92,33 @@ function usageTooltip(rateLimits: Record<string, RateLimitInfo>, now: number, up
 
 export function badgeEnabled(badge: StatusBadge): boolean {
   return vscode.workspace.getConfiguration('workerdeck.statusBar').get<boolean>(badge, BADGE_DEFAULT[badge] ?? true)
+}
+
+export class ThinkingStatusItem implements vscode.Disposable {
+  readonly #item: vscode.StatusBarItem
+
+  constructor(private readonly shown: () => boolean) {
+    this.#item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 42)
+    this.#item.command = 'workerdeck.toggleThinking'
+    this.render()
+  }
+
+  render(): void {
+    if (!badgeEnabled('thinking')) {
+      this.#item.hide()
+      return
+    }
+    const shown = this.shown()
+    this.#item.text = '$(thinking)'
+    this.#item.color = shown ? undefined : new vscode.ThemeColor('disabledForeground')
+    this.#item.tooltip = shown ? 'Thinking shown in transcripts. Click to hide.' : 'Thinking hidden in transcripts. Click to show.'
+    this.#item.accessibilityInformation = { label: shown ? 'Hide thinking' : 'Show thinking' }
+    this.#item.show()
+  }
+
+  dispose(): void {
+    this.#item.dispose()
+  }
 }
 
 export class UnreadStatusItem implements vscode.Disposable {

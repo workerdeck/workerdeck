@@ -168,6 +168,12 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
     this.pushSession()
   }
 
+  pushThinking(): void {
+    if (this.view && this.ready) {
+      this.post({ kind: 'wd-thinking', hide: !showThinking() })
+    }
+  }
+
   protected held(): { title: string } | undefined {
     return undefined
   }

@@ -30,7 +30,7 @@ export function App({
   bridge,
   variant,
   catchUp,
-  hideThinking,
+  hideThinking: initialHideThinking,
   terminalMetrics,
   affordances,
   fontSize,
@@ -49,6 +49,7 @@ export function App({
   const [reveal, setReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   const [openShell, setOpenShell] = useState<{ shellId: string; nonce: number } | undefined>(undefined)
   const [peerAvatars, setPeerAvatars] = useState<Record<string, AgentAvatarImage>>({})
+  const [hideThinking, setHideThinking] = useState(initialHideThinking)
   const controls = useRef<SessionControls | undefined>(undefined)
   // Switching sessions remounts the panel and React flushes the new `onControls` on its own schedule, which can be
   // after a `wd-focus-composer` lands - so the request is recorded and retried rather than fired at whatever is mounted.
@@ -64,6 +65,10 @@ export function App({
   useEffect(
     () =>
       bridge.onHostMessage((msg) => {
+        if (msg.kind === 'wd-thinking') {
+          setHideThinking(msg.hide)
+          return
+        }
         if (msg.kind === 'wd-show-session') {
           setShown(msg.session)
           setHeld(msg.held)

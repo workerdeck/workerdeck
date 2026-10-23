@@ -43,7 +43,9 @@ half-pixel), overridable per `workerdeck.terminal.fontSize`/`.lineHeight`, so th
 editor and the integrated terminal draw at one size. Everything the first paint needs is
 stamped on `#root` - variant, cell, affordances, `workerdeck.showThinking` (`hideThinking`) - and a change to any of them, or to
 the two `editor.*` keys, re-renders the panel through the same `reloadWebview()` the dev
-reloader uses. The webview repoints `--cw-font-mono` at `--vscode-editor-font-family`
+reloader uses. `showThinking` is the exception: it is a reading toggle (the `$(thinking)` status
+item, `workerdeck.toggleThinking`), so a change posts `wd-thinking` to every surface instead of
+reloading them, and `#root` only seeds the first paint. The webview repoints `--cw-font-mono` at `--vscode-editor-font-family`
 unconditionally, which is what makes "the agent panel is in my editor font" true under a theme
 that is monospace by construction; `workerdeck.fontFamily` survives for the `cards` variant,
 where the *sans* token is what the transcript reads in, and is stamped on `<html>` by

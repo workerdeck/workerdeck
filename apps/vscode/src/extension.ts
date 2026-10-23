@@ -26,7 +26,8 @@ import { HostSupervisor } from './host/supervisor.ts'
 import { HOST_SECTION, needsRestart } from './host/settings.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { SidebarProvider } from './sidebar.ts'
-import { SessionStatusBar, SubagentStatusItem, UnreadStatusItem, badgeEnabled } from './status-bar.ts'
+import { SessionStatusBar, SubagentStatusItem, ThinkingStatusItem, UnreadStatusItem, badgeEnabled } from './status-bar.ts'
+import { showThinking } from './webview-html.ts'
 import { catchUpFrom, createWatermarks, unseenCount } from './watermarks.ts'
 
 const SECTION_VIEWS: Record<SectionKind, string> = {
@@ -52,6 +53,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const statusBar = new SessionStatusBar()
   const unread = new UnreadStatusItem()
   const subagents = new SubagentStatusItem()
+  const thinking = new ThinkingStatusItem(showThinking)
   const watermarks = createWatermarks(context)
   const syncUnreadWatcher = () => model.setWatching(UNREAD_WATCHER, badgeEnabled('unread') || badgeEnabled('subagents'))
   syncUnreadWatcher()
@@ -479,13 +481,19 @@ export function activate(context: vscode.ExtensionContext): void {
         e.affectsConfiguration('workerdeck.fontFamily') ||
         e.affectsConfiguration('workerdeck.transcriptVariant') ||
         e.affectsConfiguration('workerdeck.catchUpMode') ||
-        e.affectsConfiguration('workerdeck.showThinking') ||
         e.affectsConfiguration('workerdeck.terminal') ||
         e.affectsConfiguration('workerdeck.actionStyle') ||
         e.affectsConfiguration('editor.fontSize') ||
         e.affectsConfiguration('editor.lineHeight')
       ) {
         registry.reloadAll()
+      }
+      if (e.affectsConfiguration('workerdeck.showThinking')) {
+        registry.pushThinking()
+        thinking.render()
+      }
+      if (e.affectsConfiguration('workerdeck.statusBar.thinking')) {
+        thinking.render()
       }
       if (e.affectsConfiguration(HOST_SECTION)) {
         hostStatus.render()
@@ -513,6 +521,7 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBar,
     unread,
     subagents,
+    thinking,
     hostStatus,
     ...(hostSupervisor ? [hostSupervisor] : []),
     vscode.window.registerWebviewViewProvider(SidebarProvider.viewId, sidebar, {
@@ -565,6 +574,7 @@ export function activate(context: vscode.ExtensionContext): void {
         sleepSession: (hostId, sessionId) => sidebar.sleepSession(hostId, sessionId),
       }),
       {
+        'workerdeck.toggleThinking': () => toggleThinking(),
         'workerdeck.manageProfiles': () => manageProfiles(profileFlow),
         'workerdeck.showProfiles': () => profiles.reveal(),
         'workerdeck.addProfile': () => addProfile(profileFlow),
@@ -587,3 +597,15 @@ function sameRef(a: SessionRef, b: SessionRef): boolean {
 }
 
 export function deactivate(): void {}
+
+function toggleThinking(): Thenable<void> {
+  const config = vscode.workspace.getConfiguration('workerdeck')
+  const held = config.inspect<boolean>('showThinking')
+  const target =
+    held?.workspaceFolderValue !== undefined
+      ? vscode.ConfigurationTarget.WorkspaceFolder
+      : held?.workspaceValue !== undefined
+        ? vscode.ConfigurationTarget.Workspace
+        : vscode.ConfigurationTarget.Global
+  return config.update('showThinking', !showThinking(), target)
+}

@@ -88,6 +88,12 @@ export class SurfaceRegistry implements vscode.Disposable {
     this.#onDidChange.fire()
   }
 
+  pushThinking(): void {
+    for (const surface of this.all()) {
+      surface.pushThinking()
+    }
+  }
+
   reloadAll(): void {
     for (const surface of this.all()) {
       surface.reloadWebview()

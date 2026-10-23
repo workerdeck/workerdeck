@@ -190,6 +190,12 @@
         "icon": "$(search-stop)"
       },
       {
+        "command": "workerdeck.toggleThinking",
+        "title": "Toggle Thinking in Transcripts",
+        "category": "WorkerDeck",
+        "icon": "$(thinking)"
+      },
+      {
         "command": "workerdeck.toggleSearch",
         "title": "Toggle Session Search",
         "category": "WorkerDeck"
@@ -985,6 +991,12 @@
             "default": true,
             "description": "Show the permission-mode picker in the window status bar. Clicking it opens a Quick Pick.",
             "order": 10
+          },
+          "workerdeck.statusBar.thinking": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Show the thinking toggle in the window status bar: one click flips `#workerdeck.showThinking#` for every open transcript, without reloading them.",
+            "order": 11
           }
         }
       },
