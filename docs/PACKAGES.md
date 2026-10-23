@@ -104,7 +104,10 @@ and the coalesced log must yield identical state. It grew one case beyond the po
 numerous thing in a real log - 1,363 frames over 388 KB in one measured session, a ninth of the
 whole attach, describing what the runner was doing an hour ago. Narrow on purpose, because
 `sdk_event` is the escape hatch for SDK messages this version does not model and the family's
-standing rule is that the safe failure is a stale row, never withheld state.
+standing rule is that the safe failure is a stale row, never withheld state. A second transient
+payload joined it in 4.0: `system`/`thinking_tokens`, the SDK's running thinking estimate for
+spinners, which measured 11,007 frames over 3.6 MB in one session; it is also the one `sdk_event`
+`logCoalesceKey` folds, so the gateway's log holds only the newest.
 `replayRetains(event)` is the **fifth** of the family and the closest relative of
 `snapshotRetains` - the same "no client can tell" claim pointed at the wire instead of at a
 store, and *not* last-write-wins: these are events the reducer reads and discards, so a replay
@@ -116,8 +119,14 @@ arguments, streamed character by character, 383 KB), `signature_delta` (153 KB) 
 `message_start`/`content_block_*` scaffolding (244 KB). `thinking_delta` is deliberately kept:
 the Claude SDK sends thinking blocks whose text is `''` and the reducer backfills them from the
 accumulated stream, so dropping those erases every thought - the same carve-out `snapshotRetains`
-documents, which is why *that* rule is provider-engine-only. `text_delta` is kept too, being
-superseded only by a lookahead nobody has needed to write for 24 KB. Proof in
+documents, which is why *that* rule is provider-engine-only. `supersededDeltaSeqs(events, afterSeq)` is that lookahead: walking back, a `text_delta` or
+`thinking_delta` is dropped when the next event to touch its agent's streaming row (keyed by
+`parentToolUseId`) is an `assistant_message` that discards it, which for thinking means one with no
+empty thinking block to backfill. A `turn_result` or `conversation_reset` in between keeps
+everything, since `turn_result` finalizes a leftover stream into a permanent row. Measured over one
+session it took the attach from 24,772 frames (8.9 MB) to about 2,800; proof in
+`packages/react/test/replay-superseded.test.ts`, which also folds the bench session from every tenth
+`afterSeq`. Proof in
 `packages/react/test/replay-retain.test.ts`, the family's usual fold-equality property, and the
 caller must never drop the log's highest-seq event whatever the rule says - a client's replay
 hold waits for it. Two more joined it, both lifted

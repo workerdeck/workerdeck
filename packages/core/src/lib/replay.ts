@@ -2,6 +2,7 @@ import {
   imagePartRef,
   replayCoalesceKey,
   replayRetains,
+  supersededDeltaSeqs,
   TOOL_RESULT_HEAD_CHARS,
   transcriptContent,
   type SessionEvent,
@@ -90,6 +91,7 @@ export function replaySlice(
   const { afterSeq, resetSeq = 0, coalesceReplay, truncateResults, imageRefs } = options
   const stale = coalesceReplay ? staleReplaySeqs(events, afterSeq) : undefined
   const residue = coalesceReplay ? resetResidueSeqs(events, afterSeq, resetSeq) : undefined
+  const superseded = coalesceReplay ? supersededDeltaSeqs(events, afterSeq) : undefined
   const lastSeq = events[events.length - 1]?.seq ?? 0
   const out: SessionEvent[] = []
   for (const event of events) {
@@ -99,7 +101,7 @@ export function replaySlice(
     if (event.seq < resetSeq && (residue ? !residue.has(event.seq) : transcriptContent(event))) {
       continue
     }
-    if (stale?.has(event.seq)) {
+    if (stale?.has(event.seq) || superseded?.has(event.seq)) {
       continue
     }
     if (coalesceReplay && event.seq !== lastSeq && !replayRetains(event)) {

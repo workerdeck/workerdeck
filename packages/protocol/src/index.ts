@@ -1070,7 +1070,7 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
       return `tool_output:${body.toolUseId}`
     }
     case 'sdk_event': {
-      return body.payload.type === 'system' && body.payload.subtype === 'status' ? 'sdk_event:system:status' : undefined
+      return transientSdkKey(body.payload)
     }
     default: {
       return undefined
@@ -1078,7 +1078,16 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
   }
 }
 
+const TRANSIENT_SDK_SUBTYPES: ReadonlySet<unknown> = new Set(['status', 'thinking_tokens'])
+
+function transientSdkKey(payload: { type: string; subtype?: unknown }): string | undefined {
+  return payload.type === 'system' && TRANSIENT_SDK_SUBTYPES.has(payload.subtype) ? `sdk_event:system:${String(payload.subtype)}` : undefined
+}
+
 export function logCoalesceKey(body: SessionEventBody): string | undefined {
+  if (body.type === 'sdk_event') {
+    return body.payload.type === 'system' && body.payload.subtype === 'thinking_tokens' ? replayCoalesceKey(body) : undefined
+  }
   return (body.type === 'user_message' && body.shell) || body.type === 'tool_output' ? replayCoalesceKey(body) : undefined
 }
 
@@ -1091,6 +1100,40 @@ export function replayRetains(body: SessionEventBody): boolean {
     return false
   }
   return delta.delta?.type === 'text_delta' || delta.delta?.type === 'thinking_delta'
+}
+
+type Covered = { text: boolean; thinking: boolean }
+
+// A streamed delta the reducer is certain to throw away: the next thing to touch its agent's streaming row is an
+// `assistant_message` that drops the row, and for thinking, one with no empty thinking block to take the streamed text.
+export function supersededDeltaSeqs(events: readonly SessionEvent[], afterSeq: number): Set<number> {
+  const superseded = new Set<number>()
+  let ahead = new Map<string, Covered>()
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]!
+    if (event.seq <= afterSeq) {
+      break
+    }
+    if (event.type === 'turn_result' || event.type === 'conversation_reset') {
+      ahead = new Map()
+      continue
+    }
+    if (event.type === 'assistant_message') {
+      const content = event.message.content
+      const takesStreamed = Array.isArray(content) && content.some((block) => block.type === 'thinking' && !(block as { thinking?: string }).thinking)
+      ahead.set(event.parentToolUseId ?? '', { text: true, thinking: !takesStreamed })
+      continue
+    }
+    if (event.type !== 'stream_delta') {
+      continue
+    }
+    const covered = ahead.get(event.parentToolUseId ?? '')
+    const kind = (event.event as { type?: string; delta?: { type?: string } }).delta?.type
+    if (covered && ((kind === 'text_delta' && covered.text) || (kind === 'thinking_delta' && covered.thinking))) {
+      superseded.add(event.seq)
+    }
+  }
+  return superseded
 }
 
 export function snapshotRetains(body: SessionEventBody): boolean {

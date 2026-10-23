@@ -186,7 +186,7 @@ function retainLog(events: SessionEvent[]): SessionEvent[] {
 describe('log coalescing is a subset of replay coalescing', () => {
   const shellRows = (events: SessionEvent[]): SessionEvent[] => events.filter((e) => e.type === 'user_message' && e.shell !== undefined)
 
-  it('keys the shell row exactly as the replay does, and nothing else', () => {
+  it('keys the shell row exactly as the replay does, and nothing transcript-shaped', () => {
     const row = shellRow({ status: 'running', bytes: 1 })
     expect(logCoalesceKey(row)).toBe('shell:sh_1')
     expect(logCoalesceKey(row)).toBe(replayCoalesceKey(row))
@@ -297,5 +297,30 @@ describe('effort_changed through a coalesced replay', () => {
     expect(fold(replayed).effort).toBeNull()
     expect(fold(events.slice(0, 2)).effort).toBe('max')
     expect(transcriptActivity(events[0]!)).toBe(0)
+  })
+})
+
+describe('thinking_tokens through a coalesced replay and log', () => {
+  const tick = (estimated: number): SessionEventBody => ({
+    type: 'sdk_event',
+    payload: { type: 'system', subtype: 'thinking_tokens', estimated_tokens: estimated, estimated_tokens_delta: 1 },
+  })
+
+  it('keeps only the newest estimate in both the replay and the log, and the transcript cannot tell', () => {
+    const events = seqd([
+      { type: 'user_message', message: { role: 'user', content: 'think hard' }, parentToolUseId: null },
+      tick(1),
+      tick(2),
+      { type: 'assistant_message', message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] }, parentToolUseId: null },
+      tick(3),
+      { type: 'sdk_event', payload: { type: 'system', subtype: 'status', status: 'requesting' } },
+    ] as SessionEventBody[])
+    expect(logCoalesceKey(events[1]!)).toBe('sdk_event:system:thinking_tokens')
+    expect(logCoalesceKey(events[1]!)).toBe(replayCoalesceKey(events[1]!))
+    expect(logCoalesceKey(events[5]!)).toBeUndefined()
+    expect(coalesce(events).map((e) => e.seq)).toEqual([1, 4, 5, 6])
+    expect(retainLog(events).map((e) => e.seq)).toEqual([1, 4, 5, 6])
+    expect(fold(coalesce(events))).toEqual(fold(events))
+    expect(transcriptActivity(events[1]!)).toBe(0)
   })
 })

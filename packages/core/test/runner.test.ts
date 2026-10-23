@@ -600,7 +600,7 @@ describe('SessionRunner', () => {
     expect(replayed.map((e) => e.type)).toEqual(['assistant_message', 'turn_result', 'status_changed'])
   })
 
-  it('a coalesced replay drops the stream deltas the reducer discards', async () => {
+  it('a coalesced replay drops the stream deltas the reducer discards, and the ones a complete message repeats', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -617,17 +617,25 @@ describe('SessionRunner', () => {
     harness.emit(partial({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '{"a":1}' } }))
     harness.emit(partial({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'hi' } }))
     harness.emit(partial({ type: 'content_block_stop' }))
-    harness.emit(assistantMessage)
     await tick()
 
+    const deltas = (list: SessionEvent[]) => list.filter((e) => e.type === 'stream_delta')
+    const midStream: SessionEvent[] = []
+    runner.subscribe((e) => midStream.push(e), 0, { coalesceReplay: true })
+    expect(deltas(midStream).map((e) => e.type === 'stream_delta' && (e.event as { delta?: { type?: string } }).delta?.type)).toEqual([
+      'thinking_delta',
+      'text_delta',
+      undefined,
+    ])
+
+    harness.emit(assistantMessage)
+    await tick()
     const full: SessionEvent[] = []
     runner.subscribe((e) => full.push(e))
     const thin: SessionEvent[] = []
     runner.subscribe((e) => thin.push(e), 0, { coalesceReplay: true })
-
-    const deltas = (list: SessionEvent[]) => list.filter((e) => e.type === 'stream_delta')
     expect(deltas(full)).toHaveLength(5)
-    expect(deltas(thin)).toHaveLength(2)
+    expect(deltas(thin)).toHaveLength(0)
     expect(thin.at(-1)?.seq).toBe(full.at(-1)?.seq)
   })
 
