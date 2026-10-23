@@ -32,6 +32,7 @@ export type RelayLinkOptions = {
   expose?: { scope?: Record<string, string>; allow?: RelayOp[] }
   // Cross-gateway teams: same-owner gateways whose agents may join a lead here without a per-join invitation.
   teams?: { acceptFrom?: string[] }
+  tickMs?: number
   log?: (message: string) => void
 }
 
@@ -237,6 +238,7 @@ export function createRelayLink(
             ca,
             allow: options.expose?.allow,
             features: teams ? ['teams'] : [],
+            tickMs: options.tickMs,
             log,
           },
           host,

@@ -57,7 +57,7 @@ async function gateway(relay: Relay, stateDir: string, name: string, acceptFrom?
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
     buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
-    relay: { url: relay.url, gateway: name, key, expose: { allow: ['send', 'peek', 'team'] }, teams: { acceptFrom }, log: () => {} },
+    relay: { url: relay.url, gateway: name, key, expose: { allow: ['send', 'peek', 'team'] }, teams: { acceptFrom }, tickMs: 50, log: () => {} },
   })
   cleanups.push(() => server.close())
   const { base } = await listenOn(server)

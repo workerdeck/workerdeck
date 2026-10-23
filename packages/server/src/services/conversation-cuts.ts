@@ -85,6 +85,7 @@ export class ConversationCuts {
   // never failed because shutdown closed its runner.
   close(): void {
     this.#closed = true
+    this.#attempts.clear()
   }
 
   get #ctx(): ServerContext {
