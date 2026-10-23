@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { WorkerDeckError, type WorkerDeckClient } from '@workerdeck/client'
 import type { SessionEvent, SessionEventBody, ShellInfo } from '@workerdeck/protocol'
-import { useClaudeSession, type UseClaudeSessionResult } from '../src/hooks/use-session.ts'
+import { REPLAY_BATCH_IDLE_MS, useClaudeSession, type UseClaudeSessionResult } from '../src/hooks/use-session.ts'
 import type { ShellItem } from '../src/lib/transcript.ts'
 import { renderHook } from './hook-runner.ts'
 
@@ -100,7 +100,47 @@ const ACTIONS = [
   'closeSession',
 ] as const
 
+function attached(lastSeq: number, replayingFrom = 0) {
+  return { type: 'attached', protocolVersion: 2, replayingFrom, session: { id: 's1', status: 'idle', createdAt: 1, lastSeq } }
+}
+
 describe('useClaudeSession', () => {
+  it('folds a replay into one render when it reaches the seq the attach named', () => {
+    const { client, handles } = fakeClient()
+    const hook = renderHook(() => useClaudeSession(client, 's1', { cacheTranscript: false }))
+    const events = [streamDelta('a'), streamDelta('b'), streamDelta('c')]
+    handles[0]!.emit('attached', attached(events.at(-1)!.seq))
+    expect(hook.current.replaying).toBe(true)
+    const renders = hook.renders
+    handles[0]!.emit('event', events[0])
+    handles[0]!.emit('event', events[1])
+    expect(hook.renders).toBe(renders)
+    handles[0]!.emit('event', events[2])
+    expect(hook.renders - renders).toBeLessThanOrEqual(2)
+    expect(hook.current.replaying).toBe(false)
+    expect(hook.current.state.lastSeq).toBe(events[2]!.seq)
+    handles[0]!.emit('event', streamDelta('live'))
+    expect(hook.current.state.lastSeq).toBe(seq)
+    hook.unmount()
+  })
+
+  it('flushes a replay that stops short of its target after a quiet moment', () => {
+    vi.useFakeTimers()
+    try {
+      const { client, handles } = fakeClient()
+      const hook = renderHook(() => useClaudeSession(client, 's1', { cacheTranscript: false }))
+      const first = streamDelta('a')
+      handles[0]!.emit('attached', attached(first.seq + 5, 0))
+      handles[0]!.emit('event', first)
+      expect(hook.current.state.lastSeq).toBe(0)
+      vi.advanceTimersByTime(REPLAY_BATCH_IDLE_MS)
+      expect(hook.current.state.lastSeq).toBe(first.seq)
+      hook.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('keeps every action identity stable across streamed events', () => {
     const { client, handles } = fakeClient()
     const hook = renderHook(() => useClaudeSession(client, 's1', { cacheTranscript: false }))

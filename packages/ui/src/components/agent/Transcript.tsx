@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { recapLine, summarizeSince, type TranscriptState } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import { Conversation, ConversationContent, ConversationScrollButton } from './Conversation.tsx'
@@ -6,7 +6,7 @@ import { Loader } from './Loader.tsx'
 import { SessionEmptyState } from './SessionEmptyState.tsx'
 import { AffordanceProvider, resolveAffordances, type TerminalAffordances } from '../terminal/affordances.tsx'
 import { WorkingRow } from '../terminal/items.tsx'
-import { subagentItems, terminalBlocks, type ToolCallItem } from '../terminal/blocks.ts'
+import { isHiddenThinking, subagentItems, terminalBlocks, type ToolCallItem } from '../terminal/blocks.ts'
 import { taskBrief, taskBusy } from '../terminal/tool-run.ts'
 import { type TranscriptRow } from './transcript-rows.ts'
 import { TranscriptRows } from './TranscriptRows.tsx'
@@ -97,6 +97,44 @@ export interface TranscriptProps {
   className?: string
 }
 
+const SETTLE_MAX_MS = 300
+
+// After the replay lands the rows still trade estimated heights for measured ones; the panel stays covered until the content height holds for two frames.
+function useSettledReveal(replaying: boolean): { hidden: boolean; holdRef: RefObject<HTMLDivElement | null> } {
+  const holdRef = useRef<HTMLDivElement | null>(null)
+  const [settling, setSettling] = useState(false)
+  const was = useRef(replaying)
+  useLayoutEffect(() => {
+    if (was.current && !replaying) {
+      setSettling(true)
+    }
+    was.current = replaying
+  }, [replaying])
+  useEffect(() => {
+    if (!settling) {
+      return
+    }
+    const content = holdRef.current?.parentElement?.querySelector<HTMLElement>('[data-slot="conversation-content"]')
+    const deadline = performance.now() + SETTLE_MAX_MS
+    let last = -1
+    let steady = 0
+    let frame = 0
+    const check = () => {
+      const height = content?.getBoundingClientRect().height ?? 0
+      steady = height === last ? steady + 1 : 0
+      last = height
+      if (!content || steady >= 2 || performance.now() > deadline) {
+        setSettling(false)
+        return
+      }
+      frame = requestAnimationFrame(check)
+    }
+    frame = requestAnimationFrame(check)
+    return () => cancelAnimationFrame(frame)
+  }, [settling])
+  return { hidden: replaying || settling, holdRef }
+}
+
 export function Transcript({
   state,
   fileUrl,
@@ -123,6 +161,7 @@ export function Transcript({
   className,
 }: TranscriptProps) {
   const terminal = variant === 'terminal'
+  const { hidden, holdRef } = useSettledReveal(replaying)
   const items = useMemo(() => (frame ? subagentItems(state.items, frame.parentToolUseId) : state.items), [state.items, frame])
   const frameTask = useMemo(
     () =>
@@ -138,10 +177,7 @@ export function Transcript({
     [frame, frameTask, items],
   )
   const rows = useMemo<TranscriptRow[]>(() => {
-    const fold = (from: number, to: number) => {
-      const blocks = terminalBlocks(items.slice(from, to), from, terminal)
-      return hideThinking ? blocks.filter((block) => !('item' in block && block.item.kind === 'thinking' && !block.item.addressed)) : blocks
-    }
+    const fold = (from: number, to: number) => terminalBlocks(items.slice(from, to), from, terminal, hideThinking ? isHiddenThinking : undefined)
     const lead: TranscriptRow[] = brief ? [{ key: 'brief' as const, text: brief }] : []
     if (boundary === undefined || !recap) {
       return [...lead, ...fold(0, items.length)]
@@ -154,7 +190,7 @@ export function Transcript({
       <HostImageProvider value={hostImage}>
         <SkillNamesProvider names={skillNames}>
           <SessionNamesProvider names={sessionNames}>
-            <Conversation className={cn(replaying && 'invisible', className)}>
+            <Conversation className={cn(hidden && 'invisible', className)}>
               <ConversationContent className={cn(terminal && 'gap-0 p-0')}>
                 <TerminalShell active={terminal} fontSize={fontSize} lineHeight={lineHeight} affordances={affordances}>
                   {frame ? (
@@ -181,7 +217,7 @@ export function Transcript({
                       boundary={boundary}
                       since={catchUp?.since}
                       terminal={terminal}
-                      replaying={replaying}
+                      replaying={hidden}
                       stickyPrompt={!frame && stickyPrompt}
                       gap={gap}
                       fontSize={fontSize}
@@ -218,8 +254,9 @@ export function Transcript({
                 </TerminalShell>
               </ConversationContent>
               <ConversationScrollButton />
-              {replaying ? (
+              {hidden ? (
                 <div
+                  ref={holdRef}
                   data-slot="transcript-hold"
                   aria-hidden
                   className="wd-hold-appear visible pointer-events-none absolute inset-0 overflow-hidden"

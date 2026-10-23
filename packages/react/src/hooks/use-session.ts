@@ -29,12 +29,16 @@ type SeedAction = { type: 'transcript_seed'; state: TranscriptState }
 type HydrateAction = { type: 'transcript_hydrate_result'; toolUseId: string; text: string }
 type ShellRowAction = { type: 'transcript_hydrate_shell'; shellId: string; shell: ShellInfo | undefined }
 type ShellOutputAction = { type: 'transcript_hydrate_shell_output'; shellId: string; text: string }
+type BatchAction = { type: 'transcript_batch'; events: SessionEvent[] }
 
-type TranscriptAction = SessionEvent | AttachedFrame | SeedAction | HydrateAction | ShellRowAction | ShellOutputAction
+type TranscriptAction = SessionEvent | AttachedFrame | SeedAction | HydrateAction | ShellRowAction | ShellOutputAction | BatchAction
 
 function reduce(state: TranscriptState, action: TranscriptAction): TranscriptState {
   if (action.type === 'transcript_seed') {
     return action.state
+  }
+  if (action.type === 'transcript_batch') {
+    return action.events.reduce(applyEvent, state)
   }
   if (action.type === 'transcript_hydrate_result') {
     return hydrateToolResult(state, action.toolUseId, action.text)
@@ -72,6 +76,7 @@ export function staleAttach(frame: AttachedFrame, held: TranscriptState): boolea
 }
 
 export const REPLAY_HOLD_MAX_MS = 1500
+export const REPLAY_BATCH_IDLE_MS = 100
 
 // `uncertain`: the gateway no longer knows whether an earlier attempt ran; the person decides before sending again.
 export type UnsentPrompt = { text: string; uncertain?: true }
@@ -182,8 +187,33 @@ export function useClaudeSession(
     })
     handleRef.current = handle
     setHandleState(handle)
-    const offEvent = handle.on('event', (event: SessionEvent) => dispatch(event))
+    let batch: SessionEvent[] = []
+    let batchUntil = 0
+    let batchTimer: ReturnType<typeof setTimeout> | undefined
+    const flush = () => {
+      clearTimeout(batchTimer)
+      batchTimer = undefined
+      batchUntil = 0
+      if (batch.length > 0) {
+        dispatch({ type: 'transcript_batch', events: batch })
+        batch = []
+      }
+    }
+    const offEvent = handle.on('event', (event: SessionEvent) => {
+      if (batchUntil === 0) {
+        dispatch(event)
+        return
+      }
+      batch.push(event)
+      if (event.seq >= batchUntil) {
+        flush()
+        return
+      }
+      clearTimeout(batchTimer)
+      batchTimer = setTimeout(flush, REPLAY_BATCH_IDLE_MS)
+    })
     const offAttached = handle.on('attached', (frame: AttachedFrame) => {
+      flush()
       if (staleAttach(frame, stateRef.current)) {
         offEvent()
         deleteTranscriptCache(key)
@@ -192,6 +222,7 @@ export function useClaudeSession(
         return
       }
       dispatch(frame)
+      batchUntil = frame.session.lastSeq > frame.replayingFrom ? frame.session.lastSeq : 0
       setReplayTarget(initialReplayTarget(frame))
       setProtocolMismatch(frame.protocolVersion === PROTOCOL_VERSION ? undefined : frame.protocolVersion)
       setShell(frame.shell === true)
@@ -211,6 +242,8 @@ export function useClaudeSession(
       optionsRef.current?.onUndeliveredPrompt?.(prompt)
     })
     return () => {
+      clearTimeout(batchTimer)
+      batch = []
       offEvent()
       offAttached()
       offConn()
