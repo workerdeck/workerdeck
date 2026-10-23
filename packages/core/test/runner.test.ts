@@ -812,6 +812,25 @@ describe('SessionRunner', () => {
     expect(events).toHaveLength(events.filter((e) => e.type !== 'sdk_event').length)
   })
 
+  it('backfilled() settles once the history is in the log, without waiting for the CLI', async () => {
+    const history = [
+      {
+        type: 'user' as const,
+        uuid: 'uuid-h1',
+        session_id: 'sdk-session-1',
+        message: { role: 'user', content: 'earlier question' },
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+      },
+    ]
+    const { runner, events } = makeRunner({ resume: 'sdk-session-1', historyFn: vi.fn(async () => history) })
+    void runner.start()
+    await runner.backfilled()
+
+    expect(events[0]?.type).toBe('user_message')
+    expect(events.some((e) => e.type === 'system_init')).toBe(false)
+  })
+
   it("stamps the harness's own wrapper messages synthetic on backfill", async () => {
     const entry = (uuid: string, content: unknown) => ({
       type: 'user' as const,

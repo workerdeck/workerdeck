@@ -102,6 +102,8 @@ export interface Runner {
   readonly pendingApprovals: PermissionRequest[]
   readonly vfs?: SandboxVfs
   start(): Promise<void>
+  // Resolves once a resumed conversation's history is in the log (at once when there is none to read).
+  backfilled?(): Promise<void>
   info(): SessionInfo
   subscribe(
     listener: SessionEventListener,

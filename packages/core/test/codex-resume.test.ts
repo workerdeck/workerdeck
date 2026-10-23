@@ -85,6 +85,22 @@ describe('CodexRunner resume backfill', () => {
     expect(runner.status).toBe('idle')
   })
 
+  it('backfilled() settles once the history is in the log, before any turn', async () => {
+    const peer = scriptedPeer()
+    peer.respond('thread/resume', () => ({
+      ...THREAD_RESULT,
+      thread: { id: 'thread-1', turns: HISTORY_TURNS },
+      turnsBackwardsCursor: null,
+    }))
+    const runner = new CodexRunner({ cwd: '/tmp', resume: 'prior', connectFn: peer.connectFn })
+    const events = collect(runner)
+    void runner.start()
+    await runner.backfilled()
+
+    expect(events.filter((e) => e.type === 'assistant_message').length).toBeGreaterThan(0)
+    expect(runner.status).toBe('idle')
+  })
+
   it('replays an image-only prompt as a named picture, not as a missing turn', async () => {
     const peer = scriptedPeer()
     peer.respond('thread/resume', () => ({

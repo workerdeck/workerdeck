@@ -2979,6 +2979,14 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   hold whose replay a socket drop cut short. Guarding that set with "only when defined" silently
   re-creates the blank window.
 
+- **A dormant wake's `attached` waits for the backfill.** The rebuilt runner reads the engine's
+  history asynchronously after `start()`, so an `attached` sent at once announced `lastSeq: 0`:
+  no hold target, no one-pass fold, and the whole history streamed in visibly. `upgradeSession`
+  awaits `Runner.backfilled()` (claude and codex resolve it when the history read ends, at once
+  when there is none) before the upgrade, capped at `RESTORE_WAIT_MS` (10 s). Never wait on
+  `status !== 'starting'` instead: a fresh claude session with a prompt, and one waking from
+  engine sleep, sit in `starting` until the CLI's `system_init`, seconds later.
+
 Five filters sit on the replay/live path, and compose. Keep them distinct:
 
 1. **Drop-below-reset**: `subscribe()` skips transcript content strictly below the latest

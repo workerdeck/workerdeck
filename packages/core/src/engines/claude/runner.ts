@@ -130,6 +130,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #lastRateLimitPoll = 0
   #started = false
   #runPromise: Promise<void> | undefined
+  #backfill: Promise<void> | undefined
 
   constructor(config: SessionRunnerConfig, id: string = randomUUID()) {
     super(config, id, Date.now(), { cost: 'reconcile' })
@@ -450,9 +451,14 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     })
   }
 
+  backfilled(): Promise<void> {
+    return this.#backfill ?? Promise.resolve()
+  }
+
   async #run(): Promise<void> {
     try {
-      await this.#backfillHistory()
+      this.#backfill = this.#backfillHistory()
+      await this.#backfill
       if (this.core.closed) {
         return
       }

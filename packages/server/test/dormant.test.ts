@@ -126,6 +126,20 @@ class UnresumableRunner extends ResumableRunner {
   }
 }
 
+class SlowBackfillRunner extends ResumableRunner {
+  #backfill: Promise<void> | undefined
+
+  override start(): Promise<void> {
+    const read = this.config.resume ? new Promise((resolve) => setTimeout(resolve, 80)) : Promise.resolve()
+    this.#backfill = read.then(() => super.start())
+    return this.#backfill
+  }
+
+  backfilled(): Promise<void> {
+    return this.#backfill ?? Promise.resolve()
+  }
+}
+
 function profile(name: string): ProfileInfo {
   return {
     name,
@@ -158,14 +172,17 @@ async function startGateway(store: RuntimeStore): Promise<Gateway> {
   const server = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
-    profiles: [profile('resumable'), profile('plain')],
+    profiles: [profile('resumable'), profile('plain'), profile('slow')],
     sessions: { store: store.records },
     parking: { parkDelayMs: 10 },
     createEngineRunner: ({ config, profile: p, id }) => {
+      const runnerId = id ?? `session-${built.length + 1}`
       const runner =
         p.name === 'plain'
-          ? new UnresumableRunner(id ?? `session-${built.length + 1}`, config)
-          : new ResumableRunner(id ?? `session-${built.length + 1}`, config)
+          ? new UnresumableRunner(runnerId, config)
+          : p.name === 'slow'
+            ? new SlowBackfillRunner(runnerId, config)
+            : new ResumableRunner(runnerId, config)
       built.push(runner)
       return runner
     },
@@ -256,6 +273,29 @@ describe('sessions that survive a restart', () => {
     const rebuilt = second.built[0]!
     expect(rebuilt.id).toBe(session.id)
     expect(rebuilt.config.resume).toBe('engine-session-1')
+  })
+
+  it('announces a woken session only once its backfill is in the log, so the first attach has a replay target', async () => {
+    const dir = await stateDir()
+    const first = await startGateway(fileRuntimeStore(dir))
+    const session = await create(first.base, 'slow')
+    await vi.waitFor(async () => {
+      expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
+    })
+    await first.server.close()
+    servers.splice(servers.indexOf(first.server), 1)
+
+    const second = await startGateway(fileRuntimeStore(dir))
+    const ws = new WebSocket(`${second.base.replace('http', 'ws')}/sessions/${session.id}/ws`)
+    const frame = await new Promise<{ type: string; session: SessionInfo }>((resolve, reject) => {
+      ws.once('message', (data: Buffer) => resolve(JSON.parse(data.toString('utf8'))))
+      ws.once('error', reject)
+    })
+    ws.close()
+
+    expect(frame.type).toBe('attached')
+    expect(frame.session.status).toBe('idle')
+    expect(frame.session.lastSeq).toBe(2)
   })
 
   it("dates a woken session's seqs with a fresh epoch, so a push that outlived the wake is knowable", async () => {

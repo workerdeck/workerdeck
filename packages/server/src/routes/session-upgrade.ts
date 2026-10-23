@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http'
 import type { Duplex } from 'node:stream'
 import type { WebSocketServer } from 'ws'
+import type { Runner } from '@workerdeck/core'
 import type { ServerContext } from '../context.ts'
 import { refuseUpgrade } from '../lib/http.ts'
 import { parseSessionRoute } from '../lib/parse-route.ts'
@@ -57,6 +58,9 @@ export async function upgradeSession(
     refuseUpgrade(socket, '503 Service Unavailable')
     return
   }
+  if (runner) {
+    await restored(runner)
+  }
   if (!runner || !auth.canSee(authCtx, runner.info())) {
     refuseUpgrade(socket, '404 Not Found')
     return
@@ -64,4 +68,18 @@ export async function upgradeSession(
   wss.handleUpgrade(req, socket, head, (ws) => {
     attachClient(ctx, ws, runner, req, { operator: auth.isOperator(authCtx) })
   })
+}
+
+export const RESTORE_WAIT_MS = 10_000
+
+export async function restored(runner: Runner, capMs = RESTORE_WAIT_MS): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const cap = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, capMs)
+  })
+  try {
+    await Promise.race([runner.backfilled?.().catch(() => {}), cap])
+  } finally {
+    clearTimeout(timer)
+  }
 }

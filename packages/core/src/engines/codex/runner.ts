@@ -182,6 +182,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   #queue: QueuedTurn[] = []
   #steering = 0
   #turnChain: Promise<void> = Promise.resolve()
+  #backfill: Promise<void> | undefined
   #activeTurn: ActiveTurn | undefined
   #connection: AppServerConnection | undefined
   #workspaceWrite: CodexWorkspaceWrite | undefined
@@ -333,6 +334,10 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     this.core.emit({ type: 'engine_sleep', asleep: false })
   }
 
+  backfilled(): Promise<void> {
+    return this.#backfill ?? Promise.resolve()
+  }
+
   start(): Promise<void> {
     if (this.#started) {
       return this.#turnChain
@@ -341,7 +346,8 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     this.#warnUntrustedProject()
     if (this.config.resume && this.config.backfillHistory !== false) {
       this.#backfillPending = true
-      this.#turnChain = this.#turnChain.then(() => this.#backfillHistory())
+      this.#backfill = this.#turnChain.then(() => this.#backfillHistory())
+      this.#turnChain = this.#backfill
     } else {
       this.core.setStatus('idle')
     }
