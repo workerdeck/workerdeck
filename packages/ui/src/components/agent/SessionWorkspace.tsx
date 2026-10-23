@@ -42,6 +42,7 @@ export interface SessionWorkspaceProps {
   onVitals?: SessionPanelProps['onVitals']
   conversation?: SessionPanelProps['conversation']
   onGoToCurrent?: SessionPanelProps['onGoToCurrent']
+  cwd?: string
   defaultRailWidth?: number
   defaultRailCollapsed?: boolean
   onRailChange?: (rail: { width: number; collapsed: boolean }) => void
@@ -83,13 +84,14 @@ export function SessionWorkspace({
   onVitals,
   conversation,
   onGoToCurrent,
+  cwd: knownCwd,
   defaultRailWidth = 260,
   defaultRailCollapsed,
   onRailChange,
   className,
 }: SessionWorkspaceProps) {
   const { info } = useSessionInfo(client, sessionId)
-  const cwd = info?.cwd
+  const cwd = info?.cwd ?? knownCwd
 
   const tree = useHostFileTree(client, cwd)
   const search = useHostFileSearch(client, cwd)

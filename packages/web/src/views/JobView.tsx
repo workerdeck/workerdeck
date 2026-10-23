@@ -78,6 +78,7 @@ export function JobView() {
       key={job.sessionId}
       client={gateway}
       sessionId={job.sessionId}
+      cwd={job.cwd}
       readOnly
       transcriptVariant={variant}
       transcriptFont={font}

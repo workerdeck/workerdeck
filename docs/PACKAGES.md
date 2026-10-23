@@ -2231,7 +2231,10 @@ runs - and emits ~9MB of worker assets it never retracts (measured: 11M → 2.7M
 there - the editor
 region is *absent* from the layout when no file is open (not zero-height), and `SessionPanel`
 keeps its child index across that transition, because remounting it drops the WS attach and the
-whole transcript. The embedder's `header` is portalled out of the panel to the top of the
+whole transcript. The file rail exists only once a cwd is known, and the session record that
+names it is a fetch away, so a host that already holds the cwd (the dashboard's polled list row,
+a job) passes it as `cwd`: without it the rail pops in ~40 ms after first paint and shoves the
+panel 260 px right (a 0.1 layout shift). The embedder's `header` is portalled out of the panel to the top of the
 workspace, since only the panel can build the `⋯` menu it is handed. The editor is **Monaco**
 (`CodeEditor.tsx`), `import()`ed so it is a lazy chunk - the dashboard's first paint is unchanged
 and its ~100 language grammars load per file type (themselves lazy, so opening a `.ts` file
