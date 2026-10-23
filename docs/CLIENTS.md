@@ -534,6 +534,17 @@ was only ever a proxy for the question the project name answers (`projectLabel` 
 exactly that basename, so an undeclared project is byte-identical to what shipped) - and it closes
 with the **age**, the one part of that identity run that keeps changing while you read it. Line
 one's own tail is the pair that changes while you *look*: the unread badge and the context ring.
+**Step rows fold into chips.** Sub-agents, checklist tasks, background jobs (`bash`, a spawned task) and
+shells no longer draw a row each by default: line two ends, just before the actions, with one compact chip
+per kind present (`StepChips`: the kind's icon and a count, the wording in its tooltip and `aria-label`,
+coloured running/failed like the rows). A click expands that kind's rows on that card and highlights the
+chip; a folded chip holding the open sub-agent or shell takes the selection tint so the open step stays
+findable. Which kinds a card draws expanded is a viewing preference in the view config
+(`ViewConfig.expandedSteps`, keyed by `sessionKey`, toggled by protocol's `toggleStepsExpanded`), so it
+persists wherever the config does (`globalState` here, `localStorage` on the dashboard). The chips count
+what the step filters let through, so `active` shells and sub-agents count only the live ones. A card
+rendered without `onToggleSteps` (the dev preview, the demo) keeps the state itself. Native apps still draw
+the rows.
 A project heading's `+` posts `wd-new-session {hostId, cwd}`, and the host runs the ordinary
 new-session flow with that preset (`createSession(deps, preset)`): adapters narrowed to that
 gateway and the folder step skipped, so a gateway with one profile goes straight to the model pick.

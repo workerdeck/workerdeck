@@ -27,6 +27,18 @@ const agents = [
   { toolUseId: 'f', description: 'Fix release build and redeploy', status: 'done', toolCount: 1 },
 ]
 
+function shell(id: string, ordinal: number, command: string, status = 'running') {
+  return { id, sessionId: '1', ordinal, command, label: command, cwd: '/x', owner: 'agent', status, startedAt: Date.now() - 60_000, bytes: 0, cols: 80, rows: 24 }
+}
+
+const shells = [shell('s1', 1, 'pnpm dev'), shell('s2', 2, 'tail -f gateway.log'), shell('s3', 3, 'vite build --watch'), shell('s4', 4, 'cargo watch')]
+
+const checklist = [
+  { text: 'Read the brief', status: 'completed' },
+  { text: 'Fold step rows into chips', status: 'in_progress' },
+  { text: 'Hand check', status: 'pending' },
+]
+
 const ICON_HASH = 'deadbeef'
 const projectIcons = {
   [ICON_HASH]:
@@ -48,6 +60,8 @@ const rows = [
     status: 'running',
     model: 'claude-opus-5-20260101[1m]',
     subagents: agents,
+    shells,
+    checklist,
     project: wd,
   }),
   // Same project, deep in a package - the row that used to read `ui`.

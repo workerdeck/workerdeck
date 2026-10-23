@@ -15,6 +15,12 @@ gateway and protocol it talks to.
   new open item shows a notification (a warning when it blocks work); turn it off with
   `workerdeck.questions.notify`.
 
+### Changed
+
+- **Session cards fold their step rows.** Sub-agents, tasks, background jobs and shells show as small
+  chips (icon and count) at the end of a card's second line; click one to expand that kind's rows on
+  that card. The choice is remembered per card.
+
 ### Fixed
 
 - Cmd+C in the transcript copies the selection instead of an empty string.

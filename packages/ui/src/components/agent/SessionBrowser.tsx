@@ -16,16 +16,19 @@ import {
   TEAM_LINGER_MS,
   teamView,
   toggleTeamExpanded,
+  expandedStepsOf,
   isGroupCollapsed,
   moveGroup,
   orderGroups,
   orderedGroupBy,
   toggleGroupCollapsed,
+  toggleStepsExpanded,
   clearContextOffered,
   newConversationGate,
   NEW_CONVERSATION_HINT,
 } from '@workerdeck/protocol'
 import type {
+  FoldableStepKind,
   HostRelays,
   SessionGroup,
   SessionRow,
@@ -352,6 +355,8 @@ export function SessionBrowser({
                         subagents={config.subagents}
                         shells={config.shells}
                         tasks={config.tasks}
+                        expandedSteps={expandedStepsOf(config, member)}
+                        onToggleSteps={(kind) => onConfigChange(toggleStepsExpanded(config, member, kind))}
                         projectIcons={projectIcons}
                         avatars={avatars}
                         tile={tiles}
@@ -422,6 +427,8 @@ interface SessionRowItemProps {
   subagents?: SubagentDisplay
   shells?: StepDisplay
   tasks?: StepDisplay
+  expandedSteps?: readonly FoldableStepKind[]
+  onToggleSteps?: (kind: FoldableStepKind) => void
   projectIcons?: Record<string, string>
   onSelect?: (row: SessionRow, modifiers: SelectModifiers) => void
   onDelete?: (row: SessionRow) => void
@@ -455,6 +462,8 @@ function SessionRowItem({
   subagents,
   shells,
   tasks,
+  expandedSteps,
+  onToggleSteps,
   projectIcons,
   onSelect,
   onDelete,
@@ -487,6 +496,8 @@ function SessionRowItem({
       subagents={subagents}
       shells={shells}
       tasks={tasks}
+      expandedSteps={expandedSteps}
+      onToggleSteps={onToggleSteps}
       projectIcons={projectIcons}
       onSelect={(modifiers) => onSelect?.(row, modifiers)}
       onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}

@@ -2,13 +2,13 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { Globe, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
-import type { SessionInfo, SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
+import type { FoldableStepKind, SessionInfo, SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
 import { AgentAvatar, LeadChip, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionStatusIcon } from './SessionStatusIcon.tsx'
-import { StepRow, sessionSteps } from './SessionSteps.tsx'
+import { StepChips, StepRow, sessionSteps } from './SessionSteps.tsx'
 import type { Step } from './SessionSteps.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatRelativeTime, friendlyModel } from '../../lib/format.ts'
@@ -26,6 +26,9 @@ export interface SessionItemProps {
   projectIcons?: Record<string, string>
   subagents?: SubagentDisplay
   shells?: StepDisplay
+  // Step rows fold into one chip per kind unless the kind is listed here; without `onToggleSteps` the card keeps its own.
+  expandedSteps?: readonly FoldableStepKind[]
+  onToggleSteps?: (kind: FoldableStepKind) => void
   tasks?: StepDisplay
   onSelect?: (modifiers: SelectModifiers) => void
   onSelectSubagent?: (toolUseId: string) => void
@@ -68,6 +71,8 @@ export function SessionItem({
   subagents = 'active',
   shells = 'active',
   tasks = 'active',
+  expandedSteps,
+  onToggleSteps,
   onSelect,
   onSelectSubagent,
   onSelectTask,
@@ -91,6 +96,10 @@ export function SessionItem({
 }: SessionItemProps) {
   const { info } = row
   const [ownEditing, setOwnEditing] = useState(false)
+  const [ownExpanded, setOwnExpanded] = useState<FoldableStepKind[]>([])
+  const expanded = onToggleSteps ? (expandedSteps ?? []) : ownExpanded
+  const toggleSteps =
+    onToggleSteps ?? ((kind: FoldableStepKind) => setOwnExpanded((held) => (held.includes(kind) ? held.filter((k) => k !== kind) : [...held, kind])))
   const isEditing = editing ?? ownEditing
   const setEditing = (next: boolean) => {
     setOwnEditing(next)
@@ -158,6 +167,8 @@ export function SessionItem({
     },
   )
   const holdsOpenStep = steps.some((s) => s.key === activeStepKey)
+  const shown = steps.filter((step) => expanded.includes(step.fold))
+  const chips = <StepChips steps={steps} expanded={expanded} activeStepKey={activeStepKey} onToggle={toggleSteps} />
   const agent = info.agent
   const label = agent ? agent.name : sessionLabel(info)
   const editable = agent ? agent.name : (info.title ?? '')
@@ -257,6 +268,7 @@ export function SessionItem({
           )}
           {unread}
           <span className="shrink-0 text-body-sm text-fg-4">{time}</span>
+          {chips}
           {actions}
         </div>
       ) : agent || tile ? (
@@ -314,6 +326,7 @@ export function SessionItem({
                 </>
               )}
               <span className="min-w-0 flex-1" />
+              {chips}
               {actions}
             </div>
           </div>
@@ -347,14 +360,15 @@ export function SessionItem({
               {time}
             </span>
             <span className="min-w-0 flex-1" />
+            {chips}
             {actions}
           </div>
         </div>
       )}
 
-      {steps.length > 0 ? (
+      {shown.length > 0 ? (
         <div className="flex flex-col">
-          {steps.map((step: Step) => (
+          {shown.map((step: Step) => (
             <StepRow key={step.key} step={step} active={step.key === activeStepKey} onSelect={step.onSelect} />
           ))}
         </div>

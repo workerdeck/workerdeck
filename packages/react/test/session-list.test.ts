@@ -38,6 +38,8 @@ import {
   groupSummary,
   isGroupCollapsed,
   toggleGroupCollapsed,
+  toggleStepsExpanded,
+  expandedStepsOf,
   moveGroup,
   orderGroups,
   resetGroupOrder,
@@ -685,6 +687,21 @@ describe('custom group collapse', () => {
     expect(isGroupCollapsed(folded, { key: 'custom:ungrouped' })).toBe(false)
     expect(isGroupCollapsed(toggleGroupCollapsed(folded, group), group)).toBe(false)
     expect(groupSummary(group)).toEqual({ sessions: 4, working: 2, attention: 1, unseen: 3 })
+  })
+})
+
+describe('expanded steps', () => {
+  it('remembers per card which step kinds draw as rows, and forgets a card with none', () => {
+    const card = row()
+    const other = row({ info: info({ id: 'sess-00000002' }) })
+    const shells = toggleStepsExpanded(DEFAULT_VIEW_CONFIG, card, 'shell')
+    expect(expandedStepsOf(shells, card)).toEqual(['shell'])
+    expect(expandedStepsOf(shells, other)).toEqual([])
+    const both = toggleStepsExpanded(shells, card, 'agent')
+    expect(expandedStepsOf(both, card)).toEqual(['shell', 'agent'])
+    const folded = toggleStepsExpanded(toggleStepsExpanded(both, card, 'shell'), card, 'agent')
+    expect(folded.expandedSteps).toEqual({})
+    expect(clearFilters(both).expandedSteps).toEqual(both.expandedSteps)
   })
 })
 

@@ -1,6 +1,6 @@
-import { ArrowRight, Check, Circle, CircleAlert } from 'lucide-react'
+import { ArrowRight, Bot, Check, Circle, CircleAlert, ListChecks, SquareTerminal } from 'lucide-react'
 import { displayedTasks, isAgentRecord, subagentLabel, visibleShells, visibleSubagents } from '@workerdeck/protocol'
-import type { SessionInfo, SessionTask, ShellInfo, StepDisplay, SubagentDisplay, SubagentInfo } from '@workerdeck/protocol'
+import type { FoldableStepKind, SessionInfo, SessionTask, ShellInfo, StepDisplay, SubagentDisplay, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
 import { AgentWriteIcon } from '../terminal/affordances.tsx'
@@ -21,6 +21,8 @@ export type StepKind = 'agent' | 'shell' | 'task'
 export type Step = {
   key: string
   kind: StepKind
+  // The chip this row folds into: a spawned background job is `bash`, a checklist item `task`.
+  fold: FoldableStepKind
   label: string
   noun: string
   state: 'done' | 'running' | 'failed' | 'pending'
@@ -61,6 +63,7 @@ export function sessionSteps(
     .map((sub) => ({
       key: sub.toolUseId,
       kind: 'agent',
+      fold: 'agent',
       label: subagentLabel(sub),
       noun: 'agent',
       state: stepState(sub.status),
@@ -83,6 +86,7 @@ function taskStep(task: SessionTask, options: TaskStepOptions): Step {
   return {
     key: task.key,
     kind: 'task',
+    fold: task.source === 'spawn' ? 'bash' : 'task',
     label: task.label,
     noun: 'task',
     state: stalled ? 'pending' : task.state,
@@ -100,6 +104,7 @@ function shellStep(shell: ShellInfo, options: ShellStepOptions, grants: boolean)
   return {
     key: shell.id,
     kind: 'shell',
+    fold: 'shell',
     label: shellInfoLabel(shell),
     noun: 'shell',
     state: shellInfoFailed(shell) ? 'failed' : running ? 'running' : 'done',
@@ -213,6 +218,108 @@ function StepIcon({ step }: { step: Step }) {
     }
     default: {
       return <Check className="size-[11px] shrink-0" />
+    }
+  }
+}
+
+const CHIP_ORDER: readonly FoldableStepKind[] = ['agent', 'task', 'bash', 'shell']
+
+const CHIP_NOUN: Record<FoldableStepKind, [string, string]> = {
+  agent: ['agent', 'agents'],
+  task: ['task', 'tasks'],
+  bash: ['bash', 'bash'],
+  shell: ['shell', 'shells'],
+}
+
+export type StepChip = {
+  kind: FoldableStepKind
+  count: number
+  label: string
+  open: boolean
+  failed: boolean
+  running: number
+  holdsActive: boolean
+}
+
+export function stepChips(steps: readonly Step[], expanded: readonly FoldableStepKind[], activeStepKey?: string): StepChip[] {
+  return CHIP_ORDER.flatMap((kind) => {
+    const own = steps.filter((step) => step.fold === kind)
+    if (own.length === 0) {
+      return []
+    }
+    const open = expanded.includes(kind)
+    const [one, many] = CHIP_NOUN[kind]
+    return [
+      {
+        kind,
+        count: own.length,
+        label: `${own.length} ${own.length === 1 ? one : many}`,
+        open,
+        failed: own.some((step) => step.state === 'failed'),
+        running: own.filter((step) => step.state === 'running').length,
+        holdsActive: !open && own.some((step) => step.key === activeStepKey),
+      },
+    ]
+  })
+}
+
+export function StepChips({
+  steps,
+  expanded,
+  activeStepKey,
+  onToggle,
+}: {
+  steps: readonly Step[]
+  expanded: readonly FoldableStepKind[]
+  activeStepKey?: string
+  onToggle: (kind: FoldableStepKind) => void
+}) {
+  return stepChips(steps, expanded, activeStepKey).map((chip) => (
+    <button
+      key={chip.kind}
+      type="button"
+      aria-expanded={chip.open}
+      aria-label={chip.label}
+      title={`${chip.open ? 'Hide' : 'Show'} ${chip.label}${chip.running ? `, ${chip.running} running` : ''}`}
+      onClick={(event) => {
+        event.stopPropagation()
+        onToggle(chip.kind)
+      }}
+      onDoubleClick={(event) => event.stopPropagation()}
+      className={cn(
+        'flex h-4 shrink-0 items-center gap-1 rounded-[3px] px-1 text-micro leading-none tabular-nums outline-none',
+        'focus-visible:ring-1 focus-visible:ring-ring',
+        chip.failed
+          ? 'text-danger'
+          : chip.kind === 'shell'
+            ? 'text-[var(--wd-shell-accent)]'
+            : chip.running
+              ? chip.kind === 'agent'
+                ? 'text-success'
+                : 'text-fg-2'
+              : 'text-fg-4',
+        chip.open ? 'bg-row-active' : chip.holdsActive ? 'bg-row-selected' : 'hover:bg-row-active',
+      )}
+    >
+      <ChipIcon kind={chip.kind} />
+      {chip.count}
+    </button>
+  ))
+}
+
+function ChipIcon({ kind }: { kind: FoldableStepKind }) {
+  switch (kind) {
+    case 'shell': {
+      return <span className="leading-none">{SHELL_GLYPH}</span>
+    }
+    case 'bash': {
+      return <SquareTerminal className="size-[11px]" />
+    }
+    case 'task': {
+      return <ListChecks className="size-[11px]" />
+    }
+    default: {
+      return <Bot className="size-[11px]" />
     }
   }
 }

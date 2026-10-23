@@ -90,9 +90,13 @@ export type ViewConfig = {
   expandedTeams?: string[]
   // `SessionGroup.key` values: the custom groups this client draws folded. A viewing preference too.
   collapsedGroups?: string[]
+  // `sessionKey` -> the step kinds this client draws as rows on that card; every other kind folds into a chip.
+  expandedSteps?: Record<string, FoldableStepKind[]>
   groupOrder?: GroupOrder
   earlierOpen?: boolean
 }
+
+export type FoldableStepKind = 'agent' | 'shell' | 'bash' | 'task'
 
 export type OrderedGroupBy = 'state' | 'adapter' | 'project'
 
@@ -531,6 +535,23 @@ export function teamLingerEnds(view: TeamView, now: number): number | undefined 
   return next
 }
 
+export function expandedStepsOf(config: ViewConfig, row: Pick<SessionRow, 'hostId' | 'info'>): FoldableStepKind[] {
+  return config.expandedSteps?.[sessionKey(row)] ?? []
+}
+
+export function toggleStepsExpanded(config: ViewConfig, row: Pick<SessionRow, 'hostId' | 'info'>, kind: FoldableStepKind): ViewConfig {
+  const key = sessionKey(row)
+  const held = expandedStepsOf(config, row)
+  const next = held.includes(kind) ? held.filter((k) => k !== kind) : [...held, kind]
+  const expandedSteps = { ...config.expandedSteps }
+  if (next.length) {
+    expandedSteps[key] = next
+  } else {
+    delete expandedSteps[key]
+  }
+  return { ...config, expandedSteps }
+}
+
 export function isGroupCollapsed(config: ViewConfig, group: Pick<SessionGroup, 'key'>): boolean {
   return (config.collapsedGroups ?? []).includes(group.key)
 }
@@ -771,6 +792,7 @@ export function clearFilters(config: ViewConfig): ViewConfig {
     customGroups: config.customGroups,
     expandedTeams: config.expandedTeams,
     collapsedGroups: config.collapsedGroups,
+    expandedSteps: config.expandedSteps,
     earlierOpen: config.earlierOpen,
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isAgentRecord, visibleSubagents } from '@workerdeck/protocol'
 import type { ShellInfo, SubagentInfo } from '@workerdeck/protocol'
-import { sessionSteps, type TaskStepOptions } from '../src/components/agent/SessionSteps.tsx'
+import { sessionSteps, stepChips, type Step, type TaskStepOptions } from '../src/components/agent/SessionSteps.tsx'
 import type { SessionInfo } from '@workerdeck/protocol'
 
 function sub(over: Partial<SubagentInfo>): SubagentInfo {
@@ -222,5 +222,54 @@ describe('sessionSteps tasks', () => {
     steps[1]?.onKill?.()
     expect(stopped).toEqual(['bg'])
     expect(sessionSteps(info, () => {}, 'none', undefined, opts())[1]?.onKill).toBeUndefined()
+  })
+})
+
+describe('stepChips', () => {
+  const step = (key: string, fold: Step['fold'], state: Step['state'] = 'done'): Step => ({
+    key,
+    kind: fold === 'bash' ? 'task' : fold,
+    fold,
+    label: key,
+    noun: fold,
+    state,
+    title: key,
+    onSelect: () => {},
+  })
+
+  it('draws one chip per kind in a fixed order', () => {
+    const steps = [
+      step('a', 'agent', 'running'),
+      step('s1', 'shell'),
+      step('s2', 'shell', 'failed'),
+      step('t1', 'task'),
+      step('t2', 'task', 'running'),
+      step('b', 'bash', 'running'),
+    ]
+    expect(stepChips(steps, [])).toEqual([
+      { kind: 'agent', count: 1, label: '1 agent', open: false, failed: false, running: 1, holdsActive: false },
+      { kind: 'task', count: 2, label: '2 tasks', open: false, failed: false, running: 1, holdsActive: false },
+      { kind: 'bash', count: 1, label: '1 bash', open: false, failed: false, running: 1, holdsActive: false },
+      { kind: 'shell', count: 2, label: '2 shells', open: false, failed: true, running: 0, holdsActive: false },
+    ])
+  })
+
+  it('marks a folded chip that holds the open step, and an expanded one as open', () => {
+    const steps = [step('s1', 'shell'), step('a', 'agent')]
+    expect(stepChips(steps, [], 's1').find((chip) => chip.kind === 'shell')?.holdsActive).toBe(true)
+    expect(stepChips(steps, ['shell'], 's1').find((chip) => chip.kind === 'shell')).toMatchObject({ open: true, holdsActive: false })
+  })
+
+  it('draws nothing for a card without steps', () => {
+    expect(stepChips([], [])).toEqual([])
+  })
+
+  it('folds a spawned task as bash and a checklist item as a task', () => {
+    const tasks: TaskStepOptions = { show: 'all', live: true, onSelect: () => {} }
+    const info = {
+      checklist: [{ text: 'write it', status: 'in_progress' }],
+      subagents: [sub({ toolUseId: 'bg', description: 'npm test' })],
+    } as unknown as SessionInfo
+    expect(sessionSteps(info, () => {}, 'all', undefined, tasks).map((s) => s.fold)).toEqual(['task', 'bash'])
   })
 })
