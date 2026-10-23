@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
-import { blockNeedsBlank, terminalBlocks } from '../src/components/terminal/blocks.ts'
+import { blockNeedsBlank, isHiddenThinking, terminalBlocks } from '../src/components/terminal/blocks.ts'
 import { subagentItems } from '../src/components/terminal/blocks.ts'
 
 let seq = 0
@@ -62,6 +62,22 @@ describe('terminalBlocks', () => {
   it('breaks a run on anything the model said between two calls', () => {
     const items = [tool('Bash'), text('that failed, trying again'), tool('Bash')]
     expect(shape(terminalBlocks(items))).toEqual(['run(1)', 'assistant_text', 'run(1)'])
+  })
+
+  it('folds a run across hidden thinking, keeping every item its own index', () => {
+    const thought = (addressed?: true): TranscriptItem => ({
+      kind: 'thinking',
+      id: `th${++seq}`,
+      text: 'hm',
+      parentToolUseId: null,
+      ...(addressed ? { addressed } : {}),
+    })
+    const items = [tool('Bash'), thought(), tool('Bash'), thought(), tool('Bash'), thought(true), tool('Bash')]
+    expect(shape(terminalBlocks(items))).toEqual(['run(1)', 'thinking', 'run(1)', 'thinking', 'run(1)', 'thinking', 'run(1)'])
+    const hidden = terminalBlocks(items, 10, true, isHiddenThinking)
+    expect(shape(hidden)).toEqual(['run(3)', 'thinking', 'run(1)'])
+    expect(hidden[0]).toMatchObject({ index: 10, indices: [10, 12, 14] })
+    expect(shape(terminalBlocks(items, 0, false, isHiddenThinking))).toEqual(['tool_call', 'tool_call', 'tool_call', 'thinking', 'tool_call'])
   })
 
   it('breaks a run on a prompt', () => {

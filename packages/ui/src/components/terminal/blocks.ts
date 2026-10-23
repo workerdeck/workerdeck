@@ -54,13 +54,19 @@ function pushLeaf(out: LeafBlock[], item: TranscriptItem, index: number): void {
   out.push({ key: `${item.kind}:${item.id}`, item, index })
 }
 
-export function terminalBlocks(items: readonly TranscriptItem[], offset = 0, fold = true): TerminalBlock[] {
+export function isHiddenThinking(item: TranscriptItem): boolean {
+  return item.kind === 'thinking' && !item.addressed
+}
+
+// `skip` drops an item before grouping, so a run of calls it sat between still folds into one; indices stay the item's own.
+export function terminalBlocks(
+  items: readonly TranscriptItem[],
+  offset = 0,
+  fold = true,
+  skip?: (item: TranscriptItem) => boolean,
+): TerminalBlock[] {
   if (!fold) {
-    return items.map((item, position) => ({
-      key: `${item.kind}:${item.id}`,
-      item,
-      index: offset + position,
-    }))
+    return items.flatMap((item, position) => (skip?.(item) ? [] : [{ key: `${item.kind}:${item.id}`, item, index: offset + position }]))
   }
 
   const topLevelCalls = new Set<string>()
@@ -72,7 +78,7 @@ export function terminalBlocks(items: readonly TranscriptItem[], offset = 0, fol
   const childrenOf = new Map<string, { item: TranscriptItem; index: number }[]>()
   items.forEach((item, position) => {
     const parent = parentOf(item)
-    if (parent !== undefined && topLevelCalls.has(parent)) {
+    if (parent !== undefined && topLevelCalls.has(parent) && !skip?.(item)) {
       const list = childrenOf.get(parent)
       if (list) {
         list.push({ item, index: offset + position })
@@ -86,7 +92,7 @@ export function terminalBlocks(items: readonly TranscriptItem[], offset = 0, fol
   for (const [position, item] of items.entries()) {
     const index = offset + position
     const parent = parentOf(item)
-    if (parent !== undefined && childrenOf.has(parent)) {
+    if ((parent !== undefined && childrenOf.has(parent)) || skip?.(item)) {
       continue
     }
     if (item.kind === 'tool_call') {

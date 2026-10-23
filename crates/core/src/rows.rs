@@ -176,10 +176,16 @@ fn push_leaf(out: &mut Vec<Block>, item: &Item, index: usize) {
 }
 
 pub fn terminal_blocks(items: &[Item], offset: usize, fold: bool) -> Vec<Block> {
+    terminal_blocks_skipping(items, offset, fold, |_| false)
+}
+
+// `skip` drops an item before grouping, so a run of calls it sat between still folds into one; indices stay the item's own.
+pub fn terminal_blocks_skipping(items: &[Item], offset: usize, fold: bool, skip: impl Fn(&Item) -> bool) -> Vec<Block> {
     if !fold {
         return items
             .iter()
             .enumerate()
+            .filter(|(_, item)| !skip(item))
             .map(|(position, item)| Block::Item(ItemBlock { key: item_key(item), item: item.clone(), index: offset + position }))
             .collect();
     }
@@ -196,7 +202,7 @@ pub fn terminal_blocks(items: &[Item], offset: usize, fold: bool) -> Vec<Block> 
         let Some(parent) = item.parent_tool_use_id() else {
             continue;
         };
-        if !top_level.contains(&**parent) {
+        if !top_level.contains(&**parent) || skip(item) {
             continue;
         }
         children_of.entry(parent.clone()).or_default().push((item.clone(), offset + position));
@@ -205,6 +211,9 @@ pub fn terminal_blocks(items: &[Item], offset: usize, fold: bool) -> Vec<Block> 
     let mut out: Vec<Block> = Vec::with_capacity(items.len());
     for (position, item) in items.iter().enumerate() {
         let index = offset + position;
+        if skip(item) {
+            continue;
+        }
         if let Some(parent) = item.parent_tool_use_id()
             && children_of.contains_key(parent)
         {
@@ -275,7 +284,11 @@ pub fn tool_call_item_index(items: &[Item], id: &str) -> Option<usize> {
 }
 
 pub fn is_hidden_thinking(block: &Block) -> bool {
-    matches!(block, Block::Item(ItemBlock { item: Item::Thinking { addressed: false, .. }, .. }))
+    matches!(block, Block::Item(ItemBlock { item, .. }) if is_hidden_thinking_item(item))
+}
+
+pub fn is_hidden_thinking_item(item: &Item) -> bool {
+    matches!(item, Item::Thinking { addressed: false, .. })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -342,9 +355,8 @@ impl TerminalRows {
 
     pub fn build_with(items: &[Item], options: &BuildOptions) -> Self {
         let blocks = |slice: &[Item], offset: usize| -> Vec<Row> {
-            terminal_blocks(slice, offset, !options.no_fold)
+            terminal_blocks_skipping(slice, offset, !options.no_fold, |item| options.hide_thinking && is_hidden_thinking_item(item))
                 .into_iter()
-                .filter(|block| !(options.hide_thinking && is_hidden_thinking(block)))
                 .map(Row::Block)
                 .collect()
         };
