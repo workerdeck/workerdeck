@@ -40,6 +40,11 @@ import type {
   HostEntryResponse,
   ProfileInfo,
   QueueStats,
+  AnswerQuestionRequest,
+  CloseQuestionRequest,
+  QuestionBoardInfo,
+  QuestionBoardResponse,
+  QuestionResponse,
   ResolvePermissionRequest,
   ShellInfo,
   UpdateSessionRequest,
@@ -59,6 +64,7 @@ import type {
 import { GENERATION_HEADER, INPUT_CHANGED_CODE, UNCONFIRMED_INPUT_CODE } from '@workerdeck/protocol'
 import { SessionHandle, type AttachOptions } from './session-handle.ts'
 import { QueueHandle } from './queue-handle.ts'
+import { QuestionsHandle } from './questions-handle.ts'
 import { sessionWsUrl } from './ws-url.ts'
 
 type ToolResultResponse = { seq: number; toolUseId: string; content: ToolResultBlock['content']; isError: boolean }
@@ -70,6 +76,7 @@ export type ClientOptions = {
   headers?: Record<string, string>
   buildWsUrl?: (sessionId: string, afterSeq: number, truncateResults?: boolean, imageRefs?: boolean, conversation?: number) => string
   buildQueueWsUrl?: () => string
+  buildQuestionsWsUrl?: () => string
   WebSocketImpl?: typeof WebSocket
   fetchImpl?: typeof fetch
 }
@@ -458,6 +465,22 @@ export class WorkerDeckClient {
     return await this.#pick('GET', '/queue', 'stats')
   }
 
+  async questionBoards(): Promise<QuestionBoardInfo[]> {
+    return await this.#pick('GET', '/questions', 'boards')
+  }
+
+  async questionBoard(boardId: string, options?: { drafts?: boolean }): Promise<QuestionBoardResponse> {
+    return await this.#call('GET', `/questions/${encodeURIComponent(boardId)}${query({ drafts: options?.drafts ? 1 : undefined })}`)
+  }
+
+  async answerQuestion(boardId: string, n: number, request: AnswerQuestionRequest): Promise<QuestionResponse> {
+    return await this.#call('POST', `/questions/${encodeURIComponent(boardId)}/${n}/answer`, request)
+  }
+
+  async closeQuestion(boardId: string, n: number, request: CloseQuestionRequest): Promise<QuestionResponse> {
+    return await this.#call('POST', `/questions/${encodeURIComponent(boardId)}/${n}/close`, request)
+  }
+
   async listShells(sessionId: string): Promise<ShellInfo[]> {
     return await this.#pick('GET', this.#sess(sessionId, '/shells'), 'shells')
   }
@@ -529,6 +552,10 @@ export class WorkerDeckClient {
     return new QueueHandle(this, options)
   }
 
+  attachQuestions(options?: { reconnect?: boolean }): QuestionsHandle {
+    return new QuestionsHandle(this, options)
+  }
+
   openSocket(sessionId: string, afterSeq: number, truncateResults = false, imageRefs = false, conversation?: number): WebSocket {
     const url =
       this.#options.buildWsUrl?.(sessionId, afterSeq, truncateResults, imageRefs, conversation) ??
@@ -550,6 +577,11 @@ export class WorkerDeckClient {
 
   openQueueSocket(): WebSocket {
     const url = this.#options.buildQueueWsUrl?.() ?? `${this.#options.baseUrl.replace(/^http/, 'ws')}/queue/ws`
+    return new this.#WebSocketImpl(url)
+  }
+
+  openQuestionsSocket(): WebSocket {
+    const url = this.#options.buildQuestionsWsUrl?.() ?? `${this.#options.baseUrl.replace(/^http/, 'ws')}/questions/ws`
     return new this.#WebSocketImpl(url)
   }
 
@@ -618,6 +650,8 @@ export { SessionHandle } from './session-handle.ts'
 export type { AttachOptions, SessionHandleEvents } from './session-handle.ts'
 export { QueueHandle } from './queue-handle.ts'
 export type { QueueHandleEvents } from './queue-handle.ts'
+export { QuestionsHandle } from './questions-handle.ts'
+export type { QuestionsHandleEvents } from './questions-handle.ts'
 export { apiUrl, isLoopbackHost } from './host-url.ts'
 export type { HostUrl } from './host-url.ts'
 export { hostAuth } from './host-auth.ts'

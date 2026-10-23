@@ -824,8 +824,10 @@ server option carries `canConnect`, `claudeExecutable`, `codexExecutable`, `code
 draft/open/answered/closed transitions, answer delivery) and `services/question-store.ts` (memory
 and per-board file stores, exported for hosts). `routes/questions.ts` is the operator-only
 `GET /questions`, `GET /questions/:board` (`?drafts=1`, `?format=md`) and
-`POST /questions/:board/:n/{answer,close}`. The `questions` server option carries `enabled` and
-`store`. Rules in `docs/GOTCHAS.md` §Question board.
+`POST /questions/:board/:n/{answer,close}`. `routes/questions-ws.ts` is the operator socket
+`/questions/ws`: `questions_attached` (every board's counts) on connect, then `questions_changed`
+(one board's new counts) from `QuestionService`'s `onChange`; a client refetches that board's items.
+The `questions` server option carries `enabled` and `store`. Rules in `docs/GOTCHAS.md` §Question board.
 
 **Owners** resolve in `services/owners.ts` (`OwnerService`: profile `owner`, the `owner` server
 option, the relay's sole enrolled owner; `multi()` when more than one is configured). The result is
@@ -1189,7 +1191,9 @@ running user shells only, persisted, listeners fired so the row redraws; `settle
 
 ## `packages/client`
 
-REST + WS client on platform `fetch`/`WebSocket`; zero runtime deps. Owns
+REST + WS client on platform `fetch`/`WebSocket`; zero runtime deps. Three sockets: a session's
+(`SessionHandle`), the queue's (`QueueHandle`) and the question board's (`QuestionsHandle`, from
+`attachQuestions()`; `hostAuth` keys it like the others). Owns
 the WS frame surface, so new frames need `SessionHandle` methods/events here. **Prompts are acked** (`user_message.clientId`, `ack` frame; every protocol 2 gateway acks): `send` stamps
 a `clientId` (a per-handle random nonce plus a counter) and keeps the prompt until the gateway's `ack`; a drop
 before the ack resends it on the next socket, ahead of anything queued while down, and the gateway runs a repeated
@@ -1433,6 +1437,12 @@ record and the detach reason are state, and the invariants around the three fram
   address, info)` builds the past conversation's banner (protocol `archivedView`) from `GET .../conversations`:
   no current conversation there reads as deleted. `conversationReadOnly(readOnly, address)` is true for any past one.
   The reducer keeps its `conversation_reset` case: a standalone runner (no gateway) still clears in place.
+
+**Question board hooks.** `useQuestionBoards(client)` holds one `/questions/ws` socket and reports
+`supported: false` (socket dropped) on a 404 from `GET /questions`; `useQuestionBoard(client, board,
+version)` loads one board without drafts and refetches when `version` (the board's `updatedAt`)
+changes, and `answer`/`close` swap the returned item in place. Hosts that mount several readers (the
+dashboard) wrap the handle in their own store instead, so one page holds one socket.
 
 ## `packages/ui`
 
@@ -2294,6 +2304,14 @@ cursor-addressed screen under the writer - and resets the screen before writing 
   once the session has no current conversation, and Transcript unavailable) with Go to current (the current conversation's n) when the host passes `onGoToCurrent`. Conversation row strings live in `lib/conversations.ts`
   (`@workerdeck/ui/format`), shared with VS Code.
 
+**Question board.** `QuestionBoard` (tabs Open / Answered / Closed, open items grouped by round
+with blocking first via protocol's `questionBoardView`, search over the past ones via
+`questionMatches`) draws one `QuestionCard` per item and owns the keyboard: `j`/`k` move, `1`-`9`
+pick, `e` focuses the note, `Enter` answers, `Cmd/Ctrl+Enter` answers from the note. It is
+transport-free (`onAnswer`/`onClose` props), so an embedder wires it to `useQuestionBoard` the way
+the dashboard does. An action or an fyi may be answered empty: the board sends
+`QUESTION_EMPTY_ANSWER` (`done`/`seen`), because the gateway needs a choice or text.
+
 ## `packages/web`
 
 dashboard (TanStack Router, hash history); create forms are engine-aware via
@@ -2305,8 +2323,8 @@ difference that is real - an interactive session pre-authorizes `bypassPermissio
 the operator is present, an unattended job makes it an opt-in - survives as a parameter rather
 than being flattened away. `questionBehavior` is the other parameterized difference: both forms
 render `QuestionsField`, defaulting to `ask` for a session (someone is watching) and `auto` for a
-job (nobody is). The layout is **four sections and a dialog**: every nav entry
-(Sessions, Gateways, Jobs, Profiles) is a *list on the left, detail beside it* pair, so each
+job (nobody is). The layout is **five sections and a dialog**: every nav entry
+(Sessions, Questions, Gateways, Jobs, Profiles) is a *list on the left, detail beside it* pair, so each
 names its own sidebar in `AppShell`'s `NAV` rather than mounting one from a route -
 navigating within a section must not replace the list you picked from, which is the whole
 point of the shape. The frame around all four is **one surface**: `.app-frame` in
@@ -2445,6 +2463,11 @@ with other owners / Make private. Drag to join and the menu's Join both go throu
 drawn under the card, and an open invitation adds a toast with a Withdraw invitation action. `useAgentAvatars` fetches each avatar path once per page (a
 failure retries after 60 s); the session header draws `AgentHeading` for an agent.
 
+- **Questions.** `useQuestions` is a module-scope store like `useJobs` (primary gateway only): REST lists
+  the boards, then `attachQuestions()` keeps them live; AppShell mounts it so the nav count (red while
+  anything blocks) stays current on every section. A board's page is `ui`'s `QuestionBoard` over
+  `react`'s `useQuestionBoard`, refetched when the board's `updatedAt` moves. Drafts never show (the
+  lead triages them).
 - **Conversations.** The session route takes `conversation=<n>` for a past conversation (read-only);
   without it the route is the current one, which a stable id makes reload-safe. Sub-agent and shell frames carry
   `conversation` along. Every card, named or not, has Conversations (the session's `conversations(id)` through

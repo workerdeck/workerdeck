@@ -76,6 +76,10 @@ export type QuestionDelivery = { delivered: string[]; undelivered: string[] }
 
 export type QuestionResponse = { item: QuestionItem; delivery?: QuestionDelivery }
 
+export type QuestionsServerFrame =
+  | { type: 'questions_attached'; protocolVersion: number; boards: QuestionBoardInfo[] }
+  | { type: 'questions_changed'; board: QuestionBoardInfo }
+
 export function isQuestionKind(value: unknown): value is QuestionKind {
   return typeof value === 'string' && (QUESTION_KINDS as readonly string[]).includes(value)
 }
@@ -96,6 +100,51 @@ export function questionAnswerLine(item: QuestionItem): string {
   const option = answer.choice ? item.options?.find((candidate) => candidate.key === answer.choice) : undefined
   const choice = answer.choice ? (option ? `${answer.choice} (${option.label})` : answer.choice) : ''
   return [choice, answer.text].filter((part) => part && part.trim() !== '').join(': ')
+}
+
+export type QuestionRound = { round?: string; items: QuestionItem[] }
+
+export type QuestionBoardView = {
+  open: QuestionRound[]
+  drafts: QuestionItem[]
+  answered: QuestionItem[]
+  closed: QuestionItem[]
+}
+
+export function questionBoardView(items: readonly QuestionItem[]): QuestionBoardView {
+  const open = items.filter((item) => item.status === 'open').sort(byUrgency)
+  const rounds = new Map<string | undefined, QuestionItem[]>()
+  for (const item of open) {
+    const round = rounds.get(item.round)
+    if (round) {
+      round.push(item)
+    } else {
+      rounds.set(item.round, [item])
+    }
+  }
+  return {
+    open: [...rounds].map(([round, members]) => (round === undefined ? { items: members } : { round, items: members })),
+    drafts: items.filter((item) => item.status === 'draft').sort(byUrgency),
+    answered: items.filter((item) => item.status === 'answered').sort((a, b) => (b.answer?.at ?? 0) - (a.answer?.at ?? 0)),
+    closed: items.filter((item) => item.status === 'closed').sort((a, b) => (b.closed?.at ?? 0) - (a.closed?.at ?? 0)),
+  }
+}
+
+export function sortQuestionBoards(boards: readonly QuestionBoardInfo[]): QuestionBoardInfo[] {
+  return [...boards].sort((a, b) => b.blocking - a.blocking || b.open - a.open || b.updatedAt - a.updatedAt)
+}
+
+export function questionMatches(item: QuestionItem, search: string): boolean {
+  const needle = search.trim().toLowerCase()
+  if (needle === '') {
+    return true
+  }
+  const hay = [`#${item.n}`, item.title, item.context, item.round, item.askerName, questionAnswerLine(item), item.closed?.note]
+  return hay.some((part) => part?.toLowerCase().includes(needle))
+}
+
+function byUrgency(a: QuestionItem, b: QuestionItem): number {
+  return Number(!!b.blocking) - Number(!!a.blocking) || a.createdAt - b.createdAt
 }
 
 // The offline copy of a board: generated on request, never kept in sync with anything.

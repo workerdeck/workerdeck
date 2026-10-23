@@ -1,6 +1,6 @@
 import { readPref, writePref } from './storage.ts'
 
-export type SidebarSection = 'sessions' | 'gateways' | 'jobs' | 'profiles'
+export type SidebarSection = 'sessions' | 'questions' | 'gateways' | 'jobs' | 'profiles'
 
 export const SIDEBAR_MIN = 240
 export const SIDEBAR_MAX = 520

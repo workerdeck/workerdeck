@@ -1,7 +1,10 @@
 import type { ClientOptions } from './index.ts'
 import { sessionWsUrl } from './ws-url.ts'
 
-export function hostAuth(options: { baseUrl: string; key: string }): Pick<ClientOptions, 'headers' | 'buildWsUrl' | 'buildQueueWsUrl'> {
+export function hostAuth(options: {
+  baseUrl: string
+  key: string
+}): Pick<ClientOptions, 'headers' | 'buildWsUrl' | 'buildQueueWsUrl' | 'buildQuestionsWsUrl'> {
   const { baseUrl, key } = options
   if (key === '') {
     return {}
@@ -15,5 +18,6 @@ export function hostAuth(options: { baseUrl: string; key: string }): Pick<Client
     buildWsUrl: (sessionId, afterSeq, truncateResults, imageRefs, conversation) =>
       withKey(sessionWsUrl(baseUrl, sessionId, afterSeq, truncateResults, imageRefs, conversation)),
     buildQueueWsUrl: () => withKey(`${wsRoot}/queue/ws`),
+    buildQuestionsWsUrl: () => withKey(`${wsRoot}/questions/ws`),
   }
 }

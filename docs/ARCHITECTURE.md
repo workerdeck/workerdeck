@@ -270,10 +270,10 @@ boundary: anything a client needs must be expressible as protocol events and com
   `header` render-prop is portalled from inside the panel up to the top of the workspace - only
   the panel can build the `⋯` menu it is handed, but app chrome belongs above everything.
 - **`packages/web`** - the full session-control dashboard (TanStack Router, hash history), shaped
-  as **four sections and a dialog**: Sessions, Gateways, Jobs and Profiles are each a
+  as **five sections and a dialog**: Sessions, Questions, Gateways, Jobs and Profiles are each a
   list-on-the-left/detail-beside-it pair (multi-gateway - routes carry the gateway, since a
   session id is unique only within one), every `+` opens a modal, and Settings is a dialog at the
-  foot of the nav rather than a fifth section. Published as prebuilt
+  foot of the nav rather than a sixth section. Published as prebuilt
   static files with zero runtime deps (`dashboardDir` is a path, not a component tree) - it is an
   application, so everything it builds with is a devDependency. The create forms and the session
   panel render from the profile's **capability record** (`ProfileInfo.capabilities`, falling back

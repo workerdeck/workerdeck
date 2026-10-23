@@ -41,5 +41,6 @@ describe('hostAuth', () => {
     const auth = hostAuth({ baseUrl: 'http://gw', key: 'k' })
     expect(auth.headers).toEqual({ authorization: 'Bearer k' })
     expect(auth.buildQueueWsUrl?.()).toBe('ws://gw/queue/ws?key=k')
+    expect(auth.buildQuestionsWsUrl?.()).toBe('ws://gw/questions/ws?key=k')
   })
 })

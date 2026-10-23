@@ -55,3 +55,5 @@ export type {
   UseShellTerminalOptions,
   UseShellTerminalResult,
 } from './hooks/use-shell-terminal.ts'
+export { useQuestionBoard, useQuestionBoards } from './hooks/use-questions.ts'
+export type { UseQuestionBoardResult, UseQuestionBoardsResult } from './hooks/use-questions.ts'

@@ -84,6 +84,11 @@ export class QuestionService implements QuestionDirectory {
       .sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
+  boardInfo(id: string): QuestionBoardInfo | undefined {
+    const board = this.#boards.get(id)
+    return board ? this.#info(board) : undefined
+  }
+
   board(id: string, options: { drafts?: boolean } = {}): QuestionBoardResponse | undefined {
     const board = this.#boards.get(id)
     if (!board) {

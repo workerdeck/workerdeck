@@ -6,6 +6,8 @@ import { JobView } from '@/views/JobView.tsx'
 import { JobsView } from '@/views/JobsView.tsx'
 import { ProfileView } from '@/views/ProfileView.tsx'
 import { ProfilesView } from '@/views/ProfilesView.tsx'
+import { QuestionBoardView } from '@/views/QuestionBoardView.tsx'
+import { QuestionsView } from '@/views/QuestionsView.tsx'
 import { SessionView } from '@/views/SessionView.tsx'
 import { SessionsView } from '@/views/SessionsView.tsx'
 
@@ -53,6 +55,18 @@ const sessionRoute = createRoute({
   }),
 })
 
+const questionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/questions',
+  component: QuestionsView,
+})
+
+const questionBoardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/questions/$boardId',
+  component: QuestionBoardView,
+})
+
 const gatewaysRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/gateways',
@@ -94,6 +108,8 @@ export const router = createRouter({
     indexRoute,
     sessionsRoute,
     sessionRoute,
+    questionsRoute,
+    questionBoardRoute,
     gatewaysRoute,
     gatewayRoute,
     jobsRoute,

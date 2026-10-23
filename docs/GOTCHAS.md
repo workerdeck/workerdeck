@@ -3679,6 +3679,13 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
 
 ## VS Code surfaces (the Agent panel and session tabs)
 
+- **The page root is focusable (`tabIndex={-1}`), or Cmd+C copies nothing.** VS Code runs a webview's
+  copy as an `execCommand` message, and its `pre/index.html` first refocuses the frame's last focused
+  element whenever `<body>` is active (seen on 1.143). Text in the transcript is not focusable, so a
+  selection there left `<body>` active, the composer took focus, the selection collapsed into it, and
+  `copy` wrote an empty string. A focusable root takes the click instead; `focusComposerOnClick` still
+  moves to the composer on a click that selects nothing. Any new webview that shows selectable text
+  beside an input needs the same root.
 - **A session lives in at most one surface, and the panel never shows a session a tab holds.**
   Surfaces are keyed by address (`SessionRef`: id plus an optional past `conversation`), so a past
   conversation is its own editor tab and never the panel's. Every click path goes through

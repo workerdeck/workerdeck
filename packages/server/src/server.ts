@@ -61,6 +61,7 @@ import { TeamLinks } from './services/team-links.ts'
 import { createPeerService } from './services/peers.ts'
 import { createMemoryQuestionStore } from './services/question-store.ts'
 import { QuestionService } from './services/questions.ts'
+import { createQuestionSocketHub } from './routes/questions-ws.ts'
 import { refuseJobInput } from './lib/permissions.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
@@ -335,6 +336,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           human: () => owners.defaultOwner() ?? 'the human',
           deliver: (sessionId, text, origin) => deliverQuestionNotice(sessionId, text, origin),
           onError: (error) => diagnose(error, 'questions'),
+          onChange: (board) => questionSockets.changed(board),
         })
   const deliverQuestionNotice = async (sessionId: string, text: string, origin?: MessageOrigin): Promise<string | undefined> => {
     if (locks.gated(sessionId)) {
@@ -487,6 +489,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES })
   const queueSockets = createQueueSocketHub({ wss, auth, queue: () => queue, diagnose })
+  const questionSockets = createQuestionSocketHub({ wss, auth, questions: () => ownQuestions })
 
   const queue = options.queue
     ? new JobQueue({
@@ -584,6 +587,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         await queueSockets.upgrade(req, socket, head)
         return
       }
+      if (pathname === basePath + '/questions/ws') {
+        await questionSockets.upgrade(req, socket, head)
+        return
+      }
       await upgradeSession(ctx, wss, req, socket, head)
     })().catch(() => socket.destroy())
   })
@@ -596,7 +603,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     shells,
     queue,
     engineSleep,
-    closeQueueSockets: queueSockets.clear,
+    closeHubSockets: () => {
+      queueSockets.clear()
+      questionSockets.clear()
+    },
     flushRecords: () => records.flush(),
     diagnose,
     releaseDirectories: () => {

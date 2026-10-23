@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { WebSocket } from 'ws'
 import type { EngineAdapter, QuestionDirectory, SessionRunnerConfig } from '@workerdeck/core'
 import {
   ENGINE_CAPABILITIES,
@@ -10,6 +11,7 @@ import {
   type MessageOrigin,
   type QuestionBoardResponse,
   type QuestionResponse,
+  type QuestionsServerFrame,
 } from '@workerdeck/protocol'
 import { createWorkerServer } from '../src/index.ts'
 import { createFileQuestionStore, createMemoryQuestionStore } from '../src/services/question-store.ts'
@@ -241,6 +243,10 @@ describe('the question board on a gateway', () => {
     const member = (await post<AgentResponse>('/agents', { name: 'Pylon', lead: lead.id, config: { cwd: '/tmp' } })).body.agent
     const tools = (id: string): QuestionDirectory => configs.get(id)!.questions!
     expect(configs.get(member.id)!.questions).toBeDefined()
+    const frames: QuestionsServerFrame[] = []
+    const socket = new WebSocket(`${base.replace(/^http/, 'ws')}/questions/ws`)
+    socket.on('message', (data) => frames.push(JSON.parse(String(data)) as QuestionsServerFrame))
+    await vi.waitFor(() => expect(frames[0]).toEqual({ type: 'questions_attached', protocolVersion: expect.any(Number), boards: [] }))
 
     expect(await tools(member.id).ask(member.id, ASK)).toContain('draft for your lead Lead')
     expect(runners.get(lead.id)!.sent.at(-1)!.text).toContain('Draft #1')
@@ -254,6 +260,14 @@ describe('the question board on a gateway', () => {
     const answered = await post<QuestionResponse>(`/questions/${lead.id}/1/answer`, { choice: 'A' })
     expect(answered.status).toBe(200)
     expect(answered.body.delivery).toEqual({ delivered: [member.id, lead.id], undelivered: [] })
+    await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ type: 'questions_changed', board: { id: lead.id, open: 0, answered: 1 } }))
+    expect(frames.map((frame) => frame.type === 'questions_changed' && [frame.board.drafts, frame.board.open])).toEqual([
+      false,
+      [1, 0],
+      [0, 1],
+      [0, 0],
+    ])
+    socket.close()
     const sent = runners.get(member.id)!.sent.at(-1)!
     expect(sent.text).toContain('answered by operator: A (Monthly first)')
     expect(sent.options?.origin).toBeUndefined()
@@ -287,5 +301,11 @@ describe('the question board on a gateway', () => {
     })
     expect(configs[0]!.questions).toBeUndefined()
     expect((await fetch(`${base}/questions`)).status).toBe(404)
+    const refused = new WebSocket(`${base.replace(/^http/, 'ws')}/questions/ws`)
+    const status = await new Promise<number | undefined>((resolve) => {
+      refused.on('unexpected-response', (_req, res) => resolve(res.statusCode))
+      refused.on('open', () => resolve(101))
+    })
+    expect(status).toBe(404)
   })
 })
