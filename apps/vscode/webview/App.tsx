@@ -172,7 +172,8 @@ export function App({
   }
 
   return (
-    <div ref={page} className="h-screen">
+    // Focusable, or Cmd+C copies an empty string (docs/GOTCHAS.md § VS Code surfaces).
+    <div ref={page} tabIndex={-1} className="h-screen outline-none">
       <SessionPanel
         key={`${shown.baseUrl}#${shown.sessionId}#${shown.conversation ?? ''}`}
         client={client}
