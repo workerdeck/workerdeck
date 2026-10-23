@@ -580,6 +580,24 @@ across gateways, because the picker and the resolver both read the composed dire
 (`GET /v1/sessions/:id/peers`, the same rows `peers_list` answers), but the resolution happens on
 the sender's gateway and only a remote session's id and title travel into the envelope.
 
+## Question board
+
+Durable, non-blocking questions from agents to the human, answered in batches. Every session holds
+five gateway tools beside the peer tools: `questions_ask`, `questions_list`, `questions_update`,
+`questions_close`, `questions_record_answer` (`packages/core/src/lib/questions-tool.ts`, contract
+`QuestionDirectory`), backed by the `QuestionService` the server installs
+(`packages/server/src/services/questions.ts`). Wire types and the markdown export are in
+`packages/protocol/src/questions.ts`; the operator reads and answers over `/v1/questions`.
+
+There is one board per team, keyed by the lead's id, and a session outside any team gets a board
+under its own id. A member's item lands as a `draft` and its lead is told; the lead publishes,
+edits, merges or rejects it, so the human only sees what the lead let through. An item moves
+`draft -> open -> answered`, or to `closed` (resolved, superseded, withdrawn, rejected) from
+either live state. An answer is delivered like a peer message to the asker, the board's lead and
+every session the item lists as waiting. The store is in memory with one JSON file per board in
+the state dir; there is no markdown copy kept in sync, only an export on request. Rules in
+`docs/GOTCHAS.md` §Question board.
+
 ## Agents and teams
 
 An **agent** is a named session: the session's record plus an identity row (`AgentInfo`: name,

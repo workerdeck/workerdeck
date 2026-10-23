@@ -11,6 +11,7 @@ import { handleHostFiles } from './fs.ts'
 import { handleJobs } from './jobs.ts'
 import { handleOwnerRename } from './owners.ts'
 import { handleProfiles } from './profiles.ts'
+import { handleQuestions } from './questions.ts'
 import { handleSdkSessions } from './sdk-sessions.ts'
 import { handleSessions } from './sessions.ts'
 
@@ -72,6 +73,11 @@ export function httpRoutes(ctx: ServerContext): HttpRoute[] {
       match: pathWhere(under('/agents')),
       auth: 'operator',
       handler: (req, res, pathname, auth) => handleAgents(ctx, req, res, pathname, auth),
+    }),
+    route({
+      match: pathWhere(under('/questions')),
+      auth: 'operator',
+      handler: (req, res, pathname) => handleQuestions(ctx, req, res, pathname),
     }),
     route({
       match: pathWhere((pathname) => pathname === base + '/owners/rename'),

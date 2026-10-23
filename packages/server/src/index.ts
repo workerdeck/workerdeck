@@ -47,6 +47,12 @@ export type { FileSessionRecordStoreOptions, SessionRecord, SessionRecordMerge, 
 export { createFileProfileStore, createMemoryProfileStore, type ProfileStore } from './services/profile-store.ts'
 export type { AvatarImage, AvatarProvider } from './services/avatars.ts'
 export {
+  createFileQuestionStore,
+  createMemoryQuestionStore,
+  type QuestionStore,
+  type StoredQuestionBoard,
+} from './services/question-store.ts'
+export {
   createFileAgentStore,
   createMemoryAgentStore,
   type AgentStore,

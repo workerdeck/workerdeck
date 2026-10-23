@@ -20,6 +20,7 @@ const HOST_ONLY_KEY_TABLE: Record<HostOnlyKey, 'durable' | 'transient'> = {
   historyFn: 'transient',
   sessionInfoFn: 'transient',
   peers: 'transient',
+  questions: 'transient',
   contextReset: 'transient',
   agentResetReason: 'transient',
   avatar: 'transient',

@@ -29,6 +29,16 @@ export const BUILTIN_TOOL_TITLES: Record<string, string> = {
   mcp__workerdeck__set_status: 'Setting status',
   change_avatar: 'Changing avatar',
   mcp__workerdeck__change_avatar: 'Changing avatar',
+  questions_ask: 'Asking a question',
+  mcp__workerdeck__questions_ask: 'Asking a question',
+  questions_list: 'Reading the question board',
+  mcp__workerdeck__questions_list: 'Reading the question board',
+  questions_update: 'Editing a question',
+  mcp__workerdeck__questions_update: 'Editing a question',
+  questions_close: 'Closing a question',
+  mcp__workerdeck__questions_close: 'Closing a question',
+  questions_record_answer: 'Recording an answer',
+  mcp__workerdeck__questions_record_answer: 'Recording an answer',
 }
 
 export function toolTitle(name: string, titles?: Record<string, string>): string | undefined {

@@ -820,6 +820,13 @@ hang off `routes/profiles.ts` as `/profiles/:name/account{,/connect,/complete}`;
 server option carries `canConnect`, `claudeExecutable`, `codexExecutable`, `codexWaitMs` and a
 `pty` override. Rules in `docs/GOTCHAS.md` §Profile accounts.
 
+**Question board** lives in `services/questions.ts` (`QuestionService`: board resolution, the
+draft/open/answered/closed transitions, answer delivery) and `services/question-store.ts` (memory
+and per-board file stores, exported for hosts). `routes/questions.ts` is the operator-only
+`GET /questions`, `GET /questions/:board` (`?drafts=1`, `?format=md`) and
+`POST /questions/:board/:n/{answer,close}`. The `questions` server option carries `enabled` and
+`store`. Rules in `docs/GOTCHAS.md` §Question board.
+
 **Owners** resolve in `services/owners.ts` (`OwnerService`: profile `owner`, the `owner` server
 option, the relay's sole enrolled owner; `multi()` when more than one is configured). The result is
 stamped on the runner config (durable host-only key `owner`), the session record and a named

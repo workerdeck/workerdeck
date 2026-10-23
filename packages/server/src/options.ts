@@ -21,6 +21,7 @@ import type { RelayLinkOptions } from './services/peer-relay.ts'
 import type { PeerServiceOptions } from './services/peers.ts'
 import type { ProfileStore } from './services/profile-store.ts'
 import type { AgentStore } from './services/agent-store.ts'
+import type { QuestionStore } from './services/question-store.ts'
 import type { AvatarProvider } from './services/avatars.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionRecords, SessionRecordStore } from './services/session-records.ts'
@@ -71,6 +72,8 @@ export type WorkerServerOptions = {
   profiles?: ProfileInfo[]
   profileStore?: ProfileStore
   agentStore?: AgentStore
+  // The question board (`questions_*` tools, `/v1/questions`). On by default; the library default store is in memory.
+  questions?: { enabled?: boolean; store?: QuestionStore }
   // Draws agent avatars. Without one, `AgentInfo.avatar` is absent and clients draw their engine tile.
   avatars?: AvatarProvider
   allowedConfigDirRoots?: string[]

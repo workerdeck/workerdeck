@@ -9,13 +9,23 @@ import {
   installAvatarDirectory,
   installContextResetDirectory,
   installPeerDirectory,
+  installQuestionDirectory,
   installShellDirectory,
   peerDirectoryHandle,
+  questionDirectoryHandle,
   shellDirectoryHandle,
 } from '@workerdeck/core'
 import type { AvatarDirectory, EngineAdapter, PeerDirectory, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
-import { isJobRun, isSharing, mergePricing, type CreateSessionRequest, type ProfileEngine, type SessionInfo } from '@workerdeck/protocol'
+import {
+  isJobRun,
+  isSharing,
+  mergePricing,
+  type CreateSessionRequest,
+  type MessageOrigin,
+  type ProfileEngine,
+  type SessionInfo,
+} from '@workerdeck/protocol'
 import type { ServerContext } from './context.ts'
 import { createServerLifecycle } from './lifecycle.ts'
 import { HttpError, httpErrorStatus, json } from './lib/http.ts'
@@ -49,6 +59,9 @@ import { SpendLedger } from './services/spend-ledger.ts'
 import { createRelayLink } from './services/peer-relay.ts'
 import { TeamLinks } from './services/team-links.ts'
 import { createPeerService } from './services/peers.ts'
+import { createMemoryQuestionStore } from './services/question-store.ts'
+import { QuestionService } from './services/questions.ts'
+import { refuseJobInput } from './lib/permissions.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
 import { OwnerService } from './services/owners.ts'
@@ -311,6 +324,39 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           options: options.peers,
         })
   const shellDirectory = shells ? createShellDirectory(shells, { runnerFor: (id) => registry.get(id) }) : undefined
+  const questions =
+    options.questions?.enabled === false
+      ? undefined
+      : new QuestionService({
+          store: options.questions?.store ?? createMemoryQuestionStore(),
+          agent: (sessionId) => agents.get(sessionId),
+          leads: (sessionId) => agents.hasMembers(sessionId),
+          name: (sessionId) => agents.get(sessionId)?.name ?? registry.get(sessionId)?.info().title,
+          human: () => owners.defaultOwner() ?? 'the human',
+          deliver: (sessionId, text, origin) => deliverQuestionNotice(sessionId, text, origin),
+          onError: (error) => diagnose(error, 'questions'),
+        })
+  const deliverQuestionNotice = async (sessionId: string, text: string, origin?: MessageOrigin): Promise<string | undefined> => {
+    if (locks.gated(sessionId)) {
+      return CUT_IN_PROGRESS
+    }
+    const runner = (await parking.ensureLive(sessionId)) ?? registry.get(sessionId)
+    if (!runner || locks.gated(sessionId)) {
+      return runner ? CUT_IN_PROGRESS : 'the session is gone'
+    }
+    const info = runner.info()
+    if (info.status === 'closed' || info.status === 'failed') {
+      return `the session is ${info.status}`
+    }
+    const locked = refuseJobInput(info, options.disableBypassPermissions)
+    if (locked) {
+      return locked
+    }
+    runner.sendMessage(text, undefined, origin ? { origin } : undefined)
+    return undefined
+  }
+  let ownQuestions = questions
+  installQuestionDirectory(questions)
   // Each runner resolves its own server's directory first and the process-wide slot only once that server has
   // closed, which is the hot-reload handover: a carried runner then reaches whichever generation installed last.
   const relayLog = options.relay?.log ?? ((message: string) => diagnose(new Error(message), 'relay'))
@@ -379,6 +425,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     effortDefaults: options.effortDefaults,
     requireApiKey: options.requireApiKey,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
+    questions: questions ? questionDirectoryHandle(() => ownQuestions) : undefined,
     contextReset: contextResets
       ? { directory: contextResetDirectoryHandle(() => ownContextResets), defaultEnabled: contextResets.defaultEnabled }
       : undefined,
@@ -487,6 +534,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     cuts,
     engineSleep,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
+    questions,
     bridge,
     promptAcks: new PromptAcks(),
     projects,
@@ -562,6 +610,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       cuts.close()
       ownContextResets = undefined
       ownAvatarChanges = undefined
+      questions?.stop()
+      ownQuestions = undefined
       return agentWrites
     },
   })

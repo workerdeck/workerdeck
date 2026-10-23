@@ -1463,6 +1463,39 @@ has the shape; these are the ways to get it wrong.
   `perMinute` (10) per sender-target pair, `maxMessageChars` (16k) with "write a file, send the
   path" as the refusal.
 
+## Question board (`questions_*`, `/v1/questions`)
+
+`docs/ARCHITECTURE.md` §Question board has the shape; these are the rules that are easy to break.
+
+- **A human answer arrives with no `origin`; a recorded one arrives as the lead.** The answer the
+  human gave on the board is the human speaking, so it is sent the way the human's own composer
+  sends (no envelope, so the model weighs it as the user). `questions_record_answer` is a model
+  reporting what the human said elsewhere, so its delivery carries `origin: { kind: 'peer' }` from
+  the lead and gets the peer envelope. Never give a model-written path the unoriginated send: that
+  would let an agent speak with the human's authority to every waiting session.
+- **Delivery wakes.** It goes through `parking.ensureLive` like `peers_send`, refuses a session in
+  a conversation cut (`CUT_IN_PROGRESS`) and a bypass job (`refuseJobInput`), and never interrupts
+  a turn (`Runner.sendMessage`'s mid-turn rule). A session it could not reach is listed on the item
+  as `undelivered`, and the answer is still in its `questions_list`; there is no retry.
+- **The board is resolved from the caller at call time** (`QuestionService.boardOf`): a member with
+  a local lead posts to the lead's board, everything else to its own. A remote (qualified) lead
+  does not count: cross-gateway boards are v2, so such a member gets its own board.
+- **Only the lead publishes, rejects or records.** The lead is the session whose id is the board's
+  id. The asker or the lead may edit or close an item while it is `draft` or `open`; an answered
+  item never changes, and a follow-up is a new item with `parent`.
+- **An answer must name a real option or carry text.** The recommendation must name an option too,
+  so an edit that removes the recommended option is refused rather than leaving a dangling key.
+- **Drafts stay off the human's list.** `GET /v1/questions/:board` leaves them out unless
+  `?drafts=1`; `/questions` is operator-only (the same 404 as a missing route), like `/agents`.
+- **Every write is synchronous** (mutate, then the store's `save`), so two tool calls cannot
+  interleave inside one transition. `stop()` (from `releaseDirectories`) refuses every later write,
+  which keeps a closed generation from writing over the next one's files after a hot reload. The
+  runner holds `questionDirectoryHandle(own)`, resolved per call, the same rule as the peer handle.
+- **No markdown mirror.** A second, writable-looking copy goes stale and invites cross-writes. The
+  offline copy is `?format=md` (`questionBoardMarkdown`), generated on request.
+- **Off switch:** `questions: { enabled: false }`. The library default store is in memory; the CLI
+  backs it with `<state-dir>/questions/` (`stateDirDefaults`).
+
 ## Conversation cut (`ConversationCuts`, `POST /sessions/:id/conversations`)
 
 A session id is stable for its whole life. A cut ends conversation n and starts n+1 under the same

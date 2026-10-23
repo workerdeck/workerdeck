@@ -21,6 +21,7 @@ import type { SessionParkManager } from './services/parking.ts'
 import type { ProducedFileStore } from './services/produced-files.ts'
 import type { ProfileService } from './services/profiles.ts'
 import type { PromptAcks } from './services/prompt-acks.ts'
+import type { QuestionService } from './services/questions.ts'
 import type { ProjectInfoService } from './services/project-info.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionFactory } from './services/session-factory.ts'
@@ -56,6 +57,8 @@ export type ServerContext = {
   // Undefined when peer messaging is off; the send path then resolves no `#` mentions.
   // The composed directory, relay included: what a session's `peers_list` answers.
   peers: PeerDirectory | undefined
+  // Undefined when the question board is off (`questions.enabled: false`).
+  questions: QuestionService | undefined
   bridge: BridgeHub
   promptAcks: PromptAcks
   projects: ProjectInfoService
