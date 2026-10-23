@@ -18,7 +18,7 @@ export interface QuestionBoardProps {
   items: readonly QuestionItem[]
   onAnswer: (n: number, request: AnswerQuestionRequest) => Promise<QuestionResponse>
   onClose: (n: number, request: CloseQuestionRequest) => Promise<QuestionResponse>
-  onOpenLink?: (link: string) => void
+  onOpenLink?: (link: string, item: QuestionItem) => void
   className?: string
 }
 
@@ -148,7 +148,7 @@ export function QuestionBoard({ items, onAnswer, onClose, onOpenLink, className 
 
   return (
     <div data-slot="question-board" tabIndex={-1} onKeyDown={onKeyDown} className={cn('flex flex-col gap-4 outline-none', className)}>
-      <div className="flex items-center gap-1" role="tablist">
+      <div className="flex flex-wrap items-center gap-1" role="tablist">
         {tabs.map(([key, label, count]) => (
           <button
             key={key}
@@ -166,7 +166,7 @@ export function QuestionBoard({ items, onAnswer, onClose, onOpenLink, className 
           </button>
         ))}
         {tab === 'open' && openItems.length > 0 ? (
-          <span className="ml-auto text-label text-fg-4">j/k move, 1-9 pick, e note, Enter answer</span>
+          <span className="ml-auto text-label whitespace-nowrap text-fg-4">j/k move, 1-9 pick, e note, Enter answer</span>
         ) : null}
       </div>
 

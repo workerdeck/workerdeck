@@ -275,6 +275,12 @@ export type HostToSection =
   | { kind: 'wd-sidebar-state'; state: SidebarState }
   | { kind: 'wd-vitals'; vitals?: SessionVitals }
 
+export type QuestionsTarget = { hostId: string; baseUrl: string; boardId: string; version: number }
+
+export type QuestionsToHost = TransportToHost | { kind: 'wd-ready' } | { kind: 'wd-question-link'; link: string; asker: string }
+
+export type HostToQuestions = TransportToWebview | { kind: 'wd-questions'; target?: QuestionsTarget; empty: string }
+
 export type FileEntryKind = 'file' | 'folder'
 
 export type WireFileEntry = { name: string; uri: string; kind: FileEntryKind; lang?: string; link?: boolean }
@@ -327,5 +333,5 @@ export type HostToFiles =
   | { kind: 'wd-files-cut'; uris: string[] }
   | { kind: 'wd-files-moved'; moves: { from: string; to: string }[] }
 
-export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost | ProfilesToHost | FilesToHost
-export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways | HostToProfiles | HostToFiles
+export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost | ProfilesToHost | FilesToHost | QuestionsToHost
+export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways | HostToProfiles | HostToFiles | HostToQuestions

@@ -130,7 +130,7 @@ export function questionBoardView(items: readonly QuestionItem[]): QuestionBoard
   }
 }
 
-export function sortQuestionBoards(boards: readonly QuestionBoardInfo[]): QuestionBoardInfo[] {
+export function sortQuestionBoards<T extends QuestionBoardInfo>(boards: readonly T[]): T[] {
   return [...boards].sort((a, b) => b.blocking - a.blocking || b.open - a.open || b.updatedAt - a.updatedAt)
 }
 

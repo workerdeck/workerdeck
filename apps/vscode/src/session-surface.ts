@@ -400,13 +400,15 @@ async function openTranscriptPath(
   if (!session) {
     return
   }
-  const path = resolvePosix(clicked, session.cwd)
+  await openHostPath(store, session.host, clicked, session.cwd, line)
+}
+
+export async function openHostPath(store: HostStore, host: GatewayHost, clicked: string, cwd: string | undefined, line?: number): Promise<void> {
+  const path = resolvePosix(clicked, cwd)
   if (!path) {
     return
   }
-  const uri = (await isLocalHost(store, session.host))
-    ? vscode.Uri.file(path)
-    : vscode.Uri.from({ scheme: 'workerdeck', authority: session.host.id.toLowerCase(), path })
+  const uri = (await isLocalHost(store, host)) ? vscode.Uri.file(path) : vscode.Uri.from({ scheme: 'workerdeck', authority: host.id.toLowerCase(), path })
   try {
     if (line) {
       const doc = await vscode.workspace.openTextDocument(uri)

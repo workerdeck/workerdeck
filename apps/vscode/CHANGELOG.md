@@ -5,6 +5,20 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [Unreleased]
+
+### Added
+
+- **Questions view** in the WorkerDeck sidebar: answer the question boards agents post to with
+  `questions_ask` (pick an option, add a note, or answer in your own words; `j`/`k`, `1`-`9`, `e`,
+  Enter). Switch boards from the title bar, open a board as Markdown, and click an item's links. A
+  new open item shows a notification (a warning when it blocks work); turn it off with
+  `workerdeck.questions.notify`.
+
+### Fixed
+
+- Cmd+C in the transcript copies the selection instead of an empty string.
+
 ## [4.0.0] - 2026-10-22
 
 Needs a 4.0.0 gateway (protocol 2). A 3.x gateway shows the version mismatch banner.

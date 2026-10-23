@@ -21,7 +21,7 @@ export interface QuestionCardProps {
   onSubmit?: () => void
   onClose?: () => void
   onFocus?: () => void
-  onOpenLink?: (link: string) => void
+  onOpenLink?: (link: string, item: QuestionItem) => void
   className?: string
 }
 
@@ -62,9 +62,9 @@ export const QuestionCard = forwardRef<HTMLTextAreaElement, QuestionCardProps>(f
             <Badge variant={item.kind === 'action' ? 'warning' : item.kind === 'fyi' ? 'neutral' : 'info'}>{item.kind}</Badge>
             {item.status === 'draft' ? <Badge>draft, with the lead</Badge> : null}
             {item.blocking && (live || item.status === 'draft') ? (
-              <Badge variant="danger" title={item.blocking}>
-                <Lock className="size-3" />
-                blocking: {item.blocking}
+              <Badge variant="danger" title={item.blocking} className="max-w-full min-w-0">
+                <Lock className="size-3 shrink-0" />
+                <span className="truncate">blocking: {item.blocking}</span>
               </Badge>
             ) : null}
             <span>{item.askerName ?? item.asker}</span>
@@ -80,9 +80,14 @@ export const QuestionCard = forwardRef<HTMLTextAreaElement, QuestionCardProps>(f
       {item.links?.length ? (
         <ul className="flex flex-col gap-0.5 text-body-sm">
           {item.links.map((link) => (
-            <li key={link} className="truncate">
+            <li key={link} className="min-w-0 truncate">
               {onOpenLink ? (
-                <button type="button" className="font-mono text-code text-accent hover:underline" onClick={() => onOpenLink(link)}>
+                <button
+                  type="button"
+                  title={link}
+                  className="block max-w-full truncate text-left font-mono text-code text-accent hover:underline"
+                  onClick={() => onOpenLink(link, item)}
+                >
                   {link}
                 </button>
               ) : (
