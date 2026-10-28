@@ -21,7 +21,6 @@ import bi.atomic.workerdeck.core.ffi.ReadMark
 import bi.atomic.workerdeck.core.ffi.SeenCounts
 import bi.atomic.workerdeck.core.ffi.getSessionCall
 import bi.atomic.workerdeck.core.ffi.SessionList
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -31,13 +30,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 data class SessionsUi(
     val groups: List<ListGroup> = emptyList(),
     val loaded: Boolean = false,
     val error: String? = null,
-    val avatars: Map<String, AvatarFrames> = emptyMap(),
     val refreshing: Boolean = false,
     // A one-shot message for an action that failed; the screen shows it once and calls `noticeShown`.
     val notice: String? = null,
@@ -122,7 +119,6 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         readMetas(reached)
         for (client in reached) if (client.gateway.id !in pastRead) readPastAgents(client.gateway.id)
         state.value = state.value.copy(groups = draw(), loaded = true, error = errorText())
-        fetchAvatars()
     }
 
     private val metaRead = mutableSetOf<String>()
@@ -231,25 +227,6 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         val client = clients[hostId] ?: return null
         val form = if (agent) CreateForm.agent(cwd, list, hostId) else CreateForm.session(cwd, resume)
         return CreateModel(form, client)
-    }
-
-    private fun fetchAvatars() {
-        for (fetch in list.avatarFetches(System.currentTimeMillis().toDouble())) {
-            val client = clients[fetch.hostId]
-            if (client == null) {
-                list.avatarSettled(fetch.key, false, System.currentTimeMillis().toDouble())
-                continue
-            }
-            viewModelScope.launch {
-                val frames = client.image(fetch.stillPath)?.let { still ->
-                    withContext(Dispatchers.Default) { decodeAvatar(still.first, client.image(fetch.busyPath)) }
-                }
-                list.avatarSettled(fetch.key, frames != null, System.currentTimeMillis().toDouble())
-                if (frames != null && clients[fetch.hostId] === client) {
-                    state.value = state.value.copy(avatars = state.value.avatars + (fetch.key to frames))
-                }
-            }
-        }
     }
 
     // A search never outlives the screen: the stored config may carry one, so it is cleared at start.

@@ -80,36 +80,23 @@ private struct TeamsPreview: View {
   }
 
   private static func member(_ id: String, _ name: String, order: Int) -> [String: Any] {
-    ["id": id, "name": name, "avatar": "/\(id)", "lead": "A", "team": "WD-Lead", "order": order]
+    ["id": id, "name": name, "lead": "A", "team": "WD-Lead", "order": order]
   }
 
   @State private var model = PreviewList(
     [
-      row("lead", agent: ["id": "A", "name": "WD-Lead", "avatar": "/a", "leads": true, "conversation": 4],
+      row("lead", agent: ["id": "A", "name": "WD-Lead", "leads": true, "conversation": 4],
           status: "running", label: "cutting 3.13.0"),
       row("m1", agent: member("B", "WD-Review", order: 0), pending: 1, label: "needs your call"),
       row("m2", agent: member("C", "WD-MonkeyArt", order: 1), status: "running"),
       row("m3", agent: member("D", "WD-Docs", order: 2), asleep: true),
-      row("solo", agent: ["id": "E", "name": "BOX-Lead", "avatar": "/e", "shared": true], label: "🧪 smoke green"),
+      row("solo", agent: ["id": "E", "name": "BOX-Lead", "shared": true], label: "🧪 smoke green"),
       row("plain", agent: nil, status: "awaiting_approval", pending: 1, title: "Fix the relay drop", model: "gpt-6-sol"),
       row("old", agent: nil, status: "closed", title: "Old one-off"),
     ],
     unseen: ["lead": 2, "m2": 1],
     config: #"{"groupBy":"none"}"#)
   @State private var revision = 0
-
-  private static func picture(_ seed: Int) -> AgentAvatarFrames {
-    let hues: [CGFloat] = [0.08, 0.55, 0.33, 0.75, 0.95]
-    let image = UIGraphicsImageRenderer(size: CGSize(width: 16, height: 16)).image { ctx in
-      UIColor(hue: hues[seed % hues.count], saturation: 0.5, brightness: 0.85, alpha: 1).setFill()
-      ctx.fill(CGRect(x: 0, y: 0, width: 16, height: 16))
-      UIColor(white: 0.15, alpha: 1).setFill()
-      ctx.fill(CGRect(x: 4, y: 6, width: 2, height: 2))
-      ctx.fill(CGRect(x: 10, y: 6, width: 2, height: 2))
-      ctx.fill(CGRect(x: 5, y: 11, width: 6, height: 1))
-    }
-    return AgentAvatarFrames(still: image, busy: [], durations: [])
-  }
 
   var body: some View {
     let _ = revision
@@ -121,7 +108,7 @@ private struct TeamsPreview: View {
               ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
                 if item.row.depth > 0 {
                   AgentCardView(
-                    item: item, frames: Self.picture(index), member: true, onOpen: {},
+                    item: item, member: true, onOpen: {},
                     menu: { Button("Leave team") {} })
                   .listRowInsets(AgentCardView<EmptyView>.insets(member: true, hasSteps: false))
                   .listRowSeparator(.hidden)
@@ -155,11 +142,11 @@ private struct TeamsPreview: View {
   private func card(_ item: ListItem, index: Int) -> some View {
     if item.row.agent != nil {
       AgentCardView(
-        item: item, frames: index == 0 ? Self.picture(0) : Self.picture(4),
+        item: item,
         tray: item.row.tray.isEmpty && !item.row.teamExpanded
           ? nil
           : TeamTray(
-            row: item.row, frames: { _ in Self.picture(1) }, select: { _ in },
+            row: item.row, select: { _ in },
             toggle: {
               model.list.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
               revision += 1

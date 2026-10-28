@@ -10,7 +10,6 @@ use wd_native::rest::{PermissionMode, ShellInfo};
 use wd_native::snapshot;
 use wd_native::vt::VtKey;
 
-mod avatar;
 mod bookmarks;
 mod composer;
 mod conversations;

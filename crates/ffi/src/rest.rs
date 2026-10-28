@@ -372,11 +372,6 @@ pub fn project_icon_call(session_id: String) -> HttpCall {
 }
 
 #[uniffi::export]
-pub fn agent_avatar_call(agent_id: String, busy: bool) -> HttpCall {
-    calls::agent_avatar(&agent_id, busy).into()
-}
-
-#[uniffi::export]
 pub fn tool_result_call(session_id: String, seq: i64, tool_use_id: String, image_refs: bool) -> HttpCall {
     calls::tool_result(&session_id, seq, &tool_use_id, image_refs).into()
 }

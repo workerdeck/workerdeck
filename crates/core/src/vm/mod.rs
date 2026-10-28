@@ -1,4 +1,3 @@
-pub mod agent_avatar;
 pub mod agents;
 pub mod attachments;
 pub mod bookmarks;

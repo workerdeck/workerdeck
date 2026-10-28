@@ -479,14 +479,6 @@ pub fn project_icon(session_id: &str) -> HttpCall {
     HttpCall::get(format!("{}/project/icon", session(session_id)))
 }
 
-pub fn agent_avatar(agent_id: &str, busy: bool) -> HttpCall {
-    HttpCall::get(agent_avatar_path(agent_id, busy))
-}
-
-pub fn agent_avatar_path(agent_id: &str, busy: bool) -> String {
-    format!("{}/{}", agent(agent_id), if busy { "avatar-busy.png" } else { "avatar.png" })
-}
-
 // A stale seq 404s rather than serving another call's result: ask again after a fresh attach.
 pub fn tool_result(session_id: &str, seq: i64, tool_use_id: &str, image_refs: bool) -> HttpCall {
     let suffix = query(&[("toolUseId", Some(tool_use_id.to_owned())), ("imageRefs", image_refs.then(|| "1".to_owned()))]);
@@ -648,8 +640,6 @@ mod tests {
         assert_eq!(attachment("s", "at/1"), call("GET", "/sessions/s/attachments/at%2F1", None));
         assert_eq!(produced_file("s", "f 1"), call("GET", "/sessions/s/produced/f%201", None));
         assert_eq!(project_icon("s/1"), call("GET", "/sessions/s%2F1/project/icon", None));
-        assert_eq!(agent_avatar("a b", false), call("GET", "/agents/a%20b/avatar.png", None));
-        assert_eq!(agent_avatar("a", true), call("GET", "/agents/a/avatar-busy.png", None));
     }
 
     #[test]

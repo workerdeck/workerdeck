@@ -41,6 +41,18 @@ fn an_agent_row_is_named_by_the_agent_not_its_session_title() {
 }
 
 #[test]
+fn a_row_names_its_model_by_the_gateways_name_then_the_id() {
+    let list = SessionList::new(None, None);
+    let named = idle("s1", r#","model":"claude-opus-5-5","modelName":"Opus 5.5 (1M)""#);
+    let bare = idle("s2", r#","model":"claude-sonnet-5""#);
+    list.set_host("h1".into(), "mac".into(), true, body(&[named, bare])).unwrap();
+    let rows: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).collect();
+    let label = |id: &str| rows.iter().find(|r| r.session_id == id).and_then(|r| r.model_label.clone());
+    assert_eq!(label("s1").as_deref(), Some("Opus 5.5 (1M)"));
+    assert_eq!(label("s2").as_deref(), Some("Sonnet 5"));
+}
+
+#[test]
 fn a_mark_counts_prose_after_it_as_unseen() {
     let list = SessionList::new(None, None);
     list.set_host("h1".into(), "mac".into(), true, body(&[idle("s1", r#","proseCount":2"#)])).unwrap();

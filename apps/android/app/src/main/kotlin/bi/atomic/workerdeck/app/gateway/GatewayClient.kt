@@ -53,17 +53,12 @@ class GatewayClient(val gateway: Gateway) : Transport {
 
     suspend fun sessions(): String = perform(listSessionsCall())
 
-    // An image under the API base with its `x-frame-durations` header; null when it did not come.
-    suspend fun image(path: String): Pair<ByteArray, String?>? = withContext(Dispatchers.IO) {
+    override suspend fun bytes(path: String): ByteArray? = withContext(Dispatchers.IO) {
         val request = runCatching { authed(Request.Builder().url(gateway.apiBase + path)).build() }.getOrNull() ?: return@withContext null
         runCatching {
-            http.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) null else response.body?.bytes()?.let { it to response.header("x-frame-durations") }
-            }
+            http.newCall(request).execute().use { response -> if (!response.isSuccessful) null else response.body?.bytes() }
         }.getOrNull()
     }
-
-    override suspend fun bytes(path: String): ByteArray? = image(path)?.first
 
     // `POST /sessions/:id/sleep`: the engine stops and wakes on the next message.
     suspend fun sleep(sessionId: String, generation: Long) {

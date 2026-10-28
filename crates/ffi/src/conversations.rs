@@ -100,7 +100,6 @@ pub fn session_conversations(
 pub struct PastAgent {
     pub id: String,
     pub name: String,
-    pub avatar: Option<String>,
     pub detail: String,
 }
 
@@ -111,7 +110,7 @@ pub fn past_agents(body: String, now_ms: f64, offset_minutes: i32) -> Option<Vec
     Some(
         vm::past_agent_items(&response.retired, now_ms, offset_minutes)
             .into_iter()
-            .map(|item| PastAgent { id: item.id, name: item.name, avatar: item.avatar, detail: item.detail })
+            .map(|item| PastAgent { id: item.id, name: item.name, detail: item.detail })
             .collect(),
     )
 }

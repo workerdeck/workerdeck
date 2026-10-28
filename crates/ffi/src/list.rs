@@ -1,10 +1,8 @@
 // The sessions list for a native app: every gateway's REST rollup, the read watermarks and the view config go in,
 // display-ready groups come out. The rules are `wd_native::vm::session_list`; nothing here decides visibility.
-use crate::avatar::AvatarFetch;
 use std::sync::Mutex;
 use wd_native::planner::fmt_cost;
 use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, ProjectIcon, SessionInfo, Sharing};
-use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
 use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
 use wd_native::vm::conversations::{clear_context_offered, new_conversation_gate};
 use wd_native::vm::create_form::{AgentSeed as FormSeed, SeedLead};
@@ -147,8 +145,6 @@ pub struct ListRow {
     pub model_label: Option<String>,
     pub agent: Option<String>,
     pub agent_id: Option<String>,
-    pub avatar_key: Option<String>,
-    pub avatar_busy: bool,
     pub asleep: bool,
     pub can_sleep: bool,
     pub members: u32,
@@ -191,7 +187,6 @@ pub struct TrayMember {
     pub host_id: String,
     pub session_id: String,
     pub title: String,
-    pub avatar_key: Option<String>,
     pub asleep: bool,
 }
 
@@ -377,7 +372,6 @@ struct State {
     relay_hosts: Entries<String>,
     config: ViewConfig,
     marks: Watermarks,
-    avatars: AvatarLoads,
     selected: Option<String>,
     linger_ends: Option<f64>,
     agent_defaults: Entries<GatewayAgentDefaults>,
@@ -448,7 +442,6 @@ fn tray_member(row: &SessionRow) -> TrayMember {
         host_id: row.host_id.clone(),
         session_id: info.id.clone(),
         title: vm::display_name(info),
-        avatar_key: info.agent.as_ref().and_then(|a| avatar_key(&row.host_id, a)),
         asleep: info.engine_asleep == Some(true),
     }
 }
@@ -489,11 +482,9 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         unseen: row.unseen as u32,
         status,
         model: info.model.clone(),
-        model_label: wd_native::vm::model_name::friendly_model(info.model.as_deref()),
+        model_label: info.model_name.clone().or_else(|| wd_native::vm::model_name::friendly_model(info.model.as_deref())),
         agent: info.agent.as_ref().map(|a| a.name.clone()),
         agent_id: info.agent.as_ref().map(|a| a.id.clone()),
-        avatar_key: info.agent.as_ref().and_then(|a| avatar_key(&row.host_id, a)),
-        avatar_busy: state == SessionState::Working && !asleep,
         asleep,
         can_sleep: vm::can_sleep(info),
         members: row.members.as_ref().map_or(0, |m| m.len() as u32),
@@ -585,7 +576,6 @@ impl SessionList {
                 relay_hosts: Entries::new(),
                 config: normalize_view_config(stored.as_ref()),
                 marks: Watermarks::from_json(marks_json.as_deref()),
-                avatars: AvatarLoads::default(),
                 selected: None,
                 linger_ends: None,
                 agent_defaults: Entries::new(),
@@ -621,7 +611,6 @@ impl SessionList {
         state.relay_hosts.0.retain(|(_, host)| *host != host_id);
         state.agent_defaults.0.retain(|(host, _)| *host != host_id);
         state.profiles.0.retain(|(host, _)| *host != host_id);
-        state.avatars.forget_host(&host_id);
         state.marks.forget_host(&host_id)
     }
 
@@ -681,25 +670,6 @@ impl SessionList {
     // The Member a phone counts as selected: the one opened last, since nothing stays highlighted on a phone.
     pub fn select(&self, host_id: String, session_id: String) {
         self.state().selected = Some(vm::session_key(&host_id, &session_id));
-    }
-
-    // The agent pictures to fetch now, each marked in flight until `avatar_settled`; a failure is retried after a minute.
-    pub fn avatar_fetches(&self, now_ms: f64) -> Vec<AvatarFetch> {
-        let mut state = self.state();
-        let State { hosts, avatars, .. } = &mut *state;
-        let mut out = Vec::new();
-        for host in hosts.iter() {
-            for agent in host.sessions.iter().filter_map(|s| s.agent.as_ref()) {
-                if let Some(fetch) = avatars.begin(&host.id, agent, now_ms) {
-                    out.push(fetch.into());
-                }
-            }
-        }
-        out
-    }
-
-    pub fn avatar_settled(&self, key: String, loaded: bool, now_ms: f64) {
-        self.state().avatars.settle(&key, loaded, now_ms);
     }
 
     pub fn unseen_total(&self) -> u32 {

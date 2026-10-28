@@ -102,12 +102,11 @@ struct CreateSessionView: View {
         } else if model.state.modelOptions.isEmpty {
           // No list to offer: an engine that ships no catalog and a profile
           // that declares no ids. The id still has to be typeable.
-          TextField("Profile default", text: $model.fields.model)
+          TextField("Model id", text: $model.fields.model)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
         } else {
           Picker("Model", selection: $model.fields.model) {
-            Text("Profile default").tag("")
             ForEach(model.state.modelOptions, id: \.self) { option in
               Text(option).tag(option)
             }

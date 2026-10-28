@@ -528,8 +528,6 @@ pub struct AgentRef {
     pub id: String,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avatar: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead_gateway: Option<String>,
@@ -570,6 +568,8 @@ pub struct SessionInfo {
     pub capabilities: Option<EngineCapabilities>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
     #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     pub effort: Option<Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -806,8 +806,6 @@ pub struct AgentInfo {
     pub created_at: f64,
     pub updated_at: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avatar: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub undelivered: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_failed: Option<String>,
@@ -916,8 +914,6 @@ pub struct RetiredAgentInfo {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avatar: Option<String>,
     pub retired_at: f64,
     pub conversations: Vec<AgentConversation>,
 }

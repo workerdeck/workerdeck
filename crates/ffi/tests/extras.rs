@@ -23,7 +23,6 @@ fn r3_calls_name_their_routes() {
     assert_eq!(find_host_files_call("/r".into(), "q".into(), Some(8)), get("/fs/find?path=%2Fr&q=q&limit=8"));
     assert_eq!(produced_file_call("s".into(), "f".into()), get("/sessions/s/produced/f"));
     assert_eq!(project_icon_call("s".into()), get("/sessions/s/project/icon"));
-    assert_eq!(agent_avatar_call("a".into(), true), get("/agents/a/avatar-busy.png"));
     assert_eq!(tool_result_call("s".into(), 3, "t".into(), true), get("/sessions/s/events/3/result?toolUseId=t&imageRefs=1"));
     assert_eq!(tool_result_image_call("s".into(), 3, "t".into(), 1), get("/sessions/s/events/3/result?toolUseId=t&part=1"));
 }

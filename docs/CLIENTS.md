@@ -1435,12 +1435,10 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 **Agents and teams** (Agent Teams phase 5). The kit mirrors `AgentRef`, `AgentInfo`,
 `StatusLabel`, `SessionInfo.agent`/`owner`/`statusLabel`, `GatewayMeta`, the `/agents` routes and
 `/meta` (`Agents.swift`), and the team half of the list view model (team units, `teamState`, the context lead, `teamView`, `teamLeads`/`teamMembers`) is the core's `SessionList`. The app draws agents with
-`AgentCardView` (44pt avatar card, 32pt member row on a tree line, a team tray of the Members Auto hides; a tap on one opens it, and the member opened last stands in
+`AgentCardView` (44pt card, 32pt member row on a tree line, a team tray of the Members Auto hides; a tap on one opens it, and the member opened last stands in
 for the selected row)
-and `AgentAvatarView` (pixelated, busy strip sliced from `avatar-busy.png` by `x-frame-durations`
-and stepped in a `TimelineView`, desaturated asleep, a dashed engine tile with no picture);
-`AgentAvatarLoader` fetches what the core list's `avatarFetches` names (per gateway and avatar
-path, retried a minute after a failure) and keeps the decoded frames. A card whose session or team needs an
+and `AgentAvatarView`, which draws no face yet: a dashed engine tile with the status badge, until the
+app gets a face renderer for `AgentRef.face` (the gateway stopped serving PNG avatars). A card whose session or team needs an
 answer is tinted orange. Verbs follow the web menu (rename, status, avatar, make agent, add to
 team, leave, dissolve, sharing, new conversation, conversations, delete agent), from the `···`, a long
 press, and swipes (leading rename and new conversation). Make agent and a team join name the session in
@@ -1571,11 +1569,8 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   never erases the character before it); resetting it mid-composition is what garbled
   Gboard input, so it only resets outside one. Hardware Enter, Tab, Escape and arrows go straight
   through as keys; the control strip mirrors iOS (esc, tab, armed ctrl, ^C, arrows, keyboard).
-- **Agents wear their MonkeyArt avatars** (`sessions/AgentAvatar.kt`), 48 dp on a lead card and
-  32 dp on a team member, with the iOS fallback (dashed box, engine mark) when there is none. What
-  to fetch, the cache key (host plus the seed-versioned `AgentRef.avatar`), the 60 s retry, the
-  busy strip's frame width and the current frame are the core's (`vm::agent_avatar`,
-  `SessionList.avatar_fetches` / `avatar_settled`); Kotlin fetches and decodes the PNGs.
+- **Agents draw no face yet** (`sessions/AgentAvatar.kt`): 48 dp on a lead card and 32 dp on a team member, the
+  iOS fallback (dashed box, engine mark) until the app gets a face renderer for `AgentRef.face`.
 - **The activity keeps itself across configuration changes** (`android:configChanges` in the
   manifest): a theme switch or a rotation would otherwise recreate it, rebuild the screen's
   `SessionModel`, reconnect, replay and drop an open shell. `onConfigurationChanged` re-derives the

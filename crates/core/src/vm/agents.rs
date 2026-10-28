@@ -49,7 +49,7 @@ pub fn is_sharing(value: &str) -> bool {
 }
 
 pub fn agent_ref(agent: &AgentInfo, team: &TeamContext) -> AgentRef {
-    let mut out = AgentRef { id: agent.id.clone(), name: agent.name.clone(), avatar: agent.avatar.clone(), ..AgentRef::default() };
+    let mut out = AgentRef { id: agent.id.clone(), name: agent.name.clone(), ..AgentRef::default() };
     if agent.lead.is_some() {
         out.lead = agent.lead.clone();
         out.lead_gateway = team.lead_gateway.clone();

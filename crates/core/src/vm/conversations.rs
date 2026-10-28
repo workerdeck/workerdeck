@@ -296,7 +296,6 @@ pub fn conversation_items(rows: &[ConversationRow], now_ms: f64, offset_minutes:
 pub struct PastAgentItem {
     pub id: String,
     pub name: String,
-    pub avatar: Option<String>,
     pub detail: String,
 }
 
@@ -311,7 +310,6 @@ pub fn past_agent_items(retired: &[RetiredAgentInfo], now_ms: f64, offset_minute
             PastAgentItem {
                 id: agent.id.clone(),
                 name: agent.name.clone(),
-                avatar: agent.avatar.clone(),
                 detail: format!("Deleted {} \u{00B7} {count} conversation{plural}", date_label(agent.retired_at, now_ms, offset_minutes)),
             }
         })

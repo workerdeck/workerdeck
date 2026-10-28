@@ -5,7 +5,6 @@ import WorkerDeckKit
 // A lead's tray in Auto: the core already cut it to the pictures drawn and a `+n` overflow.
 struct TeamTray {
   let row: ListRow
-  let frames: (TrayMember) -> AgentAvatarFrames?
   let select: (TrayMember) -> Void
   let toggle: () -> Void
 
@@ -22,7 +21,6 @@ struct AgentCardView<MenuContent: View>: View {
   }
 
   let item: ListItem
-  let frames: AgentAvatarFrames?
   var member = false
   var teamUnseen = 0
   var tray: TeamTray?
@@ -47,7 +45,7 @@ struct AgentCardView<MenuContent: View>: View {
 
   private var card: some View {
     HStack(alignment: .center, spacing: 10) {
-      AgentAvatarView(row: row, frames: frames, size: 44)
+      AgentAvatarView(row: row, size: 44)
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 6) {
           name
@@ -89,7 +87,7 @@ struct AgentCardView<MenuContent: View>: View {
 
   private var memberRow: some View {
     HStack(spacing: 8) {
-      AgentAvatarView(row: row, frames: frames, size: 32)
+      AgentAvatarView(row: row, size: 32)
       name
       if let status {
         Text(status).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
@@ -148,7 +146,7 @@ struct AgentCardView<MenuContent: View>: View {
     HStack(spacing: 4) {
       ForEach(tray.members, id: \.key) { member in
         Button { tray.select(member) } label: {
-          TrayAvatarView(member: member, frames: tray.frames(member))
+          TrayAvatarView(member: member)
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Open \(member.title)")
@@ -166,7 +164,7 @@ struct AgentCardView<MenuContent: View>: View {
   private func trayLabel(_ tray: TeamTray) -> some View {
     HStack(spacing: 4) {
       ForEach(tray.members, id: \.key) { member in
-        TrayAvatarView(member: member, frames: tray.frames(member))
+        TrayAvatarView(member: member)
       }
       trayGlyph(tray)
     }

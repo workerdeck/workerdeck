@@ -2649,7 +2649,7 @@ list, get, update, sleep, delete, stop and background task, kill shell, resolve 
 list, retire, update, avatar reroll, meta, profiles; then (R2) create session and agent,
 SDK sessions and profile detail; then (R3) attachment upload and fetch, MCP list
 and action, shells list, get and output, host files (roots, list, find, read, write), produced
-files, project icon, agent avatar and tool result (text and image). The native apps serve Claude
+files, project icon and tool result (text and image). The native apps serve Claude
 and Codex sessions only, so a provider session's file store (`/sessions/:id/files`) has no call here. An upload is the one call
 with a raw body: the core names the path (`?name=`), the platform sends the bytes under their
 media type (Swift `WorkerClient.upload`). A screen that decides things from an answer takes it
@@ -2677,10 +2677,11 @@ kind rules and can-send are still Swift (the composer slice); only the upload ca
 **The create form** is `vm::create_form` (FFI `CreateForm`, built by `CreateForm.session` or, for an
 agent, `CreateForm.agent` over the `SessionList`, whose meta and profiles seed it and which it feeds
 the `/profiles` body). The app binds `CreateFormFields` through `update`, which answers the fields
-as kept: a profile change adopts that profile's default model and mode, and snaps a mode, a catalog
-or provider model, or an effort the new engine lacks back to what it offers (the web's
-`engineFormOptions` rule). `state()` is everything else the form draws; `call()` is the create.
-The request rules: trimmed strings, empty ones omitted; `cwd` omitted when the record says
+as kept: the form preselects `ProfileInfo.defaultModel` and never sends an empty model; a profile change
+adopts that profile's default mode, its default model too while the old default was untouched, and snaps
+a mode, a catalog or provider model, or an effort the new engine lacks back to what it offers (a catalog
+model to the profile's default; the web's `engineFormOptions` rule). `state()` is everything else the form draws; `call()` is the create.
+The request rules: trimmed strings, empty ones omitted (the model falls back to the profile's default); `cwd` omitted when the record says
 `hostCwd: false`; settings sources and budgets only when the record offers them; `resume` only
 with the `resume` capability, `forkSession` only with it and `forkSession`; bypass sends
 `allowDangerouslySkipPermissions`; a stored session's title rides `meta.title` while its id is

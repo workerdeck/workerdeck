@@ -59,7 +59,6 @@ final class SessionListModel {
   /// in the list - see `ProjectIconLoader`. Held here because this is where the
   /// per-gateway clients live and where new rows arrive.
   let projectIcons = ProjectIconLoader()
-  let agentAvatars = AgentAvatarLoader()
   private var metaRead: Set<UUID> = []
   var actionError: String?
 
@@ -159,16 +158,9 @@ final class SessionListModel {
     revision &+= 1
     hasLoaded = true
     ensureProjectIcons()
-    ensureAgentAvatars()
     await syncAppBadge()
     await ensureMetas()
     await ensurePastAgents()
-  }
-
-  private func ensureAgentAvatars() {
-    agentAvatars.ensure(list: core) { [weak self] hostId in
-      UUID(uuidString: hostId).flatMap { self?.context(for: $0)?.client }
-    }
   }
 
   private func ensureMetas() async {

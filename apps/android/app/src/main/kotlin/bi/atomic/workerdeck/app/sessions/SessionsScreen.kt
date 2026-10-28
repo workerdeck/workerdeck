@@ -182,7 +182,6 @@ fun SessionsScreen(
                                 SessionRow(
                                     row,
                                     now,
-                                    ui.avatars,
                                     onOpen = { onOpen(row.hostId, row.sessionId, row.title, it) },
                                     onOpenMember = { onOpen(it.hostId, it.sessionId, it.title, null) },
                                     onStopStep = { model.stopStep(row.hostId, row.sessionId, row.conversation, it) },
@@ -441,7 +440,6 @@ private fun GroupHeader(label: String, count: UInt, unseen: UInt, collapsed: Boo
 private fun SessionRow(
     row: ListRow,
     now: Double,
-    avatars: Map<String, AvatarFrames>,
     onOpen: (Entry?) -> Unit,
     onOpenMember: (TrayMember) -> Unit,
     onStopStep: (ListStep) -> Unit,
@@ -453,7 +451,6 @@ private fun SessionRow(
 ) {
     val colors = Wd.colors
     var menu by remember { mutableStateOf(false) }
-    val avatar = row.avatarKey?.let { avatars[it] }
     val agent = row.agentId != null
     val member = agent && row.depth > 0u
     val indent = (if (member) MEMBER_INDENT else 20.dp) * row.depth.toInt()
@@ -467,13 +464,13 @@ private fun SessionRow(
                 .alpha(if (!row.asleep) 1f else if (agent) 0.6f else 0.55f),
         ) {
             if (member) {
-                MemberLine(row, now, avatar, Modifier.padding(start = GUTTER + indent, end = GUTTER, top = 6.dp, bottom = 6.dp))
+                MemberLine(row, now, Modifier.padding(start = GUTTER + indent, end = GUTTER, top = 6.dp, bottom = 6.dp))
             } else Row(
                 Modifier.fillMaxWidth().padding(start = GUTTER + indent, end = GUTTER, top = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (agent) {
-                    AgentAvatar(row, avatar, column)
+                    AgentAvatar(row, column)
                 } else {
                     Column(Modifier.width(MARK_COLUMN).padding(top = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         row.badge?.let { BadgeGlyph(it, size = 14.dp) } ?: StateGlyph(row.state)
@@ -504,7 +501,7 @@ private fun SessionRow(
                 }
                 Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (row.members > 0u) {
-                        TeamTray(row, avatars, onOpenMember, onToggleTeam)
+                        TeamTray(row, onOpenMember, onToggleTeam)
                         Spacer(Modifier.width(8.dp))
                     }
                     if (row.unseen > 0u) {
@@ -618,10 +615,10 @@ private fun StepLine(step: ListStep, modifier: Modifier, onOpen: () -> Unit, onS
 
 // A Member under its lead, the iOS member row: one line, the picture, name and status, then unread and age.
 @Composable
-private fun MemberLine(row: ListRow, now: Double, avatar: AvatarFrames?, modifier: Modifier) {
+private fun MemberLine(row: ListRow, now: Double, modifier: Modifier) {
     val colors = Wd.colors
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        AgentAvatar(row, avatar, MEMBER_AVATAR)
+        AgentAvatar(row, MEMBER_AVATAR)
         Text(row.title, style = MaterialTheme.typography.titleSmall, color = colors.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
             row.status.orEmpty(),
@@ -639,12 +636,12 @@ private fun MemberLine(row: ListRow, now: Double, avatar: AvatarFrames?, modifie
 // Auto's tray: the idle Members as pictures (a tap opens one), then `+n` past three, else a chevron that expands the
 // team or, expanded, returns it to Auto.
 @Composable
-private fun TeamTray(row: ListRow, avatars: Map<String, AvatarFrames>, onOpenMember: (TrayMember) -> Unit, onToggle: () -> Unit) {
+private fun TeamTray(row: ListRow, onOpenMember: (TrayMember) -> Unit, onToggle: () -> Unit) {
     val colors = Wd.colors
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         for (member in row.tray) {
             Box(Modifier.clip(RoundedCornerShape(4.dp)).clickable { onOpenMember(member) }.semantics { contentDescription = "Open ${member.title}" }) {
-                TrayAvatar(member, member.avatarKey?.let { avatars[it] }, TRAY_AVATAR)
+                TrayAvatar(member, TRAY_AVATAR)
             }
         }
         Box(

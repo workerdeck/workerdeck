@@ -119,11 +119,16 @@ impl CreateForm {
         self.agent.is_some()
     }
 
-    // A profile change adopts the new profile's defaults; every other edit is taken as typed.
+    // A profile change adopts the new profile's defaults, its model too while the old profile's was untouched; every
+    // other edit is taken as typed.
     pub fn update(&mut self, fields: Fields, reseed: impl FnOnce(Option<&str>) -> Option<AgentSeed>) {
         let profile_changed = fields.profile != self.fields.profile;
+        let untouched = self.default_model().is_some_and(|model| model == fields.model);
         self.fields = fields;
         if profile_changed {
+            if untouched {
+                self.fields.model.clear();
+            }
             self.apply_profile_defaults(reseed);
         }
     }
@@ -201,9 +206,6 @@ impl CreateForm {
 
     pub fn model_label(&self) -> String {
         let model = trimmed(&self.fields.model);
-        if model.is_empty() {
-            return "Profile default".to_owned();
-        }
         self.catalog_row(model).map_or_else(|| model.to_owned(), |row| row.display_name.clone())
     }
 
@@ -260,8 +262,8 @@ impl CreateForm {
         let Some(profile) = self.selected_profile().cloned() else { return };
         let caps = profile.resolved_capabilities();
         let defaults = profile.defaults.as_ref();
-        if self.fields.model.is_empty()
-            && let Some(model) = defaults.and_then(|d| d.model.clone())
+        if self.fields.model.trim().is_empty()
+            && let Some(model) = profile.default_model.clone()
         {
             self.fields.model = model;
         }
@@ -277,8 +279,12 @@ impl CreateForm {
             if !options.contains(&self.fields.model) {
                 self.fields.model = profile.provider.as_ref().and_then(|p| p.model.clone()).unwrap_or_else(|| options[0].clone());
             }
-        } else if !self.catalog().is_empty() && !self.fields.model.trim().is_empty() && self.catalog_row(&self.fields.model).is_none() {
-            self.fields.model.clear();
+        } else if !self.catalog().is_empty() && self.catalog_row(&self.fields.model).is_none() {
+            let snapped = profile
+                .default_model
+                .filter(|model| self.catalog_row(model).is_some())
+                .or_else(|| self.catalog().first().map(|row| row.value.clone()));
+            self.fields.model = snapped.unwrap_or_default();
         }
         if !self.fields.reasoning_effort.is_empty() && !self.effort_options().contains(&self.fields.reasoning_effort) {
             self.fields.reasoning_effort.clear();
@@ -351,7 +357,7 @@ impl CreateForm {
             permission_mode: Some(f.permission_mode),
             allow_dangerously_skip_permissions: (f.permission_mode == PermissionMode::BypassPermissions).then_some(true),
             setting_sources: caps.setting_sources.then(|| sources.iter().filter(|(on, _)| *on).map(|(_, s)| *s).collect()),
-            model: non_empty(&f.model),
+            model: non_empty(&f.model).or_else(|| self.default_model().map(str::to_owned)),
             max_turns: if caps.budgets { f.max_turns.trim().parse().ok() } else { None },
             max_budget_usd: if caps.budgets { f.max_budget_usd.trim().parse::<f64>().ok().filter(|v| v.is_finite()) } else { None },
             resume: is_resume.then(|| resume.to_owned()),
@@ -414,10 +420,10 @@ mod tests {
                    {"value":"sonnet","displayName":"Sonnet"},
                    {"value":"haiku","displayName":"Haiku","primary":false}],
          "defaultModel":"claude-opus-5"},
-        {"name":"cx","engine":"codex","models":[{"value":"gpt-5","displayName":"GPT-5"}]},
+        {"name":"cx","engine":"codex","models":[{"value":"gpt-5","displayName":"GPT-5"}],"defaultModel":"gpt-5"},
         {"name":"local","engine":"provider","provider":{"id":"openai","model":"m2","models":["m1","m2"]}},
         {"name":"bare","engine":"provider","provider":{"id":"openai"}},
-        {"name":"auto","engine":"claude","defaults":{"model":"sonnet","permissionMode":"auto"}},
+        {"name":"auto","engine":"claude","defaults":{"permissionMode":"auto"},"defaultModel":"sonnet"},
         {"name":"cxplan","engine":"codex","defaults":{"permissionMode":"plan"}}
     ]}"#;
 
@@ -532,7 +538,7 @@ mod tests {
     #[test]
     fn an_empty_model_takes_the_profile_default() {
         let mut form = CreateForm::new("/r".into(), None, None, None);
-        let body = r#"{"profiles":[{"name":"auto","defaults":{"model":"sonnet"},"models":[{"value":"sonnet","displayName":"Sonnet"}]}]}"#;
+        let body = r#"{"profiles":[{"name":"auto","defaultModel":"sonnet","models":[{"value":"sonnet","displayName":"Sonnet"}]}]}"#;
         form.set_profiles(body, none);
         assert_eq!(form.fields().model, "sonnet");
         assert_eq!(form.model_label(), "Sonnet");
@@ -561,25 +567,38 @@ mod tests {
     }
 
     #[test]
-    fn a_catalog_model_the_next_catalog_lacks_is_dropped() {
+    fn a_catalog_model_the_next_catalog_lacks_snaps_to_its_default() {
         let mut form = form();
         edit(&mut form, |f| f.model = "opus".into());
         pick(&mut form, "cx");
-        assert_eq!(form.fields().model, "");
-        edit(&mut form, |f| f.model = "gpt-5".into());
+        assert_eq!(form.fields().model, "gpt-5");
+        edit(&mut form, |f| f.model = "custom".into());
         pick(&mut form, "main");
-        assert_eq!(form.fields().model, "");
+        assert_eq!(form.fields().model, "claude-opus-5");
+    }
+
+    #[test]
+    fn the_default_model_follows_the_profile_until_one_is_picked() {
+        let mut form = form();
+        assert_eq!(form.fields().model, "claude-opus-5");
+        pick(&mut form, "auto");
+        assert_eq!(form.fields().model, "sonnet");
+        pick(&mut form, "main");
+        edit(&mut form, |f| f.model = "haiku".into());
+        pick(&mut form, "auto");
+        assert_eq!(form.fields().model, "haiku");
     }
 
     #[test]
     fn efforts_come_from_the_catalog_row_then_the_record() {
         let mut form = form();
-        assert_eq!(form.effort_options(), ["low", "medium", "high", "xhigh", "max"]);
-        edit(&mut form, |f| f.model = "claude-opus-5[1m]".into());
         assert_eq!(form.effort_options(), ["low", "high"]);
         assert_eq!(form.model_label(), "Opus");
         edit(&mut form, |f| f.model = "custom-id".into());
         assert_eq!(form.model_label(), "custom-id");
+        assert_eq!(form.effort_options(), ["low", "medium", "high", "xhigh", "max"]);
+        edit(&mut form, |f| f.model = "claude-opus-5[1m]".into());
+        assert_eq!(form.effort_options(), ["low", "high"]);
         pick(&mut form, "local");
         assert!(form.effort_options().is_empty());
     }
@@ -741,7 +760,7 @@ mod tests {
             body(form.call()),
             json!({
                 "name": "Ada",
-                "config": { "cwd": "/repo", "profile": "main", "permissionMode": "plan", "brief": "standing" },
+                "config": { "cwd": "/repo", "profile": "main", "model": "claude-opus-5", "permissionMode": "plan", "brief": "standing" },
                 "prompt": "go"
             })
         );

@@ -160,10 +160,9 @@ fun CreateScreen(model: CreateModel, recents: List<String>, onCreated: (Created)
             Heading("Model")
             when {
                 state.hasCatalog -> PickRow("Model", state.modelLabel) { sheet = Sheet.MODEL }
-                state.modelOptions.isEmpty() -> Field(fields.model, "Profile default") { v -> edit { it.copy(model = v) } }
+                state.modelOptions.isEmpty() -> Field(fields.model, "Model id") { v -> edit { it.copy(model = v) } }
                 else -> {
-                    val options = listOf("" to "Profile default") + state.modelOptions.map { it to it }
-                    Choice("Model", fields.model.ifEmpty { "Profile default" }, options) { v -> edit { it.copy(model = v) } }
+                    Choice("Model", fields.model, state.modelOptions.map { it to it }) { v -> edit { it.copy(model = v) } }
                 }
             }
             if (state.effortOptions.isNotEmpty()) {

@@ -441,12 +441,11 @@ struct SessionListView: View {
       let steps = item.row.steps
       if item.row.agent != nil {
         AgentCardView(
-          item: item, frames: model.agentAvatars.frames(key: item.row.avatarKey),
+          item: item,
           tray: item.row.tray.isEmpty && !item.row.teamExpanded
             ? nil
             : TeamTray(
               row: item.row,
-              frames: { model.agentAvatars.frames(key: $0.avatarKey) },
               select: { member in open(member, model: model) },
               toggle: { model.toggleTeam(item) }),
           onOpen: { path.append(route) },
@@ -482,7 +481,7 @@ struct SessionListView: View {
   private func memberUnit(_ item: ListItem, model: SessionListModel) -> some View {
     if let route = sessionRoute(for: item) {
       AgentCardView(
-        item: item, frames: model.agentAvatars.frames(key: item.row.avatarKey),
+        item: item,
         member: true,
         onOpen: {
           model.select(hostId: item.row.hostId, sessionId: item.row.sessionId)
@@ -577,7 +576,7 @@ struct SessionListView: View {
     } label: {
       Label(row.row.statusText != nil ? "Change status" : "Set status", systemImage: "text.bubble")
     }
-    if row.row.avatarKey != nil {
+    if row.row.agentId != nil {
       Button {
         Task { await model.changeAvatar(row) }
       } label: {
