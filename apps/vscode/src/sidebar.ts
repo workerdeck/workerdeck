@@ -43,7 +43,14 @@ import {
   type ViewConfig,
 } from './view-config.ts'
 import { WebviewViewHost } from './webview-host.ts'
-import { SESSION_ACTIONS, sessionActionCommand, sessionActions, teamLeadsFor, type SessionAction, type SessionMenuContext } from './session-menu.ts'
+import {
+  SESSION_ACTIONS,
+  sessionActionCommand,
+  sessionActions,
+  teamLeadsFor,
+  type SessionAction,
+  type SessionMenuContext,
+} from './session-menu.ts'
 import { ProjectIconCache } from './project-icons.ts'
 
 type ActionItem = vscode.QuickPickItem & { run: () => Promise<void> }
@@ -322,30 +329,34 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     const sessionId = info.id
     const agent = info.agent
     switch (action) {
-      case 'stop':
+      case 'stop': {
         return {
           label: '$(debug-stop) Stop',
           detail: 'Interrupt the turn in flight',
           run: () => this.#stopSession(hostId, sessionId),
         }
-      case 'moveToPanel':
+      }
+      case 'moveToPanel': {
         return {
           label: '$(layout-panel) Move to Panel',
           detail: 'Close the editor tab and show the session in the Agent panel',
           run: () => this.#delegate.moveToPanel(hostId, sessionId),
         }
-      case 'openInEditor':
+      }
+      case 'openInEditor': {
         return {
           label: '$(empty-window) Open in Editor Area',
           detail: 'Show the session in an editor tab (Cmd/Ctrl+click a session does the same)',
           run: () => this.#delegate.selectSession(hostId, sessionId, { target: 'editor' }),
         }
-      case 'setStatus':
+      }
+      case 'setStatus': {
         return {
           label: info.statusLabel ? '$(comment) Change status' : '$(comment) Set status',
           detail: 'The line under the name in the list; the agent can change it with set_status',
           run: () => this.#setStatus(hostId, info),
         }
+      }
       case 'newConversation': {
         const gate = newConversationGate(info)
         return {
@@ -361,25 +372,28 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           },
         }
       }
-      case 'sleep':
+      case 'sleep': {
         return {
           label: '$(debug-pause) Sleep',
           detail: 'Release the engine process; the next message wakes it',
           run: () => this.sleepSession(hostId, sessionId),
         }
-      case 'makeAgent':
+      }
+      case 'makeAgent': {
         return {
           label: '$(person) Make agent',
           detail: 'Keep this session as a named agent with an avatar',
           run: () => this.#agentCall(hostId, 'could not make an agent', (client) => client.nameSession(sessionId, {})),
         }
-      case 'leaveTeam':
+      }
+      case 'leaveTeam': {
         return {
           label: '$(sign-out) Leave team',
           detail: `Leave ${agent?.team ?? 'the team'} and stand on its own`,
           run: () => this.#agentCall(hostId, 'could not leave the team', (client) => client.updateAgent(agent!.id, { lead: null })),
         }
-      case 'addToTeam':
+      }
+      case 'addToTeam': {
         return {
           label: '$(organization) Add to team…',
           detail: 'Join another agent as a team member',
@@ -393,6 +407,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
             }
           },
         }
+      }
       case 'dissolveTeam': {
         const members = sessions.filter((s) => s.agent?.lead === agent!.id)
         return {
@@ -407,27 +422,31 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         }
       }
       case 'makePrivate':
-      case 'share':
+      case 'share': {
         return this.#sharingItem(hostId, agent!.id, action === 'makePrivate')
-      case 'changeAvatar':
+      }
+      case 'changeAvatar': {
         return {
           label: '$(smiley) Change avatar',
           detail: 'Pick a new avatar from a few candidates',
           run: () => this.#changeAvatar(hostId, sessionId),
         }
-      case 'editSettings':
+      }
+      case 'editSettings': {
         return {
           label: '$(settings-gear) Edit settings',
           detail: 'Project, profile, model, permission mode, instruction scope, sleep; saved on save',
           run: () => openAgentFile(hostId, agent!.id, agent!.name, 'settings'),
         }
-      case 'editBrief':
+      }
+      case 'editBrief': {
         return {
           label: '$(note) Edit brief',
           detail: 'The standing brief, as markdown; saved on save',
           run: () => openAgentFile(hostId, agent!.id, agent!.name, 'brief'),
         }
-      case 'conversations':
+      }
+      case 'conversations': {
         return {
           label: '$(history) Conversations…',
           detail: 'Past conversations open read-only',
@@ -442,18 +461,21 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
               },
             ),
         }
-      case 'deleteAgent':
+      }
+      case 'deleteAgent': {
         return {
           label: '$(trash) Delete agent…',
           detail: deleteAgentDetail(agent!.name),
           run: () => this.#deleteAgent(hostId, info),
         }
-      case 'delete':
+      }
+      case 'delete': {
         return {
           label: '$(trash) Delete',
           detail: 'Remove the session from the gateway',
           run: () => this.#deleteSession(hostId, sessionId),
         }
+      }
     }
   }
 

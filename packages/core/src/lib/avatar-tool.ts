@@ -19,8 +19,9 @@ const COLOR = z
   .optional()
   .describe(`A swatch (${FACE_SWATCHES.join(', ')}, or project for the project's colour), optionally /tone (${FACE_TONES.join(', ')})`)
 
-const part = <K extends readonly [string, ...string[]]>(kinds: K) =>
-  z.object({ kind: z.enum(kinds).optional(), color: COLOR }).optional()
+function part<K extends readonly [string, ...string[]]>(kinds: K) {
+  return z.object({ kind: z.enum(kinds).optional(), color: COLOR }).optional()
+}
 
 const CHANGE_AVATAR_TOOL_SHAPES = {
   [CHANGE_AVATAR_TOOL]: {

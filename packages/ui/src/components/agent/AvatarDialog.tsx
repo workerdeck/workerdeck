@@ -79,6 +79,10 @@ const LABELS: Record<Slot, string> = { backdrop: 'Backdrop', tile: 'Head', anten
 const DEFAULT_TONE: Record<Slot, FaceTone> = { backdrop: 'wash', tile: 'base', antenna: 'glow', visor: 'screen', eyes: 'glow', mouth: 'glow' }
 const SLOTS: readonly Slot[] = ['backdrop', 'tile', ...FACE_PARTS]
 
+function paint(color: string | undefined): { color?: string } {
+  return color === undefined ? {} : { color }
+}
+
 function splitColor(ref: string | undefined): { swatch: string; tone: string } {
   const [swatch, tone] = (ref ?? 'project').split('/')
   return { swatch: swatch || 'project', tone: tone ?? 'default' }
@@ -110,20 +114,19 @@ function FaceEditor({ client, agent, onClose, onChanged }: FaceEditorProps) {
   const kindOf = (slot: Slot): string | undefined => (slot === 'backdrop' ? undefined : slot === 'tile' ? resolved.tile.shape : resolved[slot].kind)
 
   const setColor = (slot: Slot, color: string | undefined) => {
-    const paint = color === undefined ? {} : { color }
+    const own = paint(color)
     setFace((held) => {
       if (slot === 'backdrop') {
         const { backdrop: _drop, ...rest } = held
         return color === undefined ? rest : { ...rest, backdrop: { color } }
       }
       if (slot === 'tile') {
-        return { ...held, tile: { shape: resolved.tile.shape, ...paint } }
+        return { ...held, tile: { shape: resolved.tile.shape, ...own } }
       }
-      return { ...held, [slot]: { kind: resolved[slot].kind, ...paint } }
+      return { ...held, [slot]: { kind: resolved[slot].kind, ...own } }
     })
   }
   const setKind = (slot: Slot, kind: string) => {
-    const paint = (color: string | undefined) => (color === undefined ? {} : { color })
     setFace((held) =>
       slot === 'tile'
         ? { ...held, tile: { shape: kind as FaceTileShape, ...paint(resolved.tile.color) } }

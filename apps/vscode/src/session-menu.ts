@@ -23,7 +23,9 @@ export const SESSION_ACTIONS = [
 
 export type SessionAction = (typeof SESSION_ACTIONS)[number]
 
-export const sessionActionCommand = (action: SessionAction | 'more'): string => `workerdeck.session.${action}`
+export function sessionActionCommand(action: SessionAction | 'more'): string {
+  return `workerdeck.session.${action}`
+}
 
 export type SessionMenuContext = { hostId: string; sessionId: string }
 

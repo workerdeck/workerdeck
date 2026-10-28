@@ -56,8 +56,24 @@ export const FACE_HUES: Record<FaceSwatch, number> = {
 }
 
 export const FACE_TONE_VALUES: Record<FaceTheme, Record<FaceTone, [number, number]>> = {
-  dark: { wash: [0.34, 0.05], base: [0.64, 0.095], deep: [0.48, 0.08], soft: [0.82, 0.05], glow: [0.86, 0.15], screen: [0.25, 0.025], ink: [0.23, 0.03] },
-  light: { wash: [0.91, 0.045], base: [0.7, 0.11], deep: [0.54, 0.1], soft: [0.93, 0.04], glow: [0.8, 0.16], screen: [0.3, 0.03], ink: [0.27, 0.035] },
+  dark: {
+    wash: [0.34, 0.05],
+    base: [0.64, 0.095],
+    deep: [0.48, 0.08],
+    soft: [0.82, 0.05],
+    glow: [0.86, 0.15],
+    screen: [0.25, 0.025],
+    ink: [0.23, 0.03],
+  },
+  light: {
+    wash: [0.91, 0.045],
+    base: [0.7, 0.11],
+    deep: [0.54, 0.1],
+    soft: [0.93, 0.04],
+    glow: [0.8, 0.16],
+    screen: [0.3, 0.03],
+    ink: [0.27, 0.035],
+  },
 }
 
 const OVERLAY_COLORS: Record<FaceTheme, Record<'bubble' | 'ink' | 'danger' | 'zz' | 'spark', string>> = {
@@ -96,6 +112,10 @@ export type FaceSvgOptions = {
 
 const RADIUS = { soft: 6, squircle: 9, boxy: 3.5 } as const
 
+function waveTop(amp: number): string {
+  return `M-8 0 q2 ${-amp} 4 0 t4 0${' t4 0'.repeat(12)}`
+}
+
 export function faceRadiusPx(size: number): number {
   return size === 40 || size === 32 ? 4 : size * 0.1
 }
@@ -123,15 +143,23 @@ export function faceSvg(options: FaceSvgOptions): string {
     const glow = swatchTone(ref, 'glow')
     const stem = `<rect x="15.2" y="1.5" width="1.6" height="5" rx=".8" fill="${deep}"/>`
     switch (kind) {
-      case 'ball':
+      case 'ball': {
         return stem + `<rect class="led" x="13.5" y="-1" width="5" height="5" rx="2.5" fill="${glow}"/>`
-      case 'square':
+      }
+      case 'square': {
         return stem + `<rect class="led" x="13.7" y="-.8" width="4.6" height="4.6" rx="1.1" fill="${glow}"/>`
-      case 'diamond':
-        return stem + `<g transform="rotate(45 16 1.5)"><rect class="led" x="13.9" y="-.6" width="4.2" height="4.2" rx="1" fill="${glow}"/></g>`
-      case 'triangle':
-        return stem + `<path class="led" d="M16 -1.2L19 3.4H13Z" fill="${glow}" stroke="${glow}" stroke-width="1.4" stroke-linejoin="round"/>`
-      case 'twin':
+      }
+      case 'diamond': {
+        return (
+          stem + `<g transform="rotate(45 16 1.5)"><rect class="led" x="13.9" y="-.6" width="4.2" height="4.2" rx="1" fill="${glow}"/></g>`
+        )
+      }
+      case 'triangle': {
+        return (
+          stem + `<path class="led" d="M16 -1.2L19 3.4H13Z" fill="${glow}" stroke="${glow}" stroke-width="1.4" stroke-linejoin="round"/>`
+        )
+      }
+      case 'twin': {
         return [10.5, 21.5]
           .map(
             (x) =>
@@ -139,8 +167,10 @@ export function faceSvg(options: FaceSvgOptions): string {
               `<rect class="led" x="${x - 2}" y="-.6" width="4" height="4" rx="2" fill="${glow}"/>`,
           )
           .join('')
-      default:
+      }
+      default: {
         return ''
+      }
     }
   }
 
@@ -174,16 +204,22 @@ export function faceSvg(options: FaceSvgOptions): string {
         : ''
     const painted = (shape: string): string => shape.replaceAll('/>', ` fill="${fill}"/>`) + glint(shape)
     switch (face.eyes.kind) {
-      case 'split':
-        return painted(`<rect x="8" y="14.3" width="6.6" height="4.4" rx="2.2"/><rect x="17.4" y="14.3" width="6.6" height="4.4" rx="2.2"/>`)
-      case 'slit':
+      case 'split': {
+        return painted(
+          `<rect x="8" y="14.3" width="6.6" height="4.4" rx="2.2"/><rect x="17.4" y="14.3" width="6.6" height="4.4" rx="2.2"/>`,
+        )
+      }
+      case 'slit': {
         return painted(`<rect x="7" y="15.4" width="18" height="2.2" rx="1.1"/>`)
-      case 'segments':
+      }
+      case 'segments': {
         return [0, 1, 2, 3]
           .map((i) => `<rect class="seg" style="--i:${i}" x="${8.1 + i * 4.2}" y="14.3" width="3.2" height="4.4" rx="1.3" fill="${fill}"/>`)
           .join('')
-      default:
+      }
+      default: {
         return painted(`<rect x="8" y="14.3" width="16" height="4.4" rx="2.2"/>`)
+      }
     }
   }
 
@@ -191,52 +227,68 @@ export function faceSvg(options: FaceSvgOptions): string {
     const fill = color(face.mouth.color, 'glow')
     const screen = swatchTone(face.mouth.color, 'screen')
     switch (face.mouth.kind) {
-      case 'grill':
+      case 'grill': {
         return (
           `<rect x="11.5" y="22.6" width="9" height="3.4" rx="1.2" fill="${screen}"/>` +
           [13.4, 15.55, 17.7].map((x) => `<rect x="${x}" y="23.3" width=".9" height="2" rx=".45" fill="${fill}" opacity=".85"/>`).join('')
         )
-      case 'vent':
+      }
+      case 'vent': {
         return (
           `<rect x="10.5" y="22.8" width="11" height="3" rx="1.5" fill="${screen}"/>` +
-          [12.3, 14.2, 16.1, 18, 19.9].map((x) => `<rect x="${x - 0.3}" y="23.6" width=".6" height="1.4" rx=".3" fill="${fill}" opacity=".85"/>`).join('')
+          [12.3, 14.2, 16.1, 18, 19.9]
+            .map((x) => `<rect x="${x - 0.3}" y="23.6" width=".6" height="1.4" rx=".3" fill="${fill}" opacity=".85"/>`)
+            .join('')
         )
-      case 'speaker':
-        return [11.5, 14.5, 17.5, 20.5].map((x) => `<rect x="${x - 0.9}" y="23.2" width="1.8" height="1.8" rx=".9" fill="${screen}"/>`).join('')
-      default:
+      }
+      case 'speaker': {
+        return [11.5, 14.5, 17.5, 20.5]
+          .map((x) => `<rect x="${x - 0.9}" y="23.2" width="1.8" height="1.8" rx=".9" fill="${screen}"/>`)
+          .join('')
+      }
+      default: {
         return ''
+      }
     }
   }
 
   const statusOverlay = (): string => {
     switch (state) {
-      case 'asleep':
+      case 'asleep': {
         return (
           `<g fill="none" stroke="${overlay('zz')}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">` +
           `<path class="z1" d="M24 2.2h3.2l-3.2 3.4h3.2"/><path class="z2" d="M28.4 -2.4h2.6l-2.6 2.8h2.6"/></g>`
         )
-      case 'attention':
+      }
+      case 'attention': {
         return (
           `<g class="bubble"><rect x="20.5" y="-3.5" width="12.5" height="10" rx="5" fill="${overlay('bubble')}"/>` +
           `<path d="M22.6 5.4l-1.6 3.1 4.1-2.4z" fill="${overlay('bubble')}"/>` +
           `<rect x="26" y="-1.6" width="1.6" height="4.2" rx=".8" fill="${overlay('ink')}"/>` +
           `<rect x="26" y="3.3" width="1.6" height="1.6" rx=".8" fill="${overlay('ink')}"/></g>`
         )
-      case 'failed':
+      }
+      case 'failed': {
         return (
           `<rect x="23.5" y="23.5" width="9.5" height="9.5" rx="4.75" fill="${overlay('danger')}"/>` +
           `<rect x="27.55" y="25.4" width="1.4" height="3.6" rx=".7" fill="#fff"/><rect x="27.55" y="29.7" width="1.4" height="1.4" rx=".7" fill="#fff"/>`
         )
-      case 'starting':
+      }
+      case 'starting': {
         return `<path class="spark" d="M28 -1.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" fill="${overlay('spark')}"/>`
-      case 'working':
+      }
+      case 'working': {
         return (
           `<g><rect x="20" y="-3" width="12" height="7" rx="3.5" fill="${color('steel', 'screen')}"/>` +
-          [22.2, 25.1, 28].map((x) => `<rect class="dot" x="${x}" y="-.3" width="1.8" height="1.8" rx=".9" fill="${color('steel', 'soft')}"/>`).join('') +
+          [22.2, 25.1, 28]
+            .map((x) => `<rect class="dot" x="${x}" y="-.3" width="1.8" height="1.8" rx=".9" fill="${color('steel', 'soft')}"/>`)
+            .join('') +
           `</g>`
         )
-      default:
+      }
+      default: {
         return ''
+      }
     }
   }
 
@@ -247,11 +299,12 @@ export function faceSvg(options: FaceSvgOptions): string {
     const level = Math.min(1, Math.max(0, options.context))
     const warn = level >= (options.threshold ?? 0.4)
     const fill = warn ? color('amber', 'base') : swatchTone(face.backdrop, 'deep')
-    const top = (amp: number) => `M-8 0 q2 ${-amp} 4 0 t4 0${' t4 0'.repeat(12)}`
     const wave = (amp: number, cls: string, opacity: number, paint = fill) =>
-      `<path class="wave ${cls}" d="${top(amp)}V40H-8Z" fill="${paint}" opacity="${opacity}"/>`
+      `<path class="wave ${cls}" d="${waveTop(amp)}V40H-8Z" fill="${paint}" opacity="${opacity}"/>`
     const back = warn ? wave(1.1, 'back', 0.7, color('amber', 'glow')) : wave(1.1, 'back', 0.45)
-    const crest = warn ? `<path class="wave crest" d="${top(0.8)}" fill="none" stroke="${color('amber', 'glow')}" stroke-width="1.1"/>` : ''
+    const crest = warn
+      ? `<path class="wave crest" d="${waveTop(0.8)}" fill="none" stroke="${color('amber', 'glow')}" stroke-width="1.1"/>`
+      : ''
     return (
       `<clipPath id="${id}-f"><rect x="0" y="0" width="32" height="32" rx="${rx}"/></clipPath>` +
       `<g clip-path="url(#${id}-f)"><g class="tide" style="transform:translateY(${(32 * (1 - level)).toFixed(2)}px)">` +
