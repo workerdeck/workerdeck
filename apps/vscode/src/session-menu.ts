@@ -59,7 +59,7 @@ export function sessionActions(info: SessionInfo, at: { surface?: 'editor' | 'pa
   if (agent && agent.lead === undefined) {
     actions.push(agent.shared ? 'makePrivate' : 'share')
   }
-  if (agent?.avatar) {
+  if (agent) {
     actions.push('changeAvatar')
   }
   if (agent) {

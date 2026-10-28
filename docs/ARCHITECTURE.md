@@ -619,9 +619,8 @@ roster** (epoch and revision, sent on `team.status`), and **the member's gateway
 agent's consent and current binding** (the join's op, which nothing read from a lead ever sets).
 Authorization needs both, plus local policy: a member is published to the relay only once its
 team spans gateways, and a third-gateway teammate is admitted only against a fresh cached roster
-of the lead. The relay routes and filters team frames but never owns membership. A gateway with an `AvatarProvider` (the CLI wires monkeyart)
-serves each agent's avatar (`GET /agents/:id/avatar.png`) from a persisted recipe, so no client
-ports the composer; without one, `avatar` is absent and clients draw the engine tile. Invariants: `docs/GOTCHAS.md` §Agents and teams.
+of the lead. The relay routes and filters team frames but never owns membership. An agent's avatar is a
+`face` recipe the gateway rolls and stores and every client draws as SVG; the gateway serves no image. Invariants: `docs/GOTCHAS.md` §Agents and teams.
 
 ## Version numbers
 

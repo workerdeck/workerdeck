@@ -45,7 +45,6 @@ import {
 import { WebviewViewHost } from './webview-host.ts'
 import { SESSION_ACTIONS, sessionActionCommand, sessionActions, teamLeadsFor, type SessionAction, type SessionMenuContext } from './session-menu.ts'
 import { ProjectIconCache } from './project-icons.ts'
-import type { AgentAvatarCache } from './agent-avatars.ts'
 
 type ActionItem = vscode.QuickPickItem & { run: () => Promise<void> }
 
@@ -99,7 +98,6 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
   readonly #context: vscode.ExtensionContext
   #viewConfig: ViewConfig
   readonly #icons: ProjectIconCache
-  readonly #avatars: AgentAvatarCache
 
   protected readonly bundle = 'sidebar.js'
 
@@ -108,7 +106,6 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     extensionUri: vscode.Uri,
     store: HostStore,
     model: SessionsModel,
-    avatars: AgentAvatarCache,
     delegate: SidebarDelegate,
   ) {
     super(extensionUri)
@@ -117,8 +114,6 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     this.#model = model
     this.#delegate = delegate
     this.#icons = new ProjectIconCache(store, () => this.post({ kind: 'wd-project-icons', icons: this.#icons.entries() }))
-    this.#avatars = avatars
-    avatars.onDidChange(() => this.post({ kind: 'wd-agent-avatars', avatars: this.#avatars.entries() }))
     this.#viewConfig = normalizeViewConfig(context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY))
     // Seeds the context keys, so the title bar shows the right toggle icons before the view opens.
     this.setSearchOpen(context.globalState.get<boolean>(SEARCH_OPEN_KEY) ?? false)
@@ -188,7 +183,6 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       const state = this.#model.sidebarState()
       this.post({ kind: 'wd-sidebar-state', state })
       this.#icons.ensure(state.sessions)
-      this.#avatars.ensure(state.sessions)
     }
     this.refreshUnread()
   }
@@ -214,7 +208,6 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
   protected override onReady(): void {
     // Whole, not incremental: a webview VS Code rebuilt has no map to merge into.
     this.post({ kind: 'wd-project-icons', icons: this.#icons.entries() })
-    this.post({ kind: 'wd-agent-avatars', avatars: this.#avatars.entries() })
     this.#pushState()
     // The webview boots with the bar closed and learns otherwise here: it cannot read a context key.
     this.post({ kind: 'wd-search-open', open: this.#searchOpen })
@@ -582,7 +575,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     )
   }
 
-  // The picker draws the candidates, so it lives in this webview; a request before the view has booted waits for `onReady`.
+  // The editor draws the faces, so it lives in this webview; a request before the view has booted waits for `onReady`.
   async #changeAvatar(hostId: string, sessionId: string): Promise<void> {
     const picker = { kind: 'wd-avatar-picker' as const, hostId, sessionId }
     if (this.view && this.ready) {

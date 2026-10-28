@@ -547,10 +547,10 @@ describe('agent teams in the list', () => {
     return row({ info: info({ id, agent, ...over }) })
   }
 
-  const lead = agentRow('s-lead', { id: 'A', name: 'Atlas', avatar: '/a', leads: true }, { lastActivityAt: 10 })
-  const pip = agentRow('s-pip', { id: 'P', name: 'Pip', avatar: '/p', lead: 'A', team: 'Atlas', order: 1 }, { pendingPermissionCount: 1 })
-  const juno = agentRow('s-juno', { id: 'J', name: 'Juno', avatar: '/j', lead: 'A', team: 'Atlas', order: 0 }, { status: 'running' })
-  const solo = agentRow('s-solo', { id: 'M', name: 'Marlow', avatar: '/m' }, { lastActivityAt: 5 })
+  const lead = agentRow('s-lead', { id: 'A', name: 'Atlas', leads: true }, { lastActivityAt: 10 })
+  const pip = agentRow('s-pip', { id: 'P', name: 'Pip', lead: 'A', team: 'Atlas', order: 1 }, { pendingPermissionCount: 1 })
+  const juno = agentRow('s-juno', { id: 'J', name: 'Juno', lead: 'A', team: 'Atlas', order: 0 }, { status: 'running' })
+  const solo = agentRow('s-solo', { id: 'M', name: 'Marlow' }, { lastActivityAt: 5 })
   const oneOff = row({ info: info({ id: 's-old', status: 'closed' }) })
   const all = [lead, pip, juno, solo, oneOff]
 
@@ -582,7 +582,7 @@ describe('agent teams in the list', () => {
 
   it('draws a member on another gateway under its lead when that gateway is configured, top-level otherwise', () => {
     const remote = {
-      ...agentRow('s-win', { id: 'W', name: 'MagWin', avatar: '/w', lead: 'sw-mac:A', leadGateway: 'sw-mac', team: 'Atlas' }),
+      ...agentRow('s-win', { id: 'W', name: 'MagWin', lead: 'sw-mac:A', leadGateway: 'sw-mac', team: 'Atlas' }),
       hostId: 'win',
     }
     const rows = [lead, remote]
@@ -625,7 +625,7 @@ describe('teamView', () => {
   const quiet = member('s-quiet')
   const gone = member('s-gone', { status: 'closed' })
   const lead: SessionRow = {
-    ...row({ info: info({ id: 's-lead', agent: { id: 'A', name: 'Atlas', avatar: '/a', leads: true } }) }),
+    ...row({ info: info({ id: 's-lead', agent: { id: 'A', name: 'Atlas', leads: true } }) }),
     members: [busy, asks, unread, recent, quiet, gone],
   }
   const ids = (rows: SessionRow[]) => rows.map((r) => r.info.id)

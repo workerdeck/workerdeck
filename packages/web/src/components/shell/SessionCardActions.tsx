@@ -144,7 +144,7 @@ export function SessionCardActions({
           <Item icon={<MessageSquareText />} onClick={() => onAction({ kind: 'status' })}>
             {row.info.statusLabel ? 'Change status' : 'Set status'}
           </Item>
-          {agent?.avatar ? (
+          {agent ? (
             <Item icon={<Smile />} onClick={() => onAction({ kind: 'avatar' })}>
               Change avatar
             </Item>

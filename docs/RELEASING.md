@@ -1444,8 +1444,7 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   **1** (every wire addition is optional: `SessionInfo.agent`, `AgentRef`, `PeerSessionSummary.agent`,
   `AgentRef.conversation`; `/agents` is a new operator-only route family). Ships: agents as gateway
   records persisted to `<state-dir>/agents.json`, one-level teams and the `teamReaches` peers rule,
-  the brief as host instructions, avatars as an optional `AvatarProvider` (the CLI wires monkeyart
-  0.3.0, so `@monkeyart/*` became CLI dependencies), agent sleep (`agentSleepAfterMs`,
+  the brief as host instructions, avatars, agent sleep (`agentSleepAfterMs`,
   `--agent-sleep-after`, VS Code `agentSleepAfterMinutes`), the session list's team units (folded
   team tray on the lead line, Earlier fold), drag to join, `AgentHeading`, the web New agent dialog
   and card verbs, VS Code New Agent, team verbs, avatar tabs, and `#` mentions by agent name. Agent
@@ -1462,11 +1461,9 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   read the dormant record before the file existed (a race CI hit, local runs did not); never
   publish it. 3.6.1 is the same content with that test fixed. A
   **minor**, protocol stays **1** (`SessionInfo.statusLabel`, the `status_label` event,
-  `UpdateSessionRequest.statusLabel`, `AgentRef.avatar` gaining `?v=` are all additive). Ships:
+  `UpdateSessionRequest.statusLabel` are all additive). Ships:
   `set_status` on every engine (event-log folded, cleared by a reset, kept by the dormant record),
-  `change_avatar` + `POST /agents/:id/avatar` + `avatar-preview.png` (avatar served `no-cache`),
-  monkeyart packs monkey / steampunk-bulldogs / toad by default (`--avatar-packs`; recipes now
-  `{ pack, recipe }`, bare ones still draw), custom group colour / image badges, orange attention
+  `change_avatar` + `POST /agents/:id/avatar`, custom group colour / image badges, orange attention
   cards, the card layout change. **Verified**: full `pnpm test`, the web avatar picker and group
   badge in a browser, status label persistence across a gateway restart (server test). **Not
   verified**: a paid smoke of `set_status` / `change_avatar`, the VS Code picker and tab icons, iOS

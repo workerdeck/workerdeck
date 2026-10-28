@@ -1,6 +1,6 @@
 import { STATE_LABELS, sessionLabel } from '@workerdeck/protocol'
 import type { SessionRow } from '@workerdeck/protocol'
-import { AgentAvatar, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
+import { AgentAvatar } from './AgentAvatar.tsx'
 import { statusLine } from './SessionItem.tsx'
 import { SessionStatusIcon } from './SessionStatusIcon.tsx'
 import { formatRelativeTime, friendlyModel } from '../../lib/format.ts'
@@ -8,11 +8,9 @@ import { vendorTextClass } from './EngineIcon.tsx'
 
 export function MemberCard({
   member,
-  avatars,
   onConversations,
 }: {
   member: SessionRow
-  avatars?: AgentAvatars
   onConversations?: () => void
 }) {
   const { info } = member
@@ -28,7 +26,7 @@ export function MemberCard({
   return (
     <div className="flex w-64 flex-col gap-2.5">
       <div className="flex items-center gap-2.5">
-        <AgentAvatar row={member} image={avatarOf(avatars, info.agent)} size={40} />
+        <AgentAvatar row={member} size={32} />
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-body-sm font-medium text-fg-1">{name}</span>
           <span className="flex items-center gap-1.5 text-label text-fg-3">

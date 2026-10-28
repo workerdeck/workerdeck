@@ -93,7 +93,7 @@ describe('peer service: send', () => {
 
   it("names an agent's session by its agent name, not its session title", async () => {
     const registry = new SessionRegistry()
-    const agent: AgentRef = { id: 'B', name: 'Box-Lead', avatar: '' }
+    const agent: AgentRef = { id: 'B', name: 'Box-Lead' }
     const service = createPeerService({
       refs: { registry },
       projects: new ProjectInfoService({ decorate: (info) => (info.id === 'b' ? { ...info, agent } : info) }),
@@ -280,12 +280,12 @@ function macVouches(ref: { id: string; lead?: string }, gateway: string, accepts
 
 describe('peer service: teams', () => {
   const refs: Record<string, AgentRef> = {
-    lead: { id: 'A', name: 'Atlas', avatar: '', leads: true },
-    m1: { id: 'P', name: 'Pip', avatar: '', lead: 'A', team: 'Atlas' },
-    m2: { id: 'J', name: 'Juno', avatar: '', lead: 'A', team: 'Atlas' },
-    solo: { id: 'M', name: 'Marlow', avatar: '' },
-    otherLead: { id: 'O', name: 'Orbit', avatar: '', leads: true },
-    otherMember: { id: 'F', name: 'Fern', avatar: '', lead: 'O', team: 'Orbit' },
+    lead: { id: 'A', name: 'Atlas', leads: true },
+    m1: { id: 'P', name: 'Pip', lead: 'A', team: 'Atlas' },
+    m2: { id: 'J', name: 'Juno', lead: 'A', team: 'Atlas' },
+    solo: { id: 'M', name: 'Marlow' },
+    otherLead: { id: 'O', name: 'Orbit', leads: true },
+    otherMember: { id: 'F', name: 'Fern', lead: 'O', team: 'Orbit' },
   }
 
   function teamRig(spanning: string[] = []) {

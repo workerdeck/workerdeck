@@ -41,8 +41,7 @@
             "agent": {
               "id": "ag-lead",
               "name": "WD-Lead",
-              "leads": true,
-              "avatar": "monkey:12"
+              "leads": true
             },
             "owner": "tobias",
             "lastActivityAt": 1760000005000,
@@ -110,8 +109,7 @@
             "agent": {
               "id": "ag-lead",
               "name": "WD-Lead",
-              "leads": true,
-              "avatar": "monkey:12"
+              "leads": true
             },
             "owner": "tobias",
             "lastActivityAt": 1760000005000,

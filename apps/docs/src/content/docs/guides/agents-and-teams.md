@@ -107,7 +107,12 @@ turns it off), the VS Code setting `workerdeck.host.agentSleepAfterMinutes`, or 
 
 ## Avatars
 
-The `workerdeck` CLI draws avatars with monkeyart (art under CC BY 4.0). *Change avatar* in a card's
-menu shows a few candidates to pick from, and an agent can give itself a new one with the
-`change_avatar` tool. A gateway embedded without an avatar provider sends no `avatar`, and every
-client draws an engine tile instead.
+Every agent wears a small robot: a head, an antenna, a visor, eyes and a mouth on a rounded
+backdrop, each part a kind and a colour. A new agent gets a random one in its project's colour. The
+robot also shows what the agent is doing: it blinks when idle, scans and types while working, holds
+up a `!` when it needs you, and dozes when its engine sleeps. On the agent's card the backdrop fills
+with its context use, and turns amber when it is time to wrap up.
+
+*Change avatar* in a card's menu opens an editor: start from a few random robots, then pick each
+part's kind and colour. An agent can change its own with the `change_avatar` tool, either rerolling
+or naming the parts it wants (`eyes: { kind: "slit", color: "teal" }`).

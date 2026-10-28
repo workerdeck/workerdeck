@@ -9,7 +9,6 @@
           "createdAt": 1760000000000,
           "updatedAt": 1760000000000,
           "config": {},
-          "avatar": "monkey:3",
           "sharing": "shared",
           "order": 4
         },
@@ -87,7 +86,6 @@
     {
       "id": "ag-1",
       "name": "AG-1",
-      "avatar": "monkey:3",
       "shared": true,
       "order": 4
     },

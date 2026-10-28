@@ -7,7 +7,7 @@ import { syncVsCodeTheme } from './theme.ts'
 import { App } from './App.tsx'
 
 syncVsCodeTheme()
-const bridge = new Bridge(['wd-show-session', 'wd-peer-avatars'])
+const bridge = new Bridge(['wd-show-session', 'wd-peer-rows'])
 
 const root = document.getElementById('root')
 if (!root) {

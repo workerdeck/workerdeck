@@ -1928,32 +1928,29 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   plain sessions on 5 min and agents on `never` leaves agents awake. CLI `--agent-sleep-after`
   (`never` maps to 0), VS Code `workerdeck.host.agentSleepAfterMinutes` (default 15, passed only
   when it differs, as `never` for 0).
-- **Avatars are an optional `AvatarProvider`** (`ServerOptions.avatars`); the server imports no
-  art. The CLI wires monkeyart (`packages/cli/src/lib/avatars.ts`). Without a provider,
-  `AgentInfo.avatar` / `AgentRef.avatar` are absent, the avatar routes answer 404, and clients draw
-  the engine tile. The URL is derived on the way out, never stored, so adding or removing a
-  provider changes every agent at once.
-- **The avatar is rolled once and persisted** (`avatarRecipe` on the stored agent, never in
-  `AgentInfo`), at create or naming time, or at the first avatar request. The recipe is opaque to the server;
-  swapping providers leaves old recipes that the new one must tolerate. Monkeyart renders through
-  `resolveRecipe`, so a rebuilt pack draws the stored sprite as-is (never a silent re-roll). The
-  route sends the provider's `ETag` (monkeyart: pack checksum + recipe) and answers `If-None-Match`
-  with 304; the busy strip (`avatar-busy.png`, one row of frames plus `x-frame-durations`) is 404
-  when the provider has no busy animation; monkey has one since 0.3.0. The pack PNG is ~1 MB, so
-  it loads lazily. The art is CC BY 4.0 (`@monkeyart/packs` carries `LICENSE-ART`): credit it
-  wherever it is shown.
-- **Changing an avatar is a new seed** (`POST /agents/:id/avatar { seed? }`, random without one;
-  `GET /agents/:id/avatar-preview.png?seed=` renders a candidate without saving). The seed also
-  versions the address (`avatar.png?v=<sha1>`, absent while the seed is still the agent id), because
-  every client cache is keyed by `AgentRef.avatar`; the image itself is served `no-cache` and
-  revalidated by `ETag`, since the bare route is stable per agent. The agent's `change_avatar` tool
-  is stamped only on an agent's session (`BuildOptions.agent` on create, `agents.get(id)` on every
-  rebuild), so a session named by PATCH gets it at its next wake, not at once.
-- **Several packs, chosen by the seed** (CLI `MonkeyartAvatars(packs)`, `--avatar-packs` /
-  `avatarPacks`, default monkey, steampunk-bulldogs, toad). A seed `<pack>:<rest>` names its pack,
-  any other one picks an enabled pack by its hash, so a picker of random seeds spreads across them.
-  The stored recipe is `{ pack, recipe }`; a bare one predates packs and draws as a monkey. Only
-  monkey and toad have the busy strip; the others fall back to the spinner badge.
+- **An avatar is a face: a recipe, never an image.** `AgentInfo.face` / `AgentRef.face`
+  (`AgentFace`, `packages/protocol/src/faces.ts`) names a kind and a colour for a fixed set of
+  slots (backdrop, tile, antenna, visor, eyes, mouth); clients draw it as SVG (`faceSvg`,
+  `packages/ui/src/lib/face-svg.ts`). The gateway draws nothing and serves no image route; it rolls,
+  validates (`agentFaceError`, size capped at `AGENT_FACE_MAX_BYTES`) and stores. Unknown kinds draw
+  as their slot's first kind, so an older client survives a newer kit.
+- **Colours are swatches, never hex.** A colour is `<swatch>[/<tone>]`; `project` stands for the
+  session's project swatch (`projectSwatch(info.project?.root ?? info.cwd)`, the `PROJECT_ACCENTS`
+  order), so a face follows its project and an absent colour means the project. Tones are per-theme
+  OKLCH custom properties (`--sw-<swatch>-<tone>` in `theme.css`), which `faceThemeDeclarations`
+  must agree with: VS Code's tab icons are written with the literal values.
+- **A roll is deterministic per seed and project** (`rollFace(seed, projectSwatch)`): a new agent
+  rolls from its id, `POST /agents/:id/avatar { seed? }` rerolls (random without one) and stores the
+  seed, `{ face }` replaces the face whole. `change_avatar` takes the same seed, or per-part
+  `{ kind?, color? }` args merged over the current face (`mergeAgentFace`). The tool is stamped only
+  on an agent's session (`BuildOptions.agent` on create, `agents.get(id)` on every rebuild), so a
+  session named by PATCH gets it at its next wake, not at once.
+- **The face carries the status, not a badge.** `faceStateOf` maps the row (a folded lead passes its
+  team's state) to idle, asleep, starting, working, attention, failed or closed; CSS keyframes on
+  `svg.wd-face.st-<state>` animate transform and opacity only, offset per agent by `--d` from the id
+  hash, and stop under `prefers-reduced-motion`. The markup is set as `innerHTML` and React only
+  rewrites it when the string changes, so a poll that changes nothing never restarts an animation.
+  The agent card also fills the backdrop to context use, amber from `CONTEXT_WRAP_UP_DEFAULT`.
 
 ## Relay (cross-gateway peers)
 
@@ -3729,16 +3726,12 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   persisted `{ hostId, sessionId, cwd }` alone, titles it by short id, and lets the next
   `model.onDidChange` retitle it; a restored tab on the panel's remembered session converts the
   panel to the held state, whichever of the two restores first.
-- **An agent's tab wears its avatar and its name.** `syncTab` (every `model.onDidChange`, and every
-  `AgentAvatarCache.onDidChange`) titles the tab with `sessionTitle`: the agent name, plus
-  `· <lead> team` for a member, never the session title. `iconPath` needs a file, so the cache writes
-  each fetched still to `<globalStorageUri>/agent-avatars/<sha1 of the avatar path>.png` and the tab
-  swaps its state dot for it; no avatar, a failed fetch or a failed write keeps the dot. The avatar
-  replaces the state dot, so an agent tab does not show working or attention. The cache is one
-  instance shared with the Sessions view, which reads its data URLs.
-
-## VS Code Host Mode (the supervised `workerdeck` child)
-
+- **An agent's tab wears its face and its name.** `syncTab` (every `model.onDidChange`, and every
+  `AgentFaceIcons.onDidChange`) titles the tab with `sessionTitle`: the agent name, plus
+  `· <lead> team` for a member, never the session title. `iconPath` needs files, so each face is
+  written once per theme to `<globalStorageUri>/agent-faces/<hash>-{light,dark}.svg` with literal
+  OKLCH colours and the tab swaps its state dot for it; a failed write keeps the dot. The face
+  replaces the state dot, so an agent tab does not show working or attention.
 - **Every `workerdeck.host.*` setting is `scope: "machine"`, never `machine-overridable"`.** The
   overridable variant lets a workspace win, and a `bindAddress: "0.0.0.0"` in a cloned repo's
   `.vscode/settings.json` would expose an agent runner on the LAN the moment the folder is

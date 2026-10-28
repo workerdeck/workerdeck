@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { BedDouble, ChevronDown, ChevronRight, FolderOpen, Layers, Pencil, Plus, RotateCcw, Search, SearchX, Trash2, X } from 'lucide-react'
+import { BedDouble, ChevronDown, ChevronRight, ChevronUp, FolderOpen, Layers, Pencil, Plus, RotateCcw, Search, SearchX, Trash2, X } from 'lucide-react'
 import {
   clearFilters,
   filterRows,
@@ -39,7 +39,7 @@ import type {
   ViewConfig,
   WorkspaceScope,
 } from '@workerdeck/protocol'
-import { AgentAvatar, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
+import { AgentAvatar } from './AgentAvatar.tsx'
 import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
 import { HoverCard } from '../ui/HoverCard.tsx'
@@ -85,7 +85,6 @@ export interface SessionBrowserProps {
   onSelectShell?: (row: SessionRow, shellId: string) => void
   onKillShell?: (row: SessionRow, shellId: string) => void
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
-  avatars?: AgentAvatars
   // A "Conversations" link on an agent's hover card.
   onAgentConversations?: (row: SessionRow) => void
   // Makes cards draggable onto each other: the middle of a card joins its team, a member dropped outside leaves.
@@ -138,7 +137,6 @@ export function SessionBrowser({
   onKillShell,
   onShellAgentWrite,
   onAgentConversations,
-  avatars,
   onTeamMove,
   relays,
   onCreateInGroup,
@@ -364,7 +362,6 @@ export function SessionBrowser({
                         expandedSteps={expandedStepsOf(config, member)}
                         onToggleSteps={(kind) => onConfigChange(toggleStepsExpanded(config, member, kind))}
                         projectIcons={projectIcons}
-                        avatars={avatars}
                         tile={tiles}
                         onSelect={onSelect}
                         onDelete={onDelete}
@@ -383,20 +380,28 @@ export function SessionBrowser({
                     if (!row.members?.length) {
                       return item(row, 'card', { className: row.context ? 'opacity-50' : undefined })
                     }
+                    const view = views.get(sessionKey(row)) ?? { expanded: false, shown: row.members, tray: [] }
+                    const nested = view.shown.length > 0
+                    const leadActive = isActive(row)
                     return (
                       <TeamBlock
                         key={sessionKey(row)}
                         lead={row}
-                        view={views.get(sessionKey(row)) ?? { expanded: false, shown: row.members, tray: [] }}
-                        avatars={avatars}
+                        view={view}
+                        leadActive={leadActive}
                         selected={row.members.find(isActive)}
                         peeked={peeked}
                         now={now}
                         onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
                         onSelectMember={(member) => onSelect?.(member, { meta: false, ctrl: false, alt: false })}
                         onConversations={onAgentConversations}
-                        renderLead={(tray) => item(row, 'card', { className: row.context ? 'opacity-50' : undefined, teamTray: tray })}
-                        renderMember={(member) => item(member, 'member')}
+                        renderLead={(tray) =>
+                          item(row, 'card', {
+                            className: cn(row.context && 'opacity-50', nested && 'hover:bg-transparent', nested && leadActive && 'bg-transparent'),
+                            teamTray: tray,
+                          })
+                        }
+                        renderMember={(member) => item(member, 'member', leadActive ? { className: 'hover:bg-fg-1/5' } : {})}
                       />
                     )
                   })}
@@ -417,7 +422,6 @@ function iconSrcOf(row: SessionRow | undefined, icons: Record<string, string> | 
 interface SessionRowItemProps {
   row: SessionRow
   variant?: 'card' | 'member'
-  avatars?: AgentAvatars
   teamTray?: ReactNode
   tile?: boolean
   className?: string
@@ -454,7 +458,6 @@ interface SessionRowItemProps {
 function SessionRowItem({
   row,
   variant,
-  avatars,
   teamTray,
   tile,
   className,
@@ -494,7 +497,6 @@ function SessionRowItem({
     <SessionItem
       row={row}
       variant={variant}
-      avatars={avatars}
       teamTray={teamTray}
       tile={tile}
       className={className}
@@ -586,12 +588,13 @@ function SessionRowItem({
 
 const TRAY_MAX = 4
 
-// Auto draws the members `teamView` shows under the lead and the rest as a tray on its first line: an avatar selects
-// that member, the trailing `+N` or chevron expands the team. Expanded, the knob atop the tree line returns it to Auto.
+// Auto draws the members `teamView` shows inside the team's card under the lead, and the rest as a tray on its first
+// line: a face selects that member, the trailing `+N` or chevron expands the team. Expanded, the lead's `^ N` chip returns
+// it to Auto.
 function TeamBlock({
   lead,
   view,
-  avatars,
+  leadActive,
   selected,
   peeked,
   now,
@@ -603,7 +606,7 @@ function TeamBlock({
 }: {
   lead: SessionRow
   view: TeamView
-  avatars?: AgentAvatars
+  leadActive: boolean
   selected?: SessionRow
   peeked?: ReadonlySet<string>
   now?: number
@@ -633,11 +636,11 @@ function TeamBlock({
                 }}
                 className="flex shrink-0 rounded-[3px] hover:ring-1 hover:ring-border"
               >
-                <AgentAvatar row={member} image={avatarOf(avatars, member.info.agent)} size={16} title="" className="rounded-[3px]" />
+                <AgentAvatar row={member} size={16} title="" />
               </button>
             }
           >
-            <MemberCard member={member} avatars={avatars} onConversations={onConversations ? () => onConversations(member) : undefined} />
+            <MemberCard member={member} onConversations={onConversations ? () => onConversations(member) : undefined} />
           </HoverCard>
         )
       })}
@@ -655,25 +658,32 @@ function TeamBlock({
         {overflow ? `+${view.tray.length - avatarsShown.length}` : <ChevronRight className="size-3" />}
       </button>
     </span>
+  ) : view.expanded ? (
+    <button
+      type="button"
+      aria-expanded
+      aria-label={`Show only active Team Members of ${team}`}
+      title="Show only active Members"
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+      className="flex h-4 shrink-0 items-center gap-0.5 rounded-[4px] px-0.5 text-label text-fg-3 tabular-nums hover:bg-row-hover hover:text-fg-1"
+    >
+      <ChevronUp className="size-3" />
+      {lead.members?.length ?? view.shown.length}
+    </button>
   ) : undefined
+  const nested = view.shown.length > 0
   return (
-    <div data-slot="team" data-expanded={view.expanded || undefined} className="flex flex-col">
+    <div
+      data-slot="team"
+      data-expanded={view.expanded || undefined}
+      className={cn('flex flex-col rounded-[8px]', nested && (leadActive ? 'bg-row-selected' : 'bg-row-nest'))}
+    >
       {renderLead(tray)}
-      {view.shown.length ? (
-        <div className="relative ml-3.5 flex flex-col pl-1">
-          <span aria-hidden className="absolute top-0 bottom-3 left-0 w-px bg-border" />
-          {view.expanded ? (
-            <button
-              type="button"
-              aria-expanded
-              aria-label={`Show only active Team Members of ${team}`}
-              title="Show only active Members"
-              onClick={onToggle}
-              className="absolute -top-1 -left-[7px] flex size-3.5 items-center justify-center rounded-full border border-border bg-bg text-fg-4 hover:text-fg-1"
-            >
-              <ChevronDown className="size-2.5" />
-            </button>
-          ) : null}
+      {nested ? (
+        <div className="flex flex-col gap-1 p-1">
           {view.shown.map((member) => (
             <div key={sessionKey(member)} className="relative">
               {renderMember(member)}

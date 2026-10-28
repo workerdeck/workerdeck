@@ -1,3 +1,4 @@
+import type { FaceIcon } from './agent-faces.ts'
 import * as vscode from 'vscode'
 import type { SessionInfo, SessionState } from '@workerdeck/protocol'
 import type { HostStore } from './hosts.ts'
@@ -37,7 +38,7 @@ export class SessionEditorTab extends SessionSurface<vscode.WebviewPanel> implem
   readonly #tabDelegate: TabDelegate
   #panel: vscode.WebviewPanel | undefined
   #state: SessionState = 'idle'
-  #avatar: vscode.Uri | undefined
+  #avatar: FaceIcon | undefined
   #disposed = false
 
   private constructor(extensionUri: vscode.Uri, store: HostStore, delegate: TabDelegate) {
@@ -142,8 +143,8 @@ export class SessionEditorTab extends SessionSurface<vscode.WebviewPanel> implem
     }
   }
 
-  setAvatar(avatar: vscode.Uri | undefined): void {
-    if (this.#avatar?.toString() === avatar?.toString()) {
+  setAvatar(avatar: FaceIcon | undefined): void {
+    if (this.#avatar?.dark.toString() === avatar?.dark.toString()) {
       return
     }
     this.#avatar = avatar
@@ -152,7 +153,7 @@ export class SessionEditorTab extends SessionSurface<vscode.WebviewPanel> implem
     }
   }
 
-  #icon(): vscode.Uri {
+  #icon(): vscode.Uri | FaceIcon {
     return this.#avatar ?? stateIcon(this.#state)
   }
 

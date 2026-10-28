@@ -38,8 +38,6 @@ export type RetiredAgentInfo = {
   name: string
   owner?: string
   face?: AgentFace
-  // @deprecated `face` is the avatar.
-  avatar?: string
   retiredAt: number
   conversations: AgentConversation[]
 }

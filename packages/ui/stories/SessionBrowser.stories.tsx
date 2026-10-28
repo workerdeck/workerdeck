@@ -1,3 +1,4 @@
+import { rollFace } from '@workerdeck/protocol'
 import { useState } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { DEFAULT_VIEW_CONFIG } from '@workerdeck/protocol'
@@ -103,21 +104,8 @@ export const Custom: Story = {
   ),
 }
 
-function avatar(name: string): string {
-  return new URL(`./avatars/${name}.png`, import.meta.url).href
-}
-
-const AVATARS = Object.fromEntries(
-  ['atlas', 'pip', 'juno', 'rook', 'marlow', 'orbit', 'fern'].map((name) => [
-    `/v1/agents/${name}/avatar.png`,
-    name === 'juno'
-      ? { still: avatar(name), busy: { src: avatar('juno-busy'), durations: [160, 160, 160, 160] } }
-      : { still: avatar(name) },
-  ]),
-)
-
 function agent(id: string, name: string, team: { lead?: string; team?: string; leads?: true; order?: number } = {}) {
-  return { id, name, avatar: `/v1/agents/${id}/avatar.png`, ...team }
+  return { id, name, face: rollFace(id, 'blue'), ...team }
 }
 
 const TEAM_ROWS = [
@@ -185,7 +173,7 @@ export const Teams: Story = {
   render: () => (
     <Browser
       rows={TEAM_ROWS}
-      avatars={AVATARS}
+     
       activeId="t3"
       showControls={false}
       onRenameAgent={() => {}}
@@ -196,7 +184,7 @@ export const Teams: Story = {
 
 export const TeamsExpanded: Story = {
   render: () => (
-    <Browser rows={TEAM_ROWS} avatars={AVATARS} activeId="t3" showControls={false} initial={{ groupBy: 'none', expandedTeams: ['local:atlas'] }} />
+    <Browser rows={TEAM_ROWS} activeId="t3" showControls={false} initial={{ groupBy: 'none', expandedTeams: ['local:atlas'] }} />
   ),
 }
 
@@ -232,11 +220,11 @@ const AUTO_ROWS = [
 
 // Juno went idle a second ago, so its row carries the linger countdown; hover a tray avatar for its card.
 export const TeamsAuto: Story = {
-  render: () => <Browser rows={AUTO_ROWS} avatars={AVATARS} showControls={false} initial={{ groupBy: 'none' }} />,
+  render: () => <Browser rows={AUTO_ROWS} showControls={false} initial={{ groupBy: 'none' }} />,
 }
 
 export const TeamsByState: Story = {
-  render: () => <Browser rows={TEAM_ROWS} avatars={AVATARS} showControls={false} initial={{ groupBy: 'state' }} />,
+  render: () => <Browser rows={TEAM_ROWS} showControls={false} initial={{ groupBy: 'state' }} />,
 }
 
 function applyMove(rows: SessionRow[], move: TeamMove): SessionRow[] {
@@ -264,7 +252,7 @@ function DraggableTeams() {
   return (
     <Browser
       rows={rows}
-      avatars={AVATARS}
+     
       showControls={false}
       initial={{ groupBy: 'none' }}
       onTeamMove={(move) => {
@@ -282,8 +270,8 @@ export const TeamsDrag: Story = { render: () => <DraggableTeams /> }
 export const Heading: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      <AgentHeading row={TEAM_ROWS[0]!} image={AVATARS['/v1/agents/atlas/avatar.png']} conversation={3} />
-      <AgentHeading row={TEAM_ROWS[2]!} image={AVATARS['/v1/agents/juno/avatar.png']} conversation={1} />
+      <AgentHeading row={TEAM_ROWS[0]!} conversation={3} />
+      <AgentHeading row={TEAM_ROWS[2]!} conversation={1} />
       <AgentHeading row={TEAM_ROWS[4]!} />
     </div>
   ),

@@ -22,7 +22,7 @@ import {
   createWorkerServer,
   type WorkerServerOptions,
 } from '../src/index.ts'
-import { createMemoryAgentStore, type StoredAgent } from '../src/services/agent-store.ts'
+import { createMemoryAgentStore } from '../src/services/agent-store.ts'
 import { AgentService } from '../src/services/agents.ts'
 import { fakeHarness, fileRuntimeStore, gatewayFixture, listenOn } from './helpers.ts'
 
@@ -116,7 +116,6 @@ describe('agents', () => {
     expect(agent).toMatchObject({ name: 'Atlas', id: session!.id, face: { v: 1 } })
     expect(isAgentFace(agent.face)).toBe(true)
     expect(agent).not.toHaveProperty('avatarSeed')
-    expect(agent).not.toHaveProperty('avatar')
     expect(session!.agent).toEqual({ id: agent.id, name: 'Atlas', face: agent.face })
 
     const listed = await call<{ sessions: SessionInfo[] }>(base, '/sessions')
@@ -397,27 +396,6 @@ describe('agents', () => {
     const merged = (await tools.change_avatar!.handler({ visor: { kind: 'band' }, eyes: { color: 'amber' } }, {})) as Out
     expect(merged.content[0]!.text).toMatch(/avatar is changed/)
     expect((await listed()).face).toEqual({ ...heron, visor: { ...heron.visor, kind: 'band' }, eyes: { ...heron.eyes, color: 'amber' } })
-  })
-
-  it('rolls a face from the stored seed for a record from before faces, and drops its pixel recipe', async () => {
-    const store = createMemoryAgentStore([
-      {
-        id: 'old-1',
-        schema: 1,
-        name: 'Elder',
-        createdAt: 1,
-        updatedAt: 1,
-        avatarSeed: 'otter',
-        config: { cwd: '/tmp/project' },
-        avatarRecipe: { pack: 'monkey', recipe: {} },
-      } as StoredAgent,
-    ])
-    const agents = new AgentService({ store })
-    await agents.hydrate()
-    const held = agents.get('old-1')!
-    expect(held.face).toEqual(rollFace('otter', projectSwatch('/tmp/project')))
-    expect(held).not.toHaveProperty('avatarRecipe')
-    expect(agents.public(held)).not.toHaveProperty('avatarRecipe')
   })
 
   it('is operator-only: anyone else gets the same 404 as a missing route', async () => {

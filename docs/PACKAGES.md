@@ -847,8 +847,6 @@ suggestions), `services/agent-store.ts` (memory and JSON-file stores, `agentStor
 wires `<state-dir>/agents.json`; a store is `{ list, apply }`, one transition's rows in one write),
 `routes/named-sessions.ts` (create named, naming and un-naming by PATCH, Edit settings, retire,
 startup `reconcileIdentity`),
-`services/avatars.ts` (the `AvatarProvider` seam only: `roll` an opaque recipe, `still` /
-`busy` render it; injected as `avatars`, absent by default, so an embedder pays for no art) and
 `routes/agents.ts` (operator-only `/agents`, whose lifecycle doors call the same cut). Session
 creation goes through `vetCreateRequest` and `factory.createRunner` like `POST /sessions`. Rules in
 `docs/GOTCHAS.md` § Named sessions and § Agents and teams.
@@ -2081,15 +2079,20 @@ selection's weight; the VS Code webview mixes the theme's warning colour into th
 card that asks for an action is the loudest one. Custom groups draw a badge (`GroupBadge`: the
 group's `icon`, else `customGroupColor`, a stable palette colour until one is picked) and keep the
 case the operator typed; an image from disk is scaled to 64 px and stored as a data URL in the view
-config (`CUSTOM_GROUP_ICON_MAX`). Avatars arrive through
-`avatars` (keyed by `AgentRef.avatar`), because the gateway route needs the host's credentials: the
-host fetches and hands over data URLs, exactly like `projectIcons`. Once any row has an agent,
-plain rows draw as tiles too, so the column holds. An agent card renames the agent
-(`onRenameAgent`), never the session title. `AvatarDialog` is the one avatar picker (eight
-`agentAvatarPreview` candidates, More, `changeAgentAvatar`, errors inline because a VS Code view has
-no toaster) for every client. The composer's `#` rows take `peerAvatars` (`SessionPanel` /
-`SessionWorkspace`), keyed by session id, since `PeerSessionSummary` carries the agent's name but no
-avatar; `peerAvatarsOf(rows, avatars)` builds it from the list's own rows, and once any row has one
+config (`CUSTOM_GROUP_ICON_MAX`). `AgentAvatar` draws the agent's face (`AgentRef.face`) as inline
+SVG through `faceSvg` (`lib/face-svg.ts`, pure, also exported from `./format` for hosts that need a
+file), posed and animated by the row's state (`faceStateOf`); on the agent card it also fills the
+backdrop to context use, which replaces the context ring there. The agent card is 48 px (4 px
+padding, a 40 px face, radius 8 around a radius 4 face), a member row 40 px (a 32 px face and a
+12 px gap, so its text lines up with the lead's), rows 4 px apart, and agent names sit on
+`--fg-name` until selected. A team showing members is one nested card (`--row-nest`, the whole card
+in the selection colour when the lead is selected; the lead's `^ N` chip returns it to Auto). Once
+any row has an agent, plain rows draw as tiles too, so the column holds. An agent card renames the
+agent (`onRenameAgent`), never the session title. `AvatarDialog` is the one face editor (eight
+rolls to start from, then kind, swatch and tone per slot, previews in every state, saved with
+`changeAgentAvatar({ face })`, errors inline because a VS Code view has no toaster) for every
+client. The composer's `#` rows take `peerRows` (`SessionPanel` / `SessionWorkspace`), keyed by
+session id, since `PeerSessionSummary` carries the agent's name but no face; once any row has one
 the plain rows keep the icon in a tile-width box.
 
 `SessionBrowser` is the styled sessions list *around* the card built on protocol's view model -
@@ -2460,8 +2463,7 @@ gateway pick one. `CwdField` and `EffortField` are shared with `RunForm`. Card v
 itself), errors as toasts; the `⋯` menu opens with the owner, and a top-level agent gets Share
 with other owners / Make private. Drag to join and the menu's Join both go through `teamMove` in
 `SessionsSidebar`: a cross-owner join asks first (`CrossOwnerDialog`), the outcome's message is
-drawn under the card, and an open invitation adds a toast with a Withdraw invitation action. `useAgentAvatars` fetches each avatar path once per page (a
-failure retries after 60 s); the session header draws `AgentHeading` for an agent.
+drawn under the card, and an open invitation adds a toast with a Withdraw invitation action. The session header draws `AgentHeading` for an agent.
 
 - **Questions.** `useQuestions` is a module-scope store like `useJobs` (primary gateway only): REST lists
   the boards, then `attachQuestions()` keeps them live; AppShell mounts it so the nav count (red while
@@ -2480,12 +2482,7 @@ failure retries after 60 s); the session header draws `AgentHeading` for an agen
 ## `packages/cli`
 
 published unscoped as **`workerdeck`**, the turnkey instance (`npx
-WorkerDeck`): gateway + dashboard on ONE port via the server's `fallback` hook. It is also the
-package that owns the agent avatar art: `src/lib/avatars.ts` (`MonkeyartAvatars`, the server's
-`AvatarProvider` over `@monkeyart/composer` + `@monkeyart/packs`: loads each enabled pack once
-(`avatarPacks`; the seed picks the pack, see `docs/GOTCHAS.md` §Agents and teams),
-caches PNGs) is wired unless a config file supplies its own `avatars`. The pack art is CC BY 4.0
-(`LICENSE-ART` in `@monkeyart/packs`), so the attribution travels with this package. Single-origin
+WorkerDeck`): gateway + dashboard on ONE port via the server's `fallback` hook. Single-origin
 is load-bearing, not cosmetic - a tab can't put a header on a WS handshake, so a cookie is the
 only credential it can present on an attach, and cookies are per-origin. `--auth-key` is one
 secret over two transports (login-page cookie for browsers, header for services); a config file

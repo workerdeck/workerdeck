@@ -183,14 +183,17 @@ export {
   AgentAvatar,
   AgentHeading,
   LeadChip,
-  avatarOf,
-  peerAvatarsOf,
-  type AgentAvatarImage,
   type AgentAvatarProps,
-  type AgentAvatars,
   type AgentHeadingProps,
 } from './components/agent/AgentAvatar.tsx'
-export { AvatarDialog, type AvatarDialogAgent, type AvatarDialogProps } from './components/agent/AvatarDialog.tsx'
+export { AvatarDialog, FaceView, type AvatarDialogAgent, type AvatarDialogProps, type FaceViewProps } from './components/agent/AvatarDialog.tsx'
+export {
+  CONTEXT_WRAP_UP_DEFAULT,
+  FACE_HUES,
+  FACE_TONE_VALUES,
+  faceOklch,
+  faceProjectOf,
+  faceStateOf, faceSvg, faceThemeDeclarations, type FaceState, type FaceSvgOptions, type FaceTheme } from './lib/face-svg.ts'
 export { AccountConnectDialog, type AccountConnectDialogProps } from './components/agent/AccountConnectDialog.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'

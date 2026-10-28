@@ -151,12 +151,11 @@ export class AgentService {
         agents.set(agent.id, agent)
         continue
       }
-      const faced = withFace(agent)
-      if (faced.retiredAt !== undefined) {
-        this.#tombstones.set(faced.id, faced)
+      if (agent.retiredAt !== undefined) {
+        this.#tombstones.set(agent.id, agent)
         continue
       }
-      agents.set(faced.id, faced)
+      agents.set(agent.id, agent)
       if (agent.pendingJoin && this.#gateway !== undefined) {
         this.#joining.set(agent.id, { lead: agent.pendingJoin.lead, name: agent.name, op: agent.pendingJoin.op, restored: true })
       }
@@ -351,15 +350,13 @@ export class AgentService {
   public(agent: StoredAgent): AgentInfo {
     const {
       avatarSeed: _seed,
-      avatar: _avatar,
       schema: _schema,
       pendingJoin: _pending,
       roster: _roster,
       retiredAt: _retired,
       ...rest
     } = agent
-    const { avatarRecipe: _recipe, ...info } = rest as AgentInfo & { avatarRecipe?: unknown }
-    return info
+    return rest
   }
 
   draft(input: {
@@ -985,12 +982,3 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-// A record from before faces rolls one from its seed, the same one on every load until a write keeps it; the pixel
-// recipe it carried is dropped.
-function withFace(agent: StoredAgent): StoredAgent {
-  if (agent.face !== undefined && !('avatarRecipe' in agent)) {
-    return agent
-  }
-  const { avatarRecipe: _recipe, avatar: _avatar, ...rest } = agent as StoredAgent & { avatarRecipe?: unknown }
-  return { ...rest, face: agent.face ?? rollFace(agent.avatarSeed, projectSwatch(agent.config.cwd ?? agent.id)) }
-}

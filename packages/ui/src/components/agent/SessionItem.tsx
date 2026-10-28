@@ -3,7 +3,7 @@ import { Globe, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
 import type { FoldableStepKind, SessionInfo, SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
-import { AgentAvatar, LeadChip, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
+import { AgentAvatar, LeadChip } from './AgentAvatar.tsx'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
@@ -45,8 +45,6 @@ export interface SessionItemProps {
   editing?: boolean
   onEditingChange?: (editing: boolean) => void
   actions?: ReactNode
-  // Drawn when `row.info.agent` is set: the card then leads with the avatar and names the agent.
-  avatars?: AgentAvatars
   // `member` is the one-row card a team draws under its lead.
   variant?: 'card' | 'member'
   // The state the avatar badge draws, for a folded lead standing in for its team.
@@ -90,7 +88,6 @@ export function SessionItem({
   editing,
   onEditingChange,
   actions,
-  avatars,
   variant = 'card',
   badgeState,
   teamUnseen = 0,
@@ -201,7 +198,7 @@ export function SessionItem({
             : undefined
         }
         title={agent ? agentTitle(info) : undefined}
-        className="min-w-0 shrink truncate text-body-sm font-medium tracking-[-0.005em] text-fg-1"
+        className={cn('min-w-0 shrink truncate text-body-sm font-medium tracking-[-0.005em]', active || !agent ? 'text-fg-1' : 'text-fg-name')}
       >
         {label}
       </span>
@@ -249,7 +246,8 @@ export function SessionItem({
       }}
       className={cn(
         'group group/session flex w-full cursor-pointer flex-col p-1 text-left outline-none',
-        'rounded-[4px] transition-colors focus-visible:ring-2 focus-visible:ring-ring',
+        variant === 'member' ? 'rounded-[4px]' : 'rounded-[8px]',
+        'transition-colors focus-visible:ring-2 focus-visible:ring-ring',
         needsYou
           ? cn('bg-row-attention', active && 'ring-1 ring-accent ring-inset')
           : holdsOpenStep
@@ -261,25 +259,32 @@ export function SessionItem({
       )}
     >
       {agent && variant === 'member' ? (
-        <div className={cn('flex h-9 items-center gap-1.5 overflow-hidden py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
-          <AgentAvatar row={row} image={avatarOf(avatars, agent)} size={32} />
-          {nameLabel}
-          {status ? (
-            <span title={status} className="min-w-0 flex-1 truncate text-body-sm text-fg-3">
-              {status}
-            </span>
-          ) : (
-            <span className="flex-1" />
-          )}
-          {unread}
-          {time ? <span className="shrink-0 text-body-sm text-fg-4">{time}</span> : null}
-          {chips}
-          {actions}
+        <div className="flex h-8 items-center gap-3">
+          <AgentAvatar row={row} size={32} />
+          <div className={cn('flex min-w-0 flex-1 flex-col', info.engineAsleep && 'opacity-60')}>
+            <div className="flex h-4 items-center gap-1.5 overflow-hidden">
+              {nameLabel}
+              <span className="flex-1" />
+              {unread}
+              {time ? <span className="shrink-0 text-label text-fg-4">{time}</span> : null}
+              {chips}
+              {actions}
+            </div>
+            <div className="flex h-4 items-center gap-1.5 overflow-hidden text-label tracking-[-0.005em]">
+              {model ? <span className={cn('shrink-0', vendorTextClass(engine, info.model))}>{model}</span> : null}
+              {status ? (
+                <span title={status} className="min-w-0 truncate text-fg-3">
+                  {model ? '· ' : ''}
+                  {status}
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
       ) : agent || tile ? (
-        <div className={cn('flex items-center gap-2 py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
-          <AgentAvatar row={row} image={avatarOf(avatars, agent)} size={48} state={badgeState} />
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <AgentAvatar row={row} size={40} state={badgeState} context={agent !== undefined} />
+          <div className={cn('flex min-w-0 flex-1 flex-col gap-1 pr-0.5', info.engineAsleep && 'opacity-60')}>
             <div className="flex h-5 items-center gap-1.5 overflow-hidden">
               {nameLabel}
               {agent?.leads ? <LeadChip /> : null}
@@ -301,7 +306,7 @@ export function SessionItem({
                 </span>
               ) : null}
               {teamTray}
-              <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />
+              {agent ? null : <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />}
             </div>
             <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
               {agent ? (

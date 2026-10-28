@@ -9,8 +9,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
   AgentHeading,
-  avatarOf,
-  peerAvatarsOf,
   Badge,
   Button,
   CopyButton,
@@ -24,7 +22,6 @@ import { getActionStyle, getCatchUp, getFontSize, getThinking, getTranscriptFont
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { nudgeSessions, useSessionRows, useSessions } from '@/hooks/useSessions.ts'
-import { useAgentAvatars } from '@/hooks/useAgentAvatars.ts'
 import { DeleteAgentDialog, type DeleteAgentTarget } from '@/components/DeleteAgentDialog.tsx'
 
 // Split in two so the inner view takes a *defined* client: a link can outlive the gateway it named, and hooks cannot
@@ -103,15 +100,7 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
   const { snapshots } = useSessions()
   const rows = useSessionRows(snapshots)
   const agentRow = rows.find((row) => row.hostId === hostId && row.info.id === sessionId && row.info.agent)
-  const avatars = useAgentAvatars(rows)
-  const peerAvatars = useMemo(
-    () =>
-      peerAvatarsOf(
-        rows.filter((row) => row.hostId === hostId),
-        avatars,
-      ),
-    [rows, avatars, hostId],
-  )
+  const peerRows = useMemo(() => Object.fromEntries(rows.filter((row) => row.hostId === hostId).map((row) => [row.info.id, row])), [rows, hostId])
   const polled = useMemo(
     () => snapshots.find((s) => s.host.id === hostId)?.sessions.find((s) => s.id === sessionId),
     [snapshots, hostId, sessionId],
@@ -139,7 +128,7 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
         key={sessionId}
         client={client}
         sessionId={sessionId}
-        peerAvatars={peerAvatars}
+        peerRows={peerRows}
         transcriptVariant={variant}
         transcriptFont={font}
         hideThinking={thinking === 'hide'}
@@ -203,7 +192,7 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
         header={({ actions }) => (
           <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
             {agentRow ? (
-              <AgentHeading row={agentRow} image={avatarOf(avatars, agentRow.info.agent)} className="shrink-0" />
+              <AgentHeading row={agentRow} className="shrink-0" />
             ) : (
               <span className="truncate text-body-sm font-medium text-fg-1">{info?.title ?? project ?? sessionId.slice(0, 8)}</span>
             )}

@@ -1,4 +1,4 @@
-import type { CatchUpFrom, GatewayRelayMeta, PermissionMode, ScopeRoot, SessionInfo, WorkspaceScope } from '@workerdeck/protocol'
+import type { CatchUpFrom, GatewayRelayMeta, PermissionMode, ScopeRoot, SessionInfo, SessionRow, WorkspaceScope } from '@workerdeck/protocol'
 import type { SubagentDisplay, ViewConfig } from './view-config.ts'
 import type { SessionSurfacePanel, SessionVitals } from '@workerdeck/ui'
 
@@ -128,7 +128,7 @@ export type HostToPanel =
   | { kind: 'wd-set-permission-mode'; mode: PermissionMode }
   | { kind: 'wd-insert-composer-text'; text: string }
   // The composer's `#` rows, keyed by session id on the surface's own gateway.
-  | { kind: 'wd-peer-avatars'; avatars: Record<string, AgentAvatarImage> }
+  | { kind: 'wd-peer-rows'; rows: Record<string, SessionRow> }
   | {
       kind: 'wd-focus-composer'
     }
@@ -216,8 +216,6 @@ export type SidebarToHost =
       cwd?: string
     }
 
-// The same shape as `@workerdeck/ui`'s `AgentAvatarImage`, restated so the extension host never imports the ui package.
-export type AgentAvatarImage = { still: string; busy?: { src: string; durations: number[] } }
 
 export type HostToSidebar =
   | TransportToWebview
@@ -239,7 +237,6 @@ export type HostToSidebar =
       kind: 'wd-project-icons'
       icons: Record<string, string>
     }
-  | { kind: 'wd-agent-avatars'; avatars: Record<string, AgentAvatarImage> }
   | { kind: 'wd-avatar-picker'; hostId: string; sessionId: string }
 
 export type GatewaysToHost =

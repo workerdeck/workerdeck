@@ -158,8 +158,8 @@ describe('peer relay link', () => {
   it('keeps team members on their own gateway, in both directions', async () => {
     const { relay, stateDir } = await relayRig()
     const team = {
-      lead: { id: 'A', name: 'Atlas', avatar: '', leads: true as const },
-      member: { id: 'P', name: 'Pip', avatar: '', lead: 'A', team: 'Atlas' },
+      lead: { id: 'A', name: 'Atlas', leads: true as const },
+      member: { id: 'P', name: 'Pip', lead: 'A', team: 'Atlas' },
     }
     const mac = await gateway(relay, stateDir, 'mac', [new PeerRunner('lead'), new PeerRunner('member')], undefined, team)
     const pi = await gateway(relay, stateDir, 'pi', [new PeerRunner('b1')])

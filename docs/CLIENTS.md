@@ -99,9 +99,9 @@ webview persists `{ hostId, sessionId, cwd }` via `bridge.setState` on every
 same session into the held state. Title follows the session title on every model change; the
 icon is a data-URI circle in the row's `SessionState` colour. An agent's tab is titled by the agent
 name instead (a member's reads `Juno · Atlas team`, the same title the panel's held state uses), and
-its icon is the agent's avatar still, fetched through the gateway by the shared `AgentAvatarCache`
-and written as a PNG under the extension's global storage, because `iconPath` takes a file; without
-an avatar it keeps the circle (`docs/GOTCHAS.md` §VS Code surfaces). The sidebar's `open` map
+its icon is the agent's face, drawn by `AgentFaceIcons` (`agent-faces.ts`) and written as a light
+and a dark SVG under the extension's global storage, because `iconPath` takes files; without a
+face it keeps the circle (`docs/GOTCHAS.md` §VS Code surfaces). The sidebar's `open` map
 (`SidebarState.open`, `host:session` → `'editor'`) draws the "in editor" glyph in the card's
 `actions` slot.
 
@@ -595,13 +595,13 @@ misalignment.
 **Agents.** `workerdeck.newAgent` (the person icon in the Sessions title) runs the New Session flow
 and then asks for a name and a brief (`createAgent` in `new-session.ts`). Team verbs live in the
 card's `⋯` QuickPick (`#teamItems` in `sidebar.ts`): Make agent (`nameSession`), Add to team, Leave team,
-Dissolve team, Conversations, Delete agent. Avatars are fetched host-side by
-`AgentAvatarCache` and posted as `wd-agent-avatars`. **Change avatar** is the one `⋯` row that
-does not stay native: a QuickPick cannot show the candidates, so it posts `wd-avatar-picker` and the
-sidebar webview opens `packages/ui`'s `AvatarDialog` (the dashboard's picker) over a
-`WorkerDeckClient` on the bridge transports; a request before the view has booted waits for its
-`wd-ready`. Each session surface also gets `wd-peer-avatars` (session id to image, for its own
-gateway, posted only when the map changes) for the composer's `#` rows. **Edit settings / Edit
+Dissolve team, Conversations, Delete agent. Faces ride the session list (`AgentRef.face`), so the
+webviews draw them with no fetch. **Change avatar** is the one menu entry that does not stay
+native: a menu cannot draw faces, so it posts `wd-avatar-picker` and the sidebar webview opens
+`packages/ui`'s `AvatarDialog` (the dashboard's editor) over a `WorkerDeckClient` on the bridge
+transports; a request before the view has booted waits for its `wd-ready`. Each session surface
+also gets `wd-peer-rows` (session id to row, for its own gateway, posted only when the map changes)
+for the faces on the composer's `#` rows. **Edit settings / Edit
 brief** open the agent's config as documents on a second file system provider,
 `workerdeck-agent://<host>/<agent id>/<name>.agent.json` and `.brief.md` (`agent-settings.ts`): read is
 `GET /agents/:id`, save is `PATCH /agents/:id` with the config minus the brief (a key the edit

@@ -62,7 +62,7 @@ function shell(id: string, over: Partial<ShellInfo> = {}): ShellInfo {
 const WD = { name: 'WorkerDeck', root: '/work/workerdeck', shortcode: 'WD' }
 const API = { name: 'api', root: '/work/api' }
 
-const lead: AgentRef = { id: 'ag-lead', name: 'WD-Lead', leads: true, avatar: 'monkey:12' }
+const lead: AgentRef = { id: 'ag-lead', name: 'WD-Lead', leads: true }
 
 const SHELLS = [
   shell('sh-fresh', { startedAt: T0 + 9_000 }),
@@ -580,7 +580,7 @@ const AGENTS: VmCase[] = [
     name: 'agent-ref',
     fn: 'agentRef',
     calls: [
-      [agentInfo('ag-1', { avatar: 'monkey:3', sharing: 'shared', order: 4 }), {}],
+      [agentInfo('ag-1', { sharing: 'shared', order: 4 }), {}],
       [agentInfo('ag-2', { lead: 'ag-1', sharing: 'shared', order: 0 }), { leadName: 'Lead', leadGateway: 'mini' }],
       [agentInfo('ag-3', { lead: 'ag-1' }), { leadName: 'Lead' }],
       [agentInfo('ag-4', { sharing: 'private', owner: 'dan' }), { leads: true, leadName: 'ignored' }],

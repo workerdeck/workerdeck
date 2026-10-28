@@ -5,8 +5,6 @@ export type AgentRef = {
   id: string
   name: string
   face?: AgentFace
-  // @deprecated The gateway draws no avatar images any more; `face` is the avatar.
-  avatar?: string
   lead?: string
   leadGateway?: string
   team?: string
@@ -75,8 +73,6 @@ export type AgentInfo = {
   createdAt: number
   updatedAt: number
   face?: AgentFace
-  // @deprecated The gateway draws no avatar images any more; `face` is the avatar.
-  avatar?: string
   // The first message of a conversation a crash may have kept from the engine; the user sends it again or dismisses it.
   undelivered?: string
   // The new conversation was committed but did not start; Retry start (`POST /sessions/:id/conversations/retry`) starts it.

@@ -6,7 +6,7 @@ import { WorkerdeckFileSystem } from './fsp.ts'
 import { AgentSettingsFileSystem } from './agent-settings.ts'
 import { FilesViewProvider } from './files-view.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
-import { AgentAvatarCache } from './agent-avatars.ts'
+import { AgentFaceIcons, peerRowsOf } from './agent-faces.ts'
 import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
 import { HostStore } from './hosts.ts'
 import { createAgent, createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
@@ -16,7 +16,7 @@ import { SessionEditorTab, sessionTitle } from './session-tab.ts'
 import { SurfaceRegistry } from './surfaces.ts'
 import { openHostPath, type AnySurface, type SessionRef, type SurfaceDelegate } from './session-surface.ts'
 import type { SelectOptions } from './sidebar.ts'
-import type { AgentAvatarImage, SurfaceState } from './bridge-protocol.ts'
+import type { SurfaceState } from './bridge-protocol.ts'
 import { addProfile, editProfile, manageProfiles, removeProfile, type ProfileFlowDeps } from './profiles.ts'
 import { ProfilesModel } from './profiles-model.ts'
 import { ProfilesViewProvider } from './profiles-view.ts'
@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const infoOf = (hostId: string, sessionId: string) => model.sessionsOf(hostId).find((s) => s.id === sessionId)
   const titleOf = (hostId: string, sessionId: string) => sessionTitle(infoOf(hostId, sessionId), sessionId)
-  const avatars = new AgentAvatarCache(store, context.globalStorageUri)
+  const faceIcons = new AgentFaceIcons(context.globalStorageUri)
   const sessionRef = (hostId: string, sessionId: string, cwd?: string, conversation?: number): SessionRef | undefined => {
     const host = store.get(hostId)
     if (!host) {
@@ -226,18 +226,7 @@ export function activate(context: vscode.ExtensionContext): void {
         void selectSession(shown.host.id, sessionId)
       }
     },
-    peerAvatars: (hostId) => {
-      const sessions = model.sessionsOf(hostId)
-      avatars.ensure({ [hostId]: sessions })
-      const byId: Record<string, AgentAvatarImage> = {}
-      for (const info of sessions) {
-        const image = avatars.imageFor(info)
-        if (image) {
-          byId[info.id] = image
-        }
-      }
-      return byId
-    },
+    peerRows: (hostId) => peerRowsOf(hostId, model.sessionsOf(hostId)),
   }
   const panel = new SessionPanelView(context.extensionUri, store, {
     ...surfaceDelegate,
@@ -290,10 +279,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     tab.setTitle(tabTitle(session))
     tab.setState(session.conversation === undefined ? sessionState(info) : 'ended')
-    tab.setAvatar(avatars.iconFor(info))
-    if (info.agent?.avatar) {
-      avatars.ensure({ [session.host.id]: [info] })
-    }
+    tab.setAvatar(faceIcons.iconFor(info))
   }
   const moveToPanel = async (tab: SessionEditorTab) => {
     const session = tab.session
@@ -369,7 +355,7 @@ export function activate(context: vscode.ExtensionContext): void {
       surface.openShell(options.shellId)
     }
   }
-  sidebar = new SidebarProvider(context, context.extensionUri, store, model, avatars, {
+  sidebar = new SidebarProvider(context, context.extensionUri, store, model, {
     selectSession,
     sessionDeleted: async (hostId, sessionId) => {
       for (const tab of registry.tabsOf(hostId, sessionId)) {
@@ -414,9 +400,9 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   registry.onDidChange(() => syncSurfaces())
   registry.onDidChangeFocus(() => syncSurfaces())
-  const pushPeerAvatars = () => {
+  const pushPeerRows = () => {
     for (const surface of registry.all()) {
-      surface.pushPeerAvatars()
+      surface.pushPeerRows()
     }
   }
   model.onDidChange(() => {
@@ -428,13 +414,12 @@ export function activate(context: vscode.ExtensionContext): void {
       panel.retitleHeld(titleOf(held.host.id, held.sessionId))
     }
     pushStatusBar()
-    pushPeerAvatars()
+    pushPeerRows()
   })
-  avatars.onDidChange(() => {
+  faceIcons.onDidChange(() => {
     for (const tab of registry.tabs()) {
       syncTab(tab)
     }
-    pushPeerAvatars()
   })
   syncSurfaces()
 
@@ -482,7 +467,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   context.subscriptions.push(
-    avatars,
+    faceIcons,
     startDevReload(context, [
       { reloadWebview: () => registry.reloadAll() },
       sidebar,

@@ -21,7 +21,7 @@ export interface SessionWorkspaceProps {
   affordances?: SessionPanelProps['affordances']
   scrubber?: SessionPanelProps['scrubber']
   bookmarks?: SessionPanelProps['bookmarks']
-  peerAvatars?: SessionPanelProps['peerAvatars']
+  peerRows?: SessionPanelProps['peerRows']
   onToggleBookmark?: SessionPanelProps['onToggleBookmark']
   stickyPrompt?: SessionPanelProps['stickyPrompt']
   hideThinking?: SessionPanelProps['hideThinking']
@@ -63,7 +63,7 @@ export function SessionWorkspace({
   affordances,
   scrubber,
   bookmarks,
-  peerAvatars,
+  peerRows,
   onToggleBookmark,
   stickyPrompt,
   hideThinking,
@@ -231,7 +231,7 @@ export function SessionWorkspace({
             affordances={affordances}
             scrubber={scrubber}
             bookmarks={bookmarks}
-            peerAvatars={peerAvatars}
+            peerRows={peerRows}
             onToggleBookmark={onToggleBookmark}
             stickyPrompt={stickyPrompt}
             hideThinking={hideThinking}

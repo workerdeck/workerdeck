@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react'
-import type { SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
+import type { SessionRow, SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
 import type { PeerSessionOption, StagedAttachment, UseAttachmentsResult } from '@workerdeck/react'
 import { ArrowUp, FileText, Paperclip, RotateCw, SlidersHorizontal, Sparkles, Square, TriangleAlert, Users, X } from 'lucide-react'
 import { Button } from '../ui/Button.tsx'
@@ -25,7 +25,7 @@ import { PROMPT_GLYPH } from '../terminal/items.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
 import type { TriggerSuggestion } from '../prompt-area/types.ts'
 import { cn } from '../../lib/utils.ts'
-import type { AgentAvatarImage } from './AgentAvatar.tsx'
+import { AgentAvatar } from './AgentAvatar.tsx'
 import { formatBytes } from '../../lib/format.ts'
 
 export type ComposerFileMatch = { path: string; relative: string }
@@ -56,7 +56,7 @@ export interface ComposerProps {
   // send: it never messages the named session, and an unresolvable name stays ordinary text.
   peers?: readonly PeerSessionOption[]
   // Keyed by peer session id; a row without one keeps the plain icon.
-  peerAvatars?: Readonly<Record<string, AgentAvatarImage>>
+  peerRows?: Readonly<Record<string, SessionRow>>
   // Shell mode: `$` as the first character turns the composer into a host shell prompt. Omit to leave the
   // mode off entirely - the gateway only offers it to an operator on a session whose engine reaches a host cwd.
   onShellCommand?: (command: string) => void
@@ -85,7 +85,7 @@ export function Composer({
   clientCommands,
   onSearchFiles,
   peers,
-  peerAvatars,
+  peerRows,
   onShellCommand,
   attachments,
   toolbar,
@@ -184,7 +184,7 @@ export function Composer({
       )
     }
     if (peers?.length) {
-      const tiled = peers.some((peer) => peerAvatars?.[peer.id])
+      const tiled = peers.some((peer) => peerRows?.[peer.id]?.info.agent)
       configured.push(
         hashtagTrigger({
           accessibilityLabel: 'session',
@@ -193,7 +193,7 @@ export function Composer({
               value: peer.slug,
               label: peer.label,
               description: [peer.gateway, peer.engine, peer.project, peer.status].filter(Boolean).join(' · '),
-              icon: <PeerIcon avatar={peerAvatars?.[peer.id]?.still} tiled={tiled} />,
+              icon: <PeerIcon row={peerRows?.[peer.id]} tiled={tiled} />,
             })),
           onSelect: (suggestion) => suggestion.value,
           chipStyle: 'inline',
@@ -212,7 +212,7 @@ export function Composer({
       )
     }
     return configured.length > 0 ? configured : undefined
-  }, [commands, skills, clientCommands, onSearchFiles, peers, peerAvatars, onShellCommand])
+  }, [commands, skills, clientCommands, onSearchFiles, peers, peerRows, onShellCommand])
 
   const saveDraft = draft?.save
   useEffect(() => {
@@ -651,9 +651,9 @@ function ShellBadge({ onLeave }: { onLeave: () => void }) {
   )
 }
 
-function PeerIcon({ avatar, tiled }: { avatar?: string; tiled: boolean }) {
-  if (avatar) {
-    return <img src={avatar} alt="" draggable={false} className="-mt-0.5 size-5 rounded-[3px] [image-rendering:pixelated]" />
+function PeerIcon({ row, tiled }: { row?: SessionRow; tiled: boolean }) {
+  if (row?.info.agent) {
+    return <AgentAvatar row={row} size={20} title="" className="-mt-0.5" />
   }
   const icon = <Users className="size-3.5 text-fg-3" />
   return tiled ? <span className="-mt-0.5 flex size-5 items-center justify-center">{icon}</span> : icon

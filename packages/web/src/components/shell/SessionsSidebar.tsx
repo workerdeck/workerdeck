@@ -44,6 +44,7 @@ import {
   cn,
   toast,
   AvatarDialog,
+  faceProjectOf,
   crossOwnerDrop,
   rowOwner,
   conversationRecovery,
@@ -64,7 +65,6 @@ import { clientFor, hostById, primaryHost } from '@/lib/hosts.ts'
 import { getSearchShown, setSearchShown } from '@/lib/sidebar.ts'
 import { useProjectIcons } from '@workerdeck/react'
 import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
-import { useAgentAvatars } from '@/hooks/useAgentAvatars.ts'
 import { useHostMeta } from '@/hooks/useHostMeta.ts'
 import { useViewConfig } from '@/hooks/useViewConfig.ts'
 
@@ -81,7 +81,6 @@ export function SessionsSidebar() {
   const rows = useSessionRows(snapshots)
   // `clientFor` is module scope and stable, so it is not a dependency that would re-fire the fetch.
   const projectIcons = useProjectIcons(rows, clientFor)
-  const avatars = useAgentAvatars(rows)
   const failures = snapshots.filter((s) => s.error !== undefined)
   const primary = primaryHost()
   const [config, setConfig] = useViewConfig()
@@ -506,7 +505,6 @@ export function SessionsSidebar() {
             onRenameAgent={renameAgent}
             onTeamMove={teamMove}
             relays={relays}
-            avatars={avatars}
             onAgentConversations={(row) => setConversationsOf(conversationsTarget(row))}
             rowActions={(row) => (
               <SessionCardActions
@@ -555,7 +553,7 @@ export function SessionsSidebar() {
 
       <AvatarDialog
         client={avatarFor ? clientFor(avatarFor.hostId) : undefined}
-        agent={avatarFor?.info.agent}
+        agent={avatarFor?.info.agent && { ...avatarFor.info.agent, project: faceProjectOf(avatarFor.info) }}
         onClose={() => setAvatarFor(undefined)}
         onChanged={() => void refresh()}
       />
