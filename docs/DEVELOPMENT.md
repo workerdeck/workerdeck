@@ -297,3 +297,21 @@ screenshots only under `TEST_RUNNER_WD_UI_SNAPS=1` (a failure records its own).
 waiting for a session to decide to, and a tap is the only gate the delegate's main-thread contract
 has (`docs/GOTCHAS.md`, §APNs push).
 
+
+## Measuring and reproducing in VS Code over CDP
+
+A webview bug or a pixel question is answered in a **throwaway** VS Code, never the one the fleet runs in: start
+`Code` with `env -u ELECTRON_RUN_AS_NODE`, its own `--user-data-dir` and `--extensions-dir`,
+`--extensionDevelopmentPath=apps/vscode` and `--remote-debugging-port=<port>`. Point it at a private gateway, not the
+dev one: settings `workerdeck.host.enabled: true` and `workerdeck.host.port` on a gateway you already started there
+(Host Mode adopts a gateway it finds on its port), e.g. `createWorkerServer` with the `PeerRunner` test adapter and
+`allowUnauthenticated`, which seeds agents and teams with real faces and no engine. Rebuild the webview with
+`vite build` in `apps/vscode` and run **Developer: Reload Webviews**.
+
+- The workbench is the `page` target in `http://127.0.0.1:<port>/json`; drive it with `Input.dispatchKeyEvent` /
+  `dispatchMouseEvent` (Cmd is modifier 4; Cmd+C needs `commands: ['copy']`) and `Page.captureScreenshot`.
+  Screenshots are device pixels: divide by the window's scale for CSS coordinates.
+- Each webview view is its own target (`purpose=webviewView` in the url); `Runtime.evaluate` there, then
+  `document.querySelector('iframe').contentDocument` is the view's DOM. Measure with `getBoundingClientRect` and
+  `getComputedStyle`, not from screenshots: an occluded window paints lazily.
+- A first-run VS Code opens a sign-in and theme dialog over everything; click through it before measuring.
