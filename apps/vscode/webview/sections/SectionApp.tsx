@@ -41,6 +41,10 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
         : undefined,
     [bridge, host?.baseUrl],
   )
+  // This client never attaches, so the session list is its only word on the conversation a call must name.
+  if (client && info?.conversation !== undefined) {
+    client.noteConversation(info.id, info.conversation)
+  }
 
   if (!info) {
     return <Empty>Select a session in the WorkerDeck sidebar.</Empty>
