@@ -177,8 +177,6 @@ export {
   type SessionFiltersProps,
 } from './components/agent/SessionFilters.tsx'
 export { SessionItem, type SelectModifiers, type SessionItemProps } from './components/agent/SessionItem.tsx'
-export { QUESTION_EMPTY_ANSWER, QuestionCard, type QuestionCardProps, type QuestionInput } from './components/agent/QuestionCard.tsx'
-export { QuestionBoard, type QuestionBoardProps, type QuestionBoardTab } from './components/agent/QuestionBoard.tsx'
 export {
   AgentAvatar,
   AgentHeading,

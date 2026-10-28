@@ -438,12 +438,12 @@ for what the header can't do (clear a filter, widen a scope).
 
 **There is no activity-bar container.** The views are split across the two sidebars by
 default: **Sessions** into **Explorer**, beside the file tree (it is a workspace-level list,
-and it is where the `+` lives), and the other seven into a **`secondarySidebar` container
+and it is where the `+` lives), and the other six into a **`secondarySidebar` container
 titled "WorkerDeck"** - one tab, stacked vertically, Usage → Context → MCP Servers →
-Session Info → Questions → Profiles → Gateways. The five detail views are `when`-gated on `workerdeck.hasSession`:
+Session Info → Profiles → Gateways. The five detail views are `when`-gated on `workerdeck.hasSession`:
 they are *about the thing you have open*, which is Outline and Timeline's shape. That gating
 reverses the earlier "views must not appear and disappear under the pointer" rule on
-purpose; Sessions, Questions, Profiles and Gateways stay ungated, which is what keeps both containers' shape
+purpose; Sessions, Profiles and Gateways stay ungated, which is what keeps both containers' shape
 stable. A view that *is* contributed cannot be disabled or collapsed through the API, so a
 section with nothing to say says it the only two ways that exist - the header's
 `description` (`no session`, `not reported`, `not supported`) and an empty state in the body.
@@ -452,7 +452,7 @@ bodies, so the dashboard and the extension cannot drift), Usage is `UsageMeters`
 stays drawn here because it reads the polled REST record rather than a transcript.
 `viewsContainers.secondarySidebar` is what sets `engines.vscode` to **`^1.106.0`**:
 it was proposed-only in 1.104/1.105 and finalized in 1.106, and the schema is
-`additionalProperties: false`, so on an older build the key is dropped and the seven views do
+`additionalProperties: false`, so on an older build the key is dropped and the six views do
 not exist at all. That floor is the whole cost of the layout, and it is what would keep the
 extension off a Cursor/VSCodium built on an older base. Two things a contributed location
 cannot do: it cannot order a view against a *built-in* one (extension views append after
@@ -462,27 +462,6 @@ these views needs **View: Reset View Locations** before a new default is visible
 is only a default: any view drags to either sidebar or the panel, and `contextualTitle` is
 what names the container it lands in (VS Code otherwise auto-assigns the *source*
 container's title, which is how six views dragged out of Explorer all came up "Explorer").
-
-### The Questions view
-
-The question board's VS Code surface (`src/questions-model.ts`, `src/questions-view.ts`,
-`webview/questions/`). The body is `ui`'s `QuestionBoard` for **one board**, the same component as the
-dashboard's board page, over a bridged `WorkerDeckClient` like the section views. Which board is a native
-choice, not a screen: the title's `$(list-selection)` opens a QuickPick of every board on every gateway
-(`workerdeck.pickQuestionBoard`, remembered in `workspaceState`, else the first by blocking, open, recency),
-and `$(markdown)` opens the board's `questionBoardMarkdown` as an untitled document. The view's `badge`
-is the open count over every board, which lands on the WorkerDeck container's icon.
-
-The **host** holds the live state, not the webview: `QuestionsModel` keeps one `/v1/questions/ws` per
-gateway (REST first, because a gateway with the board off refuses the upgrade; 404 stops it, any other
-failure retries every 30 s), so the badge and the notification work with the view collapsed. Host-side
-sockets carry the auth header through `clientForUrl`'s `WebSocketImpl`. A new open item raises a toast
-(`workerdeck.questions.notify`, a warning when it is blocking) whose **Answer** selects that board and
-focuses the view. "New" is a diff of open item numbers per board: the first look at a gateway seeds
-silently, so a window reload or a reconnect never re-announces what was already open, while a board
-first seen after the seed counts as new. Every window with the gateway registered toasts on its own.
-Links open like transcript paths (`openHostPath`, relative to the asker's `cwd`; a URL goes to the
-browser). The root is `tabIndex={-1}` for the Cmd+C rule in GOTCHAS.
 
 ### The unread and subagent status items
 

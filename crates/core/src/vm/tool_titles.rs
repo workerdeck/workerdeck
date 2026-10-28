@@ -5,7 +5,7 @@ pub const TOOL_TITLE_MAX_CHARS: usize = 64;
 
 pub const PEER_SEND_TOOLS: [&str; 2] = ["peers_send", "mcp__workerdeck__peers_send"];
 
-pub const BUILTIN_TOOL_TITLES: [(&str, &str); 35] = [
+pub const BUILTIN_TOOL_TITLES: [(&str, &str); 25] = [
     ("fs_read", "Reading a file"),
     ("fs_write", "Writing a file"),
     ("fs_list", "Listing files"),
@@ -31,16 +31,6 @@ pub const BUILTIN_TOOL_TITLES: [(&str, &str); 35] = [
     ("mcp__workerdeck__set_status", "Setting status"),
     ("change_avatar", "Changing avatar"),
     ("mcp__workerdeck__change_avatar", "Changing avatar"),
-    ("questions_ask", "Asking a question"),
-    ("mcp__workerdeck__questions_ask", "Asking a question"),
-    ("questions_list", "Reading the question board"),
-    ("mcp__workerdeck__questions_list", "Reading the question board"),
-    ("questions_update", "Editing a question"),
-    ("mcp__workerdeck__questions_update", "Editing a question"),
-    ("questions_close", "Closing a question"),
-    ("mcp__workerdeck__questions_close", "Closing a question"),
-    ("questions_record_answer", "Recording an answer"),
-    ("mcp__workerdeck__questions_record_answer", "Recording an answer"),
 ];
 
 pub fn builtin_tool_title(name: &str) -> Option<&'static str> {

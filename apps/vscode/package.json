@@ -127,13 +127,6 @@
           "visibility": "collapsed"
         },
         {
-          "id": "workerdeck.questions",
-          "type": "webview",
-          "name": "Questions",
-          "contextualTitle": "WorkerDeck",
-          "icon": "media/sidebar.svg"
-        },
-        {
           "id": "workerdeck.profiles",
           "type": "webview",
           "name": "Profiles",
@@ -468,18 +461,6 @@
         "category": "WorkerDeck"
       },
       {
-        "command": "workerdeck.pickQuestionBoard",
-        "title": "Switch Question Board",
-        "category": "WorkerDeck",
-        "icon": "$(list-selection)"
-      },
-      {
-        "command": "workerdeck.exportQuestionBoard",
-        "title": "Open Question Board as Markdown",
-        "category": "WorkerDeck",
-        "icon": "$(markdown)"
-      },
-      {
         "command": "workerdeck.session.stop",
         "title": "Stop",
         "category": "WorkerDeck",
@@ -757,16 +738,6 @@
           "command": "workerdeck.files.revealInOS",
           "when": "view == workerdeck.files && workerdeck.filesHasRoot && workerdeck.filesLocal",
           "group": "2_workspace@2"
-        },
-        {
-          "command": "workerdeck.pickQuestionBoard",
-          "when": "view == workerdeck.questions",
-          "group": "navigation@1"
-        },
-        {
-          "command": "workerdeck.exportQuestionBoard",
-          "when": "view == workerdeck.questions",
-          "group": "navigation@2"
         }
       ],
       "commandPalette": [
@@ -1243,19 +1214,8 @@
         }
       },
       {
-        "title": "Questions",
-        "order": 3,
-        "properties": {
-          "workerdeck.questions.notify": {
-            "type": "boolean",
-            "default": true,
-            "markdownDescription": "Show a notification when an agent opens a new item on a question board. A blocking item shows as a warning."
-          }
-        }
-      },
-      {
         "title": "Status Bar",
-        "order": 4,
+        "order": 3,
         "properties": {
           "workerdeck.statusBar.unread": {
             "type": "boolean",
@@ -1327,7 +1287,7 @@
       },
       {
         "title": "Host Mode",
-        "order": 5,
+        "order": 4,
         "properties": {
           "workerdeck.host.enabled": {
             "type": "boolean",
@@ -1491,7 +1451,7 @@
       },
       {
         "title": "Host Mode: Shell",
-        "order": 6,
+        "order": 5,
         "properties": {
           "workerdeck.host.shell": {
             "type": "boolean",
@@ -1529,7 +1489,7 @@
       },
       {
         "title": "Host Mode: Launch",
-        "order": 7,
+        "order": 6,
         "properties": {
           "workerdeck.host.hotReload": {
             "type": "boolean",
@@ -1571,7 +1531,7 @@
       },
       {
         "title": "Developer",
-        "order": 8,
+        "order": 7,
         "properties": {
           "workerdeck.dev.autoReload": {
             "type": "boolean",

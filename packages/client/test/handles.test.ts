@@ -451,28 +451,6 @@ describe('QueueHandle', () => {
   })
 })
 
-describe('QuestionsHandle', () => {
-  it('opens the questions socket, emits attached and changed, and reconnects', () => {
-    const handle = makeClient().attachQuestions()
-    settle()
-    expect(latest().url).toBe('ws://host/v1/questions/ws')
-    const seen: unknown[] = []
-    handle.on('attached', (boards) => seen.push(['attached', boards.length]))
-    handle.on('changed', (board) => seen.push(['changed', board.id]))
-    latest().deliver({ type: 'questions_attached', protocolVersion: 2, boards: [] })
-    latest().deliver({ type: 'questions_changed', board: { id: 'b1' } })
-    expect(seen).toEqual([
-      ['attached', 0],
-      ['changed', 'b1'],
-    ])
-    const before = FakeSocket.opened.length
-    latest().drop()
-    vi.advanceTimersByTime(500)
-    expect(FakeSocket.opened.length).toBe(before + 1)
-    handle.detach()
-  })
-})
-
 describe('error mapping', () => {
   const respond = (status: number, body: unknown, ok = status < 400) =>
     ({

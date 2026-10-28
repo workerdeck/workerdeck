@@ -15,7 +15,6 @@ import type {
   ContextResetDirectory,
   EngineAdapter,
   PeerDirectory,
-  QuestionDirectory,
   Runner,
   RunnerSnapshot,
   SessionRunnerConfig,
@@ -46,7 +45,6 @@ export type SessionFactoryDeps = {
   effortDefaults?: Record<string, string>
   requireApiKey?: boolean
   peers?: PeerDirectory
-  questions?: QuestionDirectory
   contextReset?: { directory: ContextResetDirectory; defaultEnabled: boolean }
   shells?: ShellDirectory
   shellAgentWrite?: ShellAgentWriteOption
@@ -288,7 +286,6 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     const config: SessionRunnerConfig = {
       ...built,
       ...(deps.peers ? { peers: deps.peers } : {}),
-      ...(deps.questions ? { questions: deps.questions } : {}),
       ...(deps.pricing ? { pricing: deps.pricing } : {}),
     }
     delete config.contextReset

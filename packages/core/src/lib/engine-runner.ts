@@ -145,7 +145,6 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
       avatar: this.config.avatar,
       reset: this.config.contextReset,
       peers: this.config.peers,
-      questions: this.config.questions,
       shells: this.config.shells,
       write: this.config.shellAgentWrite !== undefined,
     }

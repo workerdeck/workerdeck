@@ -1,19 +1,17 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { ListChecks, MessageCircleQuestion, PanelLeftClose, PanelLeftOpen, Plug, Settings, SquareTerminal, UsersRound } from 'lucide-react'
+import { ListChecks, PanelLeftClose, PanelLeftOpen, Plug, Settings, SquareTerminal, UsersRound } from 'lucide-react'
 import { cn } from '@workerdeck/ui'
 import { SettingsDialog } from '@/components/SettingsDialog.tsx'
 import { BrandMark } from './BrandMark.tsx'
 import { GatewaysSidebar } from './GatewaysSidebar.tsx'
 import { JobsSidebar } from './JobsSidebar.tsx'
 import { ProfilesSidebar } from './ProfilesSidebar.tsx'
-import { QuestionsSidebar } from './QuestionsSidebar.tsx'
 import { SessionsSidebar } from './SessionsSidebar.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
 import { readPref, writePref } from '@/lib/storage.ts'
 import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useUnseenTotal } from '@/hooks/useUnseen.ts'
-import { useOpenQuestions } from '@/hooks/useQuestions.ts'
 
 // The tab most likely to hold unread work is a background one, and a background tab shows
 // nothing but its title - so the aggregate unread lives there. Mounted at the shell, not the
@@ -29,7 +27,6 @@ function useTitleBadge() {
 
 const NAV = [
   { id: 'sessions', label: 'Sessions', icon: SquareTerminal, path: '/sessions', sidebar: SessionsSidebar },
-  { id: 'questions', label: 'Questions', icon: MessageCircleQuestion, path: '/questions', sidebar: QuestionsSidebar },
   { id: 'gateways', label: 'Gateways', icon: Plug, path: '/gateways', sidebar: GatewaysSidebar },
   { id: 'jobs', label: 'Jobs', icon: ListChecks, path: '/jobs', sidebar: JobsSidebar },
   { id: 'profiles', label: 'Profiles', icon: UsersRound, path: '/profiles', sidebar: ProfilesSidebar },
@@ -39,7 +36,6 @@ const COLLAPSED_KEY = 'workerdeck.sidebar-collapsed'
 
 export function AppShell({ children }: { children?: ReactNode }) {
   useTitleBadge()
-  const questions = useOpenQuestions()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // Longest match wins, so `/gateways` never loses to a prefix of itself.
   const section = [...NAV].sort((a, b) => b.path.length - a.path.length).find((item) => pathname.startsWith(item.path))
@@ -82,21 +78,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
               }}
               className={itemClass(item.id === section?.id)}
             >
-              <span className="relative flex shrink-0">
-                <item.icon className="size-4" />
-                {collapsed && item.id === 'questions' && questions.open > 0 ? (
-                  <span
-                    aria-hidden
-                    className={cn('absolute -top-0.5 -right-0.5 size-1.5 rounded-full', questions.blocking > 0 ? 'bg-danger' : 'bg-info')}
-                  />
-                ) : null}
-              </span>
+              <item.icon className="size-4 shrink-0" />
               {!collapsed && item.label}
-              {!collapsed && item.id === 'questions' && questions.open > 0 ? (
-                <span className={cn('ml-auto text-label tabular-nums', questions.blocking > 0 ? 'text-danger' : 'text-fg-4')}>
-                  {questions.open}
-                </span>
-              ) : null}
             </Link>
           ))}
         </nav>

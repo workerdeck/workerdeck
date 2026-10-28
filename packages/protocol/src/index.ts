@@ -1084,9 +1084,7 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
 const TRANSIENT_SDK_SUBTYPES: ReadonlySet<unknown> = new Set(['status', 'thinking_tokens'])
 
 function transientSdkKey(payload: { type: string; subtype?: unknown }): string | undefined {
-  return payload.type === 'system' && TRANSIENT_SDK_SUBTYPES.has(payload.subtype)
-    ? `sdk_event:system:${String(payload.subtype)}`
-    : undefined
+  return payload.type === 'system' && TRANSIENT_SDK_SUBTYPES.has(payload.subtype) ? `sdk_event:system:${String(payload.subtype)}` : undefined
 }
 
 export function logCoalesceKey(body: SessionEventBody): string | undefined {
@@ -1125,8 +1123,7 @@ export function supersededDeltaSeqs(events: readonly SessionEvent[], afterSeq: n
     }
     if (event.type === 'assistant_message') {
       const content = event.message.content
-      const takesStreamed =
-        Array.isArray(content) && content.some((block) => block.type === 'thinking' && !(block as { thinking?: string }).thinking)
+      const takesStreamed = Array.isArray(content) && content.some((block) => block.type === 'thinking' && !(block as { thinking?: string }).thinking)
       ahead.set(event.parentToolUseId ?? '', { text: true, thinking: !takesStreamed })
       continue
     }
@@ -1424,7 +1421,6 @@ export * from './errors.ts'
 export * from './paths.ts'
 export * from './model-menu.ts'
 export * from './pricing.ts'
-export * from './questions.ts'
 export * from './peer-mentions.ts'
 export * from './session-list.ts'
 export * from './status-label.ts'

@@ -270,10 +270,10 @@ boundary: anything a client needs must be expressible as protocol events and com
   `header` render-prop is portalled from inside the panel up to the top of the workspace - only
   the panel can build the `⋯` menu it is handed, but app chrome belongs above everything.
 - **`packages/web`** - the full session-control dashboard (TanStack Router, hash history), shaped
-  as **five sections and a dialog**: Sessions, Questions, Gateways, Jobs and Profiles are each a
+  as **four sections and a dialog**: Sessions, Gateways, Jobs and Profiles are each a
   list-on-the-left/detail-beside-it pair (multi-gateway - routes carry the gateway, since a
   session id is unique only within one), every `+` opens a modal, and Settings is a dialog at the
-  foot of the nav rather than a sixth section. Published as prebuilt
+  foot of the nav rather than a fifth section. Published as prebuilt
   static files with zero runtime deps (`dashboardDir` is a path, not a component tree) - it is an
   application, so everything it builds with is a devDependency. The create forms and the session
   panel render from the profile's **capability record** (`ProfileInfo.capabilities`, falling back
@@ -579,24 +579,6 @@ through it, and it serves one operator or a few trusted colleagues on one tailne
 across gateways, because the picker and the resolver both read the composed directory
 (`GET /v1/sessions/:id/peers`, the same rows `peers_list` answers), but the resolution happens on
 the sender's gateway and only a remote session's id and title travel into the envelope.
-
-## Question board
-
-Durable, non-blocking questions from agents to the human, answered in batches. Every session holds
-five gateway tools beside the peer tools: `questions_ask`, `questions_list`, `questions_update`,
-`questions_close`, `questions_record_answer` (`packages/core/src/lib/questions-tool.ts`, contract
-`QuestionDirectory`), backed by the `QuestionService` the server installs
-(`packages/server/src/services/questions.ts`). Wire types and the markdown export are in
-`packages/protocol/src/questions.ts`; the operator reads and answers over `/v1/questions`.
-
-There is one board per team, keyed by the lead's id, and a session outside any team gets a board
-under its own id. A member's item lands as a `draft` and its lead is told; the lead publishes,
-edits, merges or rejects it, so the human only sees what the lead let through. An item moves
-`draft -> open -> answered`, or to `closed` (resolved, superseded, withdrawn, rejected) from
-either live state. An answer is delivered like a peer message to the asker, the board's lead and
-every session the item lists as waiting. The store is in memory with one JSON file per board in
-the state dir; there is no markdown copy kept in sync, only an export on request. Rules in
-`docs/GOTCHAS.md` §Question board.
 
 ## Agents and teams
 

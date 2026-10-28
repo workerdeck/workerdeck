@@ -14,14 +14,12 @@ import { showPastAgents } from './conversations.ts'
 import { SessionPanelView } from './panel.ts'
 import { SessionEditorTab, sessionTitle } from './session-tab.ts'
 import { SurfaceRegistry } from './surfaces.ts'
-import { openHostPath, type AnySurface, type SessionRef, type SurfaceDelegate } from './session-surface.ts'
+import type { AnySurface, SessionRef, SurfaceDelegate } from './session-surface.ts'
 import type { SelectOptions } from './sidebar.ts'
 import type { SurfaceState } from './bridge-protocol.ts'
 import { addProfile, editProfile, manageProfiles, removeProfile, type ProfileFlowDeps } from './profiles.ts'
 import { ProfilesModel } from './profiles-model.ts'
 import { ProfilesViewProvider } from './profiles-view.ts'
-import { QuestionsModel, type OpenedQuestion } from './questions-model.ts'
-import { QuestionsViewProvider } from './questions-view.ts'
 import { SectionViewProvider, type SectionKind } from './section-view.ts'
 import { HostStatusItem } from './host/status-item.ts'
 import { HostSupervisor } from './host/supervisor.ts'
@@ -129,20 +127,6 @@ export function activate(context: vscode.ExtensionContext): void {
     remove: (hostId, name) => removeProfile(profileFlow, hostId, name),
   })
   profilesModel.onDidChange(() => profiles.push())
-  const questionsModel = new QuestionsModel(store)
-  const questions = new QuestionsViewProvider(context.extensionUri, store, questionsModel, context.workspaceState, {
-    openLink: async (hostId, asker, link) => {
-      const host = store.get(hostId)
-      if (/^https?:\/\//.test(link)) {
-        await vscode.env.openExternal(vscode.Uri.parse(link))
-      } else if (host) {
-        await openHostPath(store, host, link, infoOf(hostId, asker)?.cwd)
-      }
-    },
-  })
-  questionsModel.onDidChange(() => questions.push())
-  questionsModel.onDidOpen((opened) => void announceQuestion(questions, opened))
-  void questionsModel.reconnect()
   const gateways = new GatewaysViewProvider(context.extensionUri, store, {
     state: () => model.sidebarState(),
     refresh: () => model.refresh(),
@@ -473,7 +457,6 @@ export function activate(context: vscode.ExtensionContext): void {
       sidebar,
       gateways,
       profiles,
-      questions,
       files,
       ...Object.values(sections),
     ]),
@@ -518,8 +501,6 @@ export function activate(context: vscode.ExtensionContext): void {
     sidebar,
     gateways,
     profiles,
-    questionsModel,
-    questions,
     fs,
     files,
     statusBar,
@@ -536,7 +517,6 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.window.registerWebviewViewProvider(ProfilesViewProvider.viewId, profiles),
-    vscode.window.registerWebviewViewProvider(QuestionsViewProvider.viewId, questions),
     ...Object.entries(sections).map(([kind, provider]) =>
       vscode.window.registerWebviewViewProvider(SECTION_VIEWS[kind as SectionKind], provider),
     ),
@@ -591,8 +571,6 @@ export function activate(context: vscode.ExtensionContext): void {
         'workerdeck.resumeSession': () => resumeSession(sessionFlow),
         'workerdeck.pastAgents': () => showPastAgents({ store, selectSession }),
         'workerdeck.refreshSessions': () => model.refresh(),
-        'workerdeck.pickQuestionBoard': () => questions.pickBoard(),
-        'workerdeck.exportQuestionBoard': () => questions.exportBoard(),
       },
       files.commands(),
       sidebar.menuCommands(),
@@ -605,18 +583,6 @@ function sameRef(a: SessionRef, b: SessionRef): boolean {
 }
 
 export function deactivate(): void {}
-
-async function announceQuestion(view: QuestionsViewProvider, { hostId, board, item }: OpenedQuestion): Promise<void> {
-  if (vscode.workspace.getConfiguration('workerdeck').get<boolean>('questions.notify') === false) {
-    return
-  }
-  const who = item.askerName ?? 'An agent'
-  const text = `${who} asks #${item.n}: ${item.title}${item.blocking ? ` (blocking: ${item.blocking})` : ''}`
-  const show = item.blocking ? vscode.window.showWarningMessage : vscode.window.showInformationMessage
-  if ((await show(text, 'Answer')) === 'Answer') {
-    await view.show(hostId, board.id)
-  }
-}
 
 function toggleThinking(): Thenable<void> {
   const config = vscode.workspace.getConfiguration('workerdeck')

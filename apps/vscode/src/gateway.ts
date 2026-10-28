@@ -29,18 +29,9 @@ export function clientForUrl(baseUrl: string, headers: Record<string, string>): 
     baseUrl: base,
     headers,
     fetchImpl: fetch,
-    // Node 18 has no global `WebSocket`, and a browser-shaped constructor cannot carry the auth header.
-    WebSocketImpl: socketWithHeaders(headers),
+    // Required even though the host never attaches: the client resolves its WS impl at construction and Node 18 has no global `WebSocket`.
+    WebSocketImpl: NodeWebSocket as unknown as typeof WebSocket,
   })
-}
-
-function socketWithHeaders(headers: Record<string, string>): typeof WebSocket {
-  class AuthedWebSocket extends NodeWebSocket {
-    constructor(url: string) {
-      super(url, { headers })
-    }
-  }
-  return AuthedWebSocket as unknown as typeof WebSocket
 }
 
 export type HostLoader<S> = (host: GatewayHost, client: WorkerDeckClient | undefined) => Promise<S>

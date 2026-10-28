@@ -3,7 +3,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import {
   createFileAgentStore,
-  createFileQuestionStore,
   createFileProfileStore,
   createFileSessionRecordStore,
   createFileSpendStore,
@@ -216,13 +215,12 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
 
   const fallback = createFallback(auth, webRoot, hostAllowed, apns?.handleRequest ?? createApnsRoute(null, authenticatePush))
 
-  const { agentStore, profileStore, questions, sessions: sessionRecords, shell, spend } = stateDirDefaults(config)
+  const { agentStore, profileStore, sessions: sessionRecords, shell, spend } = stateDirDefaults(config)
 
   const server = createWorkerServer({
     ...config.options,
     ...(profileStore ? { profileStore } : {}),
     agentStore,
-    questions,
     // On by default here, off in the library: a mispointed config dir should say so at startup.
     checkCredentials: config.options.checkCredentials ?? true,
     sessions: sessionRecords,
@@ -341,7 +339,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
   }
 }
 
-type StateDirDefaults = Pick<WorkerServerOptions, 'agentStore' | 'profileStore' | 'questions' | 'sessions' | 'shell' | 'spend'>
+type StateDirDefaults = Pick<WorkerServerOptions, 'agentStore' | 'profileStore' | 'sessions' | 'shell' | 'spend'>
 
 // Everything the state dir backs by default. A config file's own store wins; with no state dir everything stays in memory,
 // and profile management stays refused rather than silently forgetting every profile on restart.
@@ -350,9 +348,8 @@ export function stateDirDefaults(config: ResolvedConfig): StateDirDefaults {
   const sessions = { ...config.options.sessions }
   const shell = { ...config.options.shell }
   const spend = { ...config.options.spend }
-  const questions = { ...config.options.questions }
   if (!stateDir) {
-    return { sessions, shell, spend, questions }
+    return { sessions, shell, spend }
   }
   sessions.store ??= createFileSessionRecordStore({
     dir: join(stateDir, 'sessions'),
@@ -371,8 +368,7 @@ export function stateDirDefaults(config: ResolvedConfig): StateDirDefaults {
   })
   const profileStore = config.profileStore ? createFileProfileStore(join(stateDir, 'profiles.json')) : undefined
   const agentStore = config.options.agentStore ?? createFileAgentStore(join(stateDir, 'agents.json'))
-  questions.store ??= createFileQuestionStore(join(stateDir, 'questions'))
-  return { sessions, shell, spend, questions, agentStore, ...(profileStore ? { profileStore } : {}) }
+  return { sessions, shell, spend, agentStore, ...(profileStore ? { profileStore } : {}) }
 }
 
 export type BannerInput = {

@@ -7,14 +7,6 @@ gateway and protocol it talks to.
 
 ## [Unreleased]
 
-### Added
-
-- **Questions view** in the WorkerDeck sidebar: answer the question boards agents post to with
-  `questions_ask` (pick an option, add a note, or answer in your own words; `j`/`k`, `1`-`9`, `e`,
-  Enter). Switch boards from the title bar, open a board as Markdown, and click an item's links. A
-  new open item shows a notification (a warning when it blocks work); turn it off with
-  `workerdeck.questions.notify`.
-
 ### Changed
 
 - **Session cards fold their step rows.** Sub-agents, tasks, background jobs and shells show as small

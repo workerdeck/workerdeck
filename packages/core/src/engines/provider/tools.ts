@@ -9,7 +9,6 @@ import type { ShellDirectory } from '../../lib/shells.ts'
 import type { SessionReportSource } from '../../lib/session-report.ts'
 import type { StatusLabelSink } from '../../lib/status-label.ts'
 import type { AvatarDirectory } from '../../lib/avatar-tool.ts'
-import type { QuestionDirectory } from '../../lib/questions-tool.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
 
 export type ToolTrust = 'sandboxed' | 'authoritative'
@@ -33,7 +32,6 @@ export type ToolContextOptions = {
   onDispatch?: (executionId: string, toolName: string) => void
   onSettle?: (executionId: string, result: ToolExecutionResult) => void
   peers?: PeerDirectory
-  questions?: QuestionDirectory
   contextReset?: ContextResetDirectory
   shells?: ShellDirectory
   shellWrite?: boolean
@@ -126,7 +124,6 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
       avatar: options.avatar,
       reset: options.contextReset,
       peers: options.peers,
-      questions: options.questions,
       shells: options.shells,
       write: options.shellWrite === true,
     },

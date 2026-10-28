@@ -13,22 +13,9 @@ import {
   runSessionInfoTool,
   type SessionReportSource,
 } from './session-report.ts'
-import {
-  CHANGE_AVATAR_TOOL,
-  CHANGE_AVATAR_TOOL_SHAPE,
-  isChangeAvatarToolName,
-  runChangeAvatarTool,
-  type AvatarDirectory,
-} from './avatar-tool.ts'
+import { CHANGE_AVATAR_TOOL, CHANGE_AVATAR_TOOL_SHAPE, isChangeAvatarToolName, runChangeAvatarTool, type AvatarDirectory } from './avatar-tool.ts'
 import { SET_STATUS_TOOL, SET_STATUS_TOOL_SHAPE, isSetStatusToolName, runSetStatusTool, type StatusLabelSink } from './status-label.ts'
 import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, isPeerToolName, runPeerTool, type PeerDirectory } from './peers.ts'
-import {
-  QUESTION_TOOL_NAMES,
-  QUESTION_TOOL_SHAPE_MAP,
-  isQuestionToolName,
-  runQuestionTool,
-  type QuestionDirectory,
-} from './questions-tool.ts'
 import { SHELL_TOOL_SHAPES, isShellToolName, runShellTool, shellToolNames, type ShellDirectory } from './shells.ts'
 
 export type SessionToolSources = {
@@ -37,22 +24,19 @@ export type SessionToolSources = {
   avatar?: AvatarDirectory
   reset?: ContextResetDirectory
   peers?: PeerDirectory
-  questions?: QuestionDirectory
   shells?: ShellDirectory
   write: boolean
 }
 
 export type SessionTool = GatewayToolShape & { name: string; run(args: unknown): Promise<GatewayToolOutput> }
 
-// The gateway's own tools a session is offered, session_info, set_status, change_avatar, context_reset, peers, questions, shells: the order every engine
+// The gateway's own tools a session is offered, session_info, set_status, change_avatar, context_reset, peers, shells: the order every engine
 // registers them in.
 export function sessionTools(sources: SessionToolSources, from: () => string): SessionTool[] {
-  const { report, status, avatar, reset, peers, questions, shells, write } = sources
+  const { report, status, avatar, reset, peers, shells, write } = sources
   return [
     ...(report ? [{ name: SESSION_INFO_TOOL, ...SESSION_INFO_TOOL_SHAPE, run: () => runSessionInfoTool(report, from()) }] : []),
-    ...(status
-      ? [{ name: SET_STATUS_TOOL, ...SET_STATUS_TOOL_SHAPE, run: (args: unknown) => runSetStatusTool(status, from(), args) }]
-      : []),
+    ...(status ? [{ name: SET_STATUS_TOOL, ...SET_STATUS_TOOL_SHAPE, run: (args: unknown) => runSetStatusTool(status, from(), args) }] : []),
     ...(avatar
       ? [{ name: CHANGE_AVATAR_TOOL, ...CHANGE_AVATAR_TOOL_SHAPE, run: (args: unknown) => runChangeAvatarTool(avatar, from(), args) }]
       : []),
@@ -61,13 +45,6 @@ export function sessionTools(sources: SessionToolSources, from: () => string): S
       : []),
     ...(peers
       ? PEER_TOOL_NAMES.map((name) => ({ name, ...PEER_TOOL_SHAPES[name], run: (args: unknown) => runPeerTool(peers, from(), name, args) }))
-      : []),
-    ...(questions
-      ? QUESTION_TOOL_NAMES.map((name) => ({
-          name,
-          ...QUESTION_TOOL_SHAPE_MAP[name],
-          run: (args: unknown) => runQuestionTool(questions, from(), name, args),
-        }))
       : []),
     ...(shells
       ? shellToolNames(write).map((name) => ({
@@ -104,9 +81,6 @@ export function runSessionTool(
   }
   if (sources.peers && isPeerToolName(name)) {
     return runPeerTool(sources.peers, from, name, args)
-  }
-  if (sources.questions && isQuestionToolName(name)) {
-    return runQuestionTool(sources.questions, from, name, args)
   }
   if (sources.shells && isShellToolName(name)) {
     return runShellTool(sources.shells, from, name, args, { write: sources.write })

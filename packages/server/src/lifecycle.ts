@@ -22,7 +22,7 @@ export type ServerLifecycleDeps = {
   shells: ShellRegistry | null
   queue: JobQueue | undefined
   engineSleep: EngineSleepTimers
-  closeHubSockets: () => void
+  closeQueueSockets: () => void
   // Resolves once the agent store's in-flight write has landed; the next generation hydrates only after close.
   releaseDirectories: () => Promise<void>
   // Resolves once every session record write already queued has landed, so a closed generation leaves no write behind.
@@ -117,7 +117,7 @@ function closeServer(deps: ServerLifecycleDeps): Promise<void> {
     for (const ws of wss.clients) {
       ws.close(1001, 'server shutting down')
     }
-    deps.closeHubSockets()
+    deps.closeQueueSockets()
     const force = setTimeout(() => {
       for (const ws of wss.clients) {
         ws.terminate()
