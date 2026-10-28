@@ -147,7 +147,7 @@ describe('cross-gateway teams, same owner', () => {
 
   it('mints a fresh invitation id when renewing an expired invitation before the prune', async () => {
     let now = 1_000
-    const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'mac' })
+    const agents = new AgentService({ store: createMemoryAgentStore(), gateway: 'mac' })
     await agents.hydrate()
     const transport = {
       ready: () => undefined,
@@ -288,7 +288,7 @@ async function memberRig(): Promise<{
   transport: ReturnType<typeof fakeTransport>
   member: StoredAgent
 }> {
-  const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'win', now: () => 1_000 })
+  const agents = new AgentService({ store: createMemoryAgentStore(), gateway: 'win', now: () => 1_000 })
   await agents.hydrate()
   const transport = fakeTransport()
   const teams = new TeamLinks({ agents, transport, now: () => 1_000 })
@@ -337,7 +337,7 @@ describe('team reconcile', () => {
   })
 
   it('refuses an inbound join to an agent that is itself joining a team (the cross-gateway join race; local graph races live in agents.test.ts)', async () => {
-    const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'win' })
+    const agents = new AgentService({ store: createMemoryAgentStore(), gateway: 'win' })
     await agents.hydrate()
     const transport = fakeTransport()
     let release: (result: TeamResult) => void = () => {}
@@ -358,7 +358,7 @@ describe('team reconcile', () => {
 
   it('expires an unanswered invitation and refuses a join that relies on it', async () => {
     let now = 0
-    const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'mac', now: () => now })
+    const agents = new AgentService({ store: createMemoryAgentStore(), gateway: 'mac', now: () => now })
     await agents.hydrate()
     const teams = new TeamLinks({ agents, transport: { ...fakeTransport(), gateway: 'mac' }, now: () => now, inviteTtlMs: 100 })
     const lead = (await agents.create(agents.draft({ name: 'AC-Lead' }) as StoredAgent)) as StoredAgent
@@ -376,7 +376,7 @@ describe('team reconcile', () => {
 
   it('persists both halves of an accepted edge through the file store', async () => {
     const dir = await tempDir()
-    const leadAgents = new AgentService({ store: createFileAgentStore(join(dir, 'mac.json')), basePath: '/v1', gateway: 'mac' })
+    const leadAgents = new AgentService({ store: createFileAgentStore(join(dir, 'mac.json')), gateway: 'mac' })
     await leadAgents.hydrate()
     const lead = (await leadAgents.create(leadAgents.draft({ name: 'AC-Lead' }) as StoredAgent)) as StoredAgent
     const leadTeams = new TeamLinks({ agents: leadAgents, transport: { ...fakeTransport(), gateway: 'mac' } })
@@ -384,7 +384,7 @@ describe('team reconcile', () => {
     const origin = { gateway: 'win', owner: 'tobias', agent: 'win:M1', name: 'Scout' }
     expect(await leadTeams.inbound('team.join', origin, lead.id, 'op-1')).toMatchObject({ ok: true })
 
-    const memberAgents = new AgentService({ store: createFileAgentStore(join(dir, 'win.json')), basePath: '/v1', gateway: 'win' })
+    const memberAgents = new AgentService({ store: createFileAgentStore(join(dir, 'win.json')), gateway: 'win' })
     await memberAgents.hydrate()
     const draft = memberAgents.draft({ name: 'Scout' }) as StoredAgent
     await memberAgents.create(draft)
@@ -392,10 +392,10 @@ describe('team reconcile', () => {
       memberAgents.update(draft.id, { lead: 'mac:L1' }, { joined }),
     )
 
-    const leadReread = new AgentService({ store: createFileAgentStore(join(dir, 'mac.json')), basePath: '/v1', gateway: 'mac' })
+    const leadReread = new AgentService({ store: createFileAgentStore(join(dir, 'mac.json')), gateway: 'mac' })
     await leadReread.hydrate()
     expect(leadReread.get(lead.id)?.remoteMembers).toMatchObject([{ agent: 'win:M1', state: 'accepted' }])
-    const memberReread = new AgentService({ store: createFileAgentStore(join(dir, 'win.json')), basePath: '/v1', gateway: 'win' })
+    const memberReread = new AgentService({ store: createFileAgentStore(join(dir, 'win.json')), gateway: 'win' })
     await memberReread.hydrate()
     expect(memberReread.get(draft.id)).toMatchObject({ lead: 'mac:L1', remoteLead: { name: 'AC-Lead', state: 'joined' } })
   })

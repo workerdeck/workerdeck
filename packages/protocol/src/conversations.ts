@@ -1,3 +1,4 @@
+import type { AgentFace } from './faces.ts'
 import type { SessionInfo } from './index.ts'
 
 // One conversation of a session, newest first in a list. `n` counts from 1 and is never reused.
@@ -36,6 +37,8 @@ export type RetiredAgentInfo = {
   id: string
   name: string
   owner?: string
+  face?: AgentFace
+  // @deprecated `face` is the avatar.
   avatar?: string
   retiredAt: number
   conversations: AgentConversation[]

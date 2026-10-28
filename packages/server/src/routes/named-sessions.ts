@@ -2,9 +2,12 @@ import type { SessionRunnerConfig } from '@workerdeck/core'
 import {
   errorMessage,
   isSharing,
+  projectSwatch,
+  rollFace,
   type AgentConfig,
   type AgentConversation,
   type AgentInfo,
+  type FaceSwatch,
   type SessionAgentRequest,
   type SessionInfo,
   type SessionSettings,
@@ -69,7 +72,7 @@ export async function createNamedSession(
       instructionScope: draft.config.instructionScope,
       agent: true,
       identity: async (built) => {
-        stamped = await withAvatar(ctx, draft, built.info())
+        stamped = withAvatar(ctx, draft, built.info())
         return { agent: stamped, ...(crossOwner ? { crossOwner } : {}), ...(remoteLead ? { remoteLead } : {}) }
       },
       beforeStart: async () => {
@@ -544,12 +547,11 @@ async function writeIdentity(
   remoteLead: string | undefined,
   crossOwner: boolean,
 ): Promise<StoredAgent> {
-  return createIdentity(ctx, await withAvatar(ctx, draft, info), remoteLead, crossOwner)
+  return createIdentity(ctx, withAvatar(ctx, draft, info), remoteLead, crossOwner)
 }
 
-async function withAvatar(ctx: ServerContext, draft: StoredAgent, info: SessionInfo): Promise<StoredAgent> {
-  const recipe = await rollAvatar(ctx, draft, info)
-  return recipe === undefined ? draft : { ...draft, avatarRecipe: recipe }
+function withAvatar(ctx: ServerContext, draft: StoredAgent, info: SessionInfo): StoredAgent {
+  return { ...draft, face: rollFace(draft.avatarSeed, faceProject(ctx, draft, info)) }
 }
 
 async function createIdentity(ctx: ServerContext, stamped: StoredAgent, remoteLead: string | undefined, crossOwner: boolean): Promise<StoredAgent> {
@@ -611,16 +613,10 @@ export function settled<T extends object>(outcome: T | AgentRefusal): T {
   return outcome
 }
 
-export async function rollAvatar(ctx: ServerContext, agent: StoredAgent, session: SessionInfo | undefined): Promise<unknown> {
-  if (!ctx.avatars) {
-    return undefined
-  }
-  const project = session ? (ctx.projects.withProject(session).project?.root ?? session.cwd) : undefined
-  try {
-    return await ctx.avatars.roll(agent.avatarSeed, session?.engine, project || undefined)
-  } catch {
-    return undefined
-  }
+// The swatch a roll keeps clear of: the session's project, read as clients read it (its root, else its cwd).
+export function faceProject(ctx: ServerContext, agent: StoredAgent, session: SessionInfo | undefined): FaceSwatch {
+  const project = session ? (ctx.projects.withProject(session).project?.root ?? session.cwd) : agent.config.cwd
+  return projectSwatch(project || agent.id)
 }
 
 function configOfRequest(request: Record<string, unknown>): AgentConfig {

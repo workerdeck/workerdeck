@@ -6,15 +6,23 @@ import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import { AGENT_SLEEP_AFTER_MS_DEFAULT, type AgentInfo, type AgentResponse, type SessionInfo } from '@workerdeck/protocol'
 import {
-  type AvatarProvider,
+  AGENT_SLEEP_AFTER_MS_DEFAULT,
+  isAgentFace,
+  projectSwatch,
+  rollFace,
+  type AgentFace,
+  type AgentInfo,
+  type AgentResponse,
+  type SessionInfo,
+} from '@workerdeck/protocol'
+import {
   createFileAgentStore,
   createFileSessionRecordStore,
   createWorkerServer,
   type WorkerServerOptions,
 } from '../src/index.ts'
-import { createMemoryAgentStore } from '../src/services/agent-store.ts'
+import { createMemoryAgentStore, type StoredAgent } from '../src/services/agent-store.ts'
 import { AgentService } from '../src/services/agents.ts'
 import { fakeHarness, fileRuntimeStore, gatewayFixture, listenOn } from './helpers.ts'
 
@@ -36,7 +44,6 @@ const initMessage = {
   uuid: 'uuid-init',
 } as unknown as SDKMessage
 
-const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47])
 
 const { servers, stateDir, cleanup } = gatewayFixture('wd-agents-')
 afterEach(cleanup)
@@ -54,48 +61,10 @@ afterAll(() => {
   rmSync(HOME, { recursive: true, force: true })
 })
 
-function fakeAvatars(): AvatarProvider & { rolls: number } {
-  return {
-    rolls: 0,
-    async roll(seed) {
-      this.rolls++
-      return { seed }
-    },
-    still: async (recipe) => ({ png: PNG, etag: `"still-${JSON.stringify(recipe)}"` }),
-    busy: async (recipe) => ({ png: PNG, etag: `"busy-${JSON.stringify(recipe)}"`, durations: [160, 160] }),
-  }
-}
-
-function gatedAvatars(): AvatarProvider & { hold(): void; release(): void; waiting(): number } {
-  const base = fakeAvatars()
-  let gate: Promise<void> | undefined
-  let open: () => void = () => {}
-  let waiting = 0
-  return {
-    ...base,
-    roll: async (seed, engine, project) => {
-      if (gate) {
-        waiting++
-        await gate
-        waiting--
-      }
-      return base.roll(seed, engine, project)
-    },
-    hold: () => {
-      gate = new Promise((resolve) => (open = resolve))
-    },
-    release: () => {
-      gate = undefined
-      open()
-    },
-    waiting: () => waiting,
-  }
-}
-
 // `ownQuery` gives every session its own fake query: closing one session then ends only its own stream.
 async function startGateway(
   dir?: string,
-  { ownQuery, ...extra }: Pick<WorkerServerOptions, 'authenticate' | 'avatars'> & { ownQuery?: boolean } = { avatars: fakeAvatars() },
+  { ownQuery, ...extra }: Pick<WorkerServerOptions, 'authenticate'> & { ownQuery?: boolean } = {},
 ) {
   const harness = fakeHarness()
   const queryFn: typeof harness.queryFn = ownQuery ? (params) => fakeHarness().queryFn(params) : harness.queryFn
@@ -144,9 +113,11 @@ describe('agents', () => {
     const created = await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })
     expect(created.status).toBe(201)
     const { agent, session } = created.body
-    expect(agent).toMatchObject({ name: 'Atlas', id: session!.id, avatar: `/v1/agents/${agent.id}/avatar.png` })
+    expect(agent).toMatchObject({ name: 'Atlas', id: session!.id, face: { v: 1 } })
+    expect(isAgentFace(agent.face)).toBe(true)
     expect(agent).not.toHaveProperty('avatarSeed')
-    expect(session!.agent).toEqual({ id: agent.id, name: 'Atlas', avatar: agent.avatar })
+    expect(agent).not.toHaveProperty('avatar')
+    expect(session!.agent).toEqual({ id: agent.id, name: 'Atlas', face: agent.face })
 
     const listed = await call<{ sessions: SessionInfo[] }>(base, '/sessions')
     expect(listed.body.sessions.find((s) => s.id === session!.id)?.agent?.name).toBe('Atlas')
@@ -354,7 +325,7 @@ describe('agents', () => {
   })
 
   it('starts a new conversation of an agent, keeping its identity and its team', async () => {
-    const { base, server } = await startGateway(undefined, { avatars: fakeAvatars(), ownQuery: true })
+    const { base, server } = await startGateway(undefined, { ownQuery: true })
     const lead = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
     const member = (
       await call<AgentResponse>(base, '/agents', 'POST', { name: 'Pip', config: { cwd: '/tmp/project' }, lead: lead.agent.id })
@@ -389,42 +360,25 @@ describe('agents', () => {
     expect(agent).toMatchObject({ id: session.id, name: 'Quill', config: { cwd: '/tmp/project' } })
   })
 
-  it('serves a stable avatar rolled once and persisted, with a cache validator', async () => {
-    const avatars = fakeAvatars()
-    const { base } = await startGateway(undefined, { avatars })
-    const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
-    const url = base.replace(/\/v1$/, '') + agent.avatar
-    const first = await fetch(url)
-    expect(first.status).toBe(200)
-    expect(first.headers.get('content-type')).toBe('image/png')
-    expect(new Uint8Array(await first.arrayBuffer())).toEqual(PNG)
-    const etag = first.headers.get('etag')!
-    expect((await fetch(url, { headers: { 'if-none-match': etag } })).status).toBe(304)
-    expect((await fetch(url)).headers.get('etag')).toBe(etag)
-    expect(avatars.rolls).toBe(1)
-  })
-
-  it('changes the avatar to a previewed seed or a random one, under a new address', async () => {
+  it('rolls a face per seed, replaces or rerolls it, and refuses a malformed one', async () => {
     const { base } = await startGateway()
-    const origin = base.replace(/\/v1$/, '')
     const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
-    const before = (await fetch(origin + agent.avatar)).headers.get('etag')
-    const preview = await fetch(`${base}/agents/${agent.id}/avatar-preview.png?seed=otter`)
-    expect(preview.status).toBe(200)
     const chosen = await call<AgentResponse>(base, `/agents/${agent.id}/avatar`, 'POST', { seed: 'otter' })
     expect(chosen.status).toBe(200)
-    expect(chosen.body.agent.avatar).toMatch(new RegExp(`^/v1/agents/${agent.id}/avatar\\.png\\?v=[0-9a-f]{10}$`))
-    const after = await fetch(origin + chosen.body.agent.avatar)
-    expect(after.headers.get('etag')).toBe(preview.headers.get('etag'))
-    expect(after.headers.get('etag')).not.toBe(before)
-    expect(after.headers.get('cache-control')).toBe('private, no-cache')
+    expect(chosen.body.agent.face).toEqual(rollFace('otter', projectSwatch('/tmp/project')))
+    const again = await call<AgentResponse>(base, `/agents/${agent.id}/avatar`, 'POST', { seed: 'otter' })
+    expect(again.body.agent.face).toEqual(chosen.body.agent.face)
     const random = await call<AgentResponse>(base, `/agents/${agent.id}/avatar`, 'POST', {})
-    expect(random.body.agent.avatar).not.toBe(chosen.body.agent.avatar)
+    expect(isAgentFace(random.body.agent.face)).toBe(true)
+    const face: AgentFace = { v: 1, tile: { shape: 'boxy', color: 'steel' }, eyes: { kind: 'slit', color: 'teal/glow' } }
+    expect((await call<AgentResponse>(base, `/agents/${agent.id}/avatar`, 'POST', { face })).body.agent.face).toEqual(face)
+    expect((await call(base, `/agents/${agent.id}/avatar`, 'POST', { face: { v: 1, eyes: { kind: 'laser' } } })).status).toBe(400)
+    expect((await call(base, `/agents/${agent.id}/avatar`, 'POST', { face: { v: 1, tile: { color: 'plaid' } } })).status).toBe(400)
     expect((await call(base, `/agents/${agent.id}/avatar`, 'POST', { seed: 'x'.repeat(65) })).status).toBe(400)
-    expect((await fetch(`${base}/agents/${agent.id}/avatar-preview.png`)).status).toBe(400)
+    expect((await fetch(`${base}/agents/${agent.id}/avatar.png`)).status).toBe(404)
   })
 
-  it('offers change_avatar to an agent session only, and the tool rolls a new avatar', async () => {
+  it('offers change_avatar to an agent session, which rerolls or merges the parts it names', async () => {
     const { base, harness } = await startGateway()
     const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
     await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
@@ -433,54 +387,37 @@ describe('agents', () => {
       servers.workerdeck!.instance as Record<string, Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>>
     )['_registeredTools']!
     expect(Object.keys(tools)).toContain('change_avatar')
-    const out = (await tools.change_avatar!.handler({ seed: 'heron' }, {})) as { content: { text: string }[]; isError?: boolean }
-    expect(out.isError).toBeFalsy()
-    expect(out.content[0]!.text).toMatch(/avatar is changed/)
-    const listed = (await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents.find((a) => a.id === agent.id)!
-    expect(listed.avatar).not.toBe(agent.avatar)
+    type Out = { content: { text: string }[]; isError?: boolean }
+    const rolled = (await tools.change_avatar!.handler({ seed: 'heron' }, {})) as Out
+    expect(rolled.isError).toBeFalsy()
+    expect(rolled.content[0]!.text).toMatch(/avatar is rerolled/)
+    const listed = async () => (await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents.find((a) => a.id === agent.id)!
+    const heron = rollFace('heron', projectSwatch('/tmp/project'))
+    expect((await listed()).face).toEqual(heron)
+    const merged = (await tools.change_avatar!.handler({ visor: { kind: 'band' }, eyes: { color: 'amber' } }, {})) as Out
+    expect(merged.content[0]!.text).toMatch(/avatar is changed/)
+    expect((await listed()).face).toEqual({ ...heron, visor: { ...heron.visor, kind: 'band' }, eyes: { ...heron.eyes, color: 'amber' } })
   })
 
-  it('keeps a move and a retire that land while an avatar change is still rolling', async () => {
-    const avatars = gatedAvatars()
-    const { base } = await startGateway(undefined, { avatars })
-    const lead = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Lead', config: { cwd: '/tmp/project' } })).body.agent
-    const member = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Member', config: { cwd: '/tmp/project' } })).body.agent
-    avatars.hold()
-    const rolling = call<AgentResponse>(base, `/agents/${member.id}/avatar`, 'POST', { seed: 'otter' })
-    await vi.waitFor(() => expect(avatars.waiting()).toBe(1))
-    expect((await call(base, `/agents/${member.id}`, 'PATCH', { lead: lead.id })).status).toBe(200)
-    avatars.release()
-    const changed = await rolling
-    expect(changed.status).toBe(200)
-    expect(changed.body.agent).toMatchObject({ lead: lead.id })
-    expect(changed.body.agent.avatar).not.toBe(member.avatar)
-
-    avatars.hold()
-    const late = call<{ error: string }>(base, `/agents/${member.id}/avatar`, 'POST', { seed: 'heron' })
-    await vi.waitFor(() => expect(avatars.waiting()).toBe(1))
-    expect((await call(base, `/agents/${member.id}`, 'DELETE', { expectedGeneration: 1 })).status).toBe(200)
-    avatars.release()
-    expect(await late).toEqual({ status: 404, body: { error: `no such agent: ${member.id}` } })
-    expect((await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents.map((a) => a.name)).toEqual(['Lead'])
-  })
-
-  it('serves the busy animation as one strip with its frame durations', async () => {
-    const { base } = await startGateway()
-    const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
-    const res = await fetch(base.replace(/\/v1$/, '') + agent.avatar!.replace(/avatar\.png$/, 'avatar-busy.png'))
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toBe('image/png')
-    expect(res.headers.get('x-frame-durations')).toBe('160,160')
-  })
-
-  it('omits avatar and 404s the route on a gateway without an avatar provider', async () => {
-    const { base } = await startGateway(undefined, {})
-    const created = await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })
-    expect(created.status).toBe(201)
-    const { agent } = created.body
-    expect(agent).not.toHaveProperty('avatar')
-    expect((await call<{ sessions: SessionInfo[] }>(base, '/sessions')).body.sessions[0]!.agent).toEqual({ id: agent.id, name: 'Atlas' })
-    expect((await fetch(`${base}/agents/${agent.id}/avatar.png`)).status).toBe(404)
+  it('rolls a face from the stored seed for a record from before faces, and drops its pixel recipe', async () => {
+    const store = createMemoryAgentStore([
+      {
+        id: 'old-1',
+        schema: 1,
+        name: 'Elder',
+        createdAt: 1,
+        updatedAt: 1,
+        avatarSeed: 'otter',
+        config: { cwd: '/tmp/project' },
+        avatarRecipe: { pack: 'monkey', recipe: {} },
+      } as StoredAgent,
+    ])
+    const agents = new AgentService({ store })
+    await agents.hydrate()
+    const held = agents.get('old-1')!
+    expect(held.face).toEqual(rollFace('otter', projectSwatch('/tmp/project')))
+    expect(held).not.toHaveProperty('avatarRecipe')
+    expect(agents.public(held)).not.toHaveProperty('avatarRecipe')
   })
 
   it('is operator-only: anyone else gets the same 404 as a missing route', async () => {
@@ -495,7 +432,7 @@ describe('agents', () => {
 
 describe('agent sleep default', () => {
   async function sleepAfter(gateway: number | undefined, own?: number): Promise<{ agent?: number; plain?: number }> {
-    const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', sleepAfterMs: gateway })
+    const agents = new AgentService({ store: createMemoryAgentStore(), sleepAfterMs: gateway })
     const draft = agents.draft({ id: 'session-1', name: 'Atlas', config: own === undefined ? {} : { sleepAfterMs: own } })
     if ('error' in draft) {
       throw new Error(draft.error)

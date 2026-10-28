@@ -1413,6 +1413,7 @@ export type QueueStatsResponse = { stats: QueueStats }
 
 export * from './accounts.ts'
 export * from './agents.ts'
+export * from './faces.ts'
 export * from './checklist.ts'
 export * from './conversation-cut.ts'
 export * from './conversations.ts'

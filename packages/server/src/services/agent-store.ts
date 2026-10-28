@@ -9,7 +9,6 @@ export type StoredAgent = Omit<AgentInfo, 'undelivered' | 'startFailed'> & {
   avatarSeed: string
   // Set on a retired agent's tombstone: kept for its conversation history, outside every active lookup.
   retiredAt?: number
-  avatarRecipe?: unknown
   schema?: number
   pendingJoin?: { op: string; lead: string; at: number }
   roster?: { epoch: string; rev: number; digest: string }

@@ -89,11 +89,6 @@ Options
       --owner <label>       whom sessions answer to when their profile names no
                             owner (config: owner; profiles take an owner field).
                             Needed on a gateway shared by several owners.
-      --avatar-packs <list>
-                            monkeyart packs new agent avatars are drawn from,
-                            comma separated (monkey, toad, steampunk-bulldogs,
-                            panda; config: avatarPacks). Default
-                            monkey,steampunk-bulldogs,toad.
       --effort-default <model>=<effort>
                             reasoning effort a session starts at, or switches to,
                             on this model (opus=high, gpt-6-sol=xhigh; repeatable;

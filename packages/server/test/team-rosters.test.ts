@@ -67,7 +67,7 @@ class Mesh {
     store: AgentStore = createMemoryAgentStore(),
     options: { soonMs?: number; start?: boolean } = {},
   ): Promise<Node> {
-    const agents = new AgentService({ store, basePath: '/v1', gateway, now: () => this.clock.now })
+    const agents = new AgentService({ store, gateway, now: () => this.clock.now })
     await agents.hydrate()
     const teams = new TeamLinks({
       agents,
@@ -507,7 +507,7 @@ describe('second review', () => {
   })
 
   it('gives no answer and accepts no frame before its store is loaded', async () => {
-    const agents = new AgentService({ store: createMemoryAgentStore([record('M', { lead: 'mac:L' })]), basePath: '/v1', gateway: 'win' })
+    const agents = new AgentService({ store: createMemoryAgentStore([record('M', { lead: 'mac:L' })]), gateway: 'win' })
     const teams = new TeamLinks({ agents, transport: new Mesh().transport('win') })
     expect((await teams.inboundStatus({ gateway: 'mac' }, { edges: [{ from: 'mac:L', to: 'M', op: 'o' }] })).edges).toEqual([{}])
     expect(await teams.inbound('team.release', { gateway: 'mac', owner: 'tobias', agent: 'mac:L' }, 'M', 'o')).toEqual({
@@ -575,7 +575,6 @@ describe('second review', () => {
   it('restores no join reservation without a relay gateway name', async () => {
     const agents = new AgentService({
       store: createMemoryAgentStore([record('M', { pendingJoin: { op: 'o', lead: 'mac:L', at: 1 } })]),
-      basePath: '/v1',
     })
     await agents.hydrate()
     expect(agents.restoredJoins()).toEqual([])

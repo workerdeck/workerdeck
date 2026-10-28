@@ -1,4 +1,5 @@
 import type {
+  AgentFace,
   AgentInfo,
   AgentResponse,
   CompleteAccountRequest,
@@ -295,39 +296,9 @@ export class WorkerDeckClient {
     return await this.#call('DELETE', this.#agent(id), request)
   }
 
-  // A new avatar for the agent: `seed` picks a known one (a preview's), none rolls a random one.
-  async changeAgentAvatar(id: string, seed?: string): Promise<AgentResponse> {
-    return await this.#call('POST', this.#agent(id, '/avatar'), seed === undefined ? {} : { seed })
-  }
-
-  agentAvatarPreviewUrl(id: string, seed: string): string {
-    return `${this.#options.baseUrl}${this.#agent(id, `/avatar-preview.png?seed=${encodeURIComponent(seed)}`)}`
-  }
-
-  async agentAvatarPreview(id: string, seed: string): Promise<Blob> {
-    const res = await this.#callRaw(
-      this.agentAvatarPreviewUrl(id, seed),
-      { headers: { ...this.#options.headers } },
-      'avatar preview request failed',
-    )
-    return await res.blob()
-  }
-
-  agentAvatarUrl(id: string, busy = false): string {
-    return `${this.#options.baseUrl}${this.#agent(id, busy ? '/avatar-busy.png' : '/avatar.png')}`
-  }
-
-  // `durations` is set on the busy strip only: one entry per frame, frames laid out left to right.
-  async agentAvatar(id: string, busy = false): Promise<{ blob: Blob; durations?: number[] }> {
-    const res = await this.#callRaw(this.agentAvatarUrl(id, busy), { headers: { ...this.#options.headers } }, 'agent avatar request failed')
-    const header = res.headers.get('x-frame-durations')
-    const durations = header
-      ? header
-          .split(',')
-          .map(Number)
-          .filter((n) => Number.isFinite(n) && n > 0)
-      : undefined
-    return durations?.length ? { blob: await res.blob(), durations } : { blob: await res.blob() }
+  // A new face for the agent: `seed` rolls the same face every time, `face` sets one whole, neither rolls a random one.
+  async changeAgentAvatar(id: string, change: { seed?: string; face?: AgentFace } = {}): Promise<AgentResponse> {
+    return await this.#call('POST', this.#agent(id, '/avatar'), change)
   }
 
   // The sessions this one may address, relay included: what its `peers_list` tool answers.

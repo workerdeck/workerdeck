@@ -1,5 +1,3 @@
-import { packIds, type PackId } from '@monkeyart/packs'
-import { isPackId } from './lib/avatars.ts'
 import { existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -29,8 +27,6 @@ export type WorkerDeckConfig = WorkerServerOptions & {
   // Refused unless auth is on: CORS on an open gateway lets any allowlisted page drive it with no credential.
   corsOrigins?: string[]
   apns?: ApnsConfig
-  // The monkeyart packs new avatars are drawn from (`monkey`, `toad`, `steampunk-bulldogs`, `panda`).
-  avatarPacks?: string[]
 }
 
 export type CliFlags = {
@@ -54,7 +50,6 @@ export type CliFlags = {
   engineSleepAfterMs?: number
   agentSleepAfterMs?: number
   owner?: string
-  avatarPacks?: string[]
   effortDefaults?: Record<string, string>
   agentContextReset?: 'on' | 'off' | 'never'
   agentSharing?: 'private' | 'shared' | 'never'
@@ -111,7 +106,6 @@ const VALUED = new Map<string, FlagValue>([
   ['--engine-sleep-after', (f, v, name) => (f.engineSleepAfterMs = parseDuration(v, name) ?? 0)],
   ['--agent-sleep-after', (f, v, name) => (f.agentSleepAfterMs = parseDuration(v, name) ?? 0)],
   ['--owner', (f, v) => (f.owner = v)],
-  ['--avatar-packs', (f, v, name) => (f.avatarPacks = parseAvatarPacks(v, name))],
   ['--effort-default', (f, v, name) => (f.effortDefaults = { ...f.effortDefaults, ...parseEffortDefault(v, name) })],
   ['--agent-context-reset', (f, v, name) => (f.agentContextReset = parseAgentContextReset(v, name))],
   ['--agent-sharing', (f, v, name) => (f.agentSharing = parseAgentSharing(v, name))],
@@ -276,7 +270,6 @@ export type ResolvedConfig = {
   web: boolean
   keepAwake: boolean
   corsOrigins: string[]
-  avatarPacks?: PackId[]
   apns?: ApnsConfig
   open: boolean
   // Runtime profile CRUD over /v1/profiles. The store itself is opened by `startInstance`, which owns the state dir.
@@ -418,7 +411,6 @@ export function resolveInstanceConfig(
     keepAwake: _ka,
     corsOrigins: _cors,
     apns: _ap,
-    avatarPacks: _packs,
     ...serverOptions
   } = loaded.options
   const options: WorkerServerOptions = { ...serverOptions }
@@ -502,7 +494,6 @@ export function resolveInstanceConfig(
     web,
     keepAwake,
     corsOrigins,
-    avatarPacks: resolveAvatarPacks(flags.avatarPacks ?? loaded.options.avatarPacks),
     apns: resolveApns(loaded),
     open: flags.open ?? false,
     profileStore,
@@ -523,21 +514,4 @@ function resolveApns(loaded: LoadedConfig): ApnsConfig | undefined {
   }
   const base = loaded.path ? dirname(loaded.path) : process.cwd()
   return { ...apns, keyFile: resolve(base, apns.keyFile) }
-}
-
-function parseAvatarPacks(value: string, name: string): string[] {
-  const packs = value.split(',').map((pack) => pack.trim()).filter(Boolean)
-  for (const pack of packs) {
-    if (!isPackId(pack)) {
-      throw new ConfigError(`${name}: unknown avatar pack "${pack}" (known: ${packIds.join(', ')})`)
-    }
-  }
-  return packs
-}
-
-function resolveAvatarPacks(packs: string[] | undefined): PackId[] | undefined {
-  if (packs === undefined) {
-    return undefined
-  }
-  return parseAvatarPacks(packs.join(','), 'avatarPacks') as PackId[]
 }

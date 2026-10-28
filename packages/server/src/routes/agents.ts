@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AVATAR_SEED_MAX } from '@workerdeck/core'
 import {
+  agentFaceError,
   isOwnerName,
+  mergeAgentFace,
+  rollFace,
+  type AgentFace,
+  type AgentFacePatch,
   type AgentResponse,
   type CreateAgentRequest,
   type InviteRemoteMemberRequest,
@@ -16,7 +21,6 @@ import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
 import { isAgentRefusal, type AgentRefusal } from '../services/agents.ts'
 import type { StoredAgent } from '../services/agent-store.ts'
-import type { AvatarImage } from '../services/avatars.ts'
 import {
   agentInfoOf,
   createNamedSession,
@@ -24,8 +28,7 @@ import {
   pastConversations,
   requestFromConfig,
   retireAgent,
-  rollAvatar,
-  settled,
+  faceProject,
   updateAgent,
 } from './named-sessions.ts'
 import { conversationGuard, expectedGenerationOf } from './conversations.ts'
@@ -76,27 +79,18 @@ export async function handleAgents(
   }
   if (action === 'avatar') {
     requireMethod(req, 'POST')
-    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { seed?: unknown }
-    const changed = await rerollAvatar(ctx, agent, readSeed(body.seed))
+    const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { seed?: unknown; face?: unknown }
+    if (body.face !== undefined) {
+      const error = agentFaceError(body.face)
+      if (error) {
+        fail(400, error)
+      }
+    }
+    const changed = await changeFace(ctx, agent, body.face === undefined ? { seed: readSeed(body.seed) } : { face: body.face as AgentFace })
     if (isAgentRefusal(changed)) {
       fail(changed.status, changed.error)
     }
     await respond(ctx, res, 200, changed)
-    return
-  }
-  if (action === 'avatar-preview.png') {
-    requireMethod(req, 'GET')
-    const seed = readSeed(new URL(req.url ?? '', 'http://x').searchParams.get('seed') ?? undefined)
-    if (seed === undefined) {
-      fail(400, 'seed is required')
-    }
-    const recipe = await rollFor(ctx, agent, seed)
-    await sendImage(req, res, await ctx.avatars!.still(recipe))
-    return
-  }
-  if (action === 'avatar.png' || action === 'avatar-busy.png') {
-    requireMethod(req, 'GET')
-    await sendAvatar(ctx, req, res, agent, action === 'avatar-busy.png')
     return
   }
   if (action !== undefined) {
@@ -176,58 +170,29 @@ function readSeed(seed: unknown): string | undefined {
   return seed.trim()
 }
 
-async function rollFor(ctx: ServerContext, agent: StoredAgent, seed: string): Promise<unknown> {
-  if (!ctx.avatars) {
-    fail(404, 'this gateway draws no avatars')
-  }
-  const recipe = await rollAvatar(ctx, { ...agent, avatarSeed: seed }, await sessionInfoOf(ctx, agent.id))
-  if (recipe === undefined) {
-    fail(503, 'the avatar pack could not be loaded')
-  }
-  return recipe
-}
-
-// A new seed (random unless given) rolls and saves a new avatar; the agent's `avatar` address changes with it.
-export async function rerollAvatar(ctx: ServerContext, agent: StoredAgent, seed?: string): Promise<StoredAgent | AgentRefusal> {
-  const next = seed ?? randomUUID()
-  const recipe = await rollFor(ctx, agent, next)
-  return ctx.agents.patch(agent.id, (current) => ({ ...current, avatarSeed: next, avatarRecipe: recipe }))
-}
-
-async function sendAvatar(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, agent: StoredAgent, busy: boolean): Promise<void> {
-  const avatars = ctx.avatars
-  if (!avatars) {
-    fail(404, 'this gateway draws no avatars')
-  }
-  let recipe = agent.avatarRecipe
-  if (recipe === undefined) {
-    const rolled = await rollAvatar(ctx, agent, await sessionInfoOf(ctx, agent.id))
-    if (rolled === undefined) {
-      fail(503, 'the avatar pack could not be loaded')
+// A seed (random unless given) rolls a new face, `parts` merge over the current one, `face` replaces it whole.
+export async function changeFace(
+  ctx: ServerContext,
+  agent: StoredAgent,
+  request: { seed?: string; parts?: AgentFacePatch; face?: AgentFace },
+): Promise<StoredAgent | AgentRefusal> {
+  const session = await sessionInfoOf(ctx, agent.id)
+  if (request.parts) {
+    const error = agentFaceError(request.parts, true)
+    if (error) {
+      return { status: 400, error }
     }
-    const stored = settled(
-      await ctx.agents.patch(agent.id, (current) => (current.avatarRecipe === undefined ? { ...current, avatarRecipe: rolled } : current)),
-    )
-    recipe = stored.avatarRecipe
   }
-  const image = busy ? await avatars.busy(recipe) : await avatars.still(recipe)
-  if (!image) {
-    fail(404, 'this avatar pack has no busy animation')
-  }
-  await sendImage(req, res, image)
-}
-
-// Revalidated rather than cached for a day: the address is stable per agent while the avatar can change.
-async function sendImage(req: IncomingMessage, res: ServerResponse, image: AvatarImage): Promise<void> {
-  const headers: Record<string, string> = { 'content-type': 'image/png', etag: image.etag, 'cache-control': 'private, no-cache' }
-  if (image.durations) {
-    headers['x-frame-durations'] = image.durations.join(',')
-  }
-  if (req.headers['if-none-match'] === image.etag) {
-    res.writeHead(304, headers).end()
-    return
-  }
-  res.writeHead(200, headers).end(Buffer.from(image.png))
+  const seed = request.parts || request.face ? undefined : (request.seed ?? randomUUID())
+  return ctx.agents.patch(agent.id, (current) => {
+    if (request.face) {
+      return { ...current, face: request.face }
+    }
+    if (request.parts) {
+      return { ...current, face: mergeAgentFace(current.face ?? rollFace(current.avatarSeed, faceProject(ctx, current, session)), request.parts) }
+    }
+    return { ...current, avatarSeed: seed!, face: rollFace(seed!, faceProject(ctx, current, session)) }
+  })
 }
 
 async function respond(ctx: ServerContext, res: ServerResponse, status: number, agent: StoredAgent, session?: SessionInfo): Promise<void> {

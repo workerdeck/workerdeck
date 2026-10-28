@@ -32,7 +32,7 @@ import { HttpError, httpErrorStatus, json } from './lib/http.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
-import { rerollAvatar } from './routes/agents.ts'
+import { changeFace } from './routes/agents.ts'
 import { createHistoryReader } from './services/history-reader.ts'
 import { LifecycleLocks, CUT_IN_PROGRESS } from './services/lifecycle-locks.ts'
 import { adoptIndexOwners, reconcileIdentity } from './routes/named-sessions.ts'
@@ -171,8 +171,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const shells = options.shell?.enabled === true ? shellRegistryFor(options.shell, generation) : null
   const agents = new AgentService({
     store: options.agentStore ?? createMemoryAgentStore(),
-    basePath,
-    avatars: options.avatars !== undefined,
     sleepAfterMs: options.agentSleepAfterMs,
     allowShared: options.agentSharing?.allowShared,
     modeOf: (agent) =>
@@ -224,24 +222,24 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         })
   let ownContextResets = contextResets
   installContextResetDirectory(contextResets)
-  const avatarChanges: AvatarDirectory | undefined = options.avatars
-    ? {
-        change: async (sessionId, seed) => {
-          const agent = agents.get(sessionId)
-          if (!agent) {
-            throw new Error('only an agent has an avatar, and this session is not one')
-          }
-          const changed = await rerollAvatar(ctx, agent, seed)
-          if (isAgentRefusal(changed)) {
-            throw new Error(changed.error)
-          }
-          return seed
-            ? `Your avatar is changed (seed "${seed}"); the human sees it beside your name now.`
-            : 'Your avatar is changed; the human sees it beside your name now.'
-        },
+  const avatarChanges: AvatarDirectory = {
+    change: async (sessionId, request) => {
+      const agent = agents.get(sessionId)
+      if (!agent) {
+        throw new Error('only an agent has an avatar, and this session is not one')
       }
-    : undefined
-  let ownAvatarChanges = avatarChanges
+      const changed = await changeFace(ctx, agent, request)
+      if (isAgentRefusal(changed)) {
+        throw new Error(changed.error)
+      }
+      return request.parts
+        ? 'Your avatar is changed; the human sees it beside your name now.'
+        : request.seed
+          ? `Your avatar is rerolled (seed "${request.seed}"); the human sees it beside your name now.`
+          : 'Your avatar is rerolled; the human sees it beside your name now.'
+    },
+  }
+  let ownAvatarChanges: AvatarDirectory | undefined = avatarChanges
   installAvatarDirectory(avatarChanges)
   // Built first because everything else holds it. The watchers it attaches read the later-built services only when
   // a runner registers, which no code path does before this function returns.
@@ -464,12 +462,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     started: (runner) => cuts.firstStarted(runner),
     agentBrief: (sessionId) => agents.briefFor(sessionId),
     agentInstructionScope: (sessionId) => agents.instructionScopeFor(sessionId),
-    avatar: avatarChanges
-      ? {
-          directory: avatarDirectoryHandle(() => ownAvatarChanges),
-          isAgent: (sessionId) => sessionId !== undefined && agents.get(sessionId) !== undefined,
-        }
-      : undefined,
+    avatar: {
+      directory: avatarDirectoryHandle(() => ownAvatarChanges),
+      isAgent: (sessionId) => sessionId !== undefined && agents.get(sessionId) !== undefined,
+    },
   })
 
   const availability = new AvailabilityTracker({
@@ -532,7 +528,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     owners,
     teams: teamLinks,
     relayStatus: relay ? () => relay.status() : undefined,
-    avatars: options.avatars,
     registry,
     parking,
     history,

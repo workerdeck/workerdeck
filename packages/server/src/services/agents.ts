@@ -5,6 +5,8 @@ import {
   INSTRUCTION_SCOPES,
   isInstructionScope,
   isSharing,
+  projectSwatch,
+  rollFace,
   type AgentConfig,
   type AgentInfo,
   type InstructionScope,
@@ -19,8 +21,6 @@ import { UnsupportedStateError } from './session-records.ts'
 
 export type AgentServiceOptions = {
   store: AgentStore
-  basePath: string
-  avatars?: boolean
   sleepAfterMs?: number
   // The permission mode the agent's session runs in, or would start in: its config, its live session, its profile.
   modeOf?: (agent: StoredAgent) => string | undefined
@@ -113,8 +113,6 @@ const CONFIG_KEYS: readonly (keyof AgentConfig)[] = [
 
 export class AgentService {
   #store: AgentStore
-  #basePath: string
-  #avatars: boolean
   #sleepAfterMs: number
   #allowShared: boolean
   #modeOf: (agent: StoredAgent) => string | undefined
@@ -133,8 +131,6 @@ export class AgentService {
 
   constructor(options: AgentServiceOptions) {
     this.#store = options.store
-    this.#basePath = options.basePath
-    this.#avatars = options.avatars ?? false
     this.#sleepAfterMs = options.sleepAfterMs ?? AGENT_SLEEP_AFTER_MS_DEFAULT
     this.#allowShared = options.allowShared !== false
     this.#modeOf = options.modeOf ?? ((agent) => agent.config.permissionMode)
@@ -155,11 +151,12 @@ export class AgentService {
         agents.set(agent.id, agent)
         continue
       }
-      if (agent.retiredAt !== undefined) {
-        this.#tombstones.set(agent.id, agent)
+      const faced = withFace(agent)
+      if (faced.retiredAt !== undefined) {
+        this.#tombstones.set(faced.id, faced)
         continue
       }
-      agents.set(agent.id, agent)
+      agents.set(faced.id, faced)
       if (agent.pendingJoin && this.#gateway !== undefined) {
         this.#joining.set(agent.id, { lead: agent.pendingJoin.lead, name: agent.name, op: agent.pendingJoin.op, restored: true })
       }
@@ -217,12 +214,11 @@ export class AgentService {
 
   // The history rows come from the session record, which the caller reads: the tombstone holds the identity only.
   retiredInfo(agent: StoredAgent, conversations: RetiredAgentInfo['conversations'] = []): RetiredAgentInfo {
-    const avatar = this.#avatars ? this.public({ ...agent, retiredAt: undefined }).avatar : undefined
     return {
       id: agent.id,
       name: agent.name,
       ...(agent.owner === undefined ? {} : { owner: agent.owner }),
-      ...(avatar === undefined ? {} : { avatar }),
+      ...(agent.face === undefined ? {} : { face: agent.face }),
       retiredAt: agent.retiredAt ?? agent.updatedAt,
       conversations,
     }
@@ -355,7 +351,6 @@ export class AgentService {
   public(agent: StoredAgent): AgentInfo {
     const {
       avatarSeed: _seed,
-      avatarRecipe: _recipe,
       avatar: _avatar,
       schema: _schema,
       pendingJoin: _pending,
@@ -363,13 +358,8 @@ export class AgentService {
       retiredAt: _retired,
       ...rest
     } = agent
-    const info: AgentInfo = rest
-    if (!this.#avatars) {
-      return info
-    }
-    // Versioned by the seed, so a changed avatar is a new address to every client cache keyed by it.
-    const version = agent.avatarSeed === agent.id ? '' : `?v=${createHash('sha1').update(agent.avatarSeed).digest('hex').slice(0, 10)}`
-    return { ...info, avatar: `${this.#basePath}/agents/${agent.id}/avatar.png${version}` }
+    const { avatarRecipe: _recipe, ...info } = rest as AgentInfo & { avatarRecipe?: unknown }
+    return info
   }
 
   draft(input: {
@@ -402,6 +392,7 @@ export class AgentService {
       createdAt: at,
       updatedAt: at,
       avatarSeed: id,
+      face: rollFace(id, projectSwatch(config.cwd ?? id)),
       config,
       ...(input.owner === undefined ? {} : { owner: input.owner }),
       ...(input.sharing === undefined ? {} : { sharing: input.sharing }),
@@ -992,4 +983,14 @@ function readConfig(value: unknown): AgentConfig | AgentRefusal {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// A record from before faces rolls one from its seed, the same one on every load until a write keeps it; the pixel
+// recipe it carried is dropped.
+function withFace(agent: StoredAgent): StoredAgent {
+  if (agent.face !== undefined && !('avatarRecipe' in agent)) {
+    return agent
+  }
+  const { avatarRecipe: _recipe, avatar: _avatar, ...rest } = agent as StoredAgent & { avatarRecipe?: unknown }
+  return { ...rest, face: agent.face ?? rollFace(agent.avatarSeed, projectSwatch(agent.config.cwd ?? agent.id)) }
 }

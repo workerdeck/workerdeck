@@ -1,8 +1,11 @@
+import { fnv1a, type AgentFace } from './faces.ts'
 import type { GatewayAgentDefaults, PermissionMode, ProfileInfo, SessionInfo } from './index.ts'
 
 export type AgentRef = {
   id: string
   name: string
+  face?: AgentFace
+  // @deprecated The gateway draws no avatar images any more; `face` is the avatar.
   avatar?: string
   lead?: string
   leadGateway?: string
@@ -71,6 +74,8 @@ export type AgentInfo = {
   sharing?: Sharing
   createdAt: number
   updatedAt: number
+  face?: AgentFace
+  // @deprecated The gateway draws no avatar images any more; `face` is the avatar.
   avatar?: string
   // The first message of a conversation a crash may have kept from the engine; the user sends it again or dismisses it.
   undelivered?: string
@@ -131,8 +136,8 @@ export const AGENT_SLEEP_AFTER_MS_DEFAULT = 15 * 60_000
 
 export function agentRef(agent: AgentInfo, team: { leadName?: string; leadGateway?: string; leads?: boolean } = {}): AgentRef {
   const ref: AgentRef = { id: agent.id, name: agent.name }
-  if (agent.avatar !== undefined) {
-    ref.avatar = agent.avatar
+  if (agent.face !== undefined) {
+    ref.face = agent.face
   }
   if (agent.lead !== undefined) {
     ref.lead = agent.lead
@@ -240,11 +245,7 @@ export const PROJECT_ACCENTS = ['#497eae', '#8a6bb8', '#3f8f6b', '#b0794a', '#a8
 
 // A stable colour per project key (a host and root, or any string), the same on every client and the gateway.
 export function projectAccent(key: string): string {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < key.length; i++) {
-    hash = Math.imul(hash ^ key.charCodeAt(i), 0x01000193)
-  }
-  return PROJECT_ACCENTS[(hash >>> 0) % PROJECT_ACCENTS.length]!
+  return PROJECT_ACCENTS[fnv1a(key) % PROJECT_ACCENTS.length]!
 }
 
 // What the gateway will stamp on a new agent that asks for nothing: the profile's choice, then the gateway's.

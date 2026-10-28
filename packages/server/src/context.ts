@@ -8,7 +8,6 @@ import type { AgentService } from './services/agents.ts'
 import type { RelayLinkStatus } from './services/peer-relay.ts'
 import type { TeamLinks } from './services/team-links.ts'
 import type { AttachmentStore } from './services/attachments.ts'
-import type { AvatarProvider } from './services/avatars.ts'
 import type { AuthService } from './services/auth.ts'
 import type { AvailabilityTracker } from './services/availability.ts'
 import type { BridgeHub } from './services/bridge.ts'
@@ -45,7 +44,6 @@ export type ServerContext = {
   // Present when the gateway dials a relay: the cross-gateway half of teams.
   teams?: TeamLinks
   relayStatus?: () => RelayLinkStatus
-  avatars: AvatarProvider | undefined
 
   registry: SessionRegistry
   parking: SessionParkManager

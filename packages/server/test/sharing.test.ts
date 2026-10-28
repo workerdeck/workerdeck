@@ -141,7 +141,6 @@ describe('what goes to the relay', () => {
   async function agents(allowShared?: boolean) {
     const service = new AgentService({
       store: createMemoryAgentStore(),
-      basePath: '/v1',
       gateway: 'mini',
       ...(allowShared === undefined ? {} : { allowShared }),
     })
@@ -300,7 +299,7 @@ describe('G review follow-ups', () => {
   })
 
   it('refuses a team across owners for an agent that runs without prompts, locally and remotely', async () => {
-    const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'mini' })
+    const agents = new AgentService({ store: createMemoryAgentStore(), gateway: 'mini' })
     await agents.hydrate()
     const make = async (name: string, owner: string, permissionMode?: 'bypassPermissions') =>
       (await agents.create(agents.draft({ name, owner, config: permissionMode ? { permissionMode } : {} }) as StoredAgent)) as StoredAgent

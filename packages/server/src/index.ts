@@ -45,7 +45,6 @@ export {
 } from './services/session-records.ts'
 export type { FileSessionRecordStoreOptions, SessionRecord, SessionRecordMerge, SessionRecordStore } from './services/session-records.ts'
 export { createFileProfileStore, createMemoryProfileStore, type ProfileStore } from './services/profile-store.ts'
-export type { AvatarImage, AvatarProvider } from './services/avatars.ts'
 export {
   createFileQuestionStore,
   createMemoryQuestionStore,

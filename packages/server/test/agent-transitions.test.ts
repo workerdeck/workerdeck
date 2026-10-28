@@ -1,3 +1,4 @@
+import type { AgentFace } from '@workerdeck/protocol'
 import { describe, expect, it } from 'vitest'
 import type { TeamFrameKind, TeamResult, TeamStatusAnswer } from '@workerdeck/relay-client'
 import { createMemoryAgentStore, type AgentStore, type StoredAgent } from '../src/services/agent-store.ts'
@@ -32,7 +33,7 @@ function heldTransport(): TeamTransport & { frames: Frame[]; held: Deferred<Team
 }
 
 async function service(store: AgentStore = createMemoryAgentStore()): Promise<AgentService> {
-  const agents = new AgentService({ store, basePath: '/v1', gateway: 'win' })
+  const agents = new AgentService({ store, gateway: 'win' })
   await agents.hydrate()
   return agents
 }
@@ -159,12 +160,10 @@ describe('agent mutation transitions', () => {
     const agents = await service()
     const lead = await stored(agents, 'Lead')
     const member = await stored(agents, 'Member')
-    const recipe = deferred<unknown>()
-    const avatar = recipe.promise.then((rolled) =>
-      agents.patch(member.id, (current) => ({ ...current, avatarSeed: 'otter', avatarRecipe: rolled })),
-    )
+    const face = deferred<AgentFace>()
+    const avatar = face.promise.then((rolled) => agents.patch(member.id, (current) => ({ ...current, avatarSeed: 'otter', face: rolled })))
     await agents.update(member.id, { lead: lead.id })
-    recipe.resolve({ seed: 'otter' })
+    face.resolve({ v: 1 })
     expect(await avatar).toMatchObject({ lead: lead.id, avatarSeed: 'otter' })
   })
 

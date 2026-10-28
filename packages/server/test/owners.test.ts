@@ -277,7 +277,7 @@ describe('peers between owners on one gateway', () => {
 
 describe('agent records', () => {
   async function service(seed: StoredAgent[] = []) {
-    const agents = new AgentService({ store: createMemoryAgentStore(seed), basePath: '/v1', gateway: 'mini' })
+    const agents = new AgentService({ store: createMemoryAgentStore(seed), gateway: 'mini' })
     await agents.hydrate()
     return agents
   }
@@ -338,7 +338,7 @@ describe('team links by agent owner', () => {
   }
 
   async function lead(owner: string) {
-    const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'mini' })
+    const agents = new AgentService({ store: createMemoryAgentStore(), gateway: 'mini' })
     await agents.hydrate()
     const created = await agents.create({ ...(agents.draft({ name: 'Lead', owner }) as StoredAgent) })
     return { agents, lead: created as StoredAgent }

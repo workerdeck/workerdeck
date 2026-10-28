@@ -21,7 +21,6 @@ import { createAuthSessionStore } from '../auth/auth-sessions.ts'
 import { createCliAuth, type CliAuth } from '../auth/auth.ts'
 import { hostnameOf, isLoopbackHostname, type ResolvedConfig } from '../config.ts'
 import { renderLoginPage } from '../auth/login-page.ts'
-import { MonkeyartAvatars } from './avatars.ts'
 import { createWakeLock, driveWakeLock, sessionsNeedTheMachine } from './keep-awake.ts'
 import { looksLikeAsset, resolveWithinRoot, sendHtml, serveFile } from './static.ts'
 
@@ -229,7 +228,6 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
     sessions: sessionRecords,
     shell,
     spend,
-    avatars: config.options.avatars ?? new MonkeyartAvatars(config.avatarPacks),
     // Composed, not replaced: turning push on must not unhook a config file's own observer.
     notifications:
       apns === undefined
