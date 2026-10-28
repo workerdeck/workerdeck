@@ -186,11 +186,6 @@ export type SidebarToHost =
     }
   | { kind: 'wd-delete-session'; hostId: string; sessionId: string }
   | {
-      kind: 'wd-session-menu'
-      hostId: string
-      sessionId: string
-    }
-  | {
       kind: 'wd-rename-session'
       hostId: string
       sessionId: string

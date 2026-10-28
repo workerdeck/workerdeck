@@ -38,6 +38,8 @@ export interface SessionItemProps {
   onKillShell?: (shellId: string) => void
   onShellAgentWrite?: (shellId: string, enabled: boolean) => void
   now?: number
+  showTime?: boolean
+  rootAttributes?: Record<`data-${string}`, string>
   onRename?: (title: string) => void
   renameOn?: 'doubleClick' | 'external'
   editing?: boolean
@@ -81,6 +83,8 @@ export function SessionItem({
   onKillShell,
   onShellAgentWrite,
   now,
+  showTime = true,
+  rootAttributes,
   onRename,
   renameOn = 'doubleClick',
   editing,
@@ -172,7 +176,7 @@ export function SessionItem({
   const agent = info.agent
   const label = agent ? agent.name : sessionLabel(info)
   const editable = agent ? agent.name : (info.title ?? '')
-  const time = formatRelativeTime(info.lastActivityAt ?? info.createdAt)
+  const time = showTime ? formatRelativeTime(info.lastActivityAt ?? info.createdAt) : undefined
   const nameLabel =
     isEditing && onRename ? (
       <NameEditor
@@ -221,6 +225,7 @@ export function SessionItem({
 
   return (
     <div
+      {...rootAttributes}
       data-slot="session-item"
       data-active={active || undefined}
       data-asleep={info.engineAsleep || undefined}
@@ -243,7 +248,7 @@ export function SessionItem({
         }
       }}
       className={cn(
-        'group flex w-full cursor-pointer flex-col p-1 text-left outline-none',
+        'group group/session flex w-full cursor-pointer flex-col p-1 text-left outline-none',
         'rounded-[4px] transition-colors focus-visible:ring-2 focus-visible:ring-ring',
         needsYou
           ? cn('bg-row-attention', active && 'ring-1 ring-accent ring-inset')
@@ -267,7 +272,7 @@ export function SessionItem({
             <span className="flex-1" />
           )}
           {unread}
-          <span className="shrink-0 text-body-sm text-fg-4">{time}</span>
+          {time ? <span className="shrink-0 text-body-sm text-fg-4">{time}</span> : null}
           {chips}
           {actions}
         </div>
@@ -283,7 +288,7 @@ export function SessionItem({
                   <Globe className="size-3" />
                 </span>
               ) : null}
-              {agent ? <span className="w-max max-w-max min-w-0 grow basis-0 truncate text-label text-fg-4/70">{time}</span> : null}
+              {agent && time ? <span className="w-max max-w-max min-w-0 grow basis-0 truncate text-label text-fg-4/70">{time}</span> : null}
               <span className="flex-1" />
               {unread}
               {teamUnseen > 0 ? (
@@ -319,10 +324,12 @@ export function SessionItem({
                       </Fragment>
                     ))}
                   </span>
-                  <span className="shrink-0 text-fg-4">
-                    {parts.length > 0 ? '· ' : ''}
-                    {time}
-                  </span>
+                  {time ? (
+                    <span className="shrink-0 text-fg-4">
+                      {parts.length > 0 ? '· ' : ''}
+                      {time}
+                    </span>
+                  ) : null}
                 </>
               )}
               <span className="min-w-0 flex-1" />
@@ -355,10 +362,12 @@ export function SessionItem({
                 </Fragment>
               ))}
             </span>
-            <span className="shrink-0 text-fg-4">
-              {parts.length > 0 ? '· ' : ''}
-              {time}
-            </span>
+            {time ? (
+              <span className="shrink-0 text-fg-4">
+                {parts.length > 0 ? '· ' : ''}
+                {time}
+              </span>
+            ) : null}
             <span className="min-w-0 flex-1" />
             {chips}
             {actions}

@@ -610,6 +610,7 @@ export function activate(context: vscode.ExtensionContext): void {
         'workerdeck.exportQuestionBoard': () => questions.exportBoard(),
       },
       files.commands(),
+      sidebar.menuCommands(),
     ),
   )
 }

@@ -63,6 +63,8 @@ export interface SessionBrowserProps {
   activeSubagentId?: string
   activeShellId?: string
   now?: number
+  showTime?: boolean
+  rowAttributes?: (row: SessionRow) => Record<`data-${string}`, string>
   // Overrides `activeId`, for a host whose session ids are unique only per gateway.
   isActive?: (row: SessionRow) => boolean
   // Replaces the pencil / eraser / trash; rename then falls back to the card's own double-click.
@@ -117,6 +119,8 @@ export function SessionBrowser({
   activeSubagentId,
   activeShellId,
   now,
+  showTime = true,
+  rowAttributes,
   isActive = (row) => row.info.id === activeId,
   rowActions,
   gatewayCount,
@@ -350,6 +354,8 @@ export function SessionBrowser({
                         activeShellId={activeShellId}
                         actions={rowActions?.(member)}
                         now={now}
+                        showTime={showTime}
+                        rootAttributes={rowAttributes?.(member)}
                         showGateway={gateways > 1 && config.groupBy !== 'project'}
                         showProject={config.groupBy !== 'project'}
                         subagents={config.subagents}
@@ -422,6 +428,8 @@ interface SessionRowItemProps {
   activeSubagentId?: string
   activeShellId?: string
   now?: number
+  showTime?: boolean
+  rootAttributes?: Record<`data-${string}`, string>
   showGateway?: boolean
   showProject?: boolean
   subagents?: SubagentDisplay
@@ -457,6 +465,8 @@ function SessionRowItem({
   activeSubagentId,
   activeShellId,
   now,
+  showTime,
+  rootAttributes,
   showGateway,
   showProject = true,
   subagents,
@@ -491,6 +501,8 @@ function SessionRowItem({
       active={active === true}
       activeStepKey={active ? (activeShellId ?? activeSubagentId) : undefined}
       now={now}
+      showTime={showTime}
+      rootAttributes={rootAttributes}
       showGateway={showGateway}
       showProject={showProject}
       subagents={subagents}

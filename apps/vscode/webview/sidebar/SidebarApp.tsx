@@ -8,6 +8,7 @@ import { AvatarDialog, SessionBrowser, SessionFilters, SessionSearch, type Agent
 import { Empty, Key } from '../ui/Empty.tsx'
 import { CardActions } from './CardActions.tsx'
 import { SubsetLine } from './SubsetLine.tsx'
+import { sessionMenuContext, teamLeadsFor } from '../../src/session-menu.ts'
 import { buildRows, clearFilters, filterRows, normalizeViewConfig, subsetSummary, type ViewConfig } from '../../src/view-config.ts'
 
 type Persisted = { config?: ViewConfig }
@@ -162,6 +163,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             showControls={false}
             showSearch={false}
             showSubset={false}
+            showTime={false}
             gatewayCount={hosts.length}
             relays={relays}
             projectIcons={projectIcons}
@@ -169,12 +171,13 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             isActive={isActive}
             activeSubagentId={selected?.subagentToolUseId}
             activeShellId={selected?.shellId}
-            rowActions={(row) => (
-              <CardActions
-                inEditor={state?.open?.[`${row.hostId}:${row.info.id}`] === 'editor'}
-                onMenu={() => postRow('wd-session-menu', row, {})}
-              />
-            )}
+            rowActions={(row) => <CardActions inEditor={state?.open?.[`${row.hostId}:${row.info.id}`] === 'editor'} />}
+            rowAttributes={(row) => ({
+              'data-vscode-context': sessionMenuContext(row.info, row.hostId, {
+                surface: state?.open?.[`${row.hostId}:${row.info.id}`] === 'editor' ? 'editor' : 'panel',
+                hasLeads: teamLeadsFor(state?.sessions[row.hostId] ?? [], row.info).length > 0,
+              }),
+            })}
             onSelect={(row, modifiers) => postRow('wd-select-session', row, { target: targetOf(modifiers) })}
             onSelectSubagent={(row, subagentToolUseId) => postRow('wd-select-session', row, { subagentToolUseId })}
             onSelectTask={(row, task) => postRow('wd-select-session', row, { revealToolUseId: task.toolUseId })}

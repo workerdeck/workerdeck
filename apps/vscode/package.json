@@ -478,6 +478,120 @@
         "title": "Open Question Board as Markdown",
         "category": "WorkerDeck",
         "icon": "$(markdown)"
+      },
+      {
+        "command": "workerdeck.session.stop",
+        "title": "Stop",
+        "category": "WorkerDeck",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "workerdeck.session.openInEditor",
+        "title": "Open in Editor Area",
+        "category": "WorkerDeck",
+        "icon": "$(empty-window)"
+      },
+      {
+        "command": "workerdeck.session.moveToPanel",
+        "title": "Move to Panel",
+        "category": "WorkerDeck",
+        "icon": "$(layout-panel)"
+      },
+      {
+        "command": "workerdeck.session.conversations",
+        "title": "Conversations...",
+        "category": "WorkerDeck",
+        "icon": "$(history)"
+      },
+      {
+        "command": "workerdeck.session.setStatus",
+        "title": "Set Status...",
+        "category": "WorkerDeck",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "workerdeck.session.newConversation",
+        "title": "New Conversation",
+        "category": "WorkerDeck",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "workerdeck.session.sleep",
+        "title": "Sleep",
+        "category": "WorkerDeck",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "workerdeck.session.makeAgent",
+        "title": "Make Agent",
+        "category": "WorkerDeck",
+        "icon": "$(person)"
+      },
+      {
+        "command": "workerdeck.session.changeAvatar",
+        "title": "Change Avatar...",
+        "category": "WorkerDeck",
+        "icon": "$(smiley)"
+      },
+      {
+        "command": "workerdeck.session.editSettings",
+        "title": "Edit Settings",
+        "category": "WorkerDeck",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "workerdeck.session.editBrief",
+        "title": "Edit Brief",
+        "category": "WorkerDeck",
+        "icon": "$(note)"
+      },
+      {
+        "command": "workerdeck.session.share",
+        "title": "Share with Other Owners",
+        "category": "WorkerDeck",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "workerdeck.session.makePrivate",
+        "title": "Make Private",
+        "category": "WorkerDeck",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "workerdeck.session.addToTeam",
+        "title": "Add to Team...",
+        "category": "WorkerDeck",
+        "icon": "$(organization)"
+      },
+      {
+        "command": "workerdeck.session.leaveTeam",
+        "title": "Leave Team",
+        "category": "WorkerDeck",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "workerdeck.session.dissolveTeam",
+        "title": "Dissolve Team",
+        "category": "WorkerDeck",
+        "icon": "$(ungroup-by-ref-type)"
+      },
+      {
+        "command": "workerdeck.session.more",
+        "title": "More Actions...",
+        "category": "WorkerDeck",
+        "icon": "$(ellipsis)"
+      },
+      {
+        "command": "workerdeck.session.delete",
+        "title": "Delete",
+        "category": "WorkerDeck",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "workerdeck.session.deleteAgent",
+        "title": "Delete Agent...",
+        "category": "WorkerDeck",
+        "icon": "$(trash)"
       }
     ],
     "keybindings": [
@@ -747,6 +861,82 @@
         {
           "command": "workerdeck.files.revealInOS",
           "when": "workerdeck.filesLocal"
+        },
+        {
+          "command": "workerdeck.session.stop",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.openInEditor",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.moveToPanel",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.conversations",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.setStatus",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.newConversation",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.sleep",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.makeAgent",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.changeAvatar",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.editSettings",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.editBrief",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.share",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.makePrivate",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.addToTeam",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.leaveTeam",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.dissolveTeam",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.more",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.delete",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.deleteAgent",
+          "when": "false"
         }
       ],
       "webview/context": [
@@ -814,6 +1004,101 @@
           "command": "workerdeck.files.delete",
           "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(file|folder)$/",
           "group": "7_modification@2"
+        },
+        {
+          "command": "workerdeck.session.stop",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_stop",
+          "group": "1_turn@1"
+        },
+        {
+          "command": "workerdeck.session.openInEditor",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_openInEditor",
+          "group": "2_open@1"
+        },
+        {
+          "command": "workerdeck.session.moveToPanel",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_moveToPanel",
+          "group": "2_open@1"
+        },
+        {
+          "command": "workerdeck.session.conversations",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_conversations",
+          "group": "2_open@2"
+        },
+        {
+          "command": "workerdeck.session.setStatus",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_setStatus",
+          "group": "3_session@1"
+        },
+        {
+          "command": "workerdeck.session.newConversation",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_newConversation",
+          "group": "3_session@2"
+        },
+        {
+          "command": "workerdeck.session.sleep",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_sleep",
+          "group": "3_session@3"
+        },
+        {
+          "command": "workerdeck.session.makeAgent",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_makeAgent",
+          "group": "4_agent@1"
+        },
+        {
+          "command": "workerdeck.session.changeAvatar",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_changeAvatar",
+          "group": "4_agent@2"
+        },
+        {
+          "command": "workerdeck.session.editSettings",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_editSettings",
+          "group": "4_agent@3"
+        },
+        {
+          "command": "workerdeck.session.editBrief",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_editBrief",
+          "group": "4_agent@4"
+        },
+        {
+          "command": "workerdeck.session.share",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_share",
+          "group": "4_agent@5"
+        },
+        {
+          "command": "workerdeck.session.makePrivate",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_makePrivate",
+          "group": "4_agent@5"
+        },
+        {
+          "command": "workerdeck.session.addToTeam",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_addToTeam",
+          "group": "5_team@1"
+        },
+        {
+          "command": "workerdeck.session.leaveTeam",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_leaveTeam",
+          "group": "5_team@1"
+        },
+        {
+          "command": "workerdeck.session.dissolveTeam",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_dissolveTeam",
+          "group": "5_team@2"
+        },
+        {
+          "command": "workerdeck.session.more",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session'",
+          "group": "8_more@1"
+        },
+        {
+          "command": "workerdeck.session.delete",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_delete",
+          "group": "9_delete@1"
+        },
+        {
+          "command": "workerdeck.session.deleteAgent",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_deleteAgent",
+          "group": "9_delete@1"
         }
       ]
     },

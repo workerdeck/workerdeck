@@ -3,7 +3,6 @@ import {
   STATUS_LABEL_EMOJI_MAX,
   STATUS_LABEL_TEXT_MAX,
   canSleep as canSleepRule,
-  clearContextOffered,
   errorMessage,
   newConversationGate,
   type SessionInfo,
@@ -44,8 +43,11 @@ import {
   type ViewConfig,
 } from './view-config.ts'
 import { WebviewViewHost } from './webview-host.ts'
+import { SESSION_ACTIONS, sessionActionCommand, sessionActions, teamLeadsFor, type SessionAction, type SessionMenuContext } from './session-menu.ts'
 import { ProjectIconCache } from './project-icons.ts'
 import type { AgentAvatarCache } from './agent-avatars.ts'
+
+type ActionItem = vscode.QuickPickItem & { run: () => Promise<void> }
 
 const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
 
@@ -280,9 +282,6 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       case 'wd-delete-session': {
         return this.#deleteSession(msg.hostId, msg.sessionId)
       }
-      case 'wd-session-menu': {
-        return this.#sessionMenu(msg.hostId, msg.sessionId)
-      }
     }
   }
 
@@ -291,72 +290,8 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     if (!info) {
       return
     }
-    const running = info.status === 'running' || info.status === 'starting'
-    const items: (vscode.QuickPickItem & { run: () => Promise<void> })[] = []
-    if (running) {
-      items.push({
-        label: '$(debug-stop) Stop',
-        detail: 'Interrupt the turn in flight',
-        run: () => this.#stopSession(hostId, sessionId),
-      })
-    }
-    const surface = this.#delegate.surfaceOf(hostId, sessionId)
-    if (surface === 'editor') {
-      items.push({
-        label: '$(layout-panel) Move to Panel',
-        detail: 'Close the editor tab and show the session in the Agent panel',
-        run: () => this.#delegate.moveToPanel(hostId, sessionId),
-      })
-    } else {
-      items.push({
-        label: '$(empty-window) Open in Editor Area',
-        detail: 'Show the session in an editor tab (Cmd/Ctrl+click a session does the same)',
-        run: () => this.#delegate.selectSession(hostId, sessionId, { target: 'editor' }),
-      })
-    }
-    items.push({
-      label: info.statusLabel ? '$(comment) Change status' : '$(comment) Set status',
-      detail: 'The line under the name in the list; the agent can change it with set_status',
-      run: () => this.#setStatus(hostId, info),
-    })
-    if (clearContextOffered(info)) {
-      const gate = newConversationGate(info)
-      items.push({
-        label: '$(debug-restart) New conversation',
-        description: gate.enabled ? undefined : gate.reason,
-        detail: NEW_CONVERSATION_HINT,
-        run: async () => {
-          if (!gate.enabled) {
-            void vscode.window.showInformationMessage(`WorkerDeck: ${gate.reason}.`)
-            return
-          }
-          await this.#newConversation(hostId, info)
-        },
-      })
-    }
-    if (canSleep(info)) {
-      items.push({
-        label: '$(debug-pause) Sleep',
-        detail: 'Release the engine process; the next message wakes it',
-        run: () => this.sleepSession(hostId, sessionId),
-      })
-    }
-    items.push(...this.#teamItems(hostId, info))
-    const agent = info.agent
-    items.push(
-      agent
-        ? {
-            label: '$(trash) Delete agent…',
-            detail: deleteAgentDetail(agent.name),
-            run: () => this.#deleteAgent(hostId, info),
-          }
-        : {
-            label: '$(trash) Delete',
-            detail: 'Remove the session from the gateway',
-            run: () => this.#deleteSession(hostId, sessionId),
-          },
-    )
-    const name = agent?.name ?? info.title ?? sessionId.slice(0, 8)
+    const items = this.#actionItems(hostId, info).map(([, item]) => item)
+    const name = info.agent?.name ?? info.title ?? sessionId.slice(0, 8)
     // Read here, not from the list: only the session's conversations carry a failed start or an uncertain first message.
     const withRecovery = this.#recovery(hostId, info.id).then((recovery) => [...this.#recoveryItems(hostId, info, recovery), ...items])
     const picked = await vscode.window.showQuickPick(withRecovery, {
@@ -366,91 +301,167 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     await picked?.run()
   }
 
-  #teamItems(hostId: string, info: SessionInfo): (vscode.QuickPickItem & { run: () => Promise<void> })[] {
-    const agent = info.agent
+  menuCommands(): Record<string, (context?: SessionMenuContext) => unknown> {
+    const commands: Record<string, (context?: SessionMenuContext) => unknown> = {
+      [sessionActionCommand('more')]: (context) => context && this.#sessionMenu(context.hostId, context.sessionId),
+    }
+    for (const action of SESSION_ACTIONS) {
+      commands[sessionActionCommand(action)] = async (context) => {
+        const info = context && this.#model.sessionsOf(context.hostId).find((s) => s.id === context.sessionId)
+        const item = info && this.#actionItems(context.hostId, info).find(([id]) => id === action)
+        await item?.[1].run()
+      }
+    }
+    return commands
+  }
+
+  #actionItems(hostId: string, info: SessionInfo): [SessionAction, ActionItem][] {
     const sessions = this.#model.sessionsOf(hostId)
-    const leads = sessions.filter((s) => s.agent && s.agent.lead === undefined && s.agent.id !== agent?.id && s.id !== info.id)
-    const items: (vscode.QuickPickItem & { run: () => Promise<void> })[] = []
-    if (!agent) {
-      items.push({
-        label: '$(person) Make agent',
-        detail: 'Keep this session as a named agent with an avatar',
-        run: () => this.#agentCall(hostId, 'could not make an agent', (client) => client.nameSession(info.id, {})),
-      })
-    }
-    if (agent?.lead !== undefined) {
-      items.push({
-        label: '$(sign-out) Leave team',
-        detail: `Leave ${agent.team ?? 'the team'} and stand on its own`,
-        run: () => this.#agentCall(hostId, 'could not leave the team', (client) => client.updateAgent(agent.id, { lead: null })),
-      })
-    } else if (!agent?.leads && leads.length > 0) {
-      items.push({
-        label: '$(organization) Add to team…',
-        detail: 'Join another agent as a team member',
-        run: async () => {
-          const target = await vscode.window.showQuickPick(
-            leads.map((lead) => ({ label: lead.agent!.name, description: lead.title, session: lead })),
-            { title: `Add ${agent?.name ?? info.title ?? 'session'} to a team`, placeHolder: 'Lead' },
-          )
-          if (target) {
-            await this.#moveIntoTeam({ hostId, sessionId: info.id }, { hostId, sessionId: target.session.id })
-          }
-        },
-      })
-    }
-    if (agent?.leads) {
-      const members = sessions.filter((s) => s.agent?.lead === agent.id)
-      items.push({
-        label: '$(ungroup-by-ref-type) Dissolve team',
-        detail: `Release ${members.length} member${members.length === 1 ? '' : 's'}; they stay as agents`,
-        run: () =>
-          this.#agentCall(hostId, 'could not dissolve the team', async (client) => {
-            for (const member of members) {
-              await client.updateAgent(member.agent!.id, { lead: null })
+    const leads = teamLeadsFor(sessions, info)
+    const surface = this.#delegate.surfaceOf(hostId, info.id)
+    return sessionActions(info, { surface, hasLeads: leads.length > 0 }).map((action) => [
+      action,
+      this.#actionItem(action, hostId, info, sessions, leads),
+    ])
+  }
+
+  #actionItem(action: SessionAction, hostId: string, info: SessionInfo, sessions: SessionInfo[], leads: SessionInfo[]): ActionItem {
+    const sessionId = info.id
+    const agent = info.agent
+    switch (action) {
+      case 'stop':
+        return {
+          label: '$(debug-stop) Stop',
+          detail: 'Interrupt the turn in flight',
+          run: () => this.#stopSession(hostId, sessionId),
+        }
+      case 'moveToPanel':
+        return {
+          label: '$(layout-panel) Move to Panel',
+          detail: 'Close the editor tab and show the session in the Agent panel',
+          run: () => this.#delegate.moveToPanel(hostId, sessionId),
+        }
+      case 'openInEditor':
+        return {
+          label: '$(empty-window) Open in Editor Area',
+          detail: 'Show the session in an editor tab (Cmd/Ctrl+click a session does the same)',
+          run: () => this.#delegate.selectSession(hostId, sessionId, { target: 'editor' }),
+        }
+      case 'setStatus':
+        return {
+          label: info.statusLabel ? '$(comment) Change status' : '$(comment) Set status',
+          detail: 'The line under the name in the list; the agent can change it with set_status',
+          run: () => this.#setStatus(hostId, info),
+        }
+      case 'newConversation': {
+        const gate = newConversationGate(info)
+        return {
+          label: '$(debug-restart) New conversation',
+          description: gate.enabled ? undefined : gate.reason,
+          detail: NEW_CONVERSATION_HINT,
+          run: async () => {
+            if (!gate.enabled) {
+              void vscode.window.showInformationMessage(`WorkerDeck: ${gate.reason}.`)
+              return
             }
-          }),
-      })
-    }
-    if (agent && agent.lead === undefined) {
-      items.push(this.#sharingItem(hostId, agent.id, agent.shared === true))
-    }
-    if (agent) {
-      if (agent.avatar) {
-        items.push({
+            await this.#newConversation(hostId, info)
+          },
+        }
+      }
+      case 'sleep':
+        return {
+          label: '$(debug-pause) Sleep',
+          detail: 'Release the engine process; the next message wakes it',
+          run: () => this.sleepSession(hostId, sessionId),
+        }
+      case 'makeAgent':
+        return {
+          label: '$(person) Make agent',
+          detail: 'Keep this session as a named agent with an avatar',
+          run: () => this.#agentCall(hostId, 'could not make an agent', (client) => client.nameSession(sessionId, {})),
+        }
+      case 'leaveTeam':
+        return {
+          label: '$(sign-out) Leave team',
+          detail: `Leave ${agent?.team ?? 'the team'} and stand on its own`,
+          run: () => this.#agentCall(hostId, 'could not leave the team', (client) => client.updateAgent(agent!.id, { lead: null })),
+        }
+      case 'addToTeam':
+        return {
+          label: '$(organization) Add to team…',
+          detail: 'Join another agent as a team member',
+          run: async () => {
+            const target = await vscode.window.showQuickPick(
+              leads.map((lead) => ({ label: lead.agent!.name, description: lead.title, session: lead })),
+              { title: `Add ${agent?.name ?? info.title ?? 'session'} to a team`, placeHolder: 'Lead' },
+            )
+            if (target) {
+              await this.#moveIntoTeam({ hostId, sessionId }, { hostId, sessionId: target.session.id })
+            }
+          },
+        }
+      case 'dissolveTeam': {
+        const members = sessions.filter((s) => s.agent?.lead === agent!.id)
+        return {
+          label: '$(ungroup-by-ref-type) Dissolve team',
+          detail: `Release ${members.length} member${members.length === 1 ? '' : 's'}; they stay as agents`,
+          run: () =>
+            this.#agentCall(hostId, 'could not dissolve the team', async (client) => {
+              for (const member of members) {
+                await client.updateAgent(member.agent!.id, { lead: null })
+              }
+            }),
+        }
+      }
+      case 'makePrivate':
+      case 'share':
+        return this.#sharingItem(hostId, agent!.id, action === 'makePrivate')
+      case 'changeAvatar':
+        return {
           label: '$(smiley) Change avatar',
           detail: 'Pick a new avatar from a few candidates',
-          run: () => this.#changeAvatar(hostId, info.id),
-        })
-      }
-      items.push(
-        {
+          run: () => this.#changeAvatar(hostId, sessionId),
+        }
+      case 'editSettings':
+        return {
           label: '$(settings-gear) Edit settings',
           detail: 'Project, profile, model, permission mode, instruction scope, sleep; saved on save',
-          run: () => openAgentFile(hostId, agent.id, agent.name, 'settings'),
-        },
-        {
+          run: () => openAgentFile(hostId, agent!.id, agent!.name, 'settings'),
+        }
+      case 'editBrief':
+        return {
           label: '$(note) Edit brief',
           detail: 'The standing brief, as markdown; saved on save',
-          run: () => openAgentFile(hostId, agent.id, agent.name, 'brief'),
-        },
-      )
+          run: () => openAgentFile(hostId, agent!.id, agent!.name, 'brief'),
+        }
+      case 'conversations':
+        return {
+          label: '$(history) Conversations…',
+          detail: 'Past conversations open read-only',
+          run: () =>
+            showConversations(
+              { store: this.#store, selectSession: this.#delegate.selectSession },
+              {
+                hostId,
+                sessionId,
+                name: agent?.name ?? info.title ?? sessionId.slice(0, 8),
+                ...(info.title ? { title: info.title } : {}),
+              },
+            ),
+        }
+      case 'deleteAgent':
+        return {
+          label: '$(trash) Delete agent…',
+          detail: deleteAgentDetail(agent!.name),
+          run: () => this.#deleteAgent(hostId, info),
+        }
+      case 'delete':
+        return {
+          label: '$(trash) Delete',
+          detail: 'Remove the session from the gateway',
+          run: () => this.#deleteSession(hostId, sessionId),
+        }
     }
-    items.push({
-      label: '$(history) Conversations…',
-      detail: 'Past conversations open read-only',
-      run: () =>
-        showConversations(
-          { store: this.#store, selectSession: this.#delegate.selectSession },
-          {
-            hostId,
-            sessionId: info.id,
-            name: agent?.name ?? info.title ?? info.id.slice(0, 8),
-            ...(info.title ? { title: info.title } : {}),
-          },
-        ),
-    })
-    return items
   }
 
   async agentSaved(saved: { hostId: string; agentId: string; name: string; file: AgentFile }): Promise<void> {

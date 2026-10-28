@@ -160,7 +160,7 @@ createRoot(document.getElementById('root')!).render(
           onSelectShell={() => {}}
           onKillShell={() => {}}
           onRename={() => {}}
-          actions={<CardActions inEditor={false} onMenu={() => {}} />}
+          actions={<CardActions inEditor={false} />}
         />
       ))}
     </div>

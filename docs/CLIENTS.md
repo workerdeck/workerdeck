@@ -624,11 +624,16 @@ for loopback hosts too (their locality needs no answer, their relay identity doe
 cached relay when the read fails.
 
 What is left extension-shaped after the card moved out is exactly **two** things, and they are the
-two `SessionItem` takes as props. First, **the overflow is a native menu**: the two hover actions
-became one always-visible `⋯` in the card's `actions` slot (`CardMenu`, which posts
-`wd-session-menu`) opening a **QuickPick**, decided host-side off the polled model - a
-popover anchored in a 280px view would be clipped by the view's own bounds, and a card that went
-stale between the poll and the press must not offer Stop for a finished session. That QuickPick
+two `SessionItem` takes as props. First, **the overflow is a native menu**: a right-click on a card
+opens VS Code's own `webview/context` menu. The card carries `data-vscode-context` (through
+`SessionBrowser`'s `rowAttributes`) naming its host, its session and one `wd_<action>` flag per
+action `sessionActions` (`src/session-menu.ts`) offers it, so each entry's `when` shows exactly
+the actions that card has; every entry runs `workerdeck.session.<action>`, which re-reads the session
+from the polled model, so a card that went stale between the poll and the click never runs Stop on a
+finished session. Native context menus draw no icons and no disabled-with-reason rows. The last entry,
+**More Actions...**, opens the same actions as a **QuickPick**, the one place the recovery items
+(Retry start, Send again, Dismiss) appear, because they need a gateway read the menu cannot wait for.
+The card draws no menu button and no activity time (`showTime={false}`). The menu
 is also where **New conversation** lives, on every live card, named or not, and there is no separate Clear
 context: both are the same cut (`clearContextOffered` shows it, `newConversationGate` enables it). It goes
 over REST through `startNewConversation` (`@workerdeck/ui/format`), so a refusal over unread input becomes a modal
