@@ -284,7 +284,7 @@ export function SessionItem({
       ) : agent || tile ? (
         <div className="flex items-center gap-2">
           <AgentAvatar row={row} size={40} state={badgeState} context={agent !== undefined} />
-          <div className={cn('flex min-w-0 flex-1 flex-col gap-1 pr-0.5', info.engineAsleep && 'opacity-60')}>
+          <div className={cn('flex min-w-0 flex-1 flex-col pr-0.5', info.engineAsleep && 'opacity-60')}>
             <div className="flex h-5 items-center gap-1.5 overflow-hidden">
               {nameLabel}
               {agent?.leads ? <LeadChip /> : null}
