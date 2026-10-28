@@ -364,7 +364,12 @@ async function requestedFrom(
 ): Promise<SessionRunnerConfig | AgentRefusal> {
   const record = await ctx.records.get(id)
   const canonical = record?.requested ?? record?.running
-  const merged: Record<string, unknown> = { ...(canonical ? settingsFrom(base, canonical) : base), ...patch }
+  const before: Record<string, unknown> = canonical ? settingsFrom(base, canonical) : base
+  const merged: Record<string, unknown> = { ...before, ...patch }
+  // A new profile without a model of its own picks that profile's default, not the old engine's id.
+  if ('profile' in patch && !('model' in patch) && patch.profile !== before.profile) {
+    delete merged.model
+  }
   for (const key of Object.keys(merged)) {
     if (merged[key] === null) {
       delete merged[key]

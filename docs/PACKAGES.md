@@ -455,8 +455,8 @@ an existence oracle for the gateway's filesystem.
 `AgentInfo` (the identity row of a named session, same id as the session) and `AgentRef`
 (`SessionInfo.agent`, the decoration every funnel carries; absent = unnamed), and the two rules both
 sides share: `teamReaches(from, to)` is the peers rule for teams (the gateway enforces it; a client
-may use it to section a `#` picker), and `projectAccent(key)` is the stable per-project colour the
-CLI's avatar provider bakes into backdrops and a client should reuse for group dots.
+may use it to section a `#` picker), and `projectAccent(key)` is the stable per-project colour a client
+should reuse for group dots (an agent face's `projectSwatch` is its match, one to one).
 
 ### Conversations (`conversations.ts`, `conversation-cut.ts`)
 
@@ -871,7 +871,7 @@ ever lived in session transcripts: a session's own reading is refreshed by nothi
 so one idle since yesterday replays yesterday's number as current, and a session opened today
 knows nothing of what a sibling on the same account spent an hour ago. The profile is the
 account boundary, so the newest reading across its sessions is the one state worth showing.
-Fed by `runner.subscribe` in `onRegister` like `profileDefaultModels`, but **last-write-wins by
+Fed by `runner.subscribe` in `onRegister`, but **last-write-wins by
 the event's own `ts`, never arrival order** (it subscribes from seq 0, so a rebuilt runner's
 replayed reading must not clobber a live one), and the **0%-after-reset inference happens at
 serve time** - it is a function of the wall clock, and a fabricated `rate_limit` event would be

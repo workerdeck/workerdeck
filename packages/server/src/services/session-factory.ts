@@ -23,6 +23,7 @@ import type {
 } from '@workerdeck/core'
 import type { Refusal } from '../lib/http.ts'
 import { bypassDisabled, refusePermissionMode, type BypassOption } from '../lib/permissions.ts'
+import { modelFor } from '../lib/models.ts'
 import { checkScope, sameScope } from '../lib/scope.ts'
 import { cliConfigDir, codexHomeDir, cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
 import { accountSessionEnv } from '../accounts/session-env.ts'
@@ -234,13 +235,12 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
 
   const buildRunnerConfig = (req: CreateRequestWithPrincipal, principal?: SessionPrincipal): SessionRunnerConfig => {
     const profile = req.profile !== undefined ? profiles.get(req.profile) : undefined
-    const effective = profile
-      ? {
-          ...req,
-          model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
-          permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
-        }
-      : req
+    const model = modelFor(adapterFor(profile?.engine), profile, req.model)
+    const effective = {
+      ...req,
+      ...(model === undefined ? {} : { model }),
+      ...(profile ? { permissionMode: req.permissionMode ?? profile.defaults?.permissionMode } : {}),
+    }
     const config = withApprovalDefault(
       withPrincipal(
         withScope(deps.hostBuildRunnerConfig(effective), req.scope),

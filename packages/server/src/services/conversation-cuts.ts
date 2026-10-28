@@ -16,6 +16,7 @@ import { fail, HttpError } from '../lib/http.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import { freshRecord, requestedConfig, type ConversationEntry, type SessionCut, type SessionRecord } from './session-records.ts'
 import { durableConfig, isDormant, type DormantSessionRecord, type StoredSessionRecord } from './session-store.ts'
+import { modelFor } from '../lib/models.ts'
 
 export type CutReason = 'user' | 'clear' | 'context_reset'
 
@@ -846,11 +847,14 @@ export class ConversationCuts {
         delete next.model
       }
     }
-    const cwd = ctx.factory.checkCwd(next, next.profile === undefined ? undefined : ctx.profiles.get(next.profile))
+    const profile = next.profile === undefined ? undefined : ctx.profiles.get(next.profile)
+    const cwd = ctx.factory.checkCwd(next, profile)
     if (cwd) {
       fail(cwd.status, cwd.error)
     }
-    return next
+    // Exact before the cut is recorded: a crash before the engine starts must not leave a short name or none behind.
+    const model = modelFor(ctx.adapterFor(profile?.engine), profile, next.model)
+    return model === undefined ? next : { ...next, model }
   }
 
   #remember(id: string, entry: ConversationEntry): void {

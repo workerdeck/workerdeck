@@ -3,6 +3,7 @@ import type { ModelCatalog } from '../adapter.ts'
 // The binary's embedded model table is the truth about reasoning efforts, not the SDK's stale `ModelReasoningEffort` union.
 export const CODEX_CATALOG: ModelCatalog = {
   provenance: 'embedded model presets of @openai/codex@0.162.1 (darwin-arm64 binary), re-extracted 2026-10-20',
+  defaultModel: 'gpt-6.1-sol',
   models: [
     {
       value: 'gpt-6.1-sol',

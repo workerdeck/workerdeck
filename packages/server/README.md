@@ -87,7 +87,7 @@ createWorkerServer({
     return user && { allowedProfiles: user.profiles, canManageProfiles: user.isAdmin }
   },
   profiles: [
-    { name: 'ada', configDir: '/home/ada/.claude', defaults: { model: 'opus' } },
+    { name: 'ada', configDir: '/home/ada/.claude', defaults: { model: 'claude-opus-5-5' } },
     {
       name: 'kimi',
       engine: 'provider',

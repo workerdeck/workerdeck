@@ -625,7 +625,7 @@ describe('createWorkerServer', () => {
       await vi.waitFor(() => {
         expect(harness.captured.options?.env?.CLAUDE_CONFIG_DIR).toBe(tobyDir)
       })
-      expect(harness.captured.options?.model).toBe('opus')
+      expect(harness.captured.options?.model).toBe('claude-opus-5-5')
       expect(harness.captured.options?.permissionMode).toBe('acceptEdits')
 
       await fetch(`${base}/sessions`, {
@@ -634,7 +634,7 @@ describe('createWorkerServer', () => {
         body: JSON.stringify({ cwd: '/tmp/project', prompt: 'hi', profile: 'toby', model: 'sonnet' }),
       })
       await vi.waitFor(() => {
-        expect(harness.captured.options?.model).toBe('sonnet')
+        expect(harness.captured.options?.model).toBe('claude-sonnet-5-5')
       })
 
       await fetch(`${base}/sessions`, {
@@ -848,18 +848,7 @@ describe('createWorkerServer', () => {
       expect(before.profiles[0]!.models?.length).toBeGreaterThan(0)
       expect(before.profiles[0]!.models?.some((m) => m.value === 'default')).toBe(false)
       expect(before.profiles[0]!.capabilities?.interactiveApprovals).toBe(true)
-      expect(before.profiles[0]!.defaultModel).toBeUndefined()
-
-      await fetch(`${base}/sessions`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ cwd: '/tmp/project', profile: 'main' }),
-      })
-
-      await vi.waitFor(async () => {
-        const after = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
-        expect(after.profiles[0]!.defaultModel).toBe('claude-opus-5[1m]')
-      })
+      expect(before.profiles[0]!.defaultModel).toBe('claude-opus-5-5')
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

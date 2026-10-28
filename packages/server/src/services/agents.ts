@@ -24,6 +24,8 @@ export type AgentServiceOptions = {
   sleepAfterMs?: number
   // The permission mode the agent's session runs in, or would start in: its config, its live session, its profile.
   modeOf?: (agent: StoredAgent) => string | undefined
+  // The exact model an agent with this config runs; a config is stored with it, never a short name or none.
+  modelOf?: (config: AgentConfig) => string | undefined
   // False when the gateway shares no agent with other owners: stored sharing stays, but nothing is shared.
   allowShared?: boolean
   // This gateway's relay name: a lead id qualified with it is local.
@@ -116,6 +118,7 @@ export class AgentService {
   #sleepAfterMs: number
   #allowShared: boolean
   #modeOf: (agent: StoredAgent) => string | undefined
+  #modelOf: (config: AgentConfig) => string | undefined
   #gateway: string | undefined
   #now: () => number
   #agents = new Map<string, StoredAgent>()
@@ -134,6 +137,7 @@ export class AgentService {
     this.#sleepAfterMs = options.sleepAfterMs ?? AGENT_SLEEP_AFTER_MS_DEFAULT
     this.#allowShared = options.allowShared !== false
     this.#modeOf = options.modeOf ?? ((agent) => agent.config.permissionMode)
+    this.#modelOf = options.modelOf ?? ((config) => config.model)
     this.#gateway = options.gateway
     this.#now = options.now ?? Date.now
   }
@@ -359,6 +363,11 @@ export class AgentService {
     return rest
   }
 
+  #withModel(config: AgentConfig): AgentConfig {
+    const model = this.#modelOf(config)
+    return model === undefined ? config : { ...config, model }
+  }
+
   draft(input: {
     id?: string
     name?: unknown
@@ -368,10 +377,11 @@ export class AgentService {
     sharing?: Sharing
     crossOwner?: boolean
   }): StoredAgent | AgentRefusal {
-    const config = readConfig(input.config)
-    if ('error' in config) {
-      return config
+    const read = readConfig(input.config)
+    if ('error' in read) {
+      return read
     }
+    const config = this.#withModel(read)
     const name = input.name === undefined ? this.#suggestName() : readName(input.name)
     if (typeof name !== 'string') {
       return name
@@ -779,7 +789,7 @@ export class AgentService {
       if ('error' in config) {
         return config
       }
-      next.config = config
+      next.config = this.#withModel(config)
     }
     if (patch.lead !== undefined && patch.lead !== null && this.#joining.has(agent.id) && joined === undefined) {
       return { status: 409, error: `${agent.name} is joining a team` }

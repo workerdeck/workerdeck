@@ -376,15 +376,12 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
     return undefined
   }
 
-  // Only the last session's OWN model preselects a row: "unset" is a different request from "this id", the gateway
-  // filling an unset model from the profile, so picking the default row keeps it unset.
   const picked = await pickModel(models, {
     title: `New ${noun}: model`,
     placeHolder: `Model for this ${noun} - permission mode: ${modeLabel(mode)}`,
     defaultModel: adapter.profile.defaultModel,
     current: previous?.model,
     currentTag: 'last used',
-    unset: { label: 'Profile default', detail: "whatever the profile's engine is configured for" },
     step: 3,
     totalSteps: 3,
   })
@@ -398,7 +395,7 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
   if (named === CANCEL) {
     return CANCEL
   }
-  await create(deps, adapter, { cwd, model: picked.isDefault ? undefined : picked.model?.value, permissionMode: mode, agent: named })
+  await create(deps, adapter, { cwd, model: picked.model.value, permissionMode: mode, agent: named })
   return undefined
 }
 

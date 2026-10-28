@@ -156,7 +156,8 @@ history socket is read-only.
   `allowedTools`/`disallowedTools` as far as `toolFilters` says: `'all'` (claude), `'mcp'` (codex,
   `mcp__<server>__<tool>` or `mcp__<server>` only) or `'none'` (provider, refused).
 - `SessionInfo` - server id (≠ `sdkSessionId`), status, cwd, `profile`, `engine` and its
-  `capabilities` record, model, permission mode, `canBypassPermissions` (fixed at creation: the
+  `capabilities` record, model, `modelName` (the engine catalog's name for it: `claude-opus-5-5` and
+  `claude-opus-5-5[1m]` both read "Opus 5.5"; absent for an id no catalog knows), permission mode, `canBypassPermissions` (fixed at creation: the
   CLI refuses to *switch into* bypass unless the process was spawned for it, so a picker can
   disable the mode rather than offer a refusal), `apiKeySource`, `lastSeq`,
   `pendingPermissionCount`, `title`, cumulative `totalCostUsd` / `numTurns`, `activityCount`,

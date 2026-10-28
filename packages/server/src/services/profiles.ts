@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { modelFor } from '../lib/models.ts'
 import { isOwnerName, isSharing, supportsPermissionMode, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '@workerdeck/core'
 import type { Refusal } from '../lib/http.ts'
@@ -16,7 +17,6 @@ export type ProfileServiceOptions = {
   hasEngineRunnerFactory: boolean
   adapterFor: (engine: ProfileEngine | undefined) => EngineAdapter
   decorate: {
-    defaultModel: (name: string) => string | undefined
     availability: (name: string) => EngineAvailability | undefined
     usage: (name: string) => ProfileInfo['usage'] | undefined
     spend?: (name: string) => ProfileInfo['spend'] | undefined
@@ -102,7 +102,7 @@ export class ProfileService {
     }
     for (const p of seed) {
       if (this.validate(p) === null) {
-        await this.#opts.store.save(p)
+        await this.#opts.store.save(this.#withModel(p))
       }
     }
     await this.refreshStored()
@@ -122,7 +122,7 @@ export class ProfileService {
     if (adapter.catalog.models.length > 0) {
       base.models = adapter.catalog.models
     }
-    const defaultModel = decorate.defaultModel(p.name)
+    const defaultModel = modelFor(adapter, p, undefined)
     if (defaultModel) {
       base.defaultModel = defaultModel
     }
@@ -210,9 +210,20 @@ export class ProfileService {
     if (invalid) {
       return { ok: false, status: 400, error: invalid }
     }
-    await this.#opts.store!.save(profile)
+    const saved = this.#withModel(profile)
+    await this.#opts.store!.save(saved)
     await this.refreshStored()
-    return { ok: true, profile: this.withManagedFlag(profile) }
+    return { ok: true, profile: this.withManagedFlag(saved) }
+  }
+
+  // A stored profile always names its default model, exactly: a session that asks for none runs that one.
+  #withModel(p: ProfileInfo): ProfileInfo {
+    // A provider profile's default is `provider.model` itself; a copy would outlive an edit to it.
+    if (isProviderProfile(p)) {
+      return p
+    }
+    const model = modelFor(this.#opts.adapterFor(p.engine), p, undefined)
+    return model === undefined || model === p.defaults?.model ? p : { ...p, defaults: { ...p.defaults, model } }
   }
 }
 

@@ -899,6 +899,9 @@ export type SessionInfo = {
   engine?: ProfileEngine
   capabilities?: EngineCapabilities
   model?: string
+  // The catalog's name for `model`, what a card shows. Absent for an id no catalog row knows (a provider's own name),
+  // then a client falls back to the id.
+  modelName?: string
   effort?: string | null
   permissionMode?: PermissionMode
   canBypassPermissions?: boolean

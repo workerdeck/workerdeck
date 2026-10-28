@@ -99,7 +99,7 @@ function Picker({ defaultModel, initial }: { defaultModel?: string; initial?: st
   return (
     <div style={{ padding: 24, display: 'flex', gap: 16, alignItems: 'center' }}>
       <ModelSelect variant="form" models={CLAUDE} model={model} defaultModel={defaultModel} onModelChange={setModel} />
-      <code>{model ?? 'unset'}</code>
+      <code>{model ?? defaultModel}</code>
     </div>
   )
 }

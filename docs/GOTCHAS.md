@@ -67,8 +67,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **Model list shaping happens once, in `core/src/lib/normalize.ts` (`modelOptionsFromSdk`)**, so
   no client invents its own. `supportedModels()` leads with a `value: 'default'` sentinel that is a
   choice, not a model; it's dropped and its `resolvedModel` forwarded as
-  `capabilities.defaultModel`, the only way to name a promptless session's model before its first
-  turn. `displayName` is the family alone or a variant string, so rows are renamed from their
+  `capabilities.defaultModel`, the session's own live reading (the gateway already pinned an exact model
+  at create, below). `displayName` is the family alone or a variant string, so rows are renamed from their
   resolved id. The list is flat; `primary` (newest per family) is derived here since the CLI
   reports no grouping, then re-sorted into `FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku']`
   (unknown family sorts last). A derived name is used only when unambiguous: two rows of one family
@@ -77,10 +77,18 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   short list is the default model first (tagged, never a separate "Default" row), then the newest
   model of every other line; "More models" lists everything. A line is the display name with its
   version stripped (`modelLine`: "Opus 4.7" and "Opus 5.5" are `opus`, "GPT-5.6 Terra" is
-  `gpt terra`), and catalogs list each line newest first. Only an unknown default (cold server,
-  no session yet) brings back an explicit "Profile default" row. Picking the default row sends the
-  model unset, so it keeps following the profile. VS Code (`apps/vscode/src/model-pick.ts`) and
-  `ModelSelect` (web, webview) share the rule; iOS does not have it yet.
+  `gpt terra`), and catalogs list each line newest first. There is no unset row: every picker
+  sends a model. VS Code (`apps/vscode/src/model-pick.ts`) and `ModelSelect` (web, webview) share
+  the rule; iOS does not have it yet.
+- **Every stored model is an exact id, never a short name and never none** (`server/src/lib/models.ts`
+  `modelFor`, on `exactModel` in `protocol/src/model-menu.ts`). The gateway resolves at every write: a
+  session's create config, `set_model`, an agent's config (`AgentService` `modelOf`), a saved profile's
+  `defaults.model`. `opus` becomes `claude-opus-5-5`, `opus[1m]` keeps its variant, an id no catalog row
+  knows passes through (a provider's own name), and none falls back to the profile's `defaults.model`,
+  `provider.model`, then the catalog's `defaultModel`. Why: an alias moves to the next release by itself,
+  and an unset model left the engine's own config to choose, so two agents asked for "the same" model
+  could run different ones and no card could name either. Nothing converts old records on load; stores
+  written before this were migrated once by hand (2026-10-29).
 - Model availability is purely a function of the pinned SDK version. Since 0.3.284
   `supportedModels()` also lists the older versions (back to Opus 4.6 and Sonnet 4.6), so
   `core/src/engines/claude/catalog.ts` is its shaped output, whole, with no hand-kept rows; the
@@ -93,8 +101,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   truth for the model switcher (also the only carrier of slash commands and the profile default's
   resolution). The static catalog (`core/src/engines/*/catalog.ts`, served on `ProfileInfo.models`)
   is the create-form truth: it fixes the cold-start free-text picker and may list models the CLI no
-  longer reports. `defaultModel` can't be static (it's the operator's CLI config), so it alone is
-  learned from sessions and stays absent on a cold server.
+  longer reports. `ProfileInfo.defaultModel` is static too: the profile's `defaults.model`, else
+  the catalog's `defaultModel`, exact, from the first request. The live `capabilities.defaultModel`
+  stays the session's own reading.
 - `supportedModels()` reports per-model reasoning efforts (`supportedEffortLevels`, 0.3.221+),
   forwarded as `ModelOption.reasoningEfforts`; `CreateSessionRequest.reasoningEffort` maps to the
   SDK's `Options.effort`. Effort is an open string end to end (the CLI's vocabulary outruns typed
@@ -1753,10 +1762,9 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
 - **Every agent write is one serial transition** (`AgentService`: `create`, `patch`, `unname`,
   `update`, `retire`, `drop`, `reserveJoin`). Validation, reservation and the write run together against
   the record as it is at write time, so two concurrent moves cannot form a cycle and a write
-  prepared before an await (an avatar roll, a reconcile answer) patches only its own fields and
-  never restores an old lead. Nothing awaits another gateway or the avatar provider inside one:
-  roll or ask first, then patch. `create` is the only whole-record write; `patch` on a retired id
-  is a 404, so a late avatar never revives an agent, and `create` refuses a retired or duplicate
+  prepared before an await (a reconcile answer) patches only its own fields and never restores an
+  old lead. Nothing awaits another gateway inside one: ask first, then patch. `create` is the only whole-record write; `patch` on a retired id
+  is a 404, so a late patch never revives an agent, and `create` refuses a retired or duplicate
   id. `retire` writes the lead and its released members as one store `apply`. `close()` (from `releaseDirectories`) refuses every later
   transition and resolves once the write in flight has landed; server close awaits it, and hot
   reload awaits close before the next generation hydrates, so an old generation cannot write over

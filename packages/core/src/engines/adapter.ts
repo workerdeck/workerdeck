@@ -6,6 +6,8 @@ export type EngineAvailability = { available: true } | { available: false; reaso
 export type ModelCatalog = {
   models: ModelOption[]
   provenance: string
+  // What a profile with no model of its own runs; the first primary row when absent.
+  defaultModel?: string
 }
 
 export type EngineRunnerRequest<C extends EngineRunnerConfig = EngineRunnerConfig> = {

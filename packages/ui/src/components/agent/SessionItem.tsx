@@ -119,7 +119,7 @@ export function SessionItem({
     cost === '-' ? undefined : cost,
   ].filter((part): part is string => Boolean(part))
 
-  const model = friendlyModel(info.model)
+  const model = info.modelName ?? friendlyModel(info.model)
   const status = statusLine(info.statusLabel)
   // Its own approval or question, or (on a lead) a team member's: the one card that asks for an action.
   const needsYou = row.state === 'attention' || row.teamState === 'attention' || badgeState === 'attention'

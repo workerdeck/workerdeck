@@ -1,5 +1,4 @@
-import { ENGINE_CAPABILITIES, type EngineCapabilities, type ModelOption, type PermissionMode, type ProfileInfo } from '@workerdeck/protocol'
-import { MODEL_OPTIONS } from './settings.ts'
+import { ENGINE_CAPABILITIES, modelMatches, type EngineCapabilities, type ModelOption, type PermissionMode, type ProfileInfo } from '@workerdeck/protocol'
 
 export type EngineFormOptions = {
   capabilities: EngineCapabilities
@@ -29,25 +28,22 @@ export function engineFormOptions(profile: ProfileInfo | undefined, mode: Permis
     rows = ids.map((id) => ({ value: id, displayName: id }))
     defaultHint = provider?.model
   } else {
-    rows = MODEL_OPTIONS.filter((option) => option.value !== 'default')
+    rows = []
   }
 
-  const matched = rows.find((row) => row.value === model || row.resolvedModel === model)
-  const safeModel = matched || model === '' ? model : ''
+  // Always a model the profile offers: the one picked, else the profile's default. Never empty, so a session never
+  // leaves its model to the engine's own config.
+  const find = (id: string | undefined) => (id ? rows.find((row) => modelMatches(row, id)) : undefined)
+  // The id itself, not its row's value, so a variant (`[1m]`) survives.
+  const chosen = find(model) ? model : find(defaultHint) ? defaultHint! : (rows[0]?.value ?? model)
+  const matched = find(chosen)
   return {
     capabilities,
     modes: capabilities.permissionModes,
-    models: [
-      {
-        value: 'default',
-        displayName: 'Profile default',
-        description: defaultHint ?? "the profile's configured model",
-      },
-      ...rows,
-    ],
+    models: rows,
     defaultModel: defaultHint,
     mode: safeMode,
-    model: safeModel,
+    model: chosen,
     reasoningEfforts: (matched ? matched.reasoningEfforts : undefined) ?? capabilities.reasoningEfforts ?? [],
   }
 }

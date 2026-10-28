@@ -16,7 +16,7 @@ createWorkerServer({
     return user && { allowedProfiles: user.profiles } // e.g. ['ada']
   },
   profiles: [
-    { name: 'ada', configDir: '/home/ada/.claude', defaults: { model: 'opus' } },
+    { name: 'ada', configDir: '/home/ada/.claude', defaults: { model: 'claude-opus-5-5' } },
     { name: 'sam', configDir: '/home/sam/.claude' },
   ],
 })
@@ -87,8 +87,13 @@ switching on the engine name:
   `ProfileInfo.models` from the first request - a real picker on a cold server, with per-model
   reasoning efforts where the engine takes them. Provider engines have no equivalent of a pinned
   binary's model table, so their list stays whatever the operator declared in `provider.models`
-  (falling back to `provider.model` alone). Only `defaultModel` is still learned from sessions -
-  a claude profile's default is the operator's CLI config, unknowable statically.
+  (falling back to `provider.model` alone). `defaultModel` is the profile's `defaults.model`, else
+  the engine catalog's default, always an exact id.
+- **Models are always exact ids.** A short name (`opus`, `sonnet`) is resolved to the id it stands
+  for (`claude-opus-5-5`) when a session, agent or profile is saved, and a session that names no
+  model gets its profile's default. So a model never moves to a new release behind your back, and
+  every session names the model it runs. Saving a profile with no `defaults.model` stores the
+  catalog default.
 - With `checkCredentials` on, the server probes each profile's credentials (launch + ~60s TTL)
   and stamps `available` / `unavailableReason` on `GET /profiles`. **Display-only**: an
   unavailable profile is greyed with its remedy, but creating against it still proceeds and

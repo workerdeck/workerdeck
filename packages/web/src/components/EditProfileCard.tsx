@@ -21,22 +21,13 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
   const [saving, setSaving] = useState(false)
 
   const form = engineFormOptions(profile, mode ?? 'default', defaultModel)
-  // The resolver's empty row is named "Profile default", which is circular here: inside the editor it means unset.
-  const modelRows = form.models.map((row) =>
-    row.value === 'default'
-      ? {
-          ...row,
-          displayName: 'Unset',
-          description: profile.defaultModel ?? "whatever the engine's own config picks",
-        }
-      : row,
-  )
+  const modelRows = form.models
 
   const save = async () => {
     const patch: UpdateProfileRequest = {
       description: description.trim() || undefined,
       defaults: {
-        model: defaultModel.trim() || undefined,
+        model: (modelRows.length > 1 ? form.model : defaultModel).trim() || undefined,
         permissionMode: mode,
       },
     }
@@ -78,12 +69,12 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
           <Field label="Default model">
             {/* A free-text box would let you name a model the engine has never heard of, failing at spawn rather than here. */}
             {modelRows.length > 1 ? (
-              <ModelPicker value={defaultModel} onChange={setDefaultModel} models={modelRows} />
+              <ModelPicker value={form.model} onChange={setDefaultModel} models={modelRows} />
             ) : (
               <Input
                 value={defaultModel}
                 onChange={(e) => setDefaultModel(e.target.value)}
-                placeholder="unset - request / engine default"
+                placeholder="the provider's model id"
                 className="font-mono"
               />
             )}

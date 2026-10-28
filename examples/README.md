@@ -43,8 +43,8 @@ On **Sessions**:
 - **Profile:** pick `anthropic` / `openai` / `moonshot`.
 - **Permission mode:** leave *Default* - with a provider profile picked, the form only offers the
   three modes this engine runs (the CLI-only `acceptEdits` / `plan` / `auto` are gone, as is the
-  "Resume a previous session" section). **Model:** leave *Profile default*. Under `anthropic` the
-  picker also lists the models that profile declares in `provider.models`.
+  "Resume a previous session" section). **Model:** keep the preselected one, the profile's
+  `provider.model`. Under `anthropic` the picker also lists the models that profile declares in `provider.models`.
 - Leave the initial prompt empty (send from the panel instead), then **Create**.
 
 ## 5. Watch the bridge work

@@ -146,7 +146,7 @@ async function selectModel(surface: AnySurface): Promise<void> {
     defaultModel: vitals?.defaultModel,
     current: currentModel(vitals)?.value,
   })
-  if (typeof picked === 'object' && picked.model) {
+  if (typeof picked === 'object') {
     surface.setModel(picked.model.value)
   }
 }

@@ -1,4 +1,5 @@
 import type { ModelOption, RateLimitInfo, SessionStatus } from '@workerdeck/protocol'
+import { friendlyModel } from './format.ts'
 
 export type StatusSeverity = 'none' | 'warning' | 'error'
 
@@ -127,7 +128,7 @@ export function modelLabel(vitals: ModelReadings | undefined): string {
   if (!vitals?.model) {
     return 'Default'
   }
-  return currentModel(vitals)?.displayName ?? vitals.model
+  return currentModel(vitals)?.displayName ?? friendlyModel(vitals.model) ?? vitals.model
 }
 
 export function contextSeverity(usage: { percentage: number } | undefined): StatusSeverity {

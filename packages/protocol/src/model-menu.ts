@@ -39,3 +39,14 @@ export function modelMenu(models: readonly ModelOption[], defaultModel?: string)
   const main = defaultRow ? [defaultRow, ...newest.filter((m) => m !== defaultRow)] : newest
   return { main, more: rows, defaultRow }
 }
+
+// The exact id a catalog row stands for: `opus` and `opus[1m]` become `claude-opus-5-5` and `claude-opus-5-5[1m]`. An
+// id no row knows is already exact (a provider's own name), so it passes through.
+export function exactModel(models: readonly ModelOption[], id: string): string {
+  const row = models.find((m) => m.value !== 'default' && modelMatches(m, id))
+  if (!row) {
+    return id
+  }
+  const variant = /\[.*\]$/.exec(id)?.[0] ?? ''
+  return dropVariant(row.resolvedModel ?? row.value) + variant
+}

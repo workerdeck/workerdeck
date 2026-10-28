@@ -9,16 +9,13 @@ export type ModelPickOptions = {
   // The row to preselect and tag, e.g. the session's model or the last session's.
   current?: string
   currentTag?: string
-  // Offered only when the default is unknown, so the profile's own default stays reachable.
-  unset?: { label: string; detail: string }
   step?: number
   totalSteps?: number
 }
 
-// `isDefault` is the profile default: the unset row (no `model`), or the row the default resolves to.
-export type ModelPicked = { model?: ModelOption; isDefault: boolean }
+export type ModelPicked = { model: ModelOption }
 
-type Row = vscode.QuickPickItem & { model?: ModelOption; more?: true; unset?: true }
+type Row = vscode.QuickPickItem & { model?: ModelOption; more?: true }
 
 function row(model: ModelOption, options: ModelPickOptions, defaultRow: ModelOption | undefined): Row {
   const tags = [
@@ -31,14 +28,6 @@ function row(model: ModelOption, options: ModelPickOptions, defaultRow: ModelOpt
 export async function pickModel(models: readonly ModelOption[], options: ModelPickOptions): Promise<Answer<ModelPicked>> {
   const menu = modelMenu(models, options.defaultModel)
   const main: Row[] = menu.main.map((m) => row(m, options, menu.defaultRow))
-  if (!menu.defaultRow && options.unset) {
-    main.push({
-      label: options.unset.label,
-      description: options.current === undefined ? options.currentTag : undefined,
-      detail: options.unset.detail,
-      unset: true,
-    })
-  }
   if (menu.more.length > menu.main.length) {
     main.push(
       { label: '', kind: vscode.QuickPickItemKind.Separator },
@@ -47,12 +36,10 @@ export async function pickModel(models: readonly ModelOption[], options: ModelPi
   }
   const all = menu.more.map((m) => row(m, options, menu.defaultRow))
   const isCurrent = (r: Row) =>
-    options.current === undefined
-      ? r.unset === true || (r.model !== undefined && r.model === menu.defaultRow)
-      : r.model !== undefined && modelMatches(r.model, options.current)
+    options.current === undefined ? r.model !== undefined && r.model === menu.defaultRow : r.model !== undefined && modelMatches(r.model, options.current)
   let expanded = false
   for (;;) {
-    const items = expanded ? all : main
+    const items: Row[] = expanded ? all : main
     const picked = await showPick(items, {
       title: options.title,
       placeHolder: options.placeHolder,
@@ -72,6 +59,8 @@ export async function pickModel(models: readonly ModelOption[], options: ModelPi
       expanded = true
       continue
     }
-    return { model: picked.model, isDefault: picked.unset === true || (picked.model !== undefined && picked.model === menu.defaultRow) }
+    if (picked.model) {
+      return { model: picked.model }
+    }
   }
 }

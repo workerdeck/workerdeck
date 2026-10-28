@@ -16,6 +16,7 @@ import { bypassDisabled, permissionDecision, refuseJobInput, refusePermissionMod
 import { engineOf } from '../lib/profile-env.ts'
 import { CUT_IN_PROGRESS } from '../services/lifecycle-locks.ts'
 import { CONVERSATION_ENDED, type CutOutcome } from '../services/conversation-cuts.ts'
+import { modelFor } from '../lib/models.ts'
 import { mentionsFor } from '../services/peers.ts'
 import type { PromptOutcome } from '../services/prompt-acks.ts'
 import { shownEntryInfo } from './conversations.ts'
@@ -347,7 +348,8 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
       return
     }
     case 'set_model': {
-      await runner.setModel(frame.model)
+      const { engine, profile } = runner.info()
+      await runner.setModel(modelFor(ctx.adapterFor(engine), profile === undefined ? undefined : ctx.profiles.get(profile), frame.model))
       return
     }
     case 'set_effort': {

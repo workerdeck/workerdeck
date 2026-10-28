@@ -21,6 +21,7 @@ import {
   isJobRun,
   isSharing,
   mergePricing,
+  modelMatches,
   type CreateSessionRequest,
   type MessageOrigin,
   type ProfileEngine,
@@ -29,6 +30,7 @@ import {
 import type { ServerContext } from './context.ts'
 import { createServerLifecycle } from './lifecycle.ts'
 import { HttpError, httpErrorStatus, json } from './lib/http.ts'
+import { modelFor } from './lib/models.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
@@ -113,7 +115,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     )
   }
 
-  const profileDefaultModels = new Map<string, string>()
   const profileUsage = new ProfileUsageTracker()
   const spendLedger = new SpendLedger({
     pricing: pricing.pricing,
@@ -135,7 +136,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     hasEngineRunnerFactory: options.createEngineRunner !== undefined,
     adapterFor,
     decorate: {
-      defaultModel: (name) => profileDefaultModels.get(name),
       availability: (name) => availability.get(name),
       usage: (name) => {
         refreshStaleUsage(registry, profileUsage, name, diagnose)
@@ -173,6 +173,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     store: options.agentStore ?? createMemoryAgentStore(),
     sleepAfterMs: options.agentSleepAfterMs,
     allowShared: options.agentSharing?.allowShared,
+    modelOf: (config) => {
+      // The profile a create with none named resolves to (`resolveProfile`): the only one, else `default`.
+      const all = profiles.all()
+      const profile = config.profile === undefined ? (all.length === 1 ? all[0] : profiles.get('default')) : profiles.get(config.profile)
+      // No profile to read an engine from: the create itself will refuse, so invent nothing here.
+      return profile === undefined ? config.model : modelFor(adapterFor(profile.engine), profile, config.model)
+    },
     modeOf: (agent) =>
       registry.get(agent.id)?.info().permissionMode ??
       agent.config.permissionMode ??
@@ -182,9 +189,17 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   // Every session the gateway hands out names its conversation; a history entry's info already carries its own.
   const withConversation = (info: SessionInfo): SessionInfo =>
     info.conversation === undefined ? { ...info, conversation: records.conversationOf(info.id) ?? 1 } : info
+  // The catalog's name for the session's model: `claude-opus-5-5` and its `[1m]` variant both read "Opus 5.5".
+  const withModelName = (info: SessionInfo): SessionInfo => {
+    const adapter = adapterFor(info.engine)
+    const id = modelFor(adapter, info.profile === undefined ? undefined : profiles.get(info.profile), info.model)
+    const name = id === undefined ? undefined : adapter.catalog.models.find((m) => m.value !== 'default' && modelMatches(m, id))?.displayName
+    return name === undefined || name === info.modelName ? info : { ...info, modelName: name }
+  }
   const projects = new ProjectInfoService({
     decorate: (info) => {
-      const decorated = agents.decorate(shells ? shells.decorate(withConversation(info)) : withConversation(info))
+      const named = withModelName(withConversation(info))
+      const decorated = agents.decorate(shells ? shells.decorate(named) : named)
       const owner = decorated.owner ?? owners.ownerFor(decorated.profile)
       return owner === undefined || owner === decorated.owner ? decorated : { ...decorated, owner }
     },
@@ -259,17 +274,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         engineSleep.watch(runner),
         contextResets?.watch(runner),
       ]
-      const profile = runner.info().profile
-      if (profile) {
-        detachers.push(
-          runner.subscribe((event) => {
-            if (event.type !== 'capabilities' || !event.defaultModel) {
-              return
-            }
-            profileDefaultModels.set(profile, event.defaultModel)
-          }),
-        )
-      }
       return () => {
         for (const detach of detachers) {
           detach?.()

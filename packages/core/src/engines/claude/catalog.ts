@@ -2,6 +2,7 @@ import type { ModelCatalog } from '../adapter.ts'
 
 export const CLAUDE_CATALOG: ModelCatalog = {
   provenance: 'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.293 (Claude Code CLI), extracted 2026-10-08',
+  defaultModel: 'claude-opus-5-5',
   models: [
     {
       value: 'fable',

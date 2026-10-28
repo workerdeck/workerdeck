@@ -7,14 +7,10 @@ export interface ModelSelectProps {
   models: ModelOption[]
   model?: string
   defaultModel?: string
-  onModelChange: (model?: string) => void
+  onModelChange: (model: string) => void
   variant?: 'toolbar' | 'form'
   disabled?: boolean
   className?: string
-}
-
-function isDefaultOption(value: string) {
-  return value === 'default'
 }
 
 function dropVariant(id: string) {
@@ -45,7 +41,7 @@ export function matchModel(models: readonly ModelOption[], model?: string): Mode
   if (!model) {
     return undefined
   }
-  return models.filter((m) => !isDefaultOption(m.value)).find((m) => optionMatches(m, model))
+  return models.find((m) => optionMatches(m, model))
 }
 
 const MORE = '\u0000more'
@@ -55,13 +51,12 @@ export function ModelSelect({ models, model, defaultModel, onModelChange, varian
   const [expanded, setExpanded] = useState(false)
   const keepOpen = useRef(false)
   const menu = modelMenu(models, defaultModel)
-  const sentinel = menu.defaultRow ? undefined : models.find((m) => isDefaultOption(m.value))
-  const selected = matchModel(menu.more, model) ?? (model ? undefined : (menu.defaultRow ?? sentinel))
-  const main = [...menu.main, ...(sentinel ? [sentinel] : [])]
+  const selected = matchModel(menu.more, model) ?? (model ? undefined : menu.defaultRow)
+  const main = [...menu.main]
   if (selected && !main.includes(selected)) {
     main.push(selected)
   }
-  const rows = expanded ? [...menu.more, ...(sentinel ? [sentinel] : [])] : main
+  const rows = expanded ? menu.more : main
   const hasMore = !expanded && menu.more.some((m) => !main.includes(m))
   const choose = (value: string) => {
     if (value === MORE) {
@@ -73,7 +68,7 @@ export function ModelSelect({ models, model, defaultModel, onModelChange, varian
     if (!row || row === selected) {
       return
     }
-    onModelChange(isDefaultOption(value) || row === menu.defaultRow ? undefined : value)
+    onModelChange(value)
   }
   return (
     <Select

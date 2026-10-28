@@ -18,7 +18,7 @@ export function MemberCard({
   const state = info.engineAsleep && member.state === 'idle' ? 'Asleep' : STATE_LABELS[member.state]
   const status = statusLine(info.statusLabel)
   const task = info.checklist?.find((item) => item.status === 'in_progress')?.text
-  const model = friendlyModel(info.model)
+  const model = info.modelName ?? friendlyModel(info.model)
   const notes = [
     member.unseen > 0 ? `${member.unseen} new message${member.unseen === 1 ? '' : 's'}` : undefined,
     info.pendingPermissionCount > 0 ? `${info.pendingPermissionCount} waiting for approval` : undefined,
