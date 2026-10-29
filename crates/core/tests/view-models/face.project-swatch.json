@@ -1,0 +1,29 @@
+{
+  "input": {
+    "fn": "projectSwatch",
+    "calls": [
+      [
+        "/work/workerdeck"
+      ],
+      [
+        "C:/work/api"
+      ],
+      [
+        ""
+      ],
+      [
+        "ünïcödé 🦀"
+      ],
+      [
+        "s-1"
+      ]
+    ]
+  },
+  "output": [
+    "copper",
+    "indigo",
+    "teal",
+    "rose",
+    "rose"
+  ]
+}

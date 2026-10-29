@@ -10,6 +10,7 @@ use wd_native::transcript::{
     TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
 use wd_native::vm::conversations::{self, CurrentConversation, SessionAddress};
+use wd_native::vm::face::{self, FaceOptions, FaceState, FaceTheme};
 use wd_native::vm::session_list::{self as sl, CustomGroup, SessionRow, ViewConfig};
 use wd_native::vm::status_label::StatusLabelRead;
 use wd_native::vm::watermarks::{Watermark, Watermarks};
@@ -401,6 +402,32 @@ fn transcript_fn(fn_name: &str, a: &Args) -> Value {
     project(&state)
 }
 
+fn face_fn(fn_name: &str, a: &Args) -> Value {
+    match fn_name {
+        "resolveAgentFace" => out(face::resolve_agent_face(Some(a.raw(0)))),
+        "projectSwatch" => out(face::project_swatch(&a.str(0).unwrap())),
+        "faceStateOf" => out(face::face_state_of(&a.get::<SessionRow>(0), a.opt(1))),
+        "faceTree" => {
+            let o = a.raw(0);
+            let field = |key: &str| o.get(key).filter(|v| !v.is_null());
+            let resolved = face::resolve_agent_face(field("face"));
+            let tree = face::face_tree(&FaceOptions {
+                face: &resolved,
+                project: field("project").and_then(Value::as_str).unwrap(),
+                state: serde_json::from_value::<FaceState>(field("state").cloned().unwrap()).unwrap(),
+                size: field("size").and_then(Value::as_f64).unwrap(),
+                id: field("id").and_then(Value::as_str).unwrap(),
+                context: field("context").and_then(Value::as_f64),
+                threshold: field("threshold").and_then(Value::as_f64),
+                phase: field("phase").and_then(Value::as_str),
+                theme: serde_json::from_value::<FaceTheme>(field("theme").cloned().unwrap()).unwrap(),
+            });
+            tree.to_json()
+        }
+        _ => panic!("face.{fn_name} has no Rust binding"),
+    }
+}
+
 fn conversations_fn(fn_name: &str, a: &Args) -> Value {
     match fn_name {
         "archivedView" => {
@@ -431,6 +458,7 @@ fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
         "transcript" => transcript_fn(fn_name, &a),
         "prompt" => prompt_fn(fn_name, &a),
         "conversations" => conversations_fn(fn_name, &a),
+        "face" => face_fn(fn_name, &a),
         _ => panic!("unknown view-model module {module}"),
     }
 }

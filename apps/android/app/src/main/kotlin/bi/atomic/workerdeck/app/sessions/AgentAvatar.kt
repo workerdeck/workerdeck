@@ -24,9 +24,14 @@ import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ListRow
 import bi.atomic.workerdeck.core.ffi.TrayMember
 
-// The no-avatar fallback: a native client draws no face until it has a face renderer.
+// An agent draws its face; a plain session draws its engine's mark in the same tile, with the status badge a face
+// would otherwise carry in its pose.
 @Composable
-fun AgentAvatar(row: ListRow, size: Dp) {
+fun AgentAvatar(row: ListRow, size: Dp, context: Boolean = false) {
+    row.face?.let {
+        Face(it, size, context)
+        return
+    }
     val colors = Wd.colors
     val corner = if (size >= 28.dp) 14.dp else 11.dp
     Box(Modifier.size(size)) {
@@ -56,5 +61,9 @@ fun AgentAvatar(row: ListRow, size: Dp) {
 // A tray picture: idle by definition (Auto shows every busy Member as a row), so no badge.
 @Composable
 fun TrayAvatar(member: TrayMember, size: Dp) {
+    member.face?.let {
+        Face(it, size)
+        return
+    }
     Box(Modifier.size(size).alpha(if (member.asleep) 0.6f else 1f).background(Wd.colors.raised, RoundedCornerShape(4.dp)))
 }

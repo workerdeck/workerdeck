@@ -1,0 +1,5443 @@
+{
+  "input": {
+    "fn": "faceTree",
+    "calls": [
+      [
+        {
+          "project": "blue",
+          "state": "idle",
+          "size": 32,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "dark"
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "tile": {
+              "shape": "soft"
+            },
+            "antenna": {
+              "kind": "ball",
+              "color": "amber"
+            },
+            "visor": {
+              "kind": "band"
+            },
+            "eyes": {
+              "kind": "bar",
+              "color": "amber"
+            },
+            "mouth": {
+              "kind": "grill",
+              "color": "amber"
+            }
+          },
+          "project": "blue",
+          "state": "idle",
+          "size": 40,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "dark",
+          "context": 0.22
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "tile": {
+              "shape": "soft"
+            },
+            "antenna": {
+              "kind": "ball",
+              "color": "amber"
+            },
+            "visor": {
+              "kind": "band"
+            },
+            "eyes": {
+              "kind": "bar",
+              "color": "amber"
+            },
+            "mouth": {
+              "kind": "grill",
+              "color": "amber"
+            }
+          },
+          "project": "blue",
+          "state": "working",
+          "size": 40,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "light",
+          "context": 0.55
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "backdrop": {
+              "color": "project/base"
+            },
+            "tile": {
+              "shape": "boxy",
+              "color": "steel"
+            },
+            "antenna": {
+              "kind": "diamond",
+              "color": "teal"
+            },
+            "visor": {
+              "kind": "none"
+            },
+            "eyes": {
+              "kind": "segments",
+              "color": "teal"
+            },
+            "mouth": {
+              "kind": "vent",
+              "color": "project"
+            }
+          },
+          "project": "blue",
+          "state": "working",
+          "size": 32,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "dark"
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "backdrop": {
+              "color": "project/base"
+            },
+            "tile": {
+              "shape": "boxy",
+              "color": "steel"
+            },
+            "antenna": {
+              "kind": "diamond",
+              "color": "teal"
+            },
+            "visor": {
+              "kind": "none"
+            },
+            "eyes": {
+              "kind": "segments",
+              "color": "teal"
+            },
+            "mouth": {
+              "kind": "vent",
+              "color": "project"
+            }
+          },
+          "project": "copper",
+          "state": "attention",
+          "size": 40,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "dark",
+          "context": 0.4,
+          "threshold": 0.5
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "backdrop": {
+              "color": "rose/glow"
+            },
+            "tile": {
+              "shape": "squircle",
+              "color": "mint/deep"
+            },
+            "antenna": {
+              "kind": "twin",
+              "color": "coral/soft"
+            },
+            "visor": {
+              "kind": "inset",
+              "color": "indigo"
+            },
+            "eyes": {
+              "kind": "split"
+            },
+            "mouth": {
+              "kind": "speaker",
+              "color": "olive"
+            }
+          },
+          "project": "blue",
+          "state": "asleep",
+          "size": 40,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "light",
+          "context": 1.3
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "backdrop": {
+              "color": "rose/glow"
+            },
+            "tile": {
+              "shape": "squircle",
+              "color": "mint/deep"
+            },
+            "antenna": {
+              "kind": "twin",
+              "color": "coral/soft"
+            },
+            "visor": {
+              "kind": "inset",
+              "color": "indigo"
+            },
+            "eyes": {
+              "kind": "split"
+            },
+            "mouth": {
+              "kind": "speaker",
+              "color": "olive"
+            }
+          },
+          "project": "olive",
+          "state": "starting",
+          "size": 32,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "dark"
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "tile": {
+              "shape": "soft"
+            },
+            "antenna": {
+              "kind": "triangle",
+              "color": "project"
+            },
+            "eyes": {
+              "kind": "slit",
+              "color": "violet/screen"
+            },
+            "mouth": {
+              "kind": "none"
+            }
+          },
+          "project": "blue",
+          "state": "failed",
+          "size": 40,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "dark",
+          "context": -0.2
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "tile": {
+              "shape": "soft"
+            },
+            "antenna": {
+              "kind": "triangle",
+              "color": "project"
+            },
+            "eyes": {
+              "kind": "slit",
+              "color": "violet/screen"
+            },
+            "mouth": {
+              "kind": "none"
+            }
+          },
+          "project": "blue",
+          "state": "closed",
+          "size": 32,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "light"
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "antenna": {
+              "kind": "square",
+              "color": "green"
+            },
+            "eyes": {
+              "kind": "bar"
+            },
+            "mouth": {
+              "kind": "grill"
+            }
+          },
+          "project": "blue",
+          "state": "attention",
+          "size": 20,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "dark"
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "antenna": {
+              "kind": "square",
+              "color": "green"
+            },
+            "eyes": {
+              "kind": "bar"
+            },
+            "mouth": {
+              "kind": "grill"
+            }
+          },
+          "project": "blue",
+          "state": "working",
+          "size": 16,
+          "id": "f",
+          "theme": "dark"
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "tile": {
+              "shape": "blob"
+            },
+            "antenna": {
+              "kind": "dish"
+            },
+            "eyes": {
+              "kind": "heart",
+              "color": "nope"
+            },
+            "mouth": "x"
+          },
+          "project": "teal",
+          "state": "idle",
+          "size": 44,
+          "id": "f",
+          "phase": "mac:agent-1",
+          "theme": "dark"
+        }
+      ],
+      [
+        {
+          "face": {
+            "v": 1,
+            "tile": {
+              "shape": "soft"
+            },
+            "antenna": {
+              "kind": "ball",
+              "color": "amber"
+            },
+            "visor": {
+              "kind": "band"
+            },
+            "eyes": {
+              "kind": "bar",
+              "color": "amber"
+            },
+            "mouth": {
+              "kind": "grill",
+              "color": "amber"
+            }
+          },
+          "project": "rose",
+          "state": "working",
+          "size": 24,
+          "id": "f",
+          "phase": "box:x",
+          "theme": "light"
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-idle",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 32,
+        "height": 32,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 4,
+            "fill": "oklch(0.34 0.050 250)"
+          },
+          "children": []
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6,
+                    "fill": "oklch(0.64 0.095 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.48 0.080 250)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.82 0.050 250)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 8,
+                        "y": 14.3,
+                        "width": 16,
+                        "height": 4.4,
+                        "rx": 2.2,
+                        "fill": "oklch(0.86 0.150 250)"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-idle",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 40,
+        "height": 40,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 3.2,
+            "fill": "oklch(0.34 0.050 250)"
+          },
+          "children": []
+        },
+        {
+          "tag": "clipPath",
+          "attrs": {
+            "id": "f-f"
+          },
+          "children": [
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 0,
+                "y": 0,
+                "width": 32,
+                "height": 32,
+                "rx": 3.2
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "clip-path": "url(#f-f)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "tide",
+                "style": {
+                  "translateY": 24.96
+                }
+              },
+              "children": [
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave back",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -1.1,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        1.1,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -1.1,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        1.1,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -1.1,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        1.1,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -1.1,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        1.1,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -1.1,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        1.1,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -1.1,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        1.1,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -1.1,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        1.1,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.48 0.080 250)",
+                    "opacity": 0.45
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave front",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -0.8,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        0.8,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -0.8,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        0.8,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -0.8,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        0.8,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -0.8,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        0.8,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -0.8,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        0.8,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -0.8,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        0.8,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -0.8,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        0.8,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.48 0.080 250)",
+                    "opacity": 0.9
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.2,
+                    "y": 1.5,
+                    "width": 1.6,
+                    "height": 5,
+                    "rx": 0.8,
+                    "fill": "oklch(0.48 0.080 82)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "class": "led",
+                    "x": 13.5,
+                    "y": -1,
+                    "width": 5,
+                    "height": 5,
+                    "rx": 2.5,
+                    "fill": "oklch(0.86 0.150 82)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6,
+                    "fill": "oklch(0.64 0.095 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.48 0.080 250)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 11.5,
+                        "width": 32,
+                        "height": 10,
+                        "fill": "oklch(0.25 0.025 250)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.82 0.050 250)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 8,
+                        "y": 14.3,
+                        "width": 16,
+                        "height": 4.4,
+                        "rx": 2.2,
+                        "fill": "oklch(0.86 0.150 82)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 11.5,
+                    "y": 22.6,
+                    "width": 9,
+                    "height": 3.4,
+                    "rx": 1.2,
+                    "fill": "oklch(0.25 0.025 82)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 13.4,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.86 0.150 82)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.55,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.86 0.150 82)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 17.7,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.86 0.150 82)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-working warn",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 40,
+        "height": 40,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 3.2,
+            "fill": "oklch(0.91 0.045 250)"
+          },
+          "children": []
+        },
+        {
+          "tag": "clipPath",
+          "attrs": {
+            "id": "f-f"
+          },
+          "children": [
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 0,
+                "y": 0,
+                "width": 32,
+                "height": 32,
+                "rx": 3.2
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "clip-path": "url(#f-f)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "tide",
+                "style": {
+                  "translateY": 14.4
+                }
+              },
+              "children": [
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave back",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -1.1,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        1.1,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -1.1,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        1.1,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -1.1,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        1.1,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -1.1,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        1.1,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -1.1,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        1.1,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -1.1,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        1.1,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -1.1,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        1.1,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.8 0.160 82)",
+                    "opacity": 0.7
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave front",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -0.8,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        0.8,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -0.8,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        0.8,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -0.8,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        0.8,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -0.8,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        0.8,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -0.8,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        0.8,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -0.8,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        0.8,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -0.8,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        0.8,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.7 0.110 82)",
+                    "opacity": 1
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave crest",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -0.8,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        0.8,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -0.8,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        0.8,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -0.8,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        0.8,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -0.8,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        0.8,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -0.8,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        0.8,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -0.8,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        0.8,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -0.8,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        0.8,
+                        48,
+                        0
+                      ]
+                    ],
+                    "fill": "none",
+                    "stroke": "oklch(0.8 0.160 82)",
+                    "stroke-width": 1.1
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.2,
+                    "y": 1.5,
+                    "width": 1.6,
+                    "height": 5,
+                    "rx": 0.8,
+                    "fill": "oklch(0.54 0.100 82)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "class": "led",
+                    "x": 13.5,
+                    "y": -1,
+                    "width": 5,
+                    "height": 5,
+                    "rx": 2.5,
+                    "fill": "oklch(0.8 0.160 82)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6,
+                    "fill": "oklch(0.7 0.110 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.54 0.100 250)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 11.5,
+                        "width": 32,
+                        "height": 10,
+                        "fill": "oklch(0.3 0.030 250)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.93 0.040 250)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 8,
+                        "y": 14.3,
+                        "width": 16,
+                        "height": 4.4,
+                        "rx": 2.2,
+                        "fill": "oklch(0.8 0.160 82)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "clipPath",
+                      "attrs": {
+                        "id": "f-v"
+                      },
+                      "children": [
+                        {
+                          "tag": "rect",
+                          "attrs": {
+                            "x": 8,
+                            "y": 14.3,
+                            "width": 16,
+                            "height": 4.4,
+                            "rx": 2.2
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "g",
+                      "attrs": {
+                        "clip-path": "url(#f-v)"
+                      },
+                      "children": [
+                        {
+                          "tag": "rect",
+                          "attrs": {
+                            "class": "glint",
+                            "x": 14,
+                            "y": 13,
+                            "width": 3,
+                            "height": 7,
+                            "fill": "#ffffff",
+                            "opacity": 0.6
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 11.5,
+                    "y": 22.6,
+                    "width": 9,
+                    "height": 3.4,
+                    "rx": 1.2,
+                    "fill": "oklch(0.3 0.030 82)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 13.4,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.8 0.160 82)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.55,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.8 0.160 82)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 17.7,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.8 0.160 82)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 20,
+                "y": -3,
+                "width": 12,
+                "height": 7,
+                "rx": 3.5,
+                "fill": "oklch(0.3 0.005 250)"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "class": "dot",
+                "x": 22.2,
+                "y": -0.3,
+                "width": 1.8,
+                "height": 1.8,
+                "rx": 0.9,
+                "fill": "oklch(0.93 0.007 250)"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "class": "dot",
+                "x": 25.1,
+                "y": -0.3,
+                "width": 1.8,
+                "height": 1.8,
+                "rx": 0.9,
+                "fill": "oklch(0.93 0.007 250)"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "class": "dot",
+                "x": 28,
+                "y": -0.3,
+                "width": 1.8,
+                "height": 1.8,
+                "rx": 0.9,
+                "fill": "oklch(0.93 0.007 250)"
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-working",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 32,
+        "height": 32,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 3.5
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 4,
+            "fill": "oklch(0.64 0.095 250)"
+          },
+          "children": []
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.2,
+                    "y": 1.5,
+                    "width": 1.6,
+                    "height": 5,
+                    "rx": 0.8,
+                    "fill": "oklch(0.48 0.080 205)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "transform": "rotate(45 16 1.5)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "led",
+                        "x": 13.9,
+                        "y": -0.6,
+                        "width": 4.2,
+                        "height": 4.2,
+                        "rx": 1,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 3.5,
+                    "fill": "oklch(0.64 0.017 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.48 0.014 250)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.82 0.009 250)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "seg",
+                        "style": {
+                          "--i": 0
+                        },
+                        "x": 8.1,
+                        "y": 14.3,
+                        "width": 3.2,
+                        "height": 4.4,
+                        "rx": 1.3,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "seg",
+                        "style": {
+                          "--i": 1
+                        },
+                        "x": 12.3,
+                        "y": 14.3,
+                        "width": 3.2,
+                        "height": 4.4,
+                        "rx": 1.3,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "seg",
+                        "style": {
+                          "--i": 2
+                        },
+                        "x": 16.5,
+                        "y": 14.3,
+                        "width": 3.2,
+                        "height": 4.4,
+                        "rx": 1.3,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "seg",
+                        "style": {
+                          "--i": 3
+                        },
+                        "x": 20.700000000000003,
+                        "y": 14.3,
+                        "width": 3.2,
+                        "height": 4.4,
+                        "rx": 1.3,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 10.5,
+                    "y": 22.8,
+                    "width": 11,
+                    "height": 3,
+                    "rx": 1.5,
+                    "fill": "oklch(0.25 0.025 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 12,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 13.899999999999999,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.8,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 17.7,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 19.599999999999998,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 20,
+                "y": -3,
+                "width": 12,
+                "height": 7,
+                "rx": 3.5,
+                "fill": "oklch(0.25 0.004 250)"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "class": "dot",
+                "x": 22.2,
+                "y": -0.3,
+                "width": 1.8,
+                "height": 1.8,
+                "rx": 0.9,
+                "fill": "oklch(0.82 0.009 250)"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "class": "dot",
+                "x": 25.1,
+                "y": -0.3,
+                "width": 1.8,
+                "height": 1.8,
+                "rx": 0.9,
+                "fill": "oklch(0.82 0.009 250)"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "class": "dot",
+                "x": 28,
+                "y": -0.3,
+                "width": 1.8,
+                "height": 1.8,
+                "rx": 0.9,
+                "fill": "oklch(0.82 0.009 250)"
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-attention",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 40,
+        "height": 40,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 3.5
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "class": "ring",
+            "x": -1.4,
+            "y": -1.4,
+            "width": 34.8,
+            "height": 34.8,
+            "rx": 4.6,
+            "fill": "none",
+            "stroke": "#f5a623",
+            "stroke-width": 1.2
+          },
+          "children": []
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 3.2,
+            "fill": "oklch(0.64 0.095 58)"
+          },
+          "children": []
+        },
+        {
+          "tag": "clipPath",
+          "attrs": {
+            "id": "f-f"
+          },
+          "children": [
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 0,
+                "y": 0,
+                "width": 32,
+                "height": 32,
+                "rx": 3.2
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "clip-path": "url(#f-f)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "tide",
+                "style": {
+                  "translateY": 19.2
+                }
+              },
+              "children": [
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave back",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -1.1,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        1.1,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -1.1,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        1.1,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -1.1,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        1.1,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -1.1,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        1.1,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -1.1,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        1.1,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -1.1,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        1.1,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -1.1,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        1.1,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.48 0.080 58)",
+                    "opacity": 0.45
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave front",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -0.8,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        0.8,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -0.8,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        0.8,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -0.8,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        0.8,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -0.8,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        0.8,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -0.8,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        0.8,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -0.8,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        0.8,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -0.8,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        0.8,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.48 0.080 58)",
+                    "opacity": 0.9
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.2,
+                    "y": 1.5,
+                    "width": 1.6,
+                    "height": 5,
+                    "rx": 0.8,
+                    "fill": "oklch(0.48 0.080 205)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "transform": "rotate(45 16 1.5)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "led",
+                        "x": 13.9,
+                        "y": -0.6,
+                        "width": 4.2,
+                        "height": 4.2,
+                        "rx": 1,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 3.5,
+                    "fill": "oklch(0.64 0.017 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.48 0.014 250)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.82 0.009 250)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "seg",
+                        "style": {
+                          "--i": 0
+                        },
+                        "x": 8.1,
+                        "y": 14.3,
+                        "width": 3.2,
+                        "height": 4.4,
+                        "rx": 1.3,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "seg",
+                        "style": {
+                          "--i": 1
+                        },
+                        "x": 12.3,
+                        "y": 14.3,
+                        "width": 3.2,
+                        "height": 4.4,
+                        "rx": 1.3,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "seg",
+                        "style": {
+                          "--i": 2
+                        },
+                        "x": 16.5,
+                        "y": 14.3,
+                        "width": 3.2,
+                        "height": 4.4,
+                        "rx": 1.3,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "class": "seg",
+                        "style": {
+                          "--i": 3
+                        },
+                        "x": 20.700000000000003,
+                        "y": 14.3,
+                        "width": 3.2,
+                        "height": 4.4,
+                        "rx": 1.3,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 10.5,
+                    "y": 22.8,
+                    "width": 11,
+                    "height": 3,
+                    "rx": 1.5,
+                    "fill": "oklch(0.25 0.025 58)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 12,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 58)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 13.899999999999999,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 58)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.8,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 58)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 17.7,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 58)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 19.599999999999998,
+                    "y": 23.6,
+                    "width": 0.6,
+                    "height": 1.4,
+                    "rx": 0.3,
+                    "fill": "oklch(0.86 0.150 58)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "class": "bubble"
+          },
+          "children": [
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 20.5,
+                "y": -3.5,
+                "width": 12.5,
+                "height": 10,
+                "rx": 5,
+                "fill": "#f5a623"
+              },
+              "children": []
+            },
+            {
+              "tag": "path",
+              "attrs": {
+                "d": [
+                  [
+                    "M",
+                    22.6,
+                    5.4
+                  ],
+                  [
+                    "L",
+                    21,
+                    8.5
+                  ],
+                  [
+                    "L",
+                    25.1,
+                    6.1
+                  ],
+                  [
+                    "Z"
+                  ]
+                ],
+                "fill": "#f5a623"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 26,
+                "y": -1.6,
+                "width": 1.6,
+                "height": 4.2,
+                "rx": 0.8,
+                "fill": "#1a1c22"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 26,
+                "y": 3.3,
+                "width": 1.6,
+                "height": 1.6,
+                "rx": 0.8,
+                "fill": "#1a1c22"
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-asleep warn",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 40,
+        "height": 40,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 9
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 3.2,
+            "fill": "oklch(0.8 0.160 355)"
+          },
+          "children": []
+        },
+        {
+          "tag": "clipPath",
+          "attrs": {
+            "id": "f-f"
+          },
+          "children": [
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 0,
+                "y": 0,
+                "width": 32,
+                "height": 32,
+                "rx": 3.2
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "clip-path": "url(#f-f)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "tide",
+                "style": {
+                  "translateY": 0
+                }
+              },
+              "children": [
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave back",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -1.1,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        1.1,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -1.1,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        1.1,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -1.1,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        1.1,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -1.1,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        1.1,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -1.1,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        1.1,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -1.1,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        1.1,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -1.1,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        1.1,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.8 0.160 82)",
+                    "opacity": 0.7
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave front",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -0.8,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        0.8,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -0.8,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        0.8,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -0.8,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        0.8,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -0.8,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        0.8,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -0.8,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        0.8,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -0.8,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        0.8,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -0.8,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        0.8,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.7 0.110 82)",
+                    "opacity": 1
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave crest",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -0.8,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        0.8,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -0.8,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        0.8,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -0.8,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        0.8,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -0.8,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        0.8,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -0.8,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        0.8,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -0.8,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        0.8,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -0.8,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        0.8,
+                        48,
+                        0
+                      ]
+                    ],
+                    "fill": "none",
+                    "stroke": "oklch(0.8 0.160 82)",
+                    "stroke-width": 1.1
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 9.8,
+                    "y": 1.8,
+                    "width": 1.4,
+                    "height": 4.5,
+                    "rx": 0.7,
+                    "fill": "oklch(0.54 0.100 32)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "class": "led",
+                    "x": 8.5,
+                    "y": -0.6,
+                    "width": 4,
+                    "height": 4,
+                    "rx": 2,
+                    "fill": "oklch(0.8 0.160 32)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 20.8,
+                    "y": 1.8,
+                    "width": 1.4,
+                    "height": 4.5,
+                    "rx": 0.7,
+                    "fill": "oklch(0.54 0.100 32)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "class": "led",
+                    "x": 19.5,
+                    "y": -0.6,
+                    "width": 4,
+                    "height": 4,
+                    "rx": 2,
+                    "fill": "oklch(0.8 0.160 32)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 9,
+                    "fill": "oklch(0.54 0.100 174)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.54 0.100 174)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 6,
+                        "y": 11,
+                        "width": 20,
+                        "height": 11,
+                        "rx": 4.5,
+                        "fill": "oklch(0.3 0.030 278)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.54 0.100 174)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 9,
+                        "y": 16,
+                        "width": 14,
+                        "height": 1.4,
+                        "rx": 0.7,
+                        "fill": "oklch(0.8 0.160 250)",
+                        "opacity": 0.5
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 10.6,
+                    "y": 23.2,
+                    "width": 1.8,
+                    "height": 1.8,
+                    "rx": 0.9,
+                    "fill": "oklch(0.3 0.030 120)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 13.6,
+                    "y": 23.2,
+                    "width": 1.8,
+                    "height": 1.8,
+                    "rx": 0.9,
+                    "fill": "oklch(0.3 0.030 120)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 16.6,
+                    "y": 23.2,
+                    "width": 1.8,
+                    "height": 1.8,
+                    "rx": 0.9,
+                    "fill": "oklch(0.3 0.030 120)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 19.6,
+                    "y": 23.2,
+                    "width": 1.8,
+                    "height": 1.8,
+                    "rx": 0.9,
+                    "fill": "oklch(0.3 0.030 120)"
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "fill": "none",
+            "stroke": "#7d8799",
+            "stroke-width": 1.3,
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round"
+          },
+          "children": [
+            {
+              "tag": "path",
+              "attrs": {
+                "class": "z1",
+                "d": [
+                  [
+                    "M",
+                    24,
+                    2.2
+                  ],
+                  [
+                    "L",
+                    27.2,
+                    2.2
+                  ],
+                  [
+                    "L",
+                    24,
+                    5.6
+                  ],
+                  [
+                    "L",
+                    27.2,
+                    5.6
+                  ]
+                ]
+              },
+              "children": []
+            },
+            {
+              "tag": "path",
+              "attrs": {
+                "class": "z2",
+                "d": [
+                  [
+                    "M",
+                    28.4,
+                    -2.4
+                  ],
+                  [
+                    "L",
+                    31,
+                    -2.4
+                  ],
+                  [
+                    "L",
+                    28.4,
+                    0.3999999999999999
+                  ],
+                  [
+                    "L",
+                    31,
+                    0.3999999999999999
+                  ]
+                ]
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-starting",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 32,
+        "height": 32,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 9
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 4,
+            "fill": "oklch(0.86 0.150 355)"
+          },
+          "children": []
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 9.8,
+                    "y": 1.8,
+                    "width": 1.4,
+                    "height": 4.5,
+                    "rx": 0.7,
+                    "fill": "oklch(0.48 0.080 32)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "class": "led",
+                    "x": 8.5,
+                    "y": -0.6,
+                    "width": 4,
+                    "height": 4,
+                    "rx": 2,
+                    "fill": "oklch(0.86 0.150 32)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 20.8,
+                    "y": 1.8,
+                    "width": 1.4,
+                    "height": 4.5,
+                    "rx": 0.7,
+                    "fill": "oklch(0.48 0.080 32)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "class": "led",
+                    "x": 19.5,
+                    "y": -0.6,
+                    "width": 4,
+                    "height": 4,
+                    "rx": 2,
+                    "fill": "oklch(0.86 0.150 32)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 9,
+                    "fill": "oklch(0.48 0.080 174)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.48 0.080 174)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 6,
+                        "y": 11,
+                        "width": 20,
+                        "height": 11,
+                        "rx": 4.5,
+                        "fill": "oklch(0.25 0.025 278)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.48 0.080 174)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 8,
+                        "y": 14.3,
+                        "width": 6.6,
+                        "height": 4.4,
+                        "rx": 2.2,
+                        "fill": "oklch(0.86 0.150 120)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 17.4,
+                        "y": 14.3,
+                        "width": 6.6,
+                        "height": 4.4,
+                        "rx": 2.2,
+                        "fill": "oklch(0.86 0.150 120)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 10.6,
+                    "y": 23.2,
+                    "width": 1.8,
+                    "height": 1.8,
+                    "rx": 0.9,
+                    "fill": "oklch(0.25 0.025 120)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 13.6,
+                    "y": 23.2,
+                    "width": 1.8,
+                    "height": 1.8,
+                    "rx": 0.9,
+                    "fill": "oklch(0.25 0.025 120)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 16.6,
+                    "y": 23.2,
+                    "width": 1.8,
+                    "height": 1.8,
+                    "rx": 0.9,
+                    "fill": "oklch(0.25 0.025 120)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 19.6,
+                    "y": 23.2,
+                    "width": 1.8,
+                    "height": 1.8,
+                    "rx": 0.9,
+                    "fill": "oklch(0.25 0.025 120)"
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "path",
+          "attrs": {
+            "class": "spark",
+            "d": [
+              [
+                "M",
+                28,
+                -1.5
+              ],
+              [
+                "L",
+                29,
+                1.1
+              ],
+              [
+                "L",
+                31.6,
+                2.1
+              ],
+              [
+                "L",
+                29,
+                3.1
+              ],
+              [
+                "L",
+                28,
+                5.7
+              ],
+              [
+                "L",
+                27,
+                3.1
+              ],
+              [
+                "L",
+                24.4,
+                2.1
+              ],
+              [
+                "L",
+                27,
+                1.1
+              ],
+              [
+                "Z"
+              ]
+            ],
+            "fill": "#ffd66b"
+          },
+          "children": []
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-failed",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 40,
+        "height": 40,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 3.2,
+            "fill": "oklch(0.34 0.050 250)"
+          },
+          "children": []
+        },
+        {
+          "tag": "clipPath",
+          "attrs": {
+            "id": "f-f"
+          },
+          "children": [
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 0,
+                "y": 0,
+                "width": 32,
+                "height": 32,
+                "rx": 3.2
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "clip-path": "url(#f-f)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "tide",
+                "style": {
+                  "translateY": 32
+                }
+              },
+              "children": [
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave back",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -1.1,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        1.1,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -1.1,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        1.1,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -1.1,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        1.1,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -1.1,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        1.1,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -1.1,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        1.1,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -1.1,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        1.1,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -1.1,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        1.1,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.48 0.080 250)",
+                    "opacity": 0.45
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "wave front",
+                    "d": [
+                      [
+                        "M",
+                        -8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -6,
+                        -0.8,
+                        -4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        -2,
+                        0.8,
+                        0,
+                        0
+                      ],
+                      [
+                        "Q",
+                        2,
+                        -0.8,
+                        4,
+                        0
+                      ],
+                      [
+                        "Q",
+                        6,
+                        0.8,
+                        8,
+                        0
+                      ],
+                      [
+                        "Q",
+                        10,
+                        -0.8,
+                        12,
+                        0
+                      ],
+                      [
+                        "Q",
+                        14,
+                        0.8,
+                        16,
+                        0
+                      ],
+                      [
+                        "Q",
+                        18,
+                        -0.8,
+                        20,
+                        0
+                      ],
+                      [
+                        "Q",
+                        22,
+                        0.8,
+                        24,
+                        0
+                      ],
+                      [
+                        "Q",
+                        26,
+                        -0.8,
+                        28,
+                        0
+                      ],
+                      [
+                        "Q",
+                        30,
+                        0.8,
+                        32,
+                        0
+                      ],
+                      [
+                        "Q",
+                        34,
+                        -0.8,
+                        36,
+                        0
+                      ],
+                      [
+                        "Q",
+                        38,
+                        0.8,
+                        40,
+                        0
+                      ],
+                      [
+                        "Q",
+                        42,
+                        -0.8,
+                        44,
+                        0
+                      ],
+                      [
+                        "Q",
+                        46,
+                        0.8,
+                        48,
+                        0
+                      ],
+                      [
+                        "L",
+                        48,
+                        40
+                      ],
+                      [
+                        "L",
+                        -8,
+                        40
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.48 0.080 250)",
+                    "opacity": 0.9
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.2,
+                    "y": 1.5,
+                    "width": 1.6,
+                    "height": 5,
+                    "rx": 0.8,
+                    "fill": "oklch(0.48 0.080 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "led",
+                    "d": [
+                      [
+                        "M",
+                        16,
+                        -1.2
+                      ],
+                      [
+                        "L",
+                        19,
+                        3.4
+                      ],
+                      [
+                        "L",
+                        13,
+                        3.4
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.86 0.150 250)",
+                    "stroke": "oklch(0.86 0.150 250)",
+                    "stroke-width": 1.4,
+                    "stroke-linejoin": "round"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6,
+                    "fill": "oklch(0.64 0.095 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.48 0.080 250)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.82 0.050 250)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "path",
+                      "attrs": {
+                        "d": [
+                          [
+                            "M",
+                            9.3,
+                            14.8
+                          ],
+                          [
+                            "L",
+                            12.700000000000001,
+                            18.2
+                          ],
+                          [
+                            "M",
+                            12.7,
+                            14.8
+                          ],
+                          [
+                            "L",
+                            9.299999999999999,
+                            18.2
+                          ]
+                        ],
+                        "stroke": "#f14c4c",
+                        "stroke-width": 1.6,
+                        "stroke-linecap": "round"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "path",
+                      "attrs": {
+                        "d": [
+                          [
+                            "M",
+                            19.3,
+                            14.8
+                          ],
+                          [
+                            "L",
+                            22.7,
+                            18.2
+                          ],
+                          [
+                            "M",
+                            22.7,
+                            14.8
+                          ],
+                          [
+                            "L",
+                            19.3,
+                            18.2
+                          ]
+                        ],
+                        "stroke": "#f14c4c",
+                        "stroke-width": 1.6,
+                        "stroke-linecap": "round"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 23.5,
+            "y": 23.5,
+            "width": 9.5,
+            "height": 9.5,
+            "rx": 4.75,
+            "fill": "#f14c4c"
+          },
+          "children": []
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 27.55,
+            "y": 25.4,
+            "width": 1.4,
+            "height": 3.6,
+            "rx": 0.7,
+            "fill": "#fff"
+          },
+          "children": []
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 27.55,
+            "y": 29.7,
+            "width": 1.4,
+            "height": 1.4,
+            "rx": 0.7,
+            "fill": "#fff"
+          },
+          "children": []
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-closed",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 32,
+        "height": 32,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 4,
+            "fill": "oklch(0.91 0.045 250)"
+          },
+          "children": []
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.2,
+                    "y": 1.5,
+                    "width": 1.6,
+                    "height": 5,
+                    "rx": 0.8,
+                    "fill": "oklch(0.54 0.100 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "path",
+                  "attrs": {
+                    "class": "led",
+                    "d": [
+                      [
+                        "M",
+                        16,
+                        -1.2
+                      ],
+                      [
+                        "L",
+                        19,
+                        3.4
+                      ],
+                      [
+                        "L",
+                        13,
+                        3.4
+                      ],
+                      [
+                        "Z"
+                      ]
+                    ],
+                    "fill": "oklch(0.8 0.160 250)",
+                    "stroke": "oklch(0.8 0.160 250)",
+                    "stroke-width": 1.4,
+                    "stroke-linejoin": "round"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6,
+                    "fill": "oklch(0.7 0.110 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.54 0.100 250)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.93 0.040 250)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 9,
+                        "y": 16,
+                        "width": 14,
+                        "height": 1.4,
+                        "rx": 0.7,
+                        "fill": "oklch(0.3 0.030 302)",
+                        "opacity": 0.5
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-attention",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 20,
+        "height": 20,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 3.2,
+            "fill": "oklch(0.34 0.050 250)"
+          },
+          "children": []
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.2,
+                    "y": 1.5,
+                    "width": 1.6,
+                    "height": 5,
+                    "rx": 0.8,
+                    "fill": "oklch(0.48 0.080 152)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "class": "led",
+                    "x": 13.7,
+                    "y": -0.8,
+                    "width": 4.6,
+                    "height": 4.6,
+                    "rx": 1.1,
+                    "fill": "oklch(0.86 0.150 152)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6,
+                    "fill": "oklch(0.64 0.095 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.48 0.080 250)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.82 0.050 250)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 8,
+                        "y": 14.3,
+                        "width": 16,
+                        "height": 4.4,
+                        "rx": 2.2,
+                        "fill": "oklch(0.86 0.150 250)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 11.5,
+                    "y": 22.6,
+                    "width": 9,
+                    "height": 3.4,
+                    "rx": 1.2,
+                    "fill": "oklch(0.25 0.025 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 13.4,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.55,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 17.7,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-working",
+        "style": {
+          "--d": 0
+        },
+        "width": 16,
+        "height": 16,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 3.2,
+            "fill": "oklch(0.34 0.050 250)"
+          },
+          "children": []
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.2,
+                    "y": 1.5,
+                    "width": 1.6,
+                    "height": 5,
+                    "rx": 0.8,
+                    "fill": "oklch(0.48 0.080 152)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "class": "led",
+                    "x": 13.7,
+                    "y": -0.8,
+                    "width": 4.6,
+                    "height": 4.6,
+                    "rx": 1.1,
+                    "fill": "oklch(0.86 0.150 152)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6,
+                    "fill": "oklch(0.64 0.095 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.48 0.080 250)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.82 0.050 250)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 8,
+                        "y": 14.3,
+                        "width": 16,
+                        "height": 4.4,
+                        "rx": 2.2,
+                        "fill": "oklch(0.86 0.150 250)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "clipPath",
+                      "attrs": {
+                        "id": "f-v"
+                      },
+                      "children": [
+                        {
+                          "tag": "rect",
+                          "attrs": {
+                            "x": 8,
+                            "y": 14.3,
+                            "width": 16,
+                            "height": 4.4,
+                            "rx": 2.2
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "g",
+                      "attrs": {
+                        "clip-path": "url(#f-v)"
+                      },
+                      "children": [
+                        {
+                          "tag": "rect",
+                          "attrs": {
+                            "class": "glint",
+                            "x": 14,
+                            "y": 13,
+                            "width": 3,
+                            "height": 7,
+                            "fill": "#ffffff",
+                            "opacity": 0.6
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 11.5,
+                    "y": 22.6,
+                    "width": 9,
+                    "height": 3.4,
+                    "rx": 1.2,
+                    "fill": "oklch(0.25 0.025 250)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 13.4,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.55,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 17.7,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.86 0.150 250)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-idle",
+        "style": {
+          "--d": -1.193
+        },
+        "width": 44,
+        "height": 44,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 3.2,
+            "fill": "oklch(0.34 0.050 205)"
+          },
+          "children": []
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6,
+                    "fill": "oklch(0.64 0.095 205)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.48 0.080 205)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.82 0.050 205)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 8,
+                        "y": 14.3,
+                        "width": 16,
+                        "height": 4.4,
+                        "rx": 2.2,
+                        "fill": "oklch(0.86 0.150 205)"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "svg",
+      "attrs": {
+        "class": "wd-face st-working",
+        "style": {
+          "--d": -6.176
+        },
+        "width": 24,
+        "height": 24,
+        "viewBox": "0 0 32 32",
+        "aria-hidden": "true"
+      },
+      "children": [
+        {
+          "tag": "defs",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "clipPath",
+              "attrs": {
+                "id": "f-t"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "rect",
+          "attrs": {
+            "x": 0,
+            "y": 0,
+            "width": 32,
+            "height": 32,
+            "rx": 3.2,
+            "fill": "oklch(0.91 0.045 355)"
+          },
+          "children": []
+        },
+        {
+          "tag": "g",
+          "attrs": {
+            "transform": "translate(3.2 4.6) scale(.8)"
+          },
+          "children": [
+            {
+              "tag": "g",
+              "attrs": {
+                "class": "body"
+              },
+              "children": [
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.2,
+                    "y": 1.5,
+                    "width": 1.6,
+                    "height": 5,
+                    "rx": 0.8,
+                    "fill": "oklch(0.54 0.100 82)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "class": "led",
+                    "x": 13.5,
+                    "y": -1,
+                    "width": 5,
+                    "height": 5,
+                    "rx": 2.5,
+                    "fill": "oklch(0.8 0.160 82)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 3,
+                    "y": 5,
+                    "width": 26,
+                    "height": 24,
+                    "rx": 6,
+                    "fill": "oklch(0.7 0.110 355)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "clip-path": "url(#f-t)"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 25.5,
+                        "width": 32,
+                        "height": 9,
+                        "fill": "oklch(0.54 0.100 355)",
+                        "opacity": 0.35
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 0,
+                        "y": 11.5,
+                        "width": 32,
+                        "height": 10,
+                        "fill": "oklch(0.3 0.030 355)"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 6.5,
+                    "y": 7.4,
+                    "width": 4.2,
+                    "height": 1.5,
+                    "rx": 0.75,
+                    "fill": "oklch(0.93 0.040 355)",
+                    "opacity": 0.55
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "g",
+                  "attrs": {
+                    "class": "eyes"
+                  },
+                  "children": [
+                    {
+                      "tag": "rect",
+                      "attrs": {
+                        "x": 8,
+                        "y": 14.3,
+                        "width": 16,
+                        "height": 4.4,
+                        "rx": 2.2,
+                        "fill": "oklch(0.8 0.160 82)"
+                      },
+                      "children": []
+                    },
+                    {
+                      "tag": "clipPath",
+                      "attrs": {
+                        "id": "f-v"
+                      },
+                      "children": [
+                        {
+                          "tag": "rect",
+                          "attrs": {
+                            "x": 8,
+                            "y": 14.3,
+                            "width": 16,
+                            "height": 4.4,
+                            "rx": 2.2
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "g",
+                      "attrs": {
+                        "clip-path": "url(#f-v)"
+                      },
+                      "children": [
+                        {
+                          "tag": "rect",
+                          "attrs": {
+                            "class": "glint",
+                            "x": 14,
+                            "y": 13,
+                            "width": 3,
+                            "height": 7,
+                            "fill": "#ffffff",
+                            "opacity": 0.6
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 11.5,
+                    "y": 22.6,
+                    "width": 9,
+                    "height": 3.4,
+                    "rx": 1.2,
+                    "fill": "oklch(0.3 0.030 82)"
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 13.4,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.8 0.160 82)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 15.55,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.8 0.160 82)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                },
+                {
+                  "tag": "rect",
+                  "attrs": {
+                    "x": 17.7,
+                    "y": 23.3,
+                    "width": 0.9,
+                    "height": 2,
+                    "rx": 0.45,
+                    "fill": "oklch(0.8 0.160 82)",
+                    "opacity": 0.85
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "g",
+          "attrs": {},
+          "children": [
+            {
+              "tag": "rect",
+              "attrs": {
+                "x": 20,
+                "y": -3,
+                "width": 12,
+                "height": 7,
+                "rx": 3.5,
+                "fill": "oklch(0.3 0.005 250)"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "class": "dot",
+                "x": 22.2,
+                "y": -0.3,
+                "width": 1.8,
+                "height": 1.8,
+                "rx": 0.9,
+                "fill": "oklch(0.93 0.007 250)"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "class": "dot",
+                "x": 25.1,
+                "y": -0.3,
+                "width": 1.8,
+                "height": 1.8,
+                "rx": 0.9,
+                "fill": "oklch(0.93 0.007 250)"
+              },
+              "children": []
+            },
+            {
+              "tag": "rect",
+              "attrs": {
+                "class": "dot",
+                "x": 28,
+                "y": -0.3,
+                "width": 1.8,
+                "height": 1.8,
+                "rx": 0.9,
+                "fill": "oklch(0.93 0.007 250)"
+              },
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

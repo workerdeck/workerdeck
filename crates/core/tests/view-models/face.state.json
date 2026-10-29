@@ -1,0 +1,183 @@
+{
+  "input": {
+    "fn": "faceStateOf",
+    "calls": [
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "idle",
+          "info": {
+            "id": "a",
+            "status": "idle",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0
+          },
+          "unseen": 0
+        }
+      ],
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "idle",
+          "info": {
+            "id": "a",
+            "status": "idle",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "engineAsleep": true
+          },
+          "unseen": 0
+        }
+      ],
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "working",
+          "info": {
+            "id": "a",
+            "status": "starting",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0
+          },
+          "unseen": 0
+        }
+      ],
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "working",
+          "info": {
+            "id": "a",
+            "status": "running",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0
+          },
+          "unseen": 0
+        }
+      ],
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "ended",
+          "info": {
+            "id": "a",
+            "status": "failed",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0
+          },
+          "unseen": 0
+        }
+      ],
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "ended",
+          "info": {
+            "id": "a",
+            "status": "closed",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0
+          },
+          "unseen": 0
+        }
+      ],
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "attention",
+          "info": {
+            "id": "a",
+            "status": "running",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 1
+          },
+          "unseen": 0
+        }
+      ],
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "idle",
+          "info": {
+            "id": "a",
+            "status": "idle",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0
+          },
+          "unseen": 0
+        },
+        "attention"
+      ],
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "working",
+          "info": {
+            "id": "a",
+            "status": "starting",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0
+          },
+          "unseen": 0
+        },
+        "working"
+      ]
+    ]
+  },
+  "output": [
+    "idle",
+    "asleep",
+    "starting",
+    "working",
+    "failed",
+    "closed",
+    "attention",
+    "attention",
+    "starting"
+  ]
+}

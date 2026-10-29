@@ -1416,8 +1416,9 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 `/meta` (`Agents.swift`), and the team half of the list view model (team units, `teamState`, the context lead, `teamView`, `teamLeads`/`teamMembers`) is the core's `SessionList`. The app draws agents with
 `AgentCardView` (44pt card, 32pt member row on a tree line, a team tray of the Members Auto hides; a tap on one opens it, and the member opened last stands in
 for the selected row)
-and `AgentAvatarView`, which draws no face yet: a dashed engine tile with the status badge, until the
-app gets a face renderer for `AgentRef.face` (the gateway stopped serving PNG avatars). A card whose session or team needs an
+and `AgentAvatarView`: an agent draws its face through `FaceView` (the core's draw ops in a `Canvas`, motions under a
+30 fps `TimelineView`, paused under Reduce Motion; the canvas keeps a 4-unit margin because the bubble, ring and chip reach
+past the 32-unit box), a plain session a dashed engine tile with the status badge. A card whose session or team needs an
 answer is tinted orange. Verbs follow the web menu (rename, status, avatar, make agent, add to
 team, leave, dissolve, sharing, new conversation, conversations, delete agent), from the `···`, a long
 press, and swipes (leading rename and new conversation). Make agent and a team join name the session in
@@ -1548,8 +1549,11 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   never erases the character before it); resetting it mid-composition is what garbled
   Gboard input, so it only resets outside one. Hardware Enter, Tab, Escape and arrows go straight
   through as keys; the control strip mirrors iOS (esc, tab, armed ctrl, ^C, arrows, keyboard).
-- **Agents draw no face yet** (`sessions/AgentAvatar.kt`): 48 dp on a lead card and 32 dp on a team member, the
-  iOS fallback (dashed box, engine mark) until the app gets a face renderer for `AgentRef.face`.
+- **Agents draw their face** (`sessions/Face.kt`, from `AgentAvatar.kt`): the core's draw ops on a Compose `Canvas`,
+  48 dp on a lead card (with the context tide) and 32 dp on a team member; motions tick at 30 fps from `withFrameNanos`
+  and stop at animator scale 0. A plain session keeps the dashed engine tile with its badge. The `pnpm android dev`
+  emulator runs under `taskpolicy -b` and its GPU takes seconds per frame, which trips System UI ANRs with or without
+  the loops: judge frame cost on a phone.
 - **The activity keeps itself across configuration changes** (`android:configChanges` in the
   manifest): a theme switch or a rotation would otherwise recreate it, rebuild the screen's
   `SessionModel`, reconnect, replay and drop an open shell. `onConfigurationChanged` re-derives the

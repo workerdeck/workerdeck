@@ -2,18 +2,29 @@ import SwiftUI
 import WorkerDeckCore
 import WorkerDeckKit
 
-// The no-avatar fallback: a native client draws no face until it has a face renderer.
+// An agent draws its face; a plain session draws its engine's mark in the same tile, with the status badge a face
+// would otherwise carry in its pose.
 struct AgentAvatarView: View {
   let row: ListRow
   var size: CGFloat = 32
   var state: RowState?
   var badge = true
+  var context = false
 
   private var shown: RowState { state ?? row.state }
   private var asleep: Bool { row.asleep }
   private var corner: CGFloat { size >= 28 ? 14 : 11 }
 
   var body: some View {
+    if let face = row.face {
+      FaceView(spec: face, size: size, context: context)
+        .accessibilityLabel(row.agent ?? "Agent")
+    } else {
+      tile
+    }
+  }
+
+  private var tile: some View {
     picture
       .frame(width: size, height: size)
       .overlay(alignment: .bottomTrailing) {
@@ -56,10 +67,16 @@ struct TrayAvatarView: View {
   var size: CGFloat = 18
 
   var body: some View {
-    RoundedRectangle(cornerRadius: 4)
-      .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-      .foregroundStyle(.tertiary)
-      .frame(width: size, height: size)
+    Group {
+      if let face = member.face {
+        FaceView(spec: face, size: size)
+      } else {
+        RoundedRectangle(cornerRadius: 4)
+          .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+          .foregroundStyle(.tertiary)
+          .frame(width: size, height: size)
+      }
+    }
     .accessibilityLabel(member.title)
   }
 }

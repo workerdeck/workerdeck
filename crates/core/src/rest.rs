@@ -541,6 +541,8 @@ pub struct AgentRef {
     pub order: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub face: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,5 +1,6 @@
 // The sessions list for a native app: every gateway's REST rollup, the read watermarks and the view config go in,
 // display-ready groups come out. The rules are `wd_native::vm::session_list`; nothing here decides visibility.
+use crate::face::{FaceSpec, face_spec};
 use std::sync::Mutex;
 use wd_native::planner::fmt_cost;
 use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, ProjectIcon, SessionInfo, Sharing};
@@ -145,6 +146,7 @@ pub struct ListRow {
     pub model_label: Option<String>,
     pub agent: Option<String>,
     pub agent_id: Option<String>,
+    pub face: Option<FaceSpec>,
     pub asleep: bool,
     pub can_sleep: bool,
     pub members: u32,
@@ -188,6 +190,7 @@ pub struct TrayMember {
     pub session_id: String,
     pub title: String,
     pub asleep: bool,
+    pub face: Option<FaceSpec>,
 }
 
 // The tray draws this many pictures; past it, one slot gives way to a `+n` count.
@@ -443,6 +446,7 @@ fn tray_member(row: &SessionRow) -> TrayMember {
         session_id: info.id.clone(),
         title: vm::display_name(info),
         asleep: info.engine_asleep == Some(true),
+        face: face_spec(row),
     }
 }
 
@@ -485,6 +489,7 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         model_label: info.model_name.clone().or_else(|| wd_native::vm::model_name::friendly_model(info.model.as_deref())),
         agent: info.agent.as_ref().map(|a| a.name.clone()),
         agent_id: info.agent.as_ref().map(|a| a.id.clone()),
+        face: face_spec(row),
         asleep,
         can_sleep: vm::can_sleep(info),
         members: row.members.as_ref().map_or(0, |m| m.len() as u32),

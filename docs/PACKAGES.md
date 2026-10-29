@@ -2728,6 +2728,17 @@ snapshots in `docs/NATIVE-CORE-SNAPSHOTS.md`; little-endian, no version byte):
   (0 default, `0x01000000|index`, `0x02rrggbb`), `u8 attrs` (1 bold, 2 dim, 4 italic,
   8 underline, 16 inverse, 32 strike), `u32+bytes text`.
 
+- **Agent faces (`vm::face`).** Ports `resolveAgentFace`, `projectSwatch`, `faceStateOf` and `face-svg.ts`'s geometry as
+  an SVG-shaped tree (`face_tree`), pinned to TS by `face.*` goldens: the generator parses `faceSvg`'s markup back into
+  the same tree, paths as absolute M/L/Q/Z, so geometry is compared rather than spelling. `face_drawing` lowers the tree
+  to push/pop groups and leaf rects/paths in the 32-unit box: colours OKLCH to Display P3 with the state's CSS filters
+  baked in (closed `grayscale` plus a 0.55 layer opacity, failed `saturate(.3)` on the body), inherited stroke/fill
+  resolved, and each `theme.css` animation as a `FaceMotion` (kind, duration, delay, iterations, reverse, the
+  `fill-box` pivot from the node's `getBBox`). `motion_samples` bakes every keyframe set with its easing into evenly
+  spaced `[tx, ty, sx, sy, rot, opacity]` samples (fetched once via `face_motion_tables`); clients only look up and
+  lerp. A change to `face-svg.ts` or the face keyframes in `theme.css` must land here too; only the former is golden-checked.
+  FFI: `ListRow.face` / `TrayMember.face` (`FaceSpec`, set for agents only), `face_drawing(spec, size, dark, show_context)`.
+
 - **Conversations (`vm::conversations`), protocol 2.** A screen points at a `SessionAddress { id, conversation }`:
   the stable session id, and a past conversation's n or none for the current one (`address_of` reads a bookmark's or
   a notification's n equal to the current one as the current address). There is no follow, selection or supersede:

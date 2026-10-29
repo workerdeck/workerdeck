@@ -1207,6 +1207,97 @@ const CONVERSATIONS: VmCase[] = [
   },
 ]
 
+const FACE_STEEL = {
+  v: 1,
+  backdrop: { color: 'project/base' },
+  tile: { shape: 'boxy', color: 'steel' },
+  antenna: { kind: 'diamond', color: 'teal' },
+  visor: { kind: 'none' },
+  eyes: { kind: 'segments', color: 'teal' },
+  mouth: { kind: 'vent', color: 'project' },
+}
+const FACE_NATIVE = {
+  v: 1,
+  tile: { shape: 'soft' },
+  antenna: { kind: 'ball', color: 'amber' },
+  visor: { kind: 'band' },
+  eyes: { kind: 'bar', color: 'amber' },
+  mouth: { kind: 'grill', color: 'amber' },
+}
+const FACE_ODD = {
+  v: 1,
+  backdrop: { color: 'rose/glow' },
+  tile: { shape: 'squircle', color: 'mint/deep' },
+  antenna: { kind: 'twin', color: 'coral/soft' },
+  visor: { kind: 'inset', color: 'indigo' },
+  eyes: { kind: 'split' },
+  mouth: { kind: 'speaker', color: 'olive' },
+}
+const FACE_SLIT = {
+  v: 1,
+  tile: { shape: 'soft' },
+  antenna: { kind: 'triangle', color: 'project' },
+  eyes: { kind: 'slit', color: 'violet/screen' },
+  mouth: { kind: 'none' },
+}
+const FACE_SQUARE = { v: 1, antenna: { kind: 'square', color: 'green' }, eyes: { kind: 'bar' }, mouth: { kind: 'grill' } }
+const FACE_NEWER = { v: 1, tile: { shape: 'blob' }, antenna: { kind: 'dish' }, eyes: { kind: 'heart', color: 'nope' }, mouth: 'x' }
+
+function faceCall(face: unknown, state: string, size: number, over: Record<string, unknown> = {}): unknown[] {
+  return [{ face, project: 'blue', state, size, id: 'f', phase: 'mac:agent-1', theme: 'dark', ...over }]
+}
+
+const FACES: VmCase[] = [
+  {
+    module: 'face',
+    name: 'resolve',
+    fn: 'resolveAgentFace',
+    calls: [[undefined], [FACE_STEEL], [FACE_ODD], [FACE_SLIT], [FACE_NEWER], [{ v: 1 }], ['junk']],
+  },
+  {
+    module: 'face',
+    name: 'project-swatch',
+    fn: 'projectSwatch',
+    calls: [['/work/workerdeck'], ['C:/work/api'], [''], ['ünïcödé 🦀'], ['s-1']],
+  },
+  {
+    module: 'face',
+    name: 'state',
+    fn: 'faceStateOf',
+    calls: [
+      [row('mac', info('a', { status: 'idle' }))],
+      [row('mac', info('a', { status: 'idle', engineAsleep: true }))],
+      [row('mac', info('a', { status: 'starting' }))],
+      [row('mac', info('a', { status: 'running' }))],
+      [row('mac', info('a', { status: 'failed' }))],
+      [row('mac', info('a', { status: 'closed' }))],
+      [row('mac', info('a', { status: 'running', pendingPermissionCount: 1 }))],
+      [row('mac', info('a', { status: 'idle' })), 'attention'],
+      [row('mac', info('a', { status: 'starting' })), 'working'],
+    ],
+  },
+  {
+    module: 'face',
+    name: 'tree',
+    fn: 'faceTree',
+    calls: [
+      faceCall(undefined, 'idle', 32),
+      faceCall(FACE_NATIVE, 'idle', 40, { context: 0.22 }),
+      faceCall(FACE_NATIVE, 'working', 40, { context: 0.55, theme: 'light' }),
+      faceCall(FACE_STEEL, 'working', 32),
+      faceCall(FACE_STEEL, 'attention', 40, { project: 'copper', context: 0.4, threshold: 0.5 }),
+      faceCall(FACE_ODD, 'asleep', 40, { theme: 'light', context: 1.3 }),
+      faceCall(FACE_ODD, 'starting', 32, { project: 'olive' }),
+      faceCall(FACE_SLIT, 'failed', 40, { context: -0.2 }),
+      faceCall(FACE_SLIT, 'closed', 32, { theme: 'light' }),
+      faceCall(FACE_SQUARE, 'attention', 20),
+      faceCall(FACE_SQUARE, 'working', 16, { phase: undefined }),
+      faceCall(FACE_NEWER, 'idle', 44, { project: 'teal' }),
+      faceCall(FACE_NATIVE, 'working', 24, { project: 'rose', theme: 'light', phase: 'box:x' }),
+    ],
+  },
+]
+
 export const VM_CORPUS: VmCase[] = [
   ...SESSION_LIST,
   ...AGENTS,
@@ -1221,4 +1312,5 @@ export const VM_CORPUS: VmCase[] = [
   ...TRANSCRIPT,
   ...PROMPT,
   ...CONVERSATIONS,
+  ...FACES,
 ]

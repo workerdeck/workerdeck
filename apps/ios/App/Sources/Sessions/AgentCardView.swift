@@ -45,7 +45,7 @@ struct AgentCardView<MenuContent: View>: View {
 
   private var card: some View {
     HStack(alignment: .center, spacing: 10) {
-      AgentAvatarView(row: row, size: 44)
+      AgentAvatarView(row: row, size: 44, context: true)
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 6) {
           name

@@ -9,6 +9,7 @@ pub mod composer_tokens;
 pub mod conversations;
 pub mod create_form;
 pub mod engine_mark;
+pub mod face;
 pub mod fmt;
 pub mod gateway;
 pub mod host_files;

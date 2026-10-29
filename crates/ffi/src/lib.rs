@@ -15,6 +15,7 @@ mod composer;
 mod conversations;
 mod create_form;
 mod extras;
+mod face;
 mod files;
 mod list;
 mod pickers;
@@ -33,6 +34,10 @@ pub use create_form::{CreateForm, CreateFormFields, CreateFormState, FormLead, F
 pub use extras::{
     Fact, McpSection, McpServerDetail, McpServerRow, McpServers, McpStatus, McpToolDetail, McpToolRow, SessionExtras, SkillRow,
     SkillSection, session_extras, session_extras_unknown, skill_sections,
+};
+pub use face::{
+    FaceClip, FaceDrawing, FaceGroup, FaceMotion, FaceMotionKind, FaceMotionTable, FaceOp, FacePath, FaceRect, FaceSeg, FaceSlot, FaceSpec,
+    FaceState, FaceStroke, face_drawing, face_motion_tables,
 };
 pub use files::{
     HostEntry, HostEntryKind, HostFileContent, HostFileEditor, HostFileState, HostFiles, HostFilesAvailability, HostListing, HostRoot,

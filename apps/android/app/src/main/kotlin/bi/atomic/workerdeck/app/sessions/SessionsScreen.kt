@@ -470,7 +470,7 @@ private fun SessionRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (agent) {
-                    AgentAvatar(row, column)
+                    AgentAvatar(row, column, context = true)
                 } else {
                     Column(Modifier.width(MARK_COLUMN).padding(top = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         row.badge?.let { BadgeGlyph(it, size = 14.dp) } ?: StateGlyph(row.state)

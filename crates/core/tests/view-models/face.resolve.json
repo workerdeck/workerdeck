@@ -1,0 +1,241 @@
+{
+  "input": {
+    "fn": "resolveAgentFace",
+    "calls": [
+      [
+        null
+      ],
+      [
+        {
+          "v": 1,
+          "backdrop": {
+            "color": "project/base"
+          },
+          "tile": {
+            "shape": "boxy",
+            "color": "steel"
+          },
+          "antenna": {
+            "kind": "diamond",
+            "color": "teal"
+          },
+          "visor": {
+            "kind": "none"
+          },
+          "eyes": {
+            "kind": "segments",
+            "color": "teal"
+          },
+          "mouth": {
+            "kind": "vent",
+            "color": "project"
+          }
+        }
+      ],
+      [
+        {
+          "v": 1,
+          "backdrop": {
+            "color": "rose/glow"
+          },
+          "tile": {
+            "shape": "squircle",
+            "color": "mint/deep"
+          },
+          "antenna": {
+            "kind": "twin",
+            "color": "coral/soft"
+          },
+          "visor": {
+            "kind": "inset",
+            "color": "indigo"
+          },
+          "eyes": {
+            "kind": "split"
+          },
+          "mouth": {
+            "kind": "speaker",
+            "color": "olive"
+          }
+        }
+      ],
+      [
+        {
+          "v": 1,
+          "tile": {
+            "shape": "soft"
+          },
+          "antenna": {
+            "kind": "triangle",
+            "color": "project"
+          },
+          "eyes": {
+            "kind": "slit",
+            "color": "violet/screen"
+          },
+          "mouth": {
+            "kind": "none"
+          }
+        }
+      ],
+      [
+        {
+          "v": 1,
+          "tile": {
+            "shape": "blob"
+          },
+          "antenna": {
+            "kind": "dish"
+          },
+          "eyes": {
+            "kind": "heart",
+            "color": "nope"
+          },
+          "mouth": "x"
+        }
+      ],
+      [
+        {
+          "v": 1
+        }
+      ],
+      [
+        "junk"
+      ]
+    ]
+  },
+  "output": [
+    {
+      "tile": {
+        "shape": "soft"
+      },
+      "antenna": {
+        "kind": "none"
+      },
+      "visor": {
+        "kind": "none"
+      },
+      "eyes": {
+        "kind": "bar"
+      },
+      "mouth": {
+        "kind": "none"
+      }
+    },
+    {
+      "backdrop": "project/base",
+      "tile": {
+        "shape": "boxy",
+        "color": "steel"
+      },
+      "antenna": {
+        "kind": "diamond",
+        "color": "teal"
+      },
+      "visor": {
+        "kind": "none"
+      },
+      "eyes": {
+        "kind": "segments",
+        "color": "teal"
+      },
+      "mouth": {
+        "kind": "vent",
+        "color": "project"
+      }
+    },
+    {
+      "backdrop": "rose/glow",
+      "tile": {
+        "shape": "squircle",
+        "color": "mint/deep"
+      },
+      "antenna": {
+        "kind": "twin",
+        "color": "coral/soft"
+      },
+      "visor": {
+        "kind": "inset",
+        "color": "indigo"
+      },
+      "eyes": {
+        "kind": "split"
+      },
+      "mouth": {
+        "kind": "speaker",
+        "color": "olive"
+      }
+    },
+    {
+      "tile": {
+        "shape": "soft"
+      },
+      "antenna": {
+        "kind": "triangle",
+        "color": "project"
+      },
+      "visor": {
+        "kind": "none"
+      },
+      "eyes": {
+        "kind": "slit",
+        "color": "violet/screen"
+      },
+      "mouth": {
+        "kind": "none"
+      }
+    },
+    {
+      "tile": {
+        "shape": "soft"
+      },
+      "antenna": {
+        "kind": "none"
+      },
+      "visor": {
+        "kind": "none"
+      },
+      "eyes": {
+        "kind": "bar",
+        "color": "nope"
+      },
+      "mouth": {
+        "kind": "none"
+      }
+    },
+    {
+      "tile": {
+        "shape": "soft"
+      },
+      "antenna": {
+        "kind": "none"
+      },
+      "visor": {
+        "kind": "none"
+      },
+      "eyes": {
+        "kind": "bar"
+      },
+      "mouth": {
+        "kind": "none"
+      }
+    },
+    {
+      "tile": {
+        "shape": "soft"
+      },
+      "antenna": {
+        "kind": "none"
+      },
+      "visor": {
+        "kind": "none"
+      },
+      "eyes": {
+        "kind": "bar"
+      },
+      "mouth": {
+        "kind": "none"
+      }
+    }
+  ]
+}
