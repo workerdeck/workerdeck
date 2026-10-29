@@ -1416,19 +1416,34 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 `/meta` (`Agents.swift`), and the team half of the list view model (team units, `teamState`, the context lead, `teamView`, `teamLeads`/`teamMembers`) is the core's `SessionList`. The app draws agents with
 `SessionCard` (the web's geometry: 48pt card with a 40 face, 40pt Member cards inside the team's shared card, step
 chips that unfold a kind inside the card, a tray of the Members Auto hides; a tap on one opens it, and the member opened
-last stands in for the selected row; headings drag to reorder, a card dropped on a lead joins its team; the list
+last stands in for the selected row; the list
 uses the web's fixed type scale (`ListType`: 13/12/11, not Dynamic Type) and grey ramp (`ListPalette.fg1..4`), and touch
 padding on chips and tray faces is layout-neutral (`hitPadding`) so a line stays 20pt)
 and `AgentAvatarView`: an agent draws its face through `FaceView` (the core's draw ops in a `Canvas`, motions under a
 30 fps `TimelineView`, paused under Reduce Motion; the canvas keeps a 4-unit margin because the bubble, ring and chip reach
 past the 32-unit box), a plain session a dashed engine tile with the status badge. A card whose session or team needs an
 answer is tinted orange. Verbs follow the web menu (rename, status, avatar, make agent, add to
-team, leave, dissolve, sharing, new conversation, conversations, delete agent), from the `···`, a long
-press, and swipes (leading rename and new conversation). Make agent and a team join name the session in
+team, leave, dissolve, sharing, new conversation, conversations, delete agent), from a long
+press and swipes (leading rename and new conversation). Make agent and a team join name the session in
 place (`name_session_call`, `PATCH /sessions/:id { agent }`). New agent reuses the New session form with an
 agent section (name, team, sharing, brief); New session has an optional name, which creates it named. Team moves are **same-gateway only** on the phone;
-cross-gateway invitations stay on the web and VS Code, and drag-to-team is out. `UIPREVIEW=teams`
+cross-gateway invitations stay on the web and VS Code. `UIPREVIEW=teams`
 draws every state from canned rows.
+
+**Drag and drop in the iOS list** (`Sessions/ListDrag.swift`). Hold, then move: the card or heading itself rides
+under the finger, vertical only. A lifted heading folds every group and the others slide aside as it passes them
+(`move_group` on release); a card held over an agent it could join rings it, and a Member moved anywhere outside its
+team shows "Leave"; cards never reorder. A still hold is the long-press menu, a sideways move the swipe.
+- SwiftUI's `.contextMenu` makes every gesture on its row, and every `UILongPressGestureRecognizer` around it, wait for
+  the menu to fail, which never happens once its press preview starts; that is why `.draggable` never ran on a
+  phone. The lift is therefore a custom `UIGestureRecognizer` (`HoldThenMove`, not a long press) installed on the
+  List's own `UICollectionView`, found through a hook view in each row, and it reads hit areas from frames the rows
+  report in global space (a named coordinate space does not resolve from inside List cells).
+- Once lifted it cancels the other recognizers under the finger, but a SwiftUI `Button` still fires its action on
+  release, so the list's buttons ignore taps until 0.4 s after a drop (`settled`).
+- `UIPREVIEW=list` hosts the real `SessionListView` over `PreviewListGateway`, a `URLProtocol` that serves canned rows
+  and applies team moves; `ListDragUITests` drag through it with `press(forDuration:thenDragTo:)` and, with
+  `WD_UI_SNAPS=1`, attach screenshots taken off the main thread during the drag. No edge auto-scroll yet.
 
 - **Conversations (protocol 2).** A route is a stable session id and an optional past conversation
   (`SessionRoute.session(.., conversation:)`, drawn by `CoreSessionRoute`). There is no follow: a cut closes the

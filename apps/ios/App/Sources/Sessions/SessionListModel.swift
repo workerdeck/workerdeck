@@ -71,7 +71,7 @@ final class SessionListModel {
   /// *their* session's gateway, explicitly.
   private var contexts: [UUID: HostContext] = [:]
 
-  private static let configKey = "bi.atomic.workerdeck.ios.sessionListConfig"
+  static let configKey = "bi.atomic.workerdeck.ios.sessionListConfig"
 
   private var core: SessionList { unread.list }
   // The core list the filter menu writes to; `syncConfig` after every edit.
@@ -305,10 +305,6 @@ final class SessionListModel {
   var groupOrderCustomized: Bool {
     _ = revision
     return core.groupOrderCustomized()
-  }
-
-  func item(hostId: String, sessionId: String) -> ListItem? {
-    row(hostId: hostId, sessionId: sessionId).map { ListItem(row: $0) }
   }
 
   func toggleTeam(_ item: ListItem) {

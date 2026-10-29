@@ -24,6 +24,7 @@ enum UIPreview: String {
   case projects
   case sessions
   case teams
+  case list
   case core
   case corearchived
   case coreextras
@@ -165,6 +166,34 @@ private struct TeamsPreview: View {
     .listRowInsets(CardBackground.insets(item))
     .listRowSeparator(.hidden)
     .listRowBackground(CardBackground(item: item))
+  }
+}
+
+// The app's own `SessionListView` over `PreviewListGateway`, grouped by state, from a clean slate on every launch:
+// what the drag and drop UI tests drive.
+private struct ListPreview: View {
+  private static let suite = "bi.atomic.workerdeck.ios.preview.list"
+  private static let defaults: UserDefaults = {
+    let defaults = UserDefaults(suiteName: suite) ?? .standard
+    defaults.removePersistentDomain(forName: suite)
+    defaults.set(#"{"groupBy":"state"}"#, forKey: SessionListModel.configKey)
+    return defaults
+  }()
+
+  @State private var hosts = HostStore(
+    preview: [Host(name: "mini", baseURL: PreviewListGateway.baseURL)], defaults: defaults)
+  @State private var unread = UnreadModel(defaults: defaults)
+
+  init() {
+    PreviewListGateway.install()
+  }
+
+  var body: some View {
+    SessionListView(defaults: Self.defaults)
+      .environment(hosts)
+      .environment(unread)
+      .environment(AppSettings())
+      .environment(PushCoordinator())
   }
 }
 
@@ -572,6 +601,9 @@ struct UIPreviewHarness: View {
 
     case .teams:
       TeamsPreview()
+
+    case .list:
+      ListPreview()
 
     case .core:
       NavigationStack {

@@ -32,6 +32,18 @@ struct SessionListView: View {
   @State private var history: ConversationsTarget?
   @State private var pendingDiscard: PendingDiscard?
   @State private var pendingCrossing: Crossing?
+  @State private var dragging: ListDragSession?
+  @State private var frames = ListFrames()
+  @State private var lifter = ListLifter()
+  // The heading order drawn while a heading is lifted; the core's own order again once it drops.
+  @State private var liveOrder: [String]?
+  // A SwiftUI Button under the finger still fires on release after the lift cancelled its touch.
+  @State private var droppedAt = Date.distantPast
+  private let defaults: UserDefaults
+
+  init(defaults: UserDefaults = .standard) {
+    self.defaults = defaults
+  }
 
   private struct Crossing {
     let row: ListItem
@@ -75,7 +87,7 @@ struct SessionListView: View {
     // while the list itself is what's on screen (stack empty, app active): an
     // open session has its own socket, and a backgrounded app has no reader.
     .task(id: pollKey) {
-      let live = model ?? SessionListModel(hosts: hosts, unread: unread)
+      let live = model ?? SessionListModel(hosts: hosts, unread: unread, defaults: defaults)
       if model == nil { model = live }
       guard pollKey.active else { return }
       while !Task.isCancelled {
@@ -397,7 +409,8 @@ struct SessionListView: View {
   @ViewBuilder
   private func liveList(_ model: SessionListModel) -> some View {
     @Bindable var model = model
-    let sections = model.sections(now: clockMs)
+    let sections = ordered(model.sections(now: clockMs))
+    let drop = dragging.flatMap { cardDrop($0, sections: sections, model: model) }
     List {
       if sections.isEmpty, model.hasLoaded {
         emptyState(model)
@@ -406,22 +419,28 @@ struct SessionListView: View {
       }
       ForEach(sections) { section in
         Section {
-          if !section.group.collapsed {
+          if !section.group.collapsed, liveOrder == nil {
             ForEach(section.items) { item in
-              card(item, model: model)
+              card(item, model: model, sections: sections, drop: drop)
             }
           }
         } header: {
           if section.earlier {
             earlierHeader(section, model: model)
           } else if section.group.label != nil {
-            groupHeader(section.group, model: model)
+            groupHeader(section.group, model: model, sections: sections)
           }
         }
         .listSectionSeparator(.hidden)
       }
     }
     .listStyle(.plain)
+    .listFrame { frames.list = $0 }
+    .scrollDisabled(dragging != nil)
+    .overlay(alignment: .topLeading) { lifted(model, sections: sections, drop: drop) }
+    .sensoryFeedback(.impact(weight: .medium), trigger: dragging?.subject) { _, now in now != nil }
+    .sensoryFeedback(.selection, trigger: liveOrder) { old, now in old != nil && now != nil }
+    .sensoryFeedback(.selection, trigger: drop)
     .task(id: model.lingerEnds) {
       guard let end = model.lingerEnds else { return }
       try? await Task.sleep(for: .milliseconds(max(0, end - Date().timeIntervalSince1970 * 1000) + 50))
@@ -433,7 +452,31 @@ struct SessionListView: View {
   }
 
   @ViewBuilder
-  private func card(_ item: ListItem, model: SessionListModel) -> some View {
+  private func card(_ item: ListItem, model: SessionListModel, sections: [ListSection], drop: CardDrop?) -> some View {
+    if sessionRoute(for: item) != nil {
+      let row = item.row
+      sessionCard(item, model: model)
+        .opacity(dragging?.subject == .card(item.id) ? 0 : row.context ? 0.5 : 1)
+        .overlay {
+          if drop == .join(item.id) {
+            RoundedRectangle(cornerRadius: 8)
+              .fill(Color.accentColor.opacity(0.1))
+              .strokeBorder(Color.accentColor, lineWidth: 1)
+              .accessibilityHidden(true)
+          }
+        }
+        .listFrame { frames.cards[item.id] = $0 }
+        .modifier(rowChrome(item, model: model))
+        .contextMenu { rowActions(for: item, model: model) }
+        .background(ListLiftHook(lifter: lifter, handlers: liftHandlers(model, sections: sections)))
+        .listRowInsets(CardBackground.insets(item))
+        .listRowSeparator(.hidden)
+        .listRowBackground(CardBackground(item: item))
+    }
+  }
+
+  @ViewBuilder
+  private func sessionCard(_ item: ListItem, model: SessionListModel) -> some View {
     if let route = sessionRoute(for: item) {
       let row = item.row
       SessionCard(
@@ -449,6 +492,7 @@ struct SessionListView: View {
         projectImage: projectImage(for: item, model: model),
         actions: CardActions(
           open: {
+            guard settled else { return }
             if row.depth > 0 { model.select(hostId: row.hostId, sessionId: row.sessionId) }
             path.append(route)
           },
@@ -459,18 +503,10 @@ struct SessionListView: View {
             }
           },
           killStep: { kill($0, row: item, model: model) }))
-      .opacity(row.context ? 0.5 : 1)
-      .modifier(rowChrome(item, model: model))
-      .contextMenu { rowActions(for: item, model: model) }
-      .listRowInsets(CardBackground.insets(item))
-      .listRowSeparator(.hidden)
-      .listRowBackground(CardBackground(item: item))
-      .draggable(ListDrag.session(item))
-      .dropDestination(for: String.self) { payloads, _ in
-        drop(payloads, onCard: item, model: model)
-      }
     }
   }
+
+  private var settled: Bool { dragging == nil && Date().timeIntervalSince(droppedAt) > 0.4 }
 
   private var clockMs: Double { clock.timeIntervalSince1970 * 1000 }
 
@@ -501,11 +537,18 @@ struct SessionListView: View {
 
   // `FacetGroupHeader`: fold chevron, project icon, label (capitals for a facet), gateway badge, count, the folded
   // summary, and on a project group a `+` that starts a session there. Drag it onto another heading to reorder.
-  private func groupHeader(_ group: ListGroup, model: SessionListModel) -> some View {
+  private func groupHeader(_ group: ListGroup, model: SessionListModel, sections: [ListSection]) -> some View {
+    groupHeading(group, model: model)
+      .opacity(dragging?.subject == .group(group.key) ? 0 : 1)
+      .listFrame { frames.groups[group.key] = $0 }
+      .background(ListLiftHook(lifter: lifter, handlers: liftHandlers(model, sections: sections)))
+  }
+
+  private func groupHeading(_ group: ListGroup, model: SessionListModel) -> some View {
     let label = group.label ?? ""
     return HStack(spacing: 8) {
       Button {
-        model.toggleGroup(group.key)
+        if settled { model.toggleGroup(group.key) }
       } label: {
         HStack(spacing: 8) {
           Image(systemName: group.collapsed ? "chevron.right" : "chevron.down")
@@ -542,7 +585,7 @@ struct SessionListView: View {
       .accessibilityLabel("\(group.collapsed ? "Expand" : "Collapse") \(label)")
       if let hostId = group.hostId.flatMap(UUID.init(uuidString:)), model.filter.groupBy == .project {
         Button {
-          path.append(.create(hostId: hostId, seed: CreateSessionSeed(cwd: group.cwd ?? "")))
+          if settled { path.append(.create(hostId: hostId, seed: CreateSessionSeed(cwd: group.cwd ?? ""))) }
         } label: {
           Image(systemName: "plus").font(.system(size: 12, weight: .semibold)).padding(.vertical, 4).contentShape(Rectangle())
         }
@@ -554,52 +597,170 @@ struct SessionListView: View {
     .font(ListType.label(.medium))
     .foregroundStyle(ListPalette.fg4)
     .textCase(nil)
-    .draggable(ListDrag.group(group.key)) {
-      Text(group.caps ? label.uppercased() : label).font(ListType.label(.medium)).padding(6)
-    }
-    .dropDestination(for: String.self) { payloads, _ in
-      drop(payloads, onGroup: group, model: model)
-    }
   }
 
   // MARK: - Drag and drop
 
-  // A heading dropped on a heading reorders the list; a card dropped on a lead joins that team; a Member dropped
-  // anywhere outside its team (a heading, a card that is not its team's) leaves it.
-  private func drop(_ payloads: [String], onGroup group: ListGroup, model: SessionListModel) -> Bool {
-    guard let payload = payloads.first.flatMap(ListDrag.init) else { return false }
-    switch payload {
+  // A card held over an agent it could join, or a Member moved anywhere outside its own team.
+  private enum CardDrop: Equatable {
+    case join(String)
+    case leave
+  }
+
+  private func ordered(_ sections: [ListSection]) -> [ListSection] {
+    guard let liveOrder else { return sections }
+    var queue = liveOrder.compactMap { key in sections.first { $0.id == key } }
+    return sections.map { liveOrder.contains($0.id) && !queue.isEmpty ? queue.removeFirst() : $0 }
+  }
+
+  private func liftHandlers(_ model: SessionListModel, sections: [ListSection]) -> ListLifter.Handlers {
+    ListLifter.Handlers(
+      canLift: { liftable(at: $0, model: model, sections: sections) != nil },
+      lift: { point in
+        guard dragging == nil, let subject = liftable(at: point, model: model, sections: sections) else { return }
+        lift(subject, at: point, sections: sections)
+      },
+      move: { moveDrag(to: $0) },
+      end: { endDrag(commit: $0, sections: sections, model: model) })
+  }
+
+  // What a hold at this point would lift: a reorderable heading, a card that could join a team, or a Member.
+  private func liftable(at point: CGPoint, model: SessionListModel, sections: [ListSection]) -> ListDragSubject? {
+    let reorderable = sections.filter(\.group.reorderable)
+    if reorderable.count > 1,
+      let group = reorderable.first(where: { frames.groups[$0.id]?.contains(point) ?? false })
+    {
+      return .group(group.id)
+    }
+    let drawn = sections.filter { !$0.group.collapsed }.flatMap(\.items)
+    guard let item = drawn.first(where: { frames.cards[$0.id]?.contains(point) ?? false }),
+      item.row.member || !model.teamLeads(for: item).isEmpty
+    else { return nil }
+    return .card(item.id)
+  }
+
+  private func lift(_ subject: ListDragSubject, at point: CGPoint, sections: [ListSection]) {
+    switch subject {
+    case .card(let id):
+      guard let frame = frames.cards[id] else { return }
+      dragging = ListDragSession(subject: subject, frame: frame, startY: point.y, y: point.y)
     case .group(let key):
-      guard group.reorderable, key != group.key else { return false }
-      model.moveGroup(key, onto: group.key)
-      return true
-    case .session(let hostId, let sessionId):
-      guard let source = model.item(hostId: hostId, sessionId: sessionId), source.row.member else { return false }
-      Task { await model.leave(source) }
-      return true
+      guard let frame = frames.groups[key] else { return }
+      dragging = ListDragSession(subject: subject, frame: frame, startY: point.y, y: point.y)
+      liveOrder = sections.filter(\.group.reorderable).map(\.id)
     }
   }
 
-  private func drop(_ payloads: [String], onCard target: ListItem, model: SessionListModel) -> Bool {
-    guard case .session(let hostId, let sessionId)? = payloads.first.flatMap(ListDrag.init),
-      sessionId != target.sessionId || hostId != target.row.hostId,
-      let source = model.item(hostId: hostId, sessionId: sessionId)
-    else { return false }
-    if target.row.lead, let lead = model.teamLeads(for: source).first(where: { $0.sessionId == target.sessionId }) {
-      if let owner = model.crossedOwner(source, into: lead) {
-        pendingCrossing = Crossing(row: source, lead: lead, owner: owner)
-      } else {
-        Task { await model.join(source, lead: lead) }
+  // A lifted heading takes the slot below every other heading whose middle it has passed.
+  private func moveDrag(to point: CGPoint) {
+    guard var session = dragging else { return }
+    session.y = point.y
+    dragging = session
+    guard case .group(let key) = session.subject, let order = liveOrder else { return }
+    var next = order.filter { $0 != key }
+    let passed = next.filter { (frames.groups[$0]?.midY ?? .infinity) < session.lifted.midY }.count
+    next.insert(key, at: passed)
+    if next != order {
+      withAnimation(.snappy(duration: 0.2)) { liveOrder = next }
+    }
+  }
+
+  private func endDrag(commit: Bool, sections: [ListSection], model: SessionListModel) {
+    guard let session = dragging else { return }
+    droppedAt = Date()
+    let order = liveOrder
+    let drop = cardDrop(session, sections: sections, model: model)
+    withAnimation(.snappy(duration: 0.2)) {
+      dragging = nil
+      liveOrder = nil
+    }
+    guard commit else { return }
+    switch session.subject {
+    case .group(let key):
+      let drawn = model.sections(now: clockMs).filter(\.group.reorderable).map(\.id)
+      guard let at = order?.firstIndex(of: key), drawn.indices.contains(at), drawn[at] != key else { return }
+      model.moveGroup(key, onto: drawn[at])
+    case .card(let id):
+      guard let source = sections.flatMap(\.items).first(where: { $0.id == id }), let drop else { return }
+      switch drop {
+      case .join(let target):
+        join(source, onto: sections.flatMap(\.items).first { $0.id == target }, model: model)
+      case .leave:
+        Task { await model.leave(source) }
       }
-      return true
     }
-    let sameTeam = target.row.team != nil && target.row.team == source.row.team
-    let ownLead = target.row.lead && target.row.agent == source.row.team
-    if source.row.member, !sameTeam, !ownLead {
-      Task { await model.leave(source) }
-      return true
+  }
+
+  private func cardDrop(_ session: ListDragSession, sections: [ListSection], model: SessionListModel) -> CardDrop? {
+    guard case .card(let id) = session.subject else { return nil }
+    let drawn = sections.filter { !$0.group.collapsed }.flatMap(\.items)
+    guard let source = drawn.first(where: { $0.id == id }) else { return nil }
+    let under = { (item: ListItem) in frames.cards[item.id].map { ($0.minY...$0.maxY).contains(session.y) } ?? false }
+    if under(source) { return nil }
+    let target = drawn.first { $0.id != id && under($0) }
+    if let target, model.teamLeads(for: source).contains(where: { $0.sessionId == target.sessionId }) {
+      return .join(target.id)
     }
-    return false
+    guard source.row.member else { return nil }
+    if let target, target.row.team == source.row.team || (target.row.lead && target.row.agent == source.row.team) {
+      return nil
+    }
+    return .leave
+  }
+
+  private func join(_ source: ListItem, onto target: ListItem?, model: SessionListModel) {
+    guard let target, let lead = model.teamLeads(for: source).first(where: { $0.sessionId == target.sessionId })
+    else { return }
+    if let owner = model.crossedOwner(source, into: lead) {
+      pendingCrossing = Crossing(row: source, lead: lead, owner: owner)
+    } else {
+      Task { await model.join(source, lead: lead) }
+    }
+  }
+
+  // The lifted card or heading itself, drawn over the list where the finger holds it; its own row stays as a gap.
+  @ViewBuilder
+  private func lifted(_ model: SessionListModel, sections: [ListSection], drop: CardDrop?) -> some View {
+    if let session = dragging {
+      let box = session.lifted
+      Group {
+        switch session.subject {
+        case .card(let id):
+          if let item = sections.flatMap(\.items).first(where: { $0.id == id }) {
+            sessionCard(item, model: model)
+              .background(RoundedRectangle(cornerRadius: 8).fill(ListPalette.nest))
+              .overlay {
+                if case .join = drop {
+                  RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 1.5)
+                }
+              }
+              .overlay(alignment: .bottomTrailing) {
+                if drop == .leave {
+                  Text("Leave \(item.row.team ?? "team")")
+                    .font(ListType.label(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .frame(height: 18)
+                    .background(Capsule().fill(Color.accentColor))
+                    .offset(x: -14, y: 9)
+                }
+              }
+          }
+        case .group(let key):
+          if let group = sections.first(where: { $0.id == key })?.group {
+            groupHeading(group, model: model)
+              .background(RoundedRectangle(cornerRadius: 6).fill(Color(.systemBackground)).padding(-4))
+          }
+        }
+      }
+      .frame(width: box.width, height: box.height)
+      .scaleEffect(1.02)
+      .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
+      .offset(x: box.minX - frames.list.minX, y: box.minY - frames.list.minY)
+      .allowsHitTesting(false)
+      .accessibilityElement(children: .ignore)
+      .accessibilityIdentifier("Lifted")
+    }
   }
 
   private func rowChrome(_ row: ListItem, model: SessionListModel) -> RowChrome {
@@ -1087,22 +1248,4 @@ struct PendingDiscard: Identifiable {
   let row: ListItem
   let confirmation: DiscardConfirmation
   var id: String { "\(row.sessionId)#\(confirmation.conversation)" }
-}
-
-// What a drag in the sessions list carries, as plain text: a heading's group key or a card's session.
-enum ListDrag {
-  case group(String)
-  case session(hostId: String, sessionId: String)
-
-  init?(_ text: String) {
-    let parts = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-    switch (parts.first, parts.count) {
-    case ("wd-group", 2): self = .group(parts[1])
-    case ("wd-session", 3): self = .session(hostId: parts[1], sessionId: parts[2])
-    default: return nil
-    }
-  }
-
-  static func group(_ key: String) -> String { "wd-group\n\(key)" }
-  static func session(_ item: ListItem) -> String { "wd-session\n\(item.row.hostId)\n\(item.sessionId)" }
 }

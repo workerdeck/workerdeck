@@ -17,9 +17,11 @@ final class HostStore {
   private(set) var selectedHostID: UUID?
 
   private let defaults: UserDefaults
+  private let persists: Bool
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
+    persists = true
     let stored = KeychainStore.load(service: Self.service, account: Self.account)
     hosts = stored.flatMap { try? JSONDecoder().decode([Host].self, from: $0) } ?? []
     if let raw = defaults.string(forKey: Self.selectionKey), let id = UUID(uuidString: raw),
@@ -27,6 +29,13 @@ final class HostStore {
     {
       selectedHostID = id
     }
+  }
+
+  // A preview's gateways, never read from or written to the Keychain.
+  init(preview hosts: [Host], defaults: UserDefaults) {
+    self.defaults = defaults
+    self.hosts = hosts
+    persists = false
   }
 
   var selectedHost: Host? { hosts.first { $0.id == selectedHostID } }
@@ -59,7 +68,7 @@ final class HostStore {
   }
 
   private func persistHosts() {
-    guard let data = try? JSONEncoder().encode(hosts) else { return }
+    guard persists, let data = try? JSONEncoder().encode(hosts) else { return }
     KeychainStore.save(data, service: Self.service, account: Self.account)
   }
 }
