@@ -1550,7 +1550,7 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   Gboard input, so it only resets outside one. Hardware Enter, Tab, Escape and arrows go straight
   through as keys; the control strip mirrors iOS (esc, tab, armed ctrl, ^C, arrows, keyboard).
 - **Agents draw their face** (`sessions/Face.kt`, from `AgentAvatar.kt`): the core's draw ops on a Compose `Canvas`,
-  48 dp on a lead card (with the context tide) and 32 dp on a team member; motions tick at 30 fps from `withFrameNanos`
+  40 dp on an agent card (with the context tide) and 32 dp on a team member; motions tick at 30 fps from `withFrameNanos`
   and stop at animator scale 0. A plain session keeps the dashed engine tile with its badge. The `pnpm android dev`
   emulator runs under `taskpolicy -b` and its GPU takes seconds per frame, which trips System UI ANRs with or without
   the loops: judge frame cost on a phone.
@@ -1559,9 +1559,18 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   `SessionModel`, reconnect, replay and drop an open shell. `onConfigurationChanged` re-derives the
   system bar icon colours.
 - **Teams are Auto** (`teamView` in the core, goldens `session-list.team-view.json`): a lead's
-  row carries its `tray` (at most three idle Members, `tray_overflow` past that) and `team_expanded`;
+  row carries its `tray` (four idle Members, or three and `tray_overflow`, as on the web) and `team_expanded`;
   `SessionList.groups(now)` takes the clock and `linger_ends()` says when to redraw. A phone has no
   lasting highlight, so the Member opened last counts as selected (`SessionList.select`), as on iOS.
+- **The sessions list draws the web's `SessionItem`** (`sessions/SessionCard.kt`, `SessionsList.kt`): 48 dp
+  agent cards (4 padding, 40 face, two 20 lines, no time, no dividers, 4 dp apart), the gutter card for plain
+  sessions or, once any row is an agent (`ListRow.tile`), the engine tile in the agent shape; step chips per fold
+  kind (`ListRow.chips`, `SessionList.toggleSteps`), the unfolded kinds' rows under the card. A team that shows a
+  Member is one nested card (`cardUnits`); a lingering Member fills a hairline from `linger_start`. Headings fold
+  every group, keep a project's own case, badge its gateway and offer `+` (create in that cwd). The colours are
+  the web theme's tokens (`listTones`). Long press opens the row menu; long press and drag moves a heading onto
+  another (`moveGroup`, Reset group order in the gateway menu) or a card onto a lead it may join (`teamLeads`),
+  and a Member let go outside its team card leaves it (`ListGestures.kt`). Swipes mirror iOS `RowChrome`.
 - **A long-press on a transcript row opens its menu** (`session/RowMenuItems.kt`): the core's
   `row_menu` decides what the row bookmarks (its head item), copies (its source, never the drawn
   lines) and moves to the background (only with the `backgroundTasks` capability). Bookmarks are the

@@ -21,6 +21,19 @@ import bi.atomic.workerdeck.core.ffi.ReadMark
 import bi.atomic.workerdeck.core.ffi.SeenCounts
 import bi.atomic.workerdeck.core.ffi.getSessionCall
 import bi.atomic.workerdeck.core.ffi.SessionList
+import bi.atomic.workerdeck.core.ffi.AgentPatch
+import bi.atomic.workerdeck.core.ffi.SessionPatch
+import bi.atomic.workerdeck.core.ffi.StepFold
+import bi.atomic.workerdeck.core.ffi.TeamLead
+import bi.atomic.workerdeck.core.ffi.TextEdit
+import bi.atomic.workerdeck.core.ffi.deleteSessionCall
+import bi.atomic.workerdeck.core.ffi.nameSessionCall
+import bi.atomic.workerdeck.core.ffi.projectIconCall
+import bi.atomic.workerdeck.core.ffi.updateAgentCall
+import bi.atomic.workerdeck.core.ffi.updateSessionCall
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -40,6 +53,8 @@ data class SessionsUi(
     val notice: String? = null,
     val pastAgents: List<PastAgentEntry> = emptyList(),
     val search: String = "",
+    val orderCustomized: Boolean = false,
+    val projectIcons: Map<String, ImageBitmap> = emptyMap(),
 )
 
 // A deleted agent under Past agents; its conversations open the same sheet a live agent's do.
@@ -118,7 +133,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         val reached = answers.filter { it.second.isSuccess }.map { it.first }
         readMetas(reached)
         for (client in reached) if (client.gateway.id !in pastRead) readPastAgents(client.gateway.id)
-        state.value = state.value.copy(groups = draw(), loaded = true, error = errorText())
+        state.value = state.value.copy(groups = draw(), loaded = true, error = errorText(), orderCustomized = list.groupOrderCustomized())
     }
 
     private val metaRead = mutableSetOf<String>()
@@ -202,6 +217,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     // Auto's linger window closes on a clock, not on a poll, so the list redraws itself when the soonest one ends.
     private fun draw(): List<ListGroup> {
         val groups = list.groups(System.currentTimeMillis().toDouble())
+        loadIcons(groups)
         linger?.cancel()
         list.lingerEnds()?.let { ends ->
             linger = viewModelScope.launch {
@@ -238,6 +254,82 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     fun toggleGroup(key: String) = update { list.toggleGroup(key) }
 
     fun toggleTeam(hostId: String, sessionId: String) = update { list.toggleTeam(hostId, sessionId) }
+
+    fun toggleSteps(hostId: String, sessionId: String, kind: StepFold) = update { list.toggleSteps(hostId, sessionId, kind) }
+
+    // A heading dropped on another: further down lands after it, further up before it.
+    fun moveGroup(key: String, onto: String) = update { list.moveGroup(key, onto) }
+
+    fun resetGroupOrder() = update { list.resetGroupOrder() }
+
+    fun teamLeads(row: ListRow): List<TeamLead> = list.teamLeads(row.hostId, row.sessionId)
+
+    // The lead's owner when it differs from the row's; the gateway refuses a cross-owner join without `crossOwner`.
+    fun crossedOwner(row: ListRow, lead: TeamLead): String? {
+        val mine = row.owner ?: return null
+        val theirs = lead.owner ?: return null
+        return theirs.takeIf { it != mine }
+    }
+
+    // An agent moves under the lead; a plain session becomes a named Member of it.
+    fun join(row: ListRow, lead: TeamLead, crossOwner: Boolean = false) {
+        val crossing = if (crossOwner) true else null
+        act(row, "Could not join the team") { client ->
+            val agentId = row.agentId
+            if (agentId != null) {
+                client.perform(updateAgentCall(agentId, AgentPatch(lead = TextEdit.Set(lead.agentId), crossOwner = crossing)))
+            } else {
+                client.perform(nameSessionCall(row.sessionId, lead.agentId, crossing, row.conversation))
+            }
+        }
+    }
+
+    fun leave(row: ListRow) {
+        val agentId = row.agentId ?: return
+        act(row, "Could not leave the team") { it.perform(updateAgentCall(agentId, AgentPatch(lead = TextEdit.Clear))) }
+    }
+
+    // An agent's name is the agent's; a session's title is `PATCH /sessions/:id`, and empty clears it.
+    fun rename(row: ListRow, text: String) {
+        val trimmed = text.trim()
+        val agentId = row.agentId
+        if (agentId != null) {
+            if (trimmed.isEmpty() || trimmed == row.agent) return
+            act(row, "Rename failed") { it.perform(updateAgentCall(agentId, AgentPatch(name = trimmed))) }
+            return
+        }
+        val title = if (trimmed.isEmpty()) TextEdit.Clear else TextEdit.Set(trimmed)
+        act(row, "Rename failed") { it.perform(updateSessionCall(row.sessionId, SessionPatch(title = title), row.conversation)) }
+    }
+
+    fun close(row: ListRow) {
+        act(row, "Could not close the session") { it.perform(deleteSessionCall(row.sessionId, row.conversation)) }
+    }
+
+    private fun act(row: ListRow, failure: String, call: suspend (GatewayClient) -> Unit) {
+        val client = clients[row.hostId] ?: return
+        viewModelScope.launch {
+            runCatching { call(client) }.onFailure { state.value = state.value.copy(notice = "$failure: ${describe(it)}") }
+            refresh()
+        }
+    }
+
+    private val iconsAsked = mutableSetOf<String>()
+
+    // A project heading's picture, fetched once per hash through any session of that project.
+    private fun loadIcons(groups: List<ListGroup>) {
+        for (group in groups) {
+            val hash = group.projectIconHash ?: continue
+            val row = group.rows.firstOrNull { it.projectIconHash == hash } ?: continue
+            val client = clients[row.hostId] ?: continue
+            if (!iconsAsked.add(hash)) continue
+            viewModelScope.launch {
+                val bytes = client.bytes(projectIconCall(row.sessionId).path) ?: return@launch
+                val image = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull() ?: return@launch
+                state.value = state.value.copy(projectIcons = state.value.projectIcons + (hash to image))
+            }
+        }
+    }
 
     // Opening reads the old mark before moving it: that is where the catch-up seam goes. Held here, not on the
     // screen, so a rotation redraws the same seam instead of one from the marks the screen has written since.
@@ -319,7 +411,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     private fun update(change: () -> Unit) {
         change()
         prefs.edit().putString("config", list.configJson()).apply()
-        state.value = state.value.copy(groups = draw())
+        state.value = state.value.copy(groups = draw(), orderCustomized = list.groupOrderCustomized())
     }
 
     override fun onCleared() {

@@ -15,24 +15,9 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import bi.atomic.workerdeck.R
 import bi.atomic.workerdeck.app.session.Entry
-import bi.atomic.workerdeck.app.ui.Palette
-import bi.atomic.workerdeck.core.ffi.ListStep
-import bi.atomic.workerdeck.core.ffi.StepKind
-import bi.atomic.workerdeck.core.ffi.StepState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.testTag
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,12 +30,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
@@ -68,50 +50,32 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import bi.atomic.workerdeck.core.ffi.TeamLead
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import bi.atomic.workerdeck.app.gateway.Gateway
-import bi.atomic.workerdeck.app.ui.BadgeGlyph
-import bi.atomic.workerdeck.app.ui.CountBadge
-import bi.atomic.workerdeck.app.ui.EngineMark
-import bi.atomic.workerdeck.app.ui.StateGlyph
 import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ListRow
-import bi.atomic.workerdeck.core.ffi.TrayMember
-import bi.atomic.workerdeck.core.ffi.RowState
-import bi.atomic.workerdeck.core.ffi.ago
 import bi.atomic.workerdeck.core.ffi.deleteAgentMessage
 import bi.atomic.workerdeck.core.ffi.deleteAgentTitle
 import bi.atomic.workerdeck.core.ffi.newConversationHint
 import kotlinx.coroutines.launch
-
-private val GUTTER = 16.dp
-private val MARK_COLUMN = 22.dp
-private val CARD_AVATAR = 48.dp
-private val MEMBER_AVATAR = 32.dp
-private val TRAY_AVATAR = 22.dp
-private val MEMBER_INDENT = 24.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,7 +86,7 @@ fun SessionsScreen(
     onOpenPast: (hostId: String, sessionId: String, title: String, conversation: Long) -> Unit,
     onAdd: () -> Unit,
     onForget: (Gateway) -> Unit,
-    onNew: (hostId: String, agent: Boolean) -> Unit,
+    onNew: (hostId: String, agent: Boolean, cwd: String?) -> Unit,
 ) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val colors = Wd.colors
@@ -132,6 +96,61 @@ fun SessionsScreen(
     var history by remember { mutableStateOf<ConversationsTarget?>(null) }
     val discard by model.discard.collectAsStateWithLifecycle()
     var pastOpen by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<ListRow?>(null) }
+    var closing by remember { mutableStateOf<ListRow?>(null) }
+    var crossing by remember { mutableStateOf<Pair<ListRow, TeamLead>?>(null) }
+    val drag = remember(model) { ListDrag(model::teamLeads) }
+    val join: (ListRow, TeamLead) -> Unit = { row, lead -> if (model.crossedOwner(row, lead) != null) crossing = row to lead else model.join(row, lead) }
+    val open: (ListRow, Entry?) -> Unit = { row, entry -> onOpen(row.hostId, row.sessionId, row.title, entry) }
+    val red = colors.red
+    val accent = colors.accent
+    val events = ListEvents(
+        card = CardEvents(
+            onStep = { row, step -> open(row, stepEntry(step)) },
+            onStopStep = { row, step -> model.stopStep(row.hostId, row.sessionId, row.conversation, step) },
+            onChip = { row, kind -> model.toggleSteps(row.hostId, row.sessionId, kind) },
+            onTrayMember = { onOpen(it.hostId, it.sessionId, it.title, null) },
+            onToggleTeam = { model.toggleTeam(it.hostId, it.sessionId) },
+        ),
+        open = { open(it, null) },
+        chrome = { row ->
+            val leading = buildList {
+                add(SwipeAction("Rename", accent) { renaming = row })
+                if (row.canNewConversation && row.newConversationBlocked == null) add(SwipeAction("New conversation", INDIGO) { model.newConversation(row) })
+            }
+            val trailing = when {
+                row.agentId != null -> SwipeAction("Delete agent", red) { deleting = row }
+                row.sessionStatus == "closed" -> SwipeAction("Remove", red) { model.close(row) }
+                else -> SwipeAction("Close", red) { closing = row }
+            }
+            RowChrome(leading, listOf(trailing))
+        },
+        menu = { row, expanded, dismiss ->
+            RowMenu(
+                row,
+                expanded,
+                dismiss,
+                leads = if (expanded) model.teamLeads(row) else emptyList(),
+                onRename = { renaming = row },
+                onNewConversation = { model.newConversation(row) },
+                onConversations = { history = ConversationsTarget(row.hostId, row.sessionId, row.agent ?: row.title, row.title, retired = false) },
+                onSleep = { model.sleep(row.hostId, row.sessionId, row.conversation) },
+                onJoin = { join(row, it) },
+                onLeave = { model.leave(row) },
+                onClose = { if (row.sessionStatus == "closed") model.close(row) else closing = row },
+                onDelete = { deleting = row },
+            )
+        },
+        drop = { action ->
+            when (action) {
+                is DropAction.MoveGroup -> model.moveGroup(action.key, action.onto)
+                is DropAction.Join -> join(action.row, action.lead)
+                is DropAction.Leave -> model.leave(action.row)
+            }
+        },
+        toggleGroup = model::toggleGroup,
+        newIn = { hostId, cwd -> onNew(hostId, false, cwd) },
+    )
     LaunchedEffect(ui.notice) {
         ui.notice?.let {
             scope.launch { snackbar.showSnackbar(it) }
@@ -144,13 +163,19 @@ fun SessionsScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
         bottomBar = {
-            SearchBar(ui.search, model::setSearch) { NewMenu(gateways, model::canCreateAgent, onNew) }
+            SearchBar(ui.search, model::setSearch) { NewMenu(gateways, model::canCreateAgent) { id, agent -> onNew(id, agent, null) } }
         },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Sessions", style = MaterialTheme.typography.titleMedium) },
                 actions = {
-                    GatewayMenu(gateways, onAdd, onForget, onPastAgents = if (ui.pastAgents.isNotEmpty()) ({ pastOpen = true }) else null)
+                    GatewayMenu(
+                        gateways,
+                        onAdd,
+                        onForget,
+                        onPastAgents = if (ui.pastAgents.isNotEmpty()) ({ pastOpen = true }) else null,
+                        onResetOrder = if (ui.orderCustomized) model::resetGroupOrder else null,
+                    )
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
             )
@@ -166,37 +191,7 @@ fun SessionsScreen(
                 ui.groups.isEmpty() && ui.error == null -> LazyColumn(Modifier.fillMaxSize()) {
                     item(key = "empty") { EmptyList(searching(ui.search)) }
                 }
-                else -> LazyColumn(Modifier.fillMaxSize().testTag("sessions")) {
-                    ui.error?.let { error ->
-                        item(key = "error") { ErrorStrip(error) }
-                    }
-                    val now = System.currentTimeMillis().toDouble()
-                    for (group in ui.groups) {
-                        group.label?.let { label ->
-                            item(key = "group:${group.key}") {
-                                GroupHeader(label, group.sessions, group.unseen, group.collapsed) { model.toggleGroup(group.key) }
-                            }
-                        }
-                        if (!group.collapsed) {
-                            items(group.rows, key = { "${group.key}/${it.key}" }) { row ->
-                                SessionRow(
-                                    row,
-                                    now,
-                                    onOpen = { onOpen(row.hostId, row.sessionId, row.title, it) },
-                                    onOpenMember = { onOpen(it.hostId, it.sessionId, it.title, null) },
-                                    onStopStep = { model.stopStep(row.hostId, row.sessionId, row.conversation, it) },
-                                    onToggleTeam = { model.toggleTeam(row.hostId, row.sessionId) },
-                                    onSleep = { model.sleep(row.hostId, row.sessionId, row.conversation) },
-                                    onNewConversation = { model.newConversation(row) },
-                                    onConversations = {
-                                        history = ConversationsTarget(row.hostId, row.sessionId, row.agent ?: row.title, row.title, retired = false)
-                                    },
-                                    onDelete = { deleting = row },
-                                )
-                            }
-                        }
-                    }
-                }
+                else -> SessionsList(ui.groups, ui.error, ui.projectIcons, drag, events)
             }
         }
     }
@@ -213,6 +208,35 @@ fun SessionsScreen(
                 }) { Text("Delete agent", color = Wd.colors.red) }
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
+    }
+    renaming?.let { row -> RenameDialog(row, onDismiss = { renaming = null }) { text -> model.rename(row, text) } }
+    closing?.let { row ->
+        AlertDialog(
+            onDismissRequest = { closing = null },
+            title = { Text("Close ${row.title}?") },
+            text = { Text("The run is terminated on the server. Its transcript is no longer attachable.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    closing = null
+                    model.close(row)
+                }) { Text("Close session", color = Wd.colors.red) }
+            },
+            dismissButton = { TextButton(onClick = { closing = null }) { Text("Cancel") } },
+        )
+    }
+    crossing?.let { (row, lead) ->
+        AlertDialog(
+            onDismissRequest = { crossing = null },
+            title = { Text("Join another owner's team?") },
+            text = { Text("${lead.name} belongs to ${lead.owner ?: "another owner"}. Its team will be able to message and read this agent.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    crossing = null
+                    model.join(row, lead, crossOwner = true)
+                }) { Text("Join") }
+            },
+            dismissButton = { TextButton(onClick = { crossing = null }) { Text("Cancel") } },
         )
     }
     discard?.let { pending ->
@@ -286,7 +310,7 @@ private fun NewMenu(gateways: List<Gateway>, canCreateAgent: (String) -> Boolean
 
 // Each paired gateway with its own Forget, then Add. Forgetting asks first: the key is gone once confirmed.
 @Composable
-private fun GatewayMenu(gateways: List<Gateway>, onAdd: () -> Unit, onForget: (Gateway) -> Unit, onPastAgents: (() -> Unit)?) {
+private fun GatewayMenu(gateways: List<Gateway>, onAdd: () -> Unit, onForget: (Gateway) -> Unit, onPastAgents: (() -> Unit)?, onResetOrder: (() -> Unit)?) {
     var open by remember { mutableStateOf(false) }
     var forgetting by remember { mutableStateOf<Gateway?>(null) }
     Box {
@@ -306,6 +330,15 @@ private fun GatewayMenu(gateways: List<Gateway>, onAdd: () -> Unit, onForget: (G
                     },
                 )
                 HorizontalDivider()
+            }
+            onResetOrder?.let { reset ->
+                DropdownMenuItem(
+                    text = { Text("Reset group order") },
+                    onClick = {
+                        open = false
+                        reset()
+                    },
+                )
             }
             onPastAgents?.let { show ->
                 DropdownMenuItem(
@@ -396,286 +429,83 @@ private fun LazyItemScope.EmptyList(searching: Boolean) {
     }
 }
 
+private val INDIGO = Color(0xFF5856D6)
+
 @Composable
-private fun ErrorStrip(error: String) {
-    Text(
-        error,
-        color = Wd.colors.red,
-        style = MaterialTheme.typography.bodySmall,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = GUTTER, vertical = 8.dp),
+private fun RenameDialog(row: ListRow, onDismiss: () -> Unit, onRename: (String) -> Unit) {
+    var text by remember(row.key) { mutableStateOf(row.agent ?: row.title) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (row.agentId != null) "Rename agent" else "Rename session") },
+        text = { OutlinedTextField(text, { text = it }, singleLine = true, placeholder = { Text(if (row.agentId != null) "Agent name" else "Session name") }) },
+        confirmButton = {
+            TextButton(onClick = {
+                onDismiss()
+                onRename(text)
+            }) { Text("Rename") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
+// The long press: every non-navigating thing a card can do, the swipes' actions included.
 @Composable
-private fun GroupHeader(label: String, count: UInt, unseen: UInt, collapsed: Boolean, onToggle: () -> Unit) {
-    val colors = Wd.colors
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = GUTTER, end = GUTTER, top = 18.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            label.uppercase(),
-            style = MaterialTheme.typography.labelMedium,
-            color = colors.secondary,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (unseen > 0u) {
-            CountBadge(unseen)
-            Spacer(Modifier.width(8.dp))
-        }
-        Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = colors.tertiary)
-        Icon(
-            if (collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
-            contentDescription = if (collapsed) "Expand" else "Collapse",
-            tint = colors.tertiary,
-            modifier = Modifier.size(18.dp),
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun SessionRow(
+private fun RowMenu(
     row: ListRow,
-    now: Double,
-    onOpen: (Entry?) -> Unit,
-    onOpenMember: (TrayMember) -> Unit,
-    onStopStep: (ListStep) -> Unit,
-    onToggleTeam: () -> Unit,
-    onSleep: () -> Unit,
+    expanded: Boolean,
+    dismiss: () -> Unit,
+    leads: List<TeamLead>,
+    onRename: () -> Unit,
     onNewConversation: () -> Unit,
     onConversations: () -> Unit,
+    onSleep: () -> Unit,
+    onJoin: (TeamLead) -> Unit,
+    onLeave: () -> Unit,
+    onClose: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val colors = Wd.colors
-    var menu by remember { mutableStateOf(false) }
     val agent = row.agentId != null
-    val member = agent && row.depth > 0u
-    val indent = (if (member) MEMBER_INDENT else 20.dp) * row.depth.toInt()
-    val column = if (!agent) MARK_COLUMN else if (member) MEMBER_AVATAR else CARD_AVATAR
-    Box {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .testTag("session-row")
-                .combinedClickable(onClick = { onOpen(null) }, onLongClick = { menu = true })
-                .alpha(if (!row.asleep) 1f else if (agent) 0.6f else 0.55f),
-        ) {
-            if (member) {
-                MemberLine(row, now, Modifier.padding(start = GUTTER + indent, end = GUTTER, top = 6.dp, bottom = 6.dp))
-            } else Row(
-                Modifier.fillMaxWidth().padding(start = GUTTER + indent, end = GUTTER, top = 12.dp, bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (agent) {
-                    AgentAvatar(row, column, context = true)
-                } else {
-                    Column(Modifier.width(MARK_COLUMN).padding(top = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        row.badge?.let { BadgeGlyph(it, size = 14.dp) } ?: StateGlyph(row.state)
-                        Spacer(Modifier.height(8.dp))
-                        EngineMark(row.mark, row.markTinted)
-                    }
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        row.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (row.state == RowState.ENDED) colors.secondary else colors.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        details(row, now),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.secondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    row.status?.let { status ->
-                        Spacer(Modifier.height(2.dp))
-                        Text(status, style = MaterialTheme.typography.bodySmall, color = colors.green, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (row.members > 0u) {
-                        TeamTray(row, onOpenMember, onToggleTeam)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    if (row.unseen > 0u) {
-                        CountBadge(row.unseen, if (row.state == RowState.ENDED) colors.badge else colors.blue)
-                    }
-                }
-            }
-            for (step in row.steps) {
-                StepLine(step, Modifier.padding(start = GUTTER + indent + column + 10.dp, end = GUTTER - 8.dp), onOpen = { onOpen(stepEntry(step)) }, onStop = { onStopStep(step) })
-            }
-            HorizontalDivider(Modifier.padding(start = GUTTER + indent + column + 10.dp), thickness = 0.5.dp, color = colors.separator)
-        }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, offset = DpOffset(GUTTER + indent, 0.dp)) {
-            if (row.canNewConversation) {
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text("New conversation")
-                            Text(row.newConversationBlocked ?: newConversationHint(), style = MaterialTheme.typography.bodySmall, color = colors.secondary)
-                        }
-                    },
-                    enabled = row.newConversationBlocked == null,
-                    onClick = {
-                        menu = false
-                        onNewConversation()
-                    },
-                )
-            }
+    DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
+        MenuItem(if (agent) "Rename agent" else "Rename session", dismiss = dismiss, run = onRename)
+        if (row.canNewConversation) {
             DropdownMenuItem(
-                text = { Text("Conversations…") },
+                text = {
+                    Column {
+                        Text("New conversation")
+                        Text(row.newConversationBlocked ?: newConversationHint(), style = MaterialTheme.typography.bodySmall, color = colors.secondary)
+                    }
+                },
+                enabled = row.newConversationBlocked == null,
                 onClick = {
-                    menu = false
-                    onConversations()
+                    dismiss()
+                    onNewConversation()
                 },
             )
-            if (row.canSleep) {
-                DropdownMenuItem(
-                    text = { Text("Sleep") },
-                    onClick = {
-                        menu = false
-                        onSleep()
-                    },
-                )
-            }
-            if (agent) {
-                HorizontalDivider()
-                DropdownMenuItem(
-                    text = { Text("Delete agent…", color = colors.red) },
-                    onClick = {
-                        menu = false
-                        onDelete()
-                    },
-                )
-            }
         }
-    }
-}
-
-// An agent opens its takeover, a task its call's row (a checklist item, with no call, just the session), a shell its screen.
-private fun stepEntry(step: ListStep): Entry? = when (step.kind) {
-    StepKind.AGENT -> Entry.Subagent(step.key)
-    StepKind.TASK -> step.toolUseId?.let(Entry::Reveal)
-    StepKind.SHELL -> Entry.Shell(step.key)
-}
-
-// One line per step under its card, the iOS step row: the state's mark, the label, the reading, and stop when it can.
-@Composable
-private fun StepLine(step: ListStep, modifier: Modifier, onOpen: () -> Unit, onStop: () -> Unit) {
-    val colors = Wd.colors
-    val palette = remember(colors.dark) { Palette.of(colors.dark) }
-    val tone = when {
-        step.state == StepState.FAILED -> palette.toneNamed("red")
-        step.kind == StepKind.SHELL -> palette.toneNamed("magenta")
-        step.kind == StepKind.AGENT -> palette.toneNamed("green")
-        step.state == StepState.PENDING -> colors.tertiary
-        else -> colors.secondary
-    }
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onOpen).then(modifier).height(32.dp).semantics { contentDescription = step.title },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) {
-            when {
-                step.kind == StepKind.SHELL -> Text("$", color = tone, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                step.state == StepState.RUNNING -> CircularProgressIndicator(Modifier.size(11.dp), color = tone, strokeWidth = 1.5.dp)
-                step.state == StepState.FAILED -> Icon(painterResource(R.drawable.badge_failed), contentDescription = null, tint = tone, modifier = Modifier.size(12.dp))
-                step.state == StepState.DONE -> Icon(Icons.Filled.Check, contentDescription = null, tint = tone, modifier = Modifier.size(13.dp))
-                else -> Box(Modifier.size(10.dp).border(1.25.dp, tone, CircleShape))
-            }
+        MenuItem("Conversations…", dismiss = dismiss, run = onConversations)
+        if (row.canSleep) MenuItem("Sleep", dismiss = dismiss, run = onSleep)
+        if (leads.isNotEmpty()) {
+            HorizontalDivider()
+            for (lead in leads) MenuItem("Add to ${lead.name}'s team", dismiss = dismiss) { onJoin(lead) }
         }
-        Text(
-            step.label,
-            color = tone,
-            style = MaterialTheme.typography.bodySmall,
-            fontFamily = if (step.kind == StepKind.SHELL) FontFamily.Monospace else null,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        step.detail?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = colors.tertiary, maxLines = 1) }
-        if (step.killable) {
-            Box(
-                Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onStop)
-                    .semantics { contentDescription = if (step.kind == StepKind.TASK) "Stop ${step.label}" else "Kill ${step.label}" },
-                contentAlignment = Alignment.Center,
-            ) { Icon(painterResource(R.drawable.step_stop), contentDescription = null, tint = colors.secondary, modifier = Modifier.size(18.dp)) }
-        }
-    }
-}
-
-// A Member under its lead, the iOS member row: one line, the picture, name and status, then unread and age.
-@Composable
-private fun MemberLine(row: ListRow, now: Double, modifier: Modifier) {
-    val colors = Wd.colors
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        AgentAvatar(row, MEMBER_AVATAR)
-        Text(row.title, style = MaterialTheme.typography.titleSmall, color = colors.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(
-            row.status.orEmpty(),
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.secondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (row.unseen > 0u) CountBadge(row.unseen, if (row.state == RowState.ENDED) colors.badge else colors.blue)
-        if (row.lastActivityAt > 0) Text(ago(row.lastActivityAt, now), style = MaterialTheme.typography.bodySmall, color = colors.tertiary, maxLines = 1)
-    }
-}
-
-// Auto's tray: the idle Members as pictures (a tap opens one), then `+n` past three, else a chevron that expands the
-// team or, expanded, returns it to Auto.
-@Composable
-private fun TeamTray(row: ListRow, onOpenMember: (TrayMember) -> Unit, onToggle: () -> Unit) {
-    val colors = Wd.colors
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        for (member in row.tray) {
-            Box(Modifier.clip(RoundedCornerShape(4.dp)).clickable { onOpenMember(member) }.semantics { contentDescription = "Open ${member.title}" }) {
-                TrayAvatar(member, TRAY_AVATAR)
-            }
-        }
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(50))
-                .background(colors.raised)
-                .clickable(onClick = onToggle)
-                .semantics { contentDescription = if (row.teamExpanded) "Show only active Members" else "Show all Team Members" }
-                .padding(horizontal = 8.dp, vertical = 3.dp),
-        ) {
-            if (row.trayOverflow > 0u && !row.teamExpanded) {
-                Text("+${row.trayOverflow}", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
-            } else {
-                Icon(
-                    if (row.teamExpanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = colors.secondary,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
+        if (row.member) MenuItem("Leave ${row.team ?: "team"}", dismiss = dismiss, run = onLeave)
+        HorizontalDivider()
+        when {
+            agent -> MenuItem("Delete agent…", colors.red, dismiss, onDelete)
+            row.sessionStatus == "closed" -> MenuItem("Remove", colors.red, dismiss, onClose)
+            else -> MenuItem("Close…", colors.red, dismiss, onClose)
         }
     }
 }
 
 @Composable
-private fun details(row: ListRow, now: Double) = buildAnnotatedString {
-    val colors = Wd.colors
-    val parts = mutableListOf<Pair<String, Color>>()
-    row.modelLabel?.let { parts += it to if (row.nameTinted) colors.coral else colors.secondary }
-    if (row.project.isNotEmpty()) parts += row.project to colors.secondary
-    if (row.showGateway && row.hostName.isNotEmpty()) parts += row.hostName to colors.secondary
-    if (row.lastActivityAt > 0) parts += ago(row.lastActivityAt, now) to colors.secondary
-    parts.forEachIndexed { index, (text, color) ->
-        if (index > 0) append(" · ")
-        withStyle(SpanStyle(color = color)) { append(text) }
-    }
+private fun MenuItem(label: String, color: Color = Color.Unspecified, dismiss: () -> Unit, run: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label, color = color) },
+        onClick = {
+            dismiss()
+            run()
+        },
+    )
 }

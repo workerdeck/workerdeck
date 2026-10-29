@@ -99,7 +99,7 @@ private fun App(store: GatewayStore) {
     val context = LocalContext.current
     val recents = remember { RecentCwds(context) }
     val create = creating
-    val form = remember(create) { create?.let { sessions.createModel(it[0], it[1] == "agent", recents.of(it[0]).firstOrNull() ?: "", null) } }
+    val form = remember(create) { create?.let { sessions.createModel(it[0], it[1] == "agent", it.getOrNull(2) ?: recents.of(it[0]).firstOrNull() ?: "", null) } }
     JankScreen(if (form != null) "create" else if (target == null || client == null) "sessions" else "session")
     if (create != null && form != null && target == null) {
         CreateScreen(
@@ -126,7 +126,7 @@ private fun App(store: GatewayStore) {
                 open = listOf(hostId, sessionId, title, conversation.toString())
             },
             onAdd = { adding = true },
-            onNew = { hostId, agent -> creating = listOf(hostId, if (agent) "agent" else "session") },
+            onNew = { hostId, agent, cwd -> creating = listOfNotNull(hostId, if (agent) "agent" else "session", cwd) },
             onForget = { gateway ->
                 recents.forget(gateway.id)
                 sessions.forget(gateway)
