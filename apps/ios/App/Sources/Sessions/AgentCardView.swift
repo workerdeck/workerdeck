@@ -170,8 +170,7 @@ struct StepChipsView: View {
           .padding(.horizontal, 4)
           .frame(height: 16)
           .background(RoundedRectangle(cornerRadius: 3).fill(chip.open ? ListPalette.chipOpen : Color.clear))
-          .padding(.vertical, 6)
-          .contentShape(Rectangle())
+          .hitPadding()
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("\(chip.open ? "Hide" : "Show") \(chip.label)")
@@ -207,7 +206,7 @@ struct TrayView: View {
       if !tray.expanded {
         ForEach(tray.members, id: \.key) { member in
           Button { tray.select(member) } label: {
-            TrayAvatarView(member: member, size: 16).padding(.vertical, 6).contentShape(Rectangle())
+            TrayAvatarView(member: member, size: 16).hitPadding()
           }
           .buttonStyle(.borderless)
           .accessibilityLabel("Open \(member.title)")
@@ -229,8 +228,7 @@ struct TrayView: View {
         .font(ListType.label())
         .foregroundStyle(tray.expanded ? ListPalette.fg3 : ListPalette.fg4)
         .padding(.horizontal, 2)
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
+        .hitPadding()
       }
       .buttonStyle(.borderless)
       .accessibilityLabel(tray.expanded ? "Show only active Members" : "Show all Team Members")
@@ -338,5 +336,11 @@ struct LucideBot: Shape {
     path.move(to: p(15, 13)); path.addLine(to: p(15, 15))
     path.move(to: p(9, 13)); path.addLine(to: p(9, 15))
     return path
+  }
+}
+
+extension View {
+  func hitPadding(_ amount: CGFloat = 6) -> some View {
+    padding(.vertical, amount).contentShape(Rectangle()).padding(.vertical, -amount)
   }
 }

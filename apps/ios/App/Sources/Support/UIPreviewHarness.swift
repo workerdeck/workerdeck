@@ -144,6 +144,7 @@ private struct TeamsPreview: View {
         }
       }
       .listStyle(.plain)
+      .environment(\.defaultMinListRowHeight, 0)
       .navigationTitle("Sessions")
       .navigationBarTitleDisplayMode(.inline)
     }
