@@ -79,18 +79,31 @@ private struct TeamsPreview: View {
     return ListFixture.session(id, status: status, extra)
   }
 
+  // `rollFace(id, project)` from packages/protocol, as the Storybook fixtures roll them.
+  private static let faces: [String: String] = [
+    "A": #"{"v":1,"tile":{"shape":"boxy"},"antenna":{"kind":"triangle","color":"project"},"visor":{"kind":"inset"},"eyes":{"kind":"segments","color":"coral"},"mouth":{"kind":"grill","color":"coral"}}"#,
+    "B": #"{"v":1,"tile":{"shape":"boxy"},"antenna":{"kind":"twin","color":"project"},"visor":{"kind":"band"},"eyes":{"kind":"bar","color":"indigo"},"mouth":{"kind":"grill","color":"indigo"}}"#,
+    "C": #"{"v":1,"tile":{"shape":"boxy"},"antenna":{"kind":"diamond","color":"teal"},"visor":{"kind":"band"},"eyes":{"kind":"slit","color":"teal"},"mouth":{"kind":"grill","color":"project"}}"#,
+    "D": #"{"v":1,"tile":{"shape":"boxy"},"antenna":{"kind":"square","color":"amber"},"visor":{"kind":"band"},"eyes":{"kind":"slit","color":"amber"},"mouth":{"kind":"grill","color":"amber"}}"#,
+    "E": #"{"v":1,"tile":{"shape":"soft"},"antenna":{"kind":"none","color":"coral"},"visor":{"kind":"band"},"eyes":{"kind":"segments","color":"coral"},"mouth":{"kind":"none","color":"project"}}"#,
+  ]
+
+  private static func face(_ id: String) -> Any {
+    (try? JSONSerialization.jsonObject(with: Data(faces[id]!.utf8))) ?? [:]
+  }
+
   private static func member(_ id: String, _ name: String, order: Int) -> [String: Any] {
-    ["id": id, "name": name, "lead": "A", "team": "WD-Lead", "order": order]
+    ["id": id, "name": name, "lead": "A", "team": "WD-Lead", "order": order, "face": face(id)]
   }
 
   @State private var model = PreviewList(
     [
-      row("lead", agent: ["id": "A", "name": "WD-Lead", "leads": true, "conversation": 4],
+      row("lead", agent: ["id": "A", "name": "WD-Lead", "leads": true, "conversation": 4, "face": face("A")],
           status: "running", label: "cutting 3.13.0"),
       row("m1", agent: member("B", "WD-Review", order: 0), pending: 1, label: "needs your call"),
       row("m2", agent: member("C", "WD-MonkeyArt", order: 1), status: "running"),
       row("m3", agent: member("D", "WD-Docs", order: 2), asleep: true),
-      row("solo", agent: ["id": "E", "name": "BOX-Lead", "shared": true], label: "🧪 smoke green"),
+      row("solo", agent: ["id": "E", "name": "BOX-Lead", "shared": true, "face": face("E")], label: "🧪 smoke green"),
       row("plain", agent: nil, status: "awaiting_approval", pending: 1, title: "Fix the relay drop", model: "gpt-6-sol"),
       row("old", agent: nil, status: "closed", title: "Old one-off"),
     ],
@@ -111,10 +124,21 @@ private struct TeamsPreview: View {
             }
           } header: {
             if section.earlier {
-              Button("Earlier \(section.group.sessions)") {
+              Button {
                 model.list.toggleGroup(key: "earlier")
                 revision += 1
+              } label: {
+                HStack(spacing: 4) {
+                  Image(systemName: section.group.collapsed ? "chevron.right" : "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                  Text("Earlier · \(section.group.sessions) one-off session\(section.group.sessions == 1 ? "" : "s")")
+                  Spacer(minLength: 0)
+                }
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
               }
+              .buttonStyle(.plain)
+              .textCase(nil)
             }
           }
         }
