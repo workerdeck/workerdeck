@@ -1416,7 +1416,9 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 `/meta` (`Agents.swift`), and the team half of the list view model (team units, `teamState`, the context lead, `teamView`, `teamLeads`/`teamMembers`) is the core's `SessionList`. The app draws agents with
 `SessionCard` (the web's geometry: 48pt card with a 40 face, 40pt Member cards inside the team's shared card, step
 chips that unfold a kind inside the card, a tray of the Members Auto hides; a tap on one opens it, and the member opened
-last stands in for the selected row; headings drag to reorder, a card dropped on a lead joins its team)
+last stands in for the selected row; headings drag to reorder, a card dropped on a lead joins its team; the list
+uses the web's fixed type scale (`ListType`: 13/12/11, not Dynamic Type) and grey ramp (`ListPalette.fg1..4`), and touch
+padding on chips and tray faces is layout-neutral (`hitPadding`) so a line stays 20pt)
 and `AgentAvatarView`: an agent draws its face through `FaceView` (the core's draw ops in a `Canvas`, motions under a
 30 fps `TimelineView`, paused under Reduce Motion; the canvas keeps a 4-unit margin because the bubble, ring and chip reach
 past the 32-unit box), a plain session a dashed engine tile with the status badge. A card whose session or team needs an
