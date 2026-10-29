@@ -487,12 +487,12 @@ struct SessionListView: View {
     } label: {
       HStack(spacing: 4) {
         Image(systemName: section.group.collapsed ? "chevron.right" : "chevron.down")
-          .font(.caption2.weight(.semibold))
+          .font(.system(size: 10, weight: .semibold))
         Text("Earlier · \(section.group.sessions) one-off session\(section.group.sessions == 1 ? "" : "s")")
         Spacer(minLength: 0)
       }
-      .font(.footnote)
-      .foregroundStyle(.tertiary)
+      .font(ListType.label())
+      .foregroundStyle(ListPalette.fg4)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -509,27 +509,29 @@ struct SessionListView: View {
       } label: {
         HStack(spacing: 8) {
           Image(systemName: group.collapsed ? "chevron.right" : "chevron.down")
-            .font(.caption2.weight(.semibold))
+            .font(.system(size: 10, weight: .semibold))
             .frame(width: 12)
           if let glyph = group.projectGlyph {
-            Image(systemName: projectSymbol(forLucideName: glyph)).font(.caption)
+            Image(systemName: projectSymbol(forLucideName: glyph)).font(.system(size: 11))
           } else if let hash = group.projectIconHash, let image = model.projectIcons.image(forHash: hash) {
             Image(uiImage: image)
           }
           Text(group.caps ? label.uppercased() : label)
-            .tracking(group.caps ? 0.6 : 0)
-            .foregroundStyle(group.caps ? .tertiary : .secondary)
+            .tracking(group.caps ? 0.3 : 0)
+            .foregroundStyle(group.caps ? ListPalette.fg4 : ListPalette.fg3)
             .lineLimit(1)
           if let gateway = group.gateway {
             Text(gateway)
-              .font(.caption2)
+              .font(ListType.label())
+              .foregroundStyle(ListPalette.fg4)
               .padding(.horizontal, 4)
-              .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Color.secondary.opacity(0.3)))
+              .frame(height: 16)
+              .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(ListPalette.border))
           }
-          Text("\(group.rows.count)").foregroundStyle(.tertiary).monospacedDigit()
+          Text("\(group.rows.count)").foregroundStyle(ListPalette.fg4.opacity(0.7)).monospacedDigit()
           if let summary = group.foldSummary {
             Text(summary)
-              .foregroundStyle(group.foldAttention ? ListPalette.warning : Color(uiColor: .tertiaryLabel))
+              .foregroundStyle(group.foldAttention ? ListPalette.warning : ListPalette.fg4.opacity(0.7))
               .lineLimit(1)
           }
           Spacer(minLength: 0)
@@ -542,18 +544,18 @@ struct SessionListView: View {
         Button {
           path.append(.create(hostId: hostId, seed: CreateSessionSeed(cwd: group.cwd ?? "")))
         } label: {
-          Image(systemName: "plus").font(.caption.weight(.semibold)).padding(.vertical, 4).contentShape(Rectangle())
+          Image(systemName: "plus").font(.system(size: 12, weight: .semibold)).padding(.vertical, 4).contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .tint(.secondary)
+        .tint(ListPalette.fg3)
         .accessibilityLabel("New session in \(label)")
       }
     }
-    .font(.footnote.weight(.medium))
-    .foregroundStyle(.tertiary)
+    .font(ListType.label(.medium))
+    .foregroundStyle(ListPalette.fg4)
     .textCase(nil)
     .draggable(ListDrag.group(group.key)) {
-      Text(group.caps ? label.uppercased() : label).font(.footnote.weight(.medium)).padding(6)
+      Text(group.caps ? label.uppercased() : label).font(ListType.label(.medium)).padding(6)
     }
     .dropDestination(for: String.self) { payloads, _ in
       drop(payloads, onGroup: group, model: model)

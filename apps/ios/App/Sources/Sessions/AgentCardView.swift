@@ -72,12 +72,12 @@ struct SessionCard: View {
       AgentAvatarView(row: row, size: 40, context: row.agent != nil)
       VStack(alignment: .leading, spacing: 0) {
         HStack(spacing: 6) {
-          name(font: .subheadline.weight(.medium))
+          name()
           if row.lead { LeadChip().fixedSize() }
           if row.shared {
             Image(systemName: "globe")
-              .font(.caption2)
-              .foregroundStyle(.tertiary)
+              .font(.system(size: 10))
+              .foregroundStyle(ListPalette.fg4)
               .accessibilityLabel("Shared with other owners")
           }
           Spacer(minLength: 0)
@@ -91,8 +91,9 @@ struct SessionCard: View {
         HStack(spacing: 6) {
           (row.agent != nil ? modelStatus : SessionRowView.details(
             row: row, hostName: hostName, showsProject: showsProject, projectImage: projectImage))
-            .font(.footnote)
-            .foregroundStyle(.tertiary)
+            .font(ListType.body())
+            .tracking(ListType.tracking * 13)
+            .foregroundStyle(ListPalette.fg4)
             .lineLimit(1)
             .truncationMode(.tail)
           Spacer(minLength: 0)
@@ -109,14 +110,15 @@ struct SessionCard: View {
       AgentAvatarView(row: row, size: 32)
       VStack(alignment: .leading, spacing: 0) {
         HStack(spacing: 6) {
-          name(font: .footnote.weight(.medium))
+          name()
           Spacer(minLength: 0)
           UnreadBadge(count: item.unseen, live: row.state == .working)
           chips
         }
         .frame(minHeight: 16)
         modelStatus
-          .font(.caption)
+          .font(ListType.label())
+          .tracking(ListType.tracking * 12)
           .lineLimit(1)
           .truncationMode(.tail)
           .frame(minHeight: 16)
@@ -125,10 +127,11 @@ struct SessionCard: View {
     }
   }
 
-  private func name(font: Font) -> some View {
+  private func name() -> some View {
     Text(row.agent ?? row.title)
-      .font(font)
-      .foregroundStyle(row.agent != nil ? ListPalette.name : Color.primary)
+      .font(ListType.body(.medium))
+      .tracking(ListType.tracking * 13)
+      .foregroundStyle(row.agent != nil ? ListPalette.name : ListPalette.fg1)
       .lineLimit(1)
       .layoutPriority(1)
   }
@@ -136,9 +139,9 @@ struct SessionCard: View {
   private var modelStatus: Text {
     var parts: [Text] = []
     if let model = row.modelLabel { parts.append(Text(model).foregroundStyle(row.modelTint)) }
-    if let status = row.status { parts.append(Text(status).foregroundStyle(.secondary)) }
+    if let status = row.status { parts.append(Text(status).foregroundStyle(ListPalette.fg3)) }
     return parts.enumerated().reduce(Text("")) { joined, part in
-      part.offset == 0 ? part.element : joined + Text(" · ").foregroundStyle(.secondary) + part.element
+      part.offset == 0 ? part.element : joined + Text(" · ").foregroundStyle(ListPalette.fg3) + part.element
     }
   }
 
@@ -158,11 +161,11 @@ struct StepChipsView: View {
         Button {
           toggle(chip.kind)
         } label: {
-          HStack(spacing: 3) {
+          HStack(spacing: 4) {
             icon(chip.kind)
             Text("\(chip.count)").monospacedDigit()
           }
-          .font(.caption2)
+          .font(ListType.micro())
           .foregroundStyle(tone(chip))
           .padding(.horizontal, 4)
           .frame(height: 16)
@@ -179,17 +182,17 @@ struct StepChipsView: View {
   private func tone(_ chip: ListChip) -> Color {
     if chip.failed { return ListPalette.danger }
     if chip.kind == .shell { return ListPalette.shell }
-    if chip.running > 0 { return chip.kind == .agent ? ListPalette.success : .secondary }
-    return Color(uiColor: .tertiaryLabel)
+    if chip.running > 0 { return chip.kind == .agent ? ListPalette.success : ListPalette.fg2 }
+    return ListPalette.fg4
   }
 
   @ViewBuilder
   private func icon(_ kind: StepFold) -> some View {
     switch kind {
-    case .shell: Text(TerminalShell.glyph).font(.caption2.monospaced().weight(.semibold))
-    case .bash: Image(systemName: "apple.terminal")
-    case .task: Image(systemName: "checklist")
-    case .agent: Image(systemName: "cpu")
+    case .shell: Text(TerminalShell.glyph).font(.system(size: 11, weight: .semibold, design: .monospaced))
+    case .bash: Image(systemName: "apple.terminal").font(.system(size: 10))
+    case .task: Image(systemName: "checklist").font(.system(size: 10))
+    case .agent: LucideBot().stroke(style: LucideBot.stroke(11)).frame(width: 11, height: 11)
     }
   }
 }
@@ -214,17 +217,17 @@ struct TrayView: View {
         Group {
           if tray.expanded {
             HStack(spacing: 2) {
-              Image(systemName: "chevron.up").font(.caption2.weight(.semibold))
+              Image(systemName: "chevron.up").font(.system(size: 9, weight: .semibold))
               Text("\(tray.row.members)").monospacedDigit()
             }
           } else if tray.overflow > 0 {
             Text("+\(tray.overflow)").monospacedDigit()
           } else {
-            Image(systemName: "chevron.right").font(.caption2.weight(.semibold))
+            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
           }
         }
-        .font(.caption)
-        .foregroundStyle(tray.expanded ? .secondary : .tertiary)
+        .font(ListType.label())
+        .foregroundStyle(tray.expanded ? ListPalette.fg3 : ListPalette.fg4)
         .padding(.horizontal, 2)
         .padding(.vertical, 6)
         .contentShape(Rectangle())
@@ -307,12 +310,33 @@ struct UnreadBadge: View {
   var body: some View {
     if count > 0 {
       Text("\(count)")
-        .font(.caption2.weight(.semibold).monospacedDigit())
+        .font(ListType.label().monospacedDigit())
         .foregroundStyle(live ? ListPalette.badgeForeground : Color.white)
-        .padding(.horizontal, 7)
+        .padding(.horizontal, 8)
         .frame(minWidth: 24, minHeight: 16)
         .background(Capsule().fill(live ? AnyShapeStyle(ListPalette.badge) : AnyShapeStyle(.tint)))
         .accessibilityLabel("\(count) new messages")
     }
+  }
+}
+
+// lucide `bot` (24 grid, stroke 2, round caps and joins): the sub-agent chip's glyph on the web, no SF Symbol draws it.
+struct LucideBot: Shape {
+  static func stroke(_ size: CGFloat) -> StrokeStyle {
+    StrokeStyle(lineWidth: 2 * size / 24, lineCap: .round, lineJoin: .round)
+  }
+
+  func path(in rect: CGRect) -> Path {
+    let k = min(rect.width, rect.height) / 24
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * k, y: rect.minY + y * k) }
+    var path = Path()
+    path.move(to: p(12, 8)); path.addLine(to: p(12, 4)); path.addLine(to: p(8, 4))
+    path.addRoundedRect(in: CGRect(origin: p(4, 8), size: CGSize(width: 16 * k, height: 12 * k)),
+      cornerSize: CGSize(width: 2 * k, height: 2 * k))
+    path.move(to: p(2, 14)); path.addLine(to: p(4, 14))
+    path.move(to: p(20, 14)); path.addLine(to: p(22, 14))
+    path.move(to: p(15, 13)); path.addLine(to: p(15, 15))
+    path.move(to: p(9, 13)); path.addLine(to: p(9, 15))
+    return path
   }
 }

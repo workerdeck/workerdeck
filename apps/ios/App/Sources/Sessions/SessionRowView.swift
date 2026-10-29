@@ -18,7 +18,9 @@ struct SessionRowView: View {
       HStack(spacing: 6) {
         SessionStatusIcon(row: row).frame(width: 16)
         Text(row.title)
-          .font(.subheadline.weight(.medium))
+          .font(ListType.body(.medium))
+          .tracking(ListType.tracking * 13)
+          .foregroundStyle(ListPalette.fg1)
           .lineLimit(1)
         Spacer(minLength: 0)
         UnreadBadge(count: unseen, live: row.state == .working)
@@ -30,8 +32,9 @@ struct SessionRowView: View {
       HStack(spacing: 6) {
         EngineIconView(mark: row.mark, tinted: row.markTinted, size: 16).frame(width: 16)
         Self.details(row: row, hostName: hostName, showsProject: showsProject, projectImage: projectImage)
-          .font(.footnote)
-          .foregroundStyle(.tertiary)
+          .font(ListType.body())
+          .tracking(ListType.tracking * 13)
+          .foregroundStyle(ListPalette.fg4)
           .lineLimit(1)
           .truncationMode(.tail)
         Spacer(minLength: 0)
@@ -50,7 +53,7 @@ struct SessionRowView: View {
       parts.append(Text(model).foregroundStyle(row.modelTint))
     }
     if let status = row.status {
-      parts.append(Text(status).foregroundStyle(.secondary))
+      parts.append(Text(status).foregroundStyle(ListPalette.fg3))
     }
     if let project = showsProject ? row.project : row.projectSubpath {
       let icon = showsProject ? projectIconText(row: row, image: projectImage) : nil

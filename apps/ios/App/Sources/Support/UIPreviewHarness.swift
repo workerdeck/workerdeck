@@ -130,12 +130,12 @@ private struct TeamsPreview: View {
               } label: {
                 HStack(spacing: 4) {
                   Image(systemName: section.group.collapsed ? "chevron.right" : "chevron.down")
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: 10, weight: .semibold))
                   Text("Earlier · \(section.group.sessions) one-off session\(section.group.sessions == 1 ? "" : "s")")
                   Spacer(minLength: 0)
                 }
-                .font(.footnote)
-                .foregroundStyle(.tertiary)
+                .font(ListType.label())
+                .foregroundStyle(ListPalette.fg4)
               }
               .buttonStyle(.plain)
               .textCase(nil)

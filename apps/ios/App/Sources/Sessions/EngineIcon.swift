@@ -106,7 +106,16 @@ enum ListPalette {
   static var name: Color { dyn(dark: 0xB8_B8_B8, light: 0x4A_4A_4A) }
   static var nest: Color { dyn(dark: 0x23_24_26, light: 0xEC_EC_EC) }
   static var attention: Color { dyn(dark: 0x5C_39_06, light: 0xFB_DC_B8) }
-  static var chipOpen: Color { Color.primary.opacity(0.1) }
+  static var chipOpen: Color { rowActive }
+  // `--fg-1..4` and `--row-active`: the list's grey ramp, never the system's (its `.tertiary` is fainter than `fg-4`).
+  static var fg1: Color { dyn(dark: 0xED_ED_ED, light: 0x17_17_17) }
+  static var fg2: Color { dyn(dark: 0xA1_A1_A1, light: 0x45_45_45) }
+  static var fg3: Color { dyn(dark: 0x8F_8F_8F, light: 0x73_73_73) }
+  static var fg4: Color { dyn(dark: 0x6E_6E_6E, light: 0xA1_A1_A1) }
+  static var border: Color { dyn(dark: 0x1F_1F_1F, light: 0xEB_EB_EB) }
+  static var rowActive: Color {
+    Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 1, alpha: 0.1) : UIColor(white: 0, alpha: 0.08) })
+  }
   static var success: Color { dyn(dark: 0x3E_CF_8E, light: 0x0F_7B_4F) }
   static var danger: Color { dyn(dark: 0xFF_61_66, light: 0xD9_30_36) }
   static var warning: Color { dyn(dark: 0xF5_A6_23, light: 0xA3_52_00) }
@@ -115,6 +124,17 @@ enum ListPalette {
   private static func dyn(dark: UInt32, light: UInt32) -> Color {
     Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light) })
   }
+}
+
+// The dashboard's type scale in points, fixed like the web's rem sizes (Tobias, 2026-10-29: phones match web).
+enum ListType {
+  static let tracking: CGFloat = -0.005
+  // `text-body-sm` 13/20: names and a card's second line.
+  static func body(_ weight: Font.Weight = .regular) -> Font { .system(size: 13, weight: weight) }
+  // `text-label` 12/16: a Member's second line, headings, the unread pill, tray counts.
+  static func label(_ weight: Font.Weight = .regular) -> Font { .system(size: 12, weight: weight) }
+  // `text-micro` 11/14: step chips and step rows.
+  static func micro(_ weight: Font.Weight = .regular) -> Font { .system(size: 11, weight: weight) }
 }
 
 private extension UIColor {

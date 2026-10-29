@@ -52,11 +52,11 @@ struct AgentAvatarView: View {
 struct LeadChip: View {
   var body: some View {
     Text("LEAD")
-      .font(.system(size: 9, weight: .semibold))
-      .tracking(0.6)
+      .font(.system(size: 10, weight: .medium))
+      .tracking(0.25)
       .foregroundStyle(.tint)
+      .frame(height: 14)
       .padding(.horizontal, 4)
-      .padding(.vertical, 1)
       .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.tint.opacity(0.5), lineWidth: 1))
   }
 }

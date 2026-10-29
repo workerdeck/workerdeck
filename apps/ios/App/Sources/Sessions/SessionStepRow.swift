@@ -17,7 +17,7 @@ struct SessionStepRow: View {
     switch step.kind {
     case .shell: return ListPalette.shell
     case .agent: return ListPalette.success
-    case .task: return step.state == .pending ? Color(uiColor: .tertiaryLabel) : .secondary
+    case .task: return step.state == .pending ? ListPalette.fg4 : ListPalette.fg2
     }
   }
 
@@ -26,19 +26,19 @@ struct SessionStepRow: View {
       Button(action: onOpen) {
         HStack(spacing: 8) {
           icon
-            .font(.caption2.weight(.semibold))
+            .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(tone)
             .frame(width: 16)
           Text(step.label)
-            .font(step.kind == .shell ? .footnote.monospaced() : .footnote)
+            .font(step.kind == .shell ? .system(size: 11, design: .monospaced) : ListType.micro())
             .lineLimit(1)
             .truncationMode(.tail)
             .foregroundStyle(tone)
           Spacer(minLength: 6)
           if let detail = step.detail {
             Text(detail)
-              .font(.caption.monospacedDigit())
-              .foregroundStyle(.tertiary)
+              .font(ListType.micro().monospacedDigit())
+              .foregroundStyle(ListPalette.fg4)
           }
         }
         .padding(.leading, indent)
@@ -64,7 +64,7 @@ struct SessionStepRow: View {
   @ViewBuilder
   private var icon: some View {
     if step.kind == .shell {
-      Text(TerminalShell.glyph).font(.caption.monospaced().weight(.semibold))
+      Text(TerminalShell.glyph).font(.system(size: 11, weight: .semibold, design: .monospaced))
     } else {
       switch step.state {
       case .running: ProgressView().controlSize(.mini).tint(tone)
