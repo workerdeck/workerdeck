@@ -508,43 +508,44 @@ private struct StepsPreview: View {
   /// the input is out of order. Dispatch order here is task, agent, task,
   /// agent, agent, task - and the screen must read agents first, each group
   /// still in the order it arrived.
-  @State private var model = PreviewList(
-    [
-      ListFixture.session(
-        "s1", status: "running",
-        [
-          "engine": "claude", "title": "Mixed steps", "lastActivityAt": Date().timeIntervalSince1970 * 1000 - 60_000,
-          "subagents": [
-            sub("t1", agent: nil, description: "rewrite the height budget", status: "done", tools: 0),
-            sub("a1", agent: "Explore", description: "map the web theme", status: "running", tools: 7),
-            sub("t2", agent: nil, description: "check a capture", status: "running", tools: 0),
-            sub("a2", agent: "Plan", description: "size the port", status: "failed", tools: 2),
-            // No description: the label falls back to the bare type.
-            sub("a3", agent: "general-purpose", description: nil, status: "done", tools: 0),
-            sub("t3", agent: nil, description: "and a task that failed", status: "failed", tools: 0),
-          ],
-        ])
-    ],
-    config: #"{"subagents":"all","tasks":"all"}"#)
+  @State private var model: PreviewList = {
+    let model = PreviewList(
+      [
+        ListFixture.session(
+          "s1", status: "running",
+          [
+            "engine": "claude", "title": "Mixed steps", "lastActivityAt": Date().timeIntervalSince1970 * 1000 - 60_000,
+            "subagents": [
+              sub("t1", agent: nil, description: "rewrite the height budget", status: "done", tools: 0),
+              sub("a1", agent: "Explore", description: "map the web theme", status: "running", tools: 7),
+              sub("t2", agent: nil, description: "check a capture", status: "running", tools: 0),
+              sub("a2", agent: "Plan", description: "size the port", status: "failed", tools: 2),
+              // No description: the label falls back to the bare type.
+              sub("a3", agent: "general-purpose", description: nil, status: "done", tools: 0),
+              sub("t3", agent: nil, description: "and a task that failed", status: "failed", tools: 0),
+            ],
+          ])
+      ],
+      config: #"{"subagents":"all","tasks":"all"}"#)
+    for kind in [StepFold.agent, .task, .bash, .shell] {
+      model.list.toggleSteps(hostId: model.hostId, sessionId: "s1", kind: kind)
+    }
+    return model
+  }()
 
   private static let hostId = UUID()
+  @State private var path: [SessionRoute] = []
 
   var body: some View {
     let steps = model.sections().flatMap(\.items).first?.row.steps ?? []
-    // Inside a stack, and each row is the `NavigationLink` the list gives it -
-    // a bare `SessionStepRow` is a *simpler* composition than the app ships, and
-    // where a press goes is half of what these rows are for. The destination
-    // prints the route, so "the press landed on this step" and "the press opened
-    // the session at the tail" stop looking alike.
-    NavigationStack {
+    // Rows route through `onOpen` like the card's; the destination prints the route, so a press on the wrong step shows.
+    NavigationStack(path: $path) {
       List {
         Section {
           ForEach(steps) { step in
-            NavigationLink(
-              value: SessionRoute.step(hostId: Self.hostId, sessionId: "s1", step: step)
-            ) {
-              SessionStepRow(step: step, indent: 0, onOpen: {})
-            }
+            SessionStepRow(
+              step: step, indent: 0,
+              onOpen: { path.append(SessionRoute.step(hostId: Self.hostId, sessionId: "s1", step: step)) })
           }
         } header: {
           Text("\(steps.count) steps")
