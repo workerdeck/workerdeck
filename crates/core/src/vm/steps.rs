@@ -2,7 +2,10 @@
 use crate::controller::shell;
 use crate::rest::{SessionInfo, SessionStatus, ShellInfo, ShellStatus, SubagentStatus};
 use crate::vm::checklist::{SessionTask, SessionTaskSource, SessionTaskState, displayed_tasks};
-use crate::vm::session_list::{StepDisplay, ViewConfig, is_agent_record, subagent_label, visible_shells, visible_subagents};
+use crate::vm::session_list::{
+    FoldableStepKind, StepDisplay, ViewConfig, is_agent_record, subagent_label, visible_shells, visible_subagents,
+};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StepKind {
@@ -11,7 +14,8 @@ pub enum StepKind {
     Shell,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum StepState {
     Done,
     Running,
@@ -23,6 +27,8 @@ pub enum StepState {
 pub struct Step {
     pub key: String,
     pub kind: StepKind,
+    // The chip this row folds into: a spawned background job is `Bash`, a checklist item `Task`.
+    pub fold: FoldableStepKind,
     pub label: String,
     pub state: StepState,
     pub detail: Option<String>,
@@ -46,6 +52,7 @@ pub fn session_steps(info: &SessionInfo, config: &ViewConfig, now: f64) -> Vec<S
             Step {
                 key: sub.tool_use_id.clone(),
                 kind: StepKind::Agent,
+                fold: FoldableStepKind::Agent,
                 title: format!("{label} · {tools} tool{}", if tools == 1 { "" } else { "s" }),
                 label,
                 state: match sub.status {
@@ -74,6 +81,7 @@ fn task_step(task: &SessionTask, live: bool) -> Step {
     Step {
         key: task.key.clone(),
         kind: StepKind::Task,
+        fold: if task.source == SessionTaskSource::Spawn { FoldableStepKind::Bash } else { FoldableStepKind::Task },
         label: task.label.clone(),
         state: match task.state {
             SessionTaskState::Pending => StepState::Pending,
@@ -97,6 +105,7 @@ fn shell_step(info: &ShellInfo) -> Step {
     Step {
         key: info.id.clone(),
         kind: StepKind::Shell,
+        fold: FoldableStepKind::Shell,
         label: shell::label(info),
         state: if failed {
             StepState::Failed
@@ -110,6 +119,62 @@ fn shell_step(info: &ShellInfo) -> Step {
         killable: running,
         tool_use_id: None,
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FoldStep {
+    pub key: String,
+    pub fold: FoldableStepKind,
+    pub state: StepState,
+}
+
+impl From<&Step> for FoldStep {
+    fn from(step: &Step) -> Self {
+        FoldStep { key: step.key.clone(), fold: step.fold, state: step.state }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StepChip {
+    pub kind: FoldableStepKind,
+    pub count: u32,
+    pub label: String,
+    pub open: bool,
+    pub failed: bool,
+    pub running: u32,
+    pub holds_active: bool,
+}
+
+const CHIP_ORDER: [(FoldableStepKind, &str, &str); 4] = [
+    (FoldableStepKind::Agent, "agent", "agents"),
+    (FoldableStepKind::Task, "task", "tasks"),
+    (FoldableStepKind::Bash, "bash", "bash"),
+    (FoldableStepKind::Shell, "shell", "shells"),
+];
+
+// One chip per kind a card's steps fold into, in a fixed order; `expanded` kinds draw their rows under the card.
+pub fn step_chips(steps: &[FoldStep], expanded: &[FoldableStepKind], active_step_key: Option<&str>) -> Vec<StepChip> {
+    CHIP_ORDER
+        .iter()
+        .filter_map(|&(kind, one, many)| {
+            let own: Vec<&FoldStep> = steps.iter().filter(|step| step.fold == kind).collect();
+            if own.is_empty() {
+                return None;
+            }
+            let open = expanded.contains(&kind);
+            let count = own.len() as u32;
+            Some(StepChip {
+                kind,
+                count,
+                label: format!("{count} {}", if count == 1 { one } else { many }),
+                open,
+                failed: own.iter().any(|step| step.state == StepState::Failed),
+                running: own.iter().filter(|step| step.state == StepState::Running).count() as u32,
+                holds_active: !open && own.iter().any(|step| Some(step.key.as_str()) == active_step_key),
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -154,6 +219,10 @@ mod tests {
         assert_eq!(steps[0].label, "Explore · map it");
         assert_eq!(steps[0].detail.as_deref(), Some("3"));
         assert!(steps[3].killable && steps[3].tool_use_id.as_deref() == Some("t_spawn"));
+        assert_eq!(
+            steps.iter().map(|s| s.fold).collect::<Vec<_>>()[1..4],
+            [FoldableStepKind::Task, FoldableStepKind::Task, FoldableStepKind::Bash]
+        );
         assert!(steps[4].killable && steps[4].detail.is_none());
         assert!(!steps[5].killable && steps[5].detail.is_some());
     }

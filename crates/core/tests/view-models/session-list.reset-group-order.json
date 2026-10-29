@@ -1,0 +1,150 @@
+{
+  "input": {
+    "fn": "resetGroupOrder",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "groupOrder": {
+            "state": [
+              "idle"
+            ],
+            "project": [
+              "p"
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "project",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "groupOrder": {
+            "project": [
+              "p"
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "custom",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "groupOrder": {
+            "state": [
+              "idle"
+            ]
+          }
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active"
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "groupOrder": {
+        "project": [
+          "p"
+        ]
+      }
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "project",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "groupOrder": {}
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "custom",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "groupOrder": {
+        "state": [
+          "idle"
+        ]
+      }
+    }
+  ]
+}

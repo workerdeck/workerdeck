@@ -49,6 +49,14 @@ function customGroupScript(groups: CustomGroup[], [op, a, b, c]: [string, string
   }
 }
 
+function expandedStepsScript(initial: ViewConfig, ops: [string, string, protocol.FoldableStepKind][]) {
+  let config = initial
+  return ops.map(([hostId, id, kind]) => {
+    config = protocol.toggleStepsExpanded(config, { hostId, info: { id } as protocol.SessionInfo }, kind)
+    return { expandedSteps: config.expandedSteps, s1: protocol.expandedStepsOf(config, { hostId, info: { id: 's1' } as protocol.SessionInfo }) }
+  })
+}
+
 function filterEngagement(config: ViewConfig) {
   return {
     hasFacetFilter: protocol.hasFacetFilter(config),
@@ -223,6 +231,11 @@ const FNS: Record<string, Fn> = {
   selectionScript,
   faceTree,
   faceStateOf,
+  expandedStepsScript,
+  teamViewPeeked: (lead: protocol.SessionRow, config: ViewConfig, selected: string | undefined, now: number, peeked: string[]) =>
+    protocol.teamView(lead, config, selected, now, new Set(peeked)),
+  teamLingerStartPeeked: (member: protocol.SessionRow, selected: string | undefined, now: number, peeked: string[]) =>
+    protocol.teamLingerStart(member, selected, now, new Set(peeked)) ?? null,
   defaultPricing: () => protocol.DEFAULT_PRICING,
   meteredCostOf: (byModel: protocol.ByModel) => protocol.meteredCost(protocol.costOfByModel(byModel)),
   pricingAge: (now: number, asOf?: string) => ({ days: protocol.pricingAgeDays(now, asOf), note: protocol.pricingAgeNote(now, asOf) ?? null }),

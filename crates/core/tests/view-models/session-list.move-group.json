@@ -1,0 +1,394 @@
+{
+  "input": {
+    "fn": "moveGroup",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        "attention",
+        "idle"
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        "ended",
+        "working"
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        "idle",
+        "idle"
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        "idle",
+        "earlier"
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "groupOrder": {
+            "state": [
+              "hidden-a",
+              "working"
+            ],
+            "project": [
+              "p"
+            ]
+          }
+        },
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        "working",
+        "ended"
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "custom",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        "attention",
+        "idle"
+      ]
+    ]
+  },
+  "output": [
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "groupOrder": {
+        "state": [
+          "working",
+          "idle",
+          "attention",
+          "ended"
+        ]
+      }
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "groupOrder": {
+        "state": [
+          "attention",
+          "ended",
+          "working",
+          "idle"
+        ]
+      }
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active"
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active"
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "groupOrder": {
+        "state": [
+          "attention",
+          "idle",
+          "ended",
+          "working",
+          "hidden-a"
+        ],
+        "project": [
+          "p"
+        ]
+      }
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "custom",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active"
+    }
+  ]
+}

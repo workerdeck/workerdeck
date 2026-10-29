@@ -1,0 +1,144 @@
+{
+  "input": {
+    "fn": "expandedStepsScript",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        [
+          [
+            "mac",
+            "s1",
+            "shell"
+          ],
+          [
+            "mac",
+            "s1",
+            "agent"
+          ],
+          [
+            "mac",
+            "s2",
+            "task"
+          ],
+          [
+            "mac",
+            "s1",
+            "shell"
+          ],
+          [
+            "mac",
+            "s1",
+            "agent"
+          ]
+        ]
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "expandedSteps": {
+            "mac:s1": [
+              "bash"
+            ]
+          }
+        },
+        [
+          [
+            "mac",
+            "s1",
+            "bash"
+          ]
+        ]
+      ]
+    ]
+  },
+  "output": [
+    [
+      {
+        "expandedSteps": {
+          "mac:s1": [
+            "shell"
+          ]
+        },
+        "s1": [
+          "shell"
+        ]
+      },
+      {
+        "expandedSteps": {
+          "mac:s1": [
+            "shell",
+            "agent"
+          ]
+        },
+        "s1": [
+          "shell",
+          "agent"
+        ]
+      },
+      {
+        "expandedSteps": {
+          "mac:s1": [
+            "shell",
+            "agent"
+          ],
+          "mac:s2": [
+            "task"
+          ]
+        },
+        "s1": [
+          "shell",
+          "agent"
+        ]
+      },
+      {
+        "expandedSteps": {
+          "mac:s1": [
+            "agent"
+          ],
+          "mac:s2": [
+            "task"
+          ]
+        },
+        "s1": [
+          "agent"
+        ]
+      },
+      {
+        "expandedSteps": {
+          "mac:s2": [
+            "task"
+          ]
+        },
+        "s1": []
+      }
+    ],
+    [
+      {
+        "expandedSteps": {},
+        "s1": []
+      }
+    ]
+  ]
+}

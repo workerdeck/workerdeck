@@ -1,5 +1,5 @@
 import { ArrowRight, Bot, Check, Circle, CircleAlert, ListChecks, SquareTerminal } from 'lucide-react'
-import { displayedTasks, isAgentRecord, subagentLabel, visibleShells, visibleSubagents } from '@workerdeck/protocol'
+import { displayedTasks, isAgentRecord, stepChips, subagentLabel, visibleShells, visibleSubagents } from '@workerdeck/protocol'
 import type { FoldableStepKind, SessionInfo, SessionTask, ShellInfo, StepDisplay, SubagentDisplay, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
@@ -222,46 +222,7 @@ function StepIcon({ step }: { step: Step }) {
   }
 }
 
-const CHIP_ORDER: readonly FoldableStepKind[] = ['agent', 'task', 'bash', 'shell']
-
-const CHIP_NOUN: Record<FoldableStepKind, [string, string]> = {
-  agent: ['agent', 'agents'],
-  task: ['task', 'tasks'],
-  bash: ['bash', 'bash'],
-  shell: ['shell', 'shells'],
-}
-
-export type StepChip = {
-  kind: FoldableStepKind
-  count: number
-  label: string
-  open: boolean
-  failed: boolean
-  running: number
-  holdsActive: boolean
-}
-
-export function stepChips(steps: readonly Step[], expanded: readonly FoldableStepKind[], activeStepKey?: string): StepChip[] {
-  return CHIP_ORDER.flatMap((kind) => {
-    const own = steps.filter((step) => step.fold === kind)
-    if (own.length === 0) {
-      return []
-    }
-    const open = expanded.includes(kind)
-    const [one, many] = CHIP_NOUN[kind]
-    return [
-      {
-        kind,
-        count: own.length,
-        label: `${own.length} ${own.length === 1 ? one : many}`,
-        open,
-        failed: own.some((step) => step.state === 'failed'),
-        running: own.filter((step) => step.state === 'running').length,
-        holdsActive: !open && own.some((step) => step.key === activeStepKey),
-      },
-    ]
-  })
-}
+export { stepChips, type StepChip } from '@workerdeck/protocol'
 
 export function StepChips({
   steps,

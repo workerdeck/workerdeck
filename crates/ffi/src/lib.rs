@@ -43,8 +43,8 @@ pub use files::{
     HostEntry, HostEntryKind, HostFileContent, HostFileEditor, HostFileState, HostFiles, HostFilesAvailability, HostListing, HostRoot,
 };
 pub use list::{
-    ListError, ListFacet, ListFilter, ListGroup, ListGroupBy, ListRow, ListSortBy, Mark, NewAgentSeed, RowState, SessionList, StepKind,
-    StepShow,
+    ListChip, ListError, ListFacet, ListFilter, ListGroup, ListGroupBy, ListRow, ListSortBy, Mark, NewAgentSeed, RowState, SessionList,
+    StepFold, StepKind, StepShow,
 };
 pub use pickers::{ModePicker, ModeRow, ModelPicker, PickerRow};
 pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};

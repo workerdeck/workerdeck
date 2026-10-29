@@ -111,7 +111,50 @@ pub struct ViewConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collapsed_groups: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expanded_steps: Option<Entries<Vec<FoldableStepKind>>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_order: Option<GroupOrder>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub earlier_open: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FoldableStepKind {
+    Agent,
+    Shell,
+    Bash,
+    Task,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct GroupOrder {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<Vec<String>>,
+}
+
+impl GroupOrder {
+    fn slot(&mut self, by: GroupBy) -> Option<&mut Option<Vec<String>>> {
+        match by {
+            GroupBy::State => Some(&mut self.state),
+            GroupBy::Adapter => Some(&mut self.adapter),
+            GroupBy::Project => Some(&mut self.project),
+            _ => None,
+        }
+    }
+
+    fn get(&self, by: GroupBy) -> Option<&Vec<String>> {
+        match by {
+            GroupBy::State => self.state.as_ref(),
+            GroupBy::Adapter => self.adapter.as_ref(),
+            GroupBy::Project => self.project.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 impl Default for ViewConfig {
@@ -131,6 +174,8 @@ impl Default for ViewConfig {
             custom_groups: None,
             expanded_teams: None,
             collapsed_groups: None,
+            expanded_steps: None,
+            group_order: None,
             earlier_open: None,
         }
     }
@@ -354,6 +399,8 @@ pub fn normalize_view_config(stored: Option<&Value>) -> ViewConfig {
     config.custom_groups = parse_enum(stored, "customGroups");
     config.expanded_teams = parse_enum(stored, "expandedTeams");
     config.collapsed_groups = parse_enum(stored, "collapsedGroups");
+    config.expanded_steps = parse_enum(stored, "expandedSteps");
+    config.group_order = parse_enum(stored, "groupOrder");
     config.earlier_open = parse_enum(stored, "earlierOpen");
     if let Some(group_by) = parse_enum(stored, "groupBy") {
         config.group_by = group_by;
@@ -778,21 +825,36 @@ fn lingering(member: &SessionRow, now: f64) -> Option<f64> {
     member.info.last_activity_at.filter(|at| now - at < TEAM_LINGER_MS)
 }
 
-// Auto draws a member that is busy, selected, unread, or idle for under `TEAM_LINGER_MS` by `lastActivityAt`; the rest
-// sit in the lead's tray. An expanded team, or one under a search or facet filter, draws every member.
-pub fn team_view(lead: &SessionRow, config: &ViewConfig, selected: Option<&str>, now: f64) -> TeamView {
+// Auto draws a member that is busy, selected, unread, or idle for under `TEAM_LINGER_MS` by `lastActivityAt` (unless
+// the operator already peeked at it); the rest sit in the lead's tray. An expanded team, or one under a search or facet
+// filter, draws every member.
+pub fn team_view(lead: &SessionRow, config: &ViewConfig, selected: Option<&str>, now: f64, peeked: Option<&HashSet<String>>) -> TeamView {
     let members = lead.members.clone().unwrap_or_default();
     let expanded = is_team_expanded(config, lead);
     if expanded || has_facet_filter(config) {
         return TeamView { expanded, shown: members, tray: Vec::new() };
     }
     let (shown, tray) = members.into_iter().partition(|member| {
+        let key = row_key(member);
         matches!(member.state, SessionState::Working | SessionState::Attention)
             || member.unseen > 0
-            || selected == Some(session_key(&member.host_id, &member.info.id).as_str())
-            || lingering(member, now).is_some()
+            || selected == Some(key.as_str())
+            || (lingering(member, now).is_some() && !peeked.is_some_and(|p| p.contains(&key)))
     });
     TeamView { expanded, shown, tray }
+}
+
+// When a member Auto draws only for its linger window started, so a host can draw the countdown; None otherwise.
+pub fn team_linger_start(member: &SessionRow, selected: Option<&str>, now: f64, peeked: Option<&HashSet<String>>) -> Option<f64> {
+    let key = row_key(member);
+    if matches!(member.state, SessionState::Working | SessionState::Attention)
+        || member.unseen > 0
+        || selected == Some(key.as_str())
+        || peeked.is_some_and(|p| p.contains(&key))
+    {
+        return None;
+    }
+    lingering(member, now)
 }
 
 // When the next lingering member's window closes, so a host can redraw then; None when none is lingering.
@@ -814,6 +876,79 @@ pub fn toggle_group_collapsed(config: &ViewConfig, group_key: &str) -> ViewConfi
     ViewConfig { collapsed_groups: Some(toggled(config.collapsed_groups.as_ref(), group_key)), ..config.clone() }
 }
 
+pub fn ordered_group_by(group_by: GroupBy) -> bool {
+    matches!(group_by, GroupBy::State | GroupBy::Adapter | GroupBy::Project)
+}
+
+// A group the stored order does not name lands after its nearest ranked predecessor; the Earlier fold stays last.
+pub fn order_groups(groups: &[SessionGroup], config: &ViewConfig) -> Vec<SessionGroup> {
+    let stored = config.group_order.as_ref().and_then(|order| order.get(config.group_by)).filter(|keys| !keys.is_empty());
+    let Some(stored) = stored.filter(|_| ordered_group_by(config.group_by)) else {
+        return groups.to_vec();
+    };
+    let ranked: Vec<&SessionGroup> = groups.iter().filter(|g| g.earlier != Some(true)).collect();
+    let mut out: Vec<&SessionGroup> = stored.iter().filter_map(|key| ranked.iter().copied().find(|g| &g.key == key)).collect();
+    for (i, group) in ranked.iter().enumerate() {
+        if out.iter().any(|placed| std::ptr::eq(*placed, *group)) {
+            continue;
+        }
+        let at = (0..i).rev().find_map(|j| out.iter().position(|placed| std::ptr::eq(*placed, ranked[j]))).map_or(0, |placed| placed + 1);
+        out.insert(at, group);
+    }
+    out.into_iter().cloned().chain(groups.iter().filter(|g| g.earlier == Some(true)).cloned()).collect()
+}
+
+// `drawn` is the list as `order_groups` returned it: a drop further down lands after the target, further up before it.
+pub fn move_group(config: &ViewConfig, drawn: &[SessionGroup], key: &str, onto: &str) -> ViewConfig {
+    let by = config.group_by;
+    if !ordered_group_by(by) || key == onto {
+        return config.clone();
+    }
+    let keys: Vec<&str> = drawn.iter().filter(|g| g.earlier != Some(true)).map(|g| g.key.as_str()).collect();
+    let (Some(from), Some(to)) = (keys.iter().position(|k| *k == key), keys.iter().position(|k| *k == onto)) else {
+        return config.clone();
+    };
+    let mut order: Vec<String> = keys.iter().filter(|k| **k != key).map(|k| (*k).to_owned()).collect();
+    let at = order.iter().position(|k| k == onto).unwrap_or(0) + usize::from(from < to);
+    order.insert(at, key.to_owned());
+    let mut group_order = config.group_order.clone().unwrap_or_default();
+    let hidden: Vec<String> = group_order.get(by).into_iter().flatten().filter(|k| !keys.contains(&k.as_str())).cloned().collect();
+    order.extend(hidden);
+    if let Some(slot) = group_order.slot(by) {
+        *slot = Some(order);
+    }
+    ViewConfig { group_order: Some(group_order), ..config.clone() }
+}
+
+pub fn reset_group_order(config: &ViewConfig) -> ViewConfig {
+    let mut group_order = config.group_order.clone().unwrap_or_default();
+    if !ordered_group_by(config.group_by) || group_order.get(config.group_by).is_none() {
+        return config.clone();
+    }
+    if let Some(slot) = group_order.slot(config.group_by) {
+        *slot = None;
+    }
+    ViewConfig { group_order: Some(group_order), ..config.clone() }
+}
+
+pub fn expanded_steps_of(config: &ViewConfig, host_id: &str, session_id: &str) -> Vec<FoldableStepKind> {
+    config.expanded_steps.as_ref().and_then(|held| held.get(&session_key(host_id, session_id)).cloned()).unwrap_or_default()
+}
+
+pub fn toggle_steps_expanded(config: &ViewConfig, host_id: &str, session_id: &str, kind: FoldableStepKind) -> ViewConfig {
+    let key = session_key(host_id, session_id);
+    let held = expanded_steps_of(config, host_id, session_id);
+    let next: Vec<FoldableStepKind> =
+        if held.contains(&kind) { held.into_iter().filter(|k| *k != kind).collect() } else { held.into_iter().chain([kind]).collect() };
+    let mut expanded = config.expanded_steps.clone().unwrap_or_default();
+    if next.is_empty() {
+        expanded.0.retain(|(k, _)| *k != key);
+    } else {
+        expanded.set(key, next);
+    }
+    ViewConfig { expanded_steps: Some(expanded), ..config.clone() }
+}
+
 fn count_state(rows: &[&SessionRow], state: SessionState) -> u64 {
     rows.iter().filter(|row| row.state == state).count() as u64
 }
@@ -826,6 +961,26 @@ pub fn group_summary(rows: &[SessionRow]) -> GroupSummary {
         attention: count_state(&all, SessionState::Attention),
         unseen: all.iter().map(|row| row.unseen).sum(),
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupFoldSummary {
+    pub text: String,
+    pub attention: u64,
+}
+
+// A folded group heading's reading: "2 need you · 1 working · 3 unread", None when there is nothing to say.
+pub fn group_fold_summary(rows: &[SessionRow]) -> Option<GroupFoldSummary> {
+    let summary = group_summary(rows);
+    let parts: Vec<String> = [
+        (summary.attention > 0).then(|| format!("{} need{} you", summary.attention, if summary.attention == 1 { "s" } else { "" })),
+        (summary.working > 0).then(|| format!("{} working", summary.working)),
+        (summary.unseen > 0).then(|| format!("{} unread", summary.unseen)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    (!parts.is_empty()).then(|| GroupFoldSummary { text: parts.join(" \u{00B7} "), attention: summary.attention })
 }
 
 pub fn team_summary(lead: &SessionRow) -> TeamSummary {

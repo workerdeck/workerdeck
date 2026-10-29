@@ -1,0 +1,388 @@
+{
+  "input": {
+    "fn": "orderGroups",
+    "calls": [
+      [
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        }
+      ],
+      [
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "groupOrder": {
+            "state": [
+              "idle",
+              "attention"
+            ]
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "groupOrder": {
+            "state": [
+              "ended",
+              "gone",
+              "working"
+            ]
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "none",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "groupOrder": {
+            "state": [
+              "idle"
+            ]
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "attention",
+            "label": "Needs you",
+            "rows": []
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "rows": []
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "rows": []
+          },
+          {
+            "key": "ended",
+            "label": "Ended",
+            "rows": []
+          },
+          {
+            "key": "earlier",
+            "label": "Earlier",
+            "rows": [],
+            "earlier": true
+          }
+        ],
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "adapter",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "groupOrder": {
+            "state": [
+              "idle"
+            ],
+            "adapter": []
+          }
+        }
+      ]
+    ]
+  },
+  "output": [
+    [
+      {
+        "key": "attention",
+        "label": "Needs you",
+        "rows": []
+      },
+      {
+        "key": "working",
+        "label": "Working",
+        "rows": []
+      },
+      {
+        "key": "idle",
+        "label": "Idle",
+        "rows": []
+      },
+      {
+        "key": "ended",
+        "label": "Ended",
+        "rows": []
+      },
+      {
+        "key": "earlier",
+        "label": "Earlier",
+        "rows": [],
+        "earlier": true
+      }
+    ],
+    [
+      {
+        "key": "idle",
+        "label": "Idle",
+        "rows": []
+      },
+      {
+        "key": "ended",
+        "label": "Ended",
+        "rows": []
+      },
+      {
+        "key": "attention",
+        "label": "Needs you",
+        "rows": []
+      },
+      {
+        "key": "working",
+        "label": "Working",
+        "rows": []
+      },
+      {
+        "key": "earlier",
+        "label": "Earlier",
+        "rows": [],
+        "earlier": true
+      }
+    ],
+    [
+      {
+        "key": "attention",
+        "label": "Needs you",
+        "rows": []
+      },
+      {
+        "key": "ended",
+        "label": "Ended",
+        "rows": []
+      },
+      {
+        "key": "working",
+        "label": "Working",
+        "rows": []
+      },
+      {
+        "key": "idle",
+        "label": "Idle",
+        "rows": []
+      },
+      {
+        "key": "earlier",
+        "label": "Earlier",
+        "rows": [],
+        "earlier": true
+      }
+    ],
+    [
+      {
+        "key": "attention",
+        "label": "Needs you",
+        "rows": []
+      },
+      {
+        "key": "working",
+        "label": "Working",
+        "rows": []
+      },
+      {
+        "key": "idle",
+        "label": "Idle",
+        "rows": []
+      },
+      {
+        "key": "ended",
+        "label": "Ended",
+        "rows": []
+      },
+      {
+        "key": "earlier",
+        "label": "Earlier",
+        "rows": [],
+        "earlier": true
+      }
+    ],
+    [
+      {
+        "key": "attention",
+        "label": "Needs you",
+        "rows": []
+      },
+      {
+        "key": "working",
+        "label": "Working",
+        "rows": []
+      },
+      {
+        "key": "idle",
+        "label": "Idle",
+        "rows": []
+      },
+      {
+        "key": "ended",
+        "label": "Ended",
+        "rows": []
+      },
+      {
+        "key": "earlier",
+        "label": "Earlier",
+        "rows": [],
+        "earlier": true
+      }
+    ]
+  ]
+}

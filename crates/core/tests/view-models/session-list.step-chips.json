@@ -1,0 +1,336 @@
+{
+  "input": {
+    "fn": "stepChips",
+    "calls": [
+      [
+        [
+          {
+            "key": "a1",
+            "fold": "agent",
+            "state": "running"
+          },
+          {
+            "key": "a2",
+            "fold": "agent",
+            "state": "done"
+          },
+          {
+            "key": "t1",
+            "fold": "task",
+            "state": "pending"
+          },
+          {
+            "key": "sh_1",
+            "fold": "shell",
+            "state": "running"
+          },
+          {
+            "key": "sh_2",
+            "fold": "shell",
+            "state": "failed"
+          },
+          {
+            "key": "b1",
+            "fold": "bash",
+            "state": "running"
+          }
+        ],
+        []
+      ],
+      [
+        [
+          {
+            "key": "a1",
+            "fold": "agent",
+            "state": "running"
+          },
+          {
+            "key": "a2",
+            "fold": "agent",
+            "state": "done"
+          },
+          {
+            "key": "t1",
+            "fold": "task",
+            "state": "pending"
+          },
+          {
+            "key": "sh_1",
+            "fold": "shell",
+            "state": "running"
+          },
+          {
+            "key": "sh_2",
+            "fold": "shell",
+            "state": "failed"
+          },
+          {
+            "key": "b1",
+            "fold": "bash",
+            "state": "running"
+          }
+        ],
+        [
+          "shell",
+          "agent"
+        ]
+      ],
+      [
+        [
+          {
+            "key": "a1",
+            "fold": "agent",
+            "state": "running"
+          },
+          {
+            "key": "a2",
+            "fold": "agent",
+            "state": "done"
+          },
+          {
+            "key": "t1",
+            "fold": "task",
+            "state": "pending"
+          },
+          {
+            "key": "sh_1",
+            "fold": "shell",
+            "state": "running"
+          },
+          {
+            "key": "sh_2",
+            "fold": "shell",
+            "state": "failed"
+          },
+          {
+            "key": "b1",
+            "fold": "bash",
+            "state": "running"
+          }
+        ],
+        [],
+        "sh_1"
+      ],
+      [
+        [
+          {
+            "key": "a1",
+            "fold": "agent",
+            "state": "running"
+          },
+          {
+            "key": "a2",
+            "fold": "agent",
+            "state": "done"
+          },
+          {
+            "key": "t1",
+            "fold": "task",
+            "state": "pending"
+          },
+          {
+            "key": "sh_1",
+            "fold": "shell",
+            "state": "running"
+          },
+          {
+            "key": "sh_2",
+            "fold": "shell",
+            "state": "failed"
+          },
+          {
+            "key": "b1",
+            "fold": "bash",
+            "state": "running"
+          }
+        ],
+        [
+          "shell"
+        ],
+        "sh_1"
+      ],
+      [
+        [
+          {
+            "key": "b",
+            "fold": "bash",
+            "state": "done"
+          }
+        ],
+        []
+      ],
+      [
+        [],
+        [
+          "task"
+        ]
+      ]
+    ]
+  },
+  "output": [
+    [
+      {
+        "kind": "agent",
+        "count": 2,
+        "label": "2 agents",
+        "open": false,
+        "failed": false,
+        "running": 1,
+        "holdsActive": false
+      },
+      {
+        "kind": "task",
+        "count": 1,
+        "label": "1 task",
+        "open": false,
+        "failed": false,
+        "running": 0,
+        "holdsActive": false
+      },
+      {
+        "kind": "bash",
+        "count": 1,
+        "label": "1 bash",
+        "open": false,
+        "failed": false,
+        "running": 1,
+        "holdsActive": false
+      },
+      {
+        "kind": "shell",
+        "count": 2,
+        "label": "2 shells",
+        "open": false,
+        "failed": true,
+        "running": 1,
+        "holdsActive": false
+      }
+    ],
+    [
+      {
+        "kind": "agent",
+        "count": 2,
+        "label": "2 agents",
+        "open": true,
+        "failed": false,
+        "running": 1,
+        "holdsActive": false
+      },
+      {
+        "kind": "task",
+        "count": 1,
+        "label": "1 task",
+        "open": false,
+        "failed": false,
+        "running": 0,
+        "holdsActive": false
+      },
+      {
+        "kind": "bash",
+        "count": 1,
+        "label": "1 bash",
+        "open": false,
+        "failed": false,
+        "running": 1,
+        "holdsActive": false
+      },
+      {
+        "kind": "shell",
+        "count": 2,
+        "label": "2 shells",
+        "open": true,
+        "failed": true,
+        "running": 1,
+        "holdsActive": false
+      }
+    ],
+    [
+      {
+        "kind": "agent",
+        "count": 2,
+        "label": "2 agents",
+        "open": false,
+        "failed": false,
+        "running": 1,
+        "holdsActive": false
+      },
+      {
+        "kind": "task",
+        "count": 1,
+        "label": "1 task",
+        "open": false,
+        "failed": false,
+        "running": 0,
+        "holdsActive": false
+      },
+      {
+        "kind": "bash",
+        "count": 1,
+        "label": "1 bash",
+        "open": false,
+        "failed": false,
+        "running": 1,
+        "holdsActive": false
+      },
+      {
+        "kind": "shell",
+        "count": 2,
+        "label": "2 shells",
+        "open": false,
+        "failed": true,
+        "running": 1,
+        "holdsActive": true
+      }
+    ],
+    [
+      {
+        "kind": "agent",
+        "count": 2,
+        "label": "2 agents",
+        "open": false,
+        "failed": false,
+        "running": 1,
+        "holdsActive": false
+      },
+      {
+        "kind": "task",
+        "count": 1,
+        "label": "1 task",
+        "open": false,
+        "failed": false,
+        "running": 0,
+        "holdsActive": false
+      },
+      {
+        "kind": "bash",
+        "count": 1,
+        "label": "1 bash",
+        "open": false,
+        "failed": false,
+        "running": 1,
+        "holdsActive": false
+      },
+      {
+        "kind": "shell",
+        "count": 2,
+        "label": "2 shells",
+        "open": true,
+        "failed": true,
+        "running": 1,
+        "holdsActive": false
+      }
+    ],
+    [
+      {
+        "kind": "bash",
+        "count": 1,
+        "label": "1 bash",
+        "open": false,
+        "failed": false,
+        "running": 0,
+        "holdsActive": false
+      }
+    ],
+    []
+  ]
+}

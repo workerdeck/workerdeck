@@ -11,7 +11,7 @@ import {
   sessionKey,
   styleCustomGroup,
   customGroupColor,
-  groupSummary,
+  groupFoldSummary,
   PROJECT_ACCENTS,
 } from '@workerdeck/protocol'
 import type { CustomGroup, HostRelays, SessionGroup, SessionRow } from '@workerdeck/protocol'
@@ -261,7 +261,7 @@ export function CustomGroupHeader({
   }
 
   const custom = group.custom !== undefined
-  const summary = collapsed ? foldedSummary(group) : undefined
+  const summary = collapsed ? groupFoldSummary(group) : undefined
   return (
     <GroupHeading
       {...dragProps}
@@ -342,7 +342,7 @@ export function FacetGroupHeader({
   collapsed: boolean
   onToggleCollapsed: () => void
 }) {
-  const summary = collapsed ? foldedSummary(group) : undefined
+  const summary = collapsed ? groupFoldSummary(group) : undefined
   return (
     <GroupHeading
       {...dragProps}
@@ -395,16 +395,6 @@ function GroupNameInput({ initial, onRename, onDone }: { initial: string; onRena
       />
     </div>
   )
-}
-
-function foldedSummary(group: SessionGroup): { text: string; attention: number } | undefined {
-  const summary = groupSummary(group)
-  const parts = [
-    summary.attention ? `${summary.attention} need${summary.attention === 1 ? 's' : ''} you` : undefined,
-    summary.working ? `${summary.working} working` : undefined,
-    summary.unseen ? `${summary.unseen} unread` : undefined,
-  ].filter(Boolean)
-  return parts.length ? { text: parts.join(' · '), attention: summary.attention } : undefined
 }
 
 export function GroupHeading({

@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use wd_native::projection::project;
@@ -129,7 +130,34 @@ fn session_list(fn_name: &str, a: &Args) -> Value {
         "teamState" => out(sl::team_state(&a.get::<Vec<SessionRow>>(0))),
         "toggleTeamExpanded" => out(sl::toggle_team_expanded(&a.get(0), &a.get(1))),
         "isTeamExpanded" => out(sl::is_team_expanded(&a.get(0), &a.get(1))),
-        "teamView" => out(sl::team_view(&a.get(0), &a.get(1), a.str(2).as_deref(), a.get(3))),
+        "teamView" => out(sl::team_view(&a.get(0), &a.get(1), a.str(2).as_deref(), a.get(3), None)),
+        "teamViewPeeked" => {
+            let peeked: HashSet<String> = a.get(4);
+            out(sl::team_view(&a.get(0), &a.get(1), a.str(2).as_deref(), a.get(3), Some(&peeked)))
+        }
+        "teamLingerStartPeeked" => {
+            let peeked: HashSet<String> = a.get(3);
+            out(sl::team_linger_start(&a.get(0), a.str(1).as_deref(), a.get(2), Some(&peeked)))
+        }
+        "groupFoldSummary" => out(sl::group_fold_summary(&serde_json::from_value::<Vec<SessionRow>>(a.raw(0)["rows"].clone()).unwrap())),
+        "stepChips" => {
+            let steps: Vec<wd_native::vm::steps::FoldStep> = a.get(0);
+            out(wd_native::vm::steps::step_chips(&steps, &a.get::<Vec<sl::FoldableStepKind>>(1), a.str(2).as_deref()))
+        }
+        "expandedStepsScript" => {
+            let mut config: ViewConfig = a.get(0);
+            let ops: Vec<(String, String, sl::FoldableStepKind)> = a.get(1);
+            out(ops
+                .into_iter()
+                .map(|(host, id, kind)| {
+                    config = sl::toggle_steps_expanded(&config, &host, &id, kind);
+                    serde_json::json!({ "expandedSteps": config.expanded_steps, "s1": sl::expanded_steps_of(&config, &host, "s1") })
+                })
+                .collect::<Vec<_>>())
+        }
+        "orderGroups" => out(sl::order_groups(&a.get::<Vec<sl::SessionGroup>>(0), &a.get(1))),
+        "moveGroup" => out(sl::move_group(&a.get(0), &a.get::<Vec<sl::SessionGroup>>(1), &a.str(2).unwrap(), &a.str(3).unwrap())),
+        "resetGroupOrder" => out(sl::reset_group_order(&a.get(0))),
         "teamLingerEnds" => out(sl::team_linger_ends(&a.get(0), a.get(1))),
         "toggleGroupCollapsed" => out(sl::toggle_group_collapsed(&a.get(0), a.raw(1)["key"].as_str().unwrap())),
         "isGroupCollapsed" => out(sl::is_group_collapsed(&a.get(0), a.raw(1)["key"].as_str().unwrap())),

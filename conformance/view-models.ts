@@ -201,6 +201,23 @@ const CUSTOM = [
   { id: 'g-empty', name: 'Empty', members: [], icon: 'data:image/png;base64,AAAA' },
 ]
 
+const STEPS = [
+  { key: 'a1', fold: 'agent', state: 'running' },
+  { key: 'a2', fold: 'agent', state: 'done' },
+  { key: 't1', fold: 'task', state: 'pending' },
+  { key: 'sh_1', fold: 'shell', state: 'running' },
+  { key: 'sh_2', fold: 'shell', state: 'failed' },
+  { key: 'b1', fold: 'bash', state: 'running' },
+]
+
+const GROUPS = [
+  { key: 'attention', label: 'Needs you', rows: [] },
+  { key: 'working', label: 'Working', rows: [] },
+  { key: 'idle', label: 'Idle', rows: [] },
+  { key: 'ended', label: 'Ended', rows: [] },
+  { key: 'earlier', label: 'Earlier', rows: [], earlier: true },
+]
+
 function config(over: Partial<ViewConfig> = {}): ViewConfig {
   return { ...DEFAULT_VIEW_CONFIG, ...over }
 }
@@ -452,6 +469,94 @@ const SESSION_LIST: VmCase[] = [
     name: 'team-summaries',
     fn: 'teamSummary',
     calls: [[{ ...BY_ID.get('s-lead-0001')!, members: pick('s-review-02', 's-art-0003', 's-remote-07') }], [BY_ID.get('s-solo-0004')]],
+  },
+  {
+    module: 'session-list',
+    name: 'group-fold-summary',
+    fn: 'groupFoldSummary',
+    calls: [
+      [{ rows: ROWS }],
+      [{ rows: [] }],
+      [{ rows: pick('s-solo-0004') }],
+      [{ rows: [{ ...BY_ID.get('s-lead-0001')!, members: pick('s-review-02', 's-art-0003') }] }],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'step-chips',
+    fn: 'stepChips',
+    calls: [
+      [STEPS, []],
+      [STEPS, ['shell', 'agent']],
+      [STEPS, [], 'sh_1'],
+      [STEPS, ['shell'], 'sh_1'],
+      [[{ key: 'b', fold: 'bash', state: 'done' }], []],
+      [[], ['task']],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'expanded-steps',
+    fn: 'expandedStepsScript',
+    calls: [
+      [config(), [['mac', 's1', 'shell'], ['mac', 's1', 'agent'], ['mac', 's2', 'task'], ['mac', 's1', 'shell'], ['mac', 's1', 'agent']]],
+      [config({ expandedSteps: { 'mac:s1': ['bash'] } }), [['mac', 's1', 'bash']]],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'order-groups',
+    fn: 'orderGroups',
+    calls: [
+      [GROUPS, config()],
+      [GROUPS, config({ groupOrder: { state: ['idle', 'attention'] } })],
+      [GROUPS, config({ groupOrder: { state: ['ended', 'gone', 'working'] } })],
+      [GROUPS, config({ groupBy: 'none', groupOrder: { state: ['idle'] } })],
+      [GROUPS, config({ groupBy: 'adapter', groupOrder: { state: ['idle'], adapter: [] } })],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'move-group',
+    fn: 'moveGroup',
+    calls: [
+      [config(), GROUPS, 'attention', 'idle'],
+      [config(), GROUPS, 'ended', 'working'],
+      [config(), GROUPS, 'idle', 'idle'],
+      [config(), GROUPS, 'idle', 'earlier'],
+      [config({ groupOrder: { state: ['hidden-a', 'working'], project: ['p'] } }), GROUPS, 'working', 'ended'],
+      [config({ groupBy: 'custom' }), GROUPS, 'attention', 'idle'],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'reset-group-order',
+    fn: 'resetGroupOrder',
+    calls: [
+      [config()],
+      [config({ groupOrder: { state: ['idle'], project: ['p'] } })],
+      [config({ groupBy: 'project', groupOrder: { project: ['p'] } })],
+      [config({ groupBy: 'custom', groupOrder: { state: ['idle'] } })],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'team-view-peeked',
+    fn: 'teamViewPeeked',
+    calls: [
+      [TEAM, config(), undefined, T0 + 60_000, ['mac:s-linger']],
+      [TEAM, config(), undefined, T0 + 60_000, ['mac:s-unread', 'mac:s-art-0003']],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'team-linger-start',
+    fn: 'teamLingerStartPeeked',
+    calls: TEAM.members!.flatMap((member) => [
+      [member, undefined, T0 + 60_000, []],
+      [member, 'mac:s-linger', T0 + 60_000, []],
+      [member, undefined, T0 + 60_000, ['mac:s-linger']],
+    ]),
   },
   {
     module: 'session-list',

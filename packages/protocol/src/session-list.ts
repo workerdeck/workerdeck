@@ -628,6 +628,61 @@ export function groupSummary(group: Pick<SessionGroup, 'rows'>): GroupSummary {
   }
 }
 
+// A folded group heading's reading: "2 need you · 1 working · 3 unread", undefined when there is nothing to say.
+export function groupFoldSummary(group: Pick<SessionGroup, 'rows'>): { text: string; attention: number } | undefined {
+  const summary = groupSummary(group)
+  const parts = [
+    summary.attention ? `${summary.attention} need${summary.attention === 1 ? 's' : ''} you` : undefined,
+    summary.working ? `${summary.working} working` : undefined,
+    summary.unseen ? `${summary.unseen} unread` : undefined,
+  ].filter(Boolean)
+  return parts.length ? { text: parts.join(' · '), attention: summary.attention } : undefined
+}
+
+export type FoldableStep = { key: string; fold: FoldableStepKind; state: 'done' | 'running' | 'failed' | 'pending' }
+
+export type StepChip = {
+  kind: FoldableStepKind
+  count: number
+  label: string
+  open: boolean
+  failed: boolean
+  running: number
+  holdsActive: boolean
+}
+
+const CHIP_ORDER: readonly FoldableStepKind[] = ['agent', 'task', 'bash', 'shell']
+
+const CHIP_NOUN: Record<FoldableStepKind, [string, string]> = {
+  agent: ['agent', 'agents'],
+  task: ['task', 'tasks'],
+  bash: ['bash', 'bash'],
+  shell: ['shell', 'shells'],
+}
+
+// One chip per kind a card's steps fold into, in a fixed order; `expanded` kinds draw their rows under the card.
+export function stepChips(steps: readonly FoldableStep[], expanded: readonly FoldableStepKind[], activeStepKey?: string): StepChip[] {
+  return CHIP_ORDER.flatMap((kind) => {
+    const own = steps.filter((step) => step.fold === kind)
+    if (own.length === 0) {
+      return []
+    }
+    const open = expanded.includes(kind)
+    const [one, many] = CHIP_NOUN[kind]
+    return [
+      {
+        kind,
+        count: own.length,
+        label: `${own.length} ${own.length === 1 ? one : many}`,
+        open,
+        failed: own.some((step) => step.state === 'failed'),
+        running: own.filter((step) => step.state === 'running').length,
+        holdsActive: !open && own.some((step) => step.key === activeStepKey),
+      },
+    ]
+  })
+}
+
 export type TeamSummary = { members: number; working: number; attention: number; unseen: number }
 
 export function teamSummary(lead: SessionRow): TeamSummary {

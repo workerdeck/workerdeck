@@ -1,4 +1,4 @@
-use wdffi::{ListError, ListFacet, ListGroupBy, ListSortBy, RowState, SessionList, StepKind, StepShow};
+use wdffi::{ListError, ListFacet, ListGroupBy, ListSortBy, RowState, SessionList, StepFold, StepKind, StepShow};
 
 fn session(id: &str, status: &str, extra: &str) -> String {
     format!(r#"{{"id":"{id}","status":"{status}","cwd":"/work/app","createdAt":1000,"lastSeq":4{extra}}}"#)
@@ -243,7 +243,38 @@ fn team_leads_name_the_agents_a_row_could_join() {
 }
 
 fn steps_of(list: &SessionList) -> usize {
-    list.groups(0.0).into_iter().flat_map(|g| g.rows).map(|r| r.steps.len()).sum()
+    list.groups(0.0).into_iter().flat_map(|g| g.rows).flat_map(|r| r.chips).map(|c| c.count as usize).sum()
+}
+
+#[test]
+fn a_chip_unfolds_its_kind_under_the_card() {
+    let agents = r#","pendingPermissionCount":0,"subagents":[{"toolUseId":"a","agentType":"Explore","description":"d","status":"running","startedAt":0,"toolCount":1}]"#;
+    let list = SessionList::new(None, None);
+    list.set_host("h1".into(), "mac".into(), true, body(&[session("s1", "running", agents)])).unwrap();
+    let row = |list: &SessionList| list.groups(0.0).into_iter().flat_map(|g| g.rows).next().unwrap();
+    let folded = row(&list);
+    assert_eq!((folded.steps.len(), folded.chips.len()), (0, 1));
+    assert_eq!((folded.chips[0].kind, folded.chips[0].running, folded.chips[0].open), (StepFold::Agent, 1, false));
+    list.toggle_steps("h1".into(), "s1".into(), StepFold::Agent);
+    let open = row(&list);
+    assert_eq!((open.steps.len(), open.chips[0].open), (1, true));
+    assert!(list.config_json().contains(r#""expandedSteps":{"h1:s1":["agent"]}"#));
+}
+
+#[test]
+fn headings_reorder_by_drop_and_reset() {
+    let list = SessionList::new(None, None);
+    list.set_host("h1".into(), "mac".into(), true, body(&[session("w", "running", r#","pendingPermissionCount":0"#), idle("i", "")]))
+        .unwrap();
+    let keys = |list: &SessionList| list.groups(0.0).into_iter().map(|g| g.key).collect::<Vec<_>>();
+    let before = keys(&list);
+    assert_eq!(before.len(), 2);
+    assert!(list.groups(0.0).iter().all(|g| g.reorderable && g.caps));
+    list.move_group(before[0].clone(), before[1].clone());
+    assert_eq!(keys(&list), vec![before[1].clone(), before[0].clone()]);
+    assert!(list.group_order_customized());
+    list.reset_group_order();
+    assert_eq!(keys(&list), before);
 }
 
 #[test]
