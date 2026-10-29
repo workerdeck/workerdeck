@@ -95,11 +95,10 @@ describe('runScript', () => {
     expect(Date.now() - started).toBeLessThan(5000)
   })
 
-  // The outer timeout must exceed the guest deadline below, or vitest's 5s default decides the outcome instead of the memory cap
-  // under test - which flaked on CI about every other run. Big chunks reach the cap in few iterations; only the result shape is asserted.
+  // Chunks half the cap trip it on the second or third push; 512 KB chunks thrashed near the cap past the 10 s deadline on CI.
   it('red team: runaway allocation hits the memory cap as a failed result, not a host crash', async () => {
     const result = await runScript(await engine(), {
-      script: 'const a = []; while (true) { a.push(new Uint8Array(512 * 1024)) }',
+      script: 'const a = []; while (true) { a.push(new Uint8Array(4 * 1024 * 1024)) }',
       memoryLimitBytes: 8 * 1024 * 1024,
       timeoutMs: 10_000,
     })
