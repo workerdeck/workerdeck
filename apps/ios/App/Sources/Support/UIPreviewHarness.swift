@@ -105,21 +105,8 @@ private struct TeamsPreview: View {
         ForEach(model.sections()) { section in
           Section {
             if !section.group.collapsed {
-              ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
-                if item.row.depth > 0 {
-                  AgentCardView(
-                    item: item, member: true, onOpen: {},
-                    menu: { Button("Leave team") {} })
-                  .listRowInsets(AgentCardView<EmptyView>.insets(member: true, hasSteps: false))
-                  .listRowSeparator(.hidden)
-                  .listRowBackground(
-                    ZStack {
-                      if item.needsYou { ListAttention.background }
-                      TeamTreeLine()
-                    })
-                } else {
-                  card(item, index: index)
-                }
+              ForEach(section.items) { item in
+                card(item)
               }
             }
           } header: {
@@ -138,27 +125,21 @@ private struct TeamsPreview: View {
     }
   }
 
-  @ViewBuilder
-  private func card(_ item: ListItem, index: Int) -> some View {
-    if item.row.agent != nil {
-      AgentCardView(
-        item: item,
-        tray: item.row.tray.isEmpty && !item.row.teamExpanded
-          ? nil
-          : TeamTray(
-            row: item.row, select: { _ in },
-            toggle: {
-              model.list.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
-              revision += 1
-            }),
-        onOpen: {}, menu: { Button("New conversation") {} })
-      .listRowInsets(AgentCardView<EmptyView>.insets(member: false, hasSteps: false))
-      .listRowBackground(item.needsYou ? ListAttention.background : nil)
-    } else {
-      SessionCardView(item: item, onOpen: {}, menu: { Button("Close") {} })
-        .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: false))
-        .listRowBackground(item.needsYou ? ListAttention.background : nil)
-    }
+  private func card(_ item: ListItem) -> some View {
+    SessionCard(
+      item: item,
+      tray: item.row.depth == 0 && (!item.row.tray.isEmpty || item.row.teamExpanded)
+        ? TeamTray(
+          row: item.row, select: { _ in },
+          toggle: {
+            model.list.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
+            revision += 1
+          })
+        : nil,
+      actions: CardActions(open: {}))
+    .listRowInsets(CardBackground.insets(item))
+    .listRowSeparator(.hidden)
+    .listRowBackground(CardBackground(item: item))
   }
 }
 
@@ -263,24 +244,22 @@ private struct SessionsPreview: View {
       List {
         let _ = revision
         ForEach(model.sections().flatMap(\.items)) { item in
-          SessionCardView(
-            item: item, onOpen: { item.hostUUID.map { path.append(.session(hostId: $0, sessionId: item.sessionId)) } },
-            hostName: item.row.hostName,
-            // The app's own actions, spelled out rather than left empty: the
-            // menu is part of what this harness exists to check.
-            menu: {
-              Button { } label: { Label("Rename", systemImage: "pencil") }
-              Button(role: .destructive) { } label: { Label("Close", systemImage: "xmark.circle") }
-            })
-          .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !item.row.steps.isEmpty))
-          .listRowSeparator(item.row.steps.isEmpty ? .automatic : .hidden, edges: .bottom)
-          SessionStepRows(row: item, steps: item.row.steps) { step in
-            step.killable ? {} : nil
-          }
+          SessionCard(
+            item: item, hostName: item.row.hostName,
+            actions: CardActions(
+              open: { item.hostUUID.map { path.append(.session(hostId: $0, sessionId: item.sessionId)) } },
+              toggleChip: { kind in
+                model.list.toggleSteps(hostId: item.row.hostId, sessionId: item.sessionId, kind: kind)
+                revision += 1
+              },
+              killStep: { step in step.killable ? {} : nil }))
+          .listRowInsets(CardBackground.insets(item))
+          .listRowSeparator(.hidden)
+          .listRowBackground(CardBackground(item: item))
         }
       }
       .listStyle(.plain)
-      .environment(\.defaultMinListRowHeight, SessionStepRow.height)
+      .environment(\.defaultMinListRowHeight, 0)
       .navigationTitle("Sessions")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -510,9 +489,8 @@ private struct StepsPreview: View {
             NavigationLink(
               value: SessionRoute.step(hostId: Self.hostId, sessionId: "s1", step: step)
             ) {
-              SessionStepRow(step: step)
+              SessionStepRow(step: step, indent: 0, onOpen: {})
             }
-            .listRowInsets(SessionStepRow.insets)
           }
         } header: {
           Text("\(steps.count) steps")

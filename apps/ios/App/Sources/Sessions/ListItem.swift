@@ -1,9 +1,17 @@
 import Foundation
 import WorkerDeckCore
 
+// Where a row sits in a team's shared card: the lead on top, Members inside it, the last one closing it.
+enum NestRole {
+  case lead
+  case member
+  case lastMember
+}
+
 // One drawn row: the core's display record.
 struct ListItem: Identifiable {
   let row: ListRow
+  var nest: NestRole?
 
   var id: String { row.key }
   var sessionId: String { row.sessionId }
@@ -12,6 +20,7 @@ struct ListItem: Identifiable {
   var unseen: Int { Int(row.unseen) }
   var live: Bool { row.state == .working || row.state == .attention }
   var needsYou: Bool { row.state == .attention || row.teamState == .attention }
+  var agentCard: Bool { row.agent != nil || row.tile }
 }
 
 // One section of the list, in the core's order. A team's shown Members follow their lead at depth 1.
@@ -20,7 +29,7 @@ struct ListSection: Identifiable {
   let items: [ListItem]
 
   var id: String { group.key }
-  var earlier: Bool { group.key == "earlier" }
+  var earlier: Bool { group.earlier }
 }
 
 extension ProjectChoice: @retroactive Identifiable {
@@ -33,7 +42,17 @@ extension ListStep: @retroactive Identifiable {
 
 extension SessionList {
   func sections(now: Double) -> [ListSection] {
-    groups(nowMs: now).map { group in ListSection(group: group, items: group.rows.map(ListItem.init)) }
+    groups(nowMs: now).map { group in
+      let rows = group.rows
+      let items = rows.indices.map { at in
+        let next = at + 1 < rows.count ? rows[at + 1] : nil
+        let nested = (next?.depth ?? 0) > 0
+        let nest: NestRole? =
+          rows[at].depth > 0 ? (nested ? .member : .lastMember) : (nested ? .lead : nil)
+        return ListItem(row: rows[at], nest: nest)
+      }
+      return ListSection(group: group, items: items)
+    }
   }
 }
 

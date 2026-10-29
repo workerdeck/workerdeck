@@ -282,6 +282,35 @@ final class SessionListModel {
     syncConfig()
   }
 
+  func toggleGroup(_ key: String) {
+    core.toggleGroup(key: key)
+    syncConfig()
+  }
+
+  func toggleSteps(_ item: ListItem, _ kind: StepFold) {
+    core.toggleSteps(hostId: item.row.hostId, sessionId: item.row.sessionId, kind: kind)
+    syncConfig()
+  }
+
+  func moveGroup(_ key: String, onto: String) {
+    core.moveGroup(key: key, onto: onto)
+    syncConfig()
+  }
+
+  func resetGroupOrder() {
+    core.resetGroupOrder()
+    syncConfig()
+  }
+
+  var groupOrderCustomized: Bool {
+    _ = revision
+    return core.groupOrderCustomized()
+  }
+
+  func item(hostId: String, sessionId: String) -> ListItem? {
+    row(hostId: hostId, sessionId: sessionId).map { ListItem(row: $0) }
+  }
+
   func toggleTeam(_ item: ListItem) {
     core.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
     syncConfig()

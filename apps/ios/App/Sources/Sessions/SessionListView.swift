@@ -408,20 +408,17 @@ struct SessionListView: View {
         Section {
           if !section.group.collapsed {
             ForEach(section.items) { item in
-              if item.row.depth > 0 {
-                memberUnit(item, model: model)
-              } else {
-                unit(item, section: section, model: model)
-              }
+              card(item, model: model)
             }
           }
         } header: {
           if section.earlier {
             earlierHeader(section, model: model)
-          } else if let label = section.group.label {
-            Text(label)
+          } else if section.group.label != nil {
+            groupHeader(section.group, model: model)
           }
         }
+        .listSectionSeparator(.hidden)
       }
     }
     .listStyle(.plain)
@@ -430,73 +427,48 @@ struct SessionListView: View {
       try? await Task.sleep(for: .milliseconds(max(0, end - Date().timeIntervalSince1970 * 1000) + 50))
       clock = Date()
     }
-    .environment(\.defaultMinListRowHeight, SessionStepRow.height)
+    .environment(\.defaultMinListRowHeight, 0)
     .modifier(SessionSearch(open: $searchOpen, text: $model.search))
     .refreshable { await model.refresh() }
   }
 
   @ViewBuilder
-  private func unit(_ item: ListItem, section: ListSection, model: SessionListModel) -> some View {
+  private func card(_ item: ListItem, model: SessionListModel) -> some View {
     if let route = sessionRoute(for: item) {
-      let steps = item.row.steps
-      if item.row.agent != nil {
-        AgentCardView(
-          item: item,
-          tray: item.row.tray.isEmpty && !item.row.teamExpanded
-            ? nil
-            : TeamTray(
-              row: item.row,
-              select: { member in open(member, model: model) },
-              toggle: { model.toggleTeam(item) }),
-          onOpen: { path.append(route) },
-          menu: { rowActions(for: item, model: model) })
-        .opacity(item.row.context ? 0.5 : 1)
-        .modifier(rowChrome(item, model: model))
-        .contextMenu { rowActions(for: item, model: model) }
-        .listRowInsets(AgentCardView<EmptyView>.insets(member: false, hasSteps: !steps.isEmpty))
-        .listRowBackground(item.needsYou ? ListAttention.background : nil)
-        stepRows(for: item, model: model)
-      } else {
-        SessionCardView(
-          item: item,
-          onOpen: { path.append(route) },
-          // Grouped by project, the section header already names the gateway.
-          hostName: showsHostNames(model) && model.filter.groupBy != .project
-            ? item.row.hostName : nil,
-          projectImage: projectImage(for: item, model: model),
-          // Grouped by project, the section header already names it.
-          showsProject: model.filter.groupBy != .project,
-          menu: { rowActions(for: item, model: model) })
-        .modifier(rowChrome(item, model: model))
-        .contextMenu { rowActions(for: item, model: model) }
-        .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !steps.isEmpty))
-        .listRowSeparator(steps.isEmpty ? .automatic : .hidden, edges: .bottom)
-        .listRowBackground(item.needsYou ? ListAttention.background : nil)
-        stepRows(for: item, model: model)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private func memberUnit(_ item: ListItem, model: SessionListModel) -> some View {
-    if let route = sessionRoute(for: item) {
-      AgentCardView(
+      let row = item.row
+      SessionCard(
         item: item,
-        member: true,
-        onOpen: {
-          model.select(hostId: item.row.hostId, sessionId: item.row.sessionId)
-          path.append(route)
-        },
-        menu: { rowActions(for: item, model: model) })
+        tray: row.depth == 0 && (!row.tray.isEmpty || row.teamExpanded)
+          ? TeamTray(
+            row: row,
+            select: { member in open(member, model: model) },
+            toggle: { model.toggleTeam(item) })
+          : nil,
+        hostName: showsHostNames(model) && model.filter.groupBy != .project ? row.hostName : nil,
+        showsProject: model.filter.groupBy != .project,
+        projectImage: projectImage(for: item, model: model),
+        actions: CardActions(
+          open: {
+            if row.depth > 0 { model.select(hostId: row.hostId, sessionId: row.sessionId) }
+            path.append(route)
+          },
+          toggleChip: { model.toggleSteps(item, $0) },
+          openStep: { step in
+            if let hostId = item.hostUUID {
+              path.append(.step(hostId: hostId, sessionId: item.sessionId, step: step))
+            }
+          },
+          killStep: { kill($0, row: item, model: model) }))
+      .opacity(row.context ? 0.5 : 1)
       .modifier(rowChrome(item, model: model))
       .contextMenu { rowActions(for: item, model: model) }
-      .listRowInsets(AgentCardView<EmptyView>.insets(member: true, hasSteps: false))
+      .listRowInsets(CardBackground.insets(item))
       .listRowSeparator(.hidden)
-      .listRowBackground(
-        ZStack {
-          if item.needsYou { ListAttention.background }
-          TeamTreeLine()
-        })
+      .listRowBackground(CardBackground(item: item))
+      .draggable(ListDrag.session(item))
+      .dropDestination(for: String.self) { payloads, _ in
+        drop(payloads, onCard: item, model: model)
+      }
     }
   }
 
@@ -516,13 +488,116 @@ struct SessionListView: View {
       HStack(spacing: 4) {
         Image(systemName: section.group.collapsed ? "chevron.right" : "chevron.down")
           .font(.caption2.weight(.semibold))
-        Text(section.group.label ?? "Earlier")
-        Text("\(section.group.sessions)").monospacedDigit().foregroundStyle(.tertiary)
+        Text("Earlier · \(section.group.sessions) one-off session\(section.group.sessions == 1 ? "" : "s")")
         Spacer(minLength: 0)
       }
+      .font(.footnote)
+      .foregroundStyle(.tertiary)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .textCase(nil)
+  }
+
+  // `FacetGroupHeader`: fold chevron, project icon, label (capitals for a facet), gateway badge, count, the folded
+  // summary, and on a project group a `+` that starts a session there. Drag it onto another heading to reorder.
+  private func groupHeader(_ group: ListGroup, model: SessionListModel) -> some View {
+    let label = group.label ?? ""
+    return HStack(spacing: 8) {
+      Button {
+        model.toggleGroup(group.key)
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: group.collapsed ? "chevron.right" : "chevron.down")
+            .font(.caption2.weight(.semibold))
+            .frame(width: 12)
+          if let glyph = group.projectGlyph {
+            Image(systemName: projectSymbol(forLucideName: glyph)).font(.caption)
+          } else if let hash = group.projectIconHash, let image = model.projectIcons.image(forHash: hash) {
+            Image(uiImage: image)
+          }
+          Text(group.caps ? label.uppercased() : label)
+            .tracking(group.caps ? 0.6 : 0)
+            .foregroundStyle(group.caps ? .tertiary : .secondary)
+            .lineLimit(1)
+          if let gateway = group.gateway {
+            Text(gateway)
+              .font(.caption2)
+              .padding(.horizontal, 4)
+              .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Color.secondary.opacity(0.3)))
+          }
+          Text("\(group.rows.count)").foregroundStyle(.tertiary).monospacedDigit()
+          if let summary = group.foldSummary {
+            Text(summary)
+              .foregroundStyle(group.foldAttention ? ListPalette.warning : Color(uiColor: .tertiaryLabel))
+              .lineLimit(1)
+          }
+          Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("\(group.collapsed ? "Expand" : "Collapse") \(label)")
+      if let hostId = group.hostId.flatMap(UUID.init(uuidString:)), model.filter.groupBy == .project {
+        Button {
+          path.append(.create(hostId: hostId, seed: CreateSessionSeed(cwd: group.cwd ?? "")))
+        } label: {
+          Image(systemName: "plus").font(.caption.weight(.semibold)).padding(.vertical, 4).contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .tint(.secondary)
+        .accessibilityLabel("New session in \(label)")
+      }
+    }
+    .font(.footnote.weight(.medium))
+    .foregroundStyle(.tertiary)
+    .textCase(nil)
+    .draggable(ListDrag.group(group.key)) {
+      Text(group.caps ? label.uppercased() : label).font(.footnote.weight(.medium)).padding(6)
+    }
+    .dropDestination(for: String.self) { payloads, _ in
+      drop(payloads, onGroup: group, model: model)
+    }
+  }
+
+  // MARK: - Drag and drop
+
+  // A heading dropped on a heading reorders the list; a card dropped on a lead joins that team; a Member dropped
+  // anywhere outside its team (a heading, a card that is not its team's) leaves it.
+  private func drop(_ payloads: [String], onGroup group: ListGroup, model: SessionListModel) -> Bool {
+    guard let payload = payloads.first.flatMap(ListDrag.init) else { return false }
+    switch payload {
+    case .group(let key):
+      guard group.reorderable, key != group.key else { return false }
+      model.moveGroup(key, onto: group.key)
+      return true
+    case .session(let hostId, let sessionId):
+      guard let source = model.item(hostId: hostId, sessionId: sessionId), source.row.member else { return false }
+      Task { await model.leave(source) }
+      return true
+    }
+  }
+
+  private func drop(_ payloads: [String], onCard target: ListItem, model: SessionListModel) -> Bool {
+    guard case .session(let hostId, let sessionId)? = payloads.first.flatMap(ListDrag.init),
+      sessionId != target.sessionId || hostId != target.row.hostId,
+      let source = model.item(hostId: hostId, sessionId: sessionId)
+    else { return false }
+    if target.row.lead, let lead = model.teamLeads(for: source).first(where: { $0.sessionId == target.sessionId }) {
+      if let owner = model.crossedOwner(source, into: lead) {
+        pendingCrossing = Crossing(row: source, lead: lead, owner: owner)
+      } else {
+        Task { await model.join(source, lead: lead) }
+      }
+      return true
+    }
+    let sameTeam = target.row.team != nil && target.row.team == source.row.team
+    let ownLead = target.row.lead && target.row.agent == source.row.team
+    if source.row.member, !sameTeam, !ownLead {
+      Task { await model.leave(source) }
+      return true
+    }
+    return false
   }
 
   private func rowChrome(_ row: ListItem, model: SessionListModel) -> RowChrome {
@@ -728,16 +803,6 @@ struct SessionListView: View {
     row.hostUUID.map { .session(hostId: $0, sessionId: row.sessionId) }
   }
 
-  // MARK: - Step lines
-
-  // One list row per step, in the core's order (agents, tasks, shells). Rows rather than a stack inside the card,
-  // because a full-width row is a real thumb target; the press follows the kind (`SessionRoute.step`).
-  private func stepRows(for row: ListItem, model: SessionListModel) -> some View {
-    SessionStepRows(row: row, steps: row.row.steps) {
-      kill($0, row: row, model: model)
-    }
-  }
-
   private func kill(_ step: ListStep, row: ListItem, model: SessionListModel) -> (() -> Void)? {
     guard step.killable else { return nil }
     switch step.kind {
@@ -893,6 +958,7 @@ struct SessionListView: View {
             adapters: model.adapters,
             projects: model.projects,
             pastAgents: model.pastAgents,
+            orderCustomized: model.groupOrderCustomized,
             list: model.list,
             changed: { model.syncConfig() },
             openPast: { history = ConversationsTarget(past: $0) })
@@ -1019,4 +1085,22 @@ struct PendingDiscard: Identifiable {
   let row: ListItem
   let confirmation: DiscardConfirmation
   var id: String { "\(row.sessionId)#\(confirmation.conversation)" }
+}
+
+// What a drag in the sessions list carries, as plain text: a heading's group key or a card's session.
+enum ListDrag {
+  case group(String)
+  case session(hostId: String, sessionId: String)
+
+  init?(_ text: String) {
+    let parts = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    switch (parts.first, parts.count) {
+    case ("wd-group", 2): self = .group(parts[1])
+    case ("wd-session", 3): self = .session(hostId: parts[1], sessionId: parts[2])
+    default: return nil
+    }
+  }
+
+  static func group(_ key: String) -> String { "wd-group\n\(key)" }
+  static func session(_ item: ListItem) -> String { "wd-session\n\(item.row.hostId)\n\(item.sessionId)" }
 }

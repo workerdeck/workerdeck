@@ -102,6 +102,15 @@ enum ListPalette {
   /// reason the design draws two. VS Code's `badge.background`.
   static var badge: Color { dyn(dark: 0x61_61_61, light: 0xC4_C4_C4) }
   static var badgeForeground: Color { dyn(dark: 0xCC_CC_CC, light: 0x33_33_33) }
+  // `--fg-name`, `--row-nest`, `--row-attention`, `--row-active`, `--success`, `--danger`, `--wd-shell-accent`.
+  static var name: Color { dyn(dark: 0xB8_B8_B8, light: 0x4A_4A_4A) }
+  static var nest: Color { dyn(dark: 0x23_24_26, light: 0xEC_EC_EC) }
+  static var attention: Color { dyn(dark: 0x5C_39_06, light: 0xFB_DC_B8) }
+  static var chipOpen: Color { Color.primary.opacity(0.1) }
+  static var success: Color { dyn(dark: 0x3E_CF_8E, light: 0x0F_7B_4F) }
+  static var danger: Color { dyn(dark: 0xFF_61_66, light: 0xD9_30_36) }
+  static var warning: Color { dyn(dark: 0xF5_A6_23, light: 0xA3_52_00) }
+  static var shell: Color { dyn(dark: 0xC5_86_C0, light: 0x8B_3A_8B) }
 
   private static func dyn(dark: UInt32, light: UInt32) -> Color {
     Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light) })

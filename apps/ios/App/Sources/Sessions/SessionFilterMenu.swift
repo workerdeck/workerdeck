@@ -27,13 +27,14 @@ struct FilterMenu: View, Equatable {
   let adapters: [String]
   let projects: [ProjectChoice]
   let pastAgents: [PastAgentEntry]
+  var orderCustomized = false
   let list: SessionList
   let changed: () -> Void
   let openPast: (PastAgentEntry) -> Void
 
   nonisolated static func == (lhs: FilterMenu, rhs: FilterMenu) -> Bool {
     lhs.hosts == rhs.hosts && lhs.adapters == rhs.adapters && lhs.projects == rhs.projects
-      && lhs.filter == rhs.filter && lhs.pastAgents == rhs.pastAgents
+      && lhs.filter == rhs.filter && lhs.pastAgents == rhs.pastAgents && lhs.orderCustomized == rhs.orderCustomized
   }
 
   private static let states: [(RowState, String)] = [
@@ -86,6 +87,12 @@ struct FilterMenu: View, Equatable {
             Text("State").tag(ListSortBy.state)
             Text("Project").tag(ListSortBy.project)
           }
+        }
+      }
+      if orderCustomized {
+        Button("Reset group order") {
+          list.resetGroupOrder()
+          changed()
         }
       }
       Section("Show under each session") {
