@@ -5,17 +5,36 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
-## [Unreleased]
+## [4.1.0] - 2026-10-29
+
+### Added
+
+- **Agent faces.** Agents are drawn as animated robots that move with the session's state (working,
+  waiting, done), with the context fill on the card in place of the ring. *Change avatar* opens a
+  per-part editor. Existing agents get a face rolled from their old seed; reroll any you want changed.
+- **Right-click a session card** for VS Code's own context menu with the card's actions; *More
+  Actions...* keeps the QuickPick for the recovery items.
+- **Thinking toggle in the status bar** (`$(thinking)`, dimmed when hidden; remove it with
+  `workerdeck.statusBar.thinking`). It applies live, without reloading the open transcripts.
 
 ### Changed
 
 - **Session cards fold their step rows.** Sub-agents, tasks, background jobs and shells show as small
   chips (icon and count) at the end of a card's second line; click one to expand that kind's rows on
   that card. The choice is remembered per card.
+- **Every card names its exact model** (`claude-opus-5-5`, not `Opus`). A session created without a
+  model now gets the profile's default instead of leaving the choice to the engine.
+- Cards are 48 px with the face inset 4 px on every side; no activity time and no menu button.
+- Opening a session is much faster: the replay is thinner and folds in one render.
 
 ### Fixed
 
 - Cmd+C in the transcript copies the selection instead of an empty string.
+- Host actions (kill shell, sleep, rename...) and the MCP section no longer fail with 409 "must name
+  its conversation".
+- A message sent while a turn is running is confirmed when the turn answers it, and a typed `/clear`
+  no longer waits forever.
+- The first open of a dormant session no longer streams its history in visibly.
 
 ## [4.0.0] - 2026-10-22
 

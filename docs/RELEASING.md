@@ -1683,6 +1683,24 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   build-verified only (no push seam in the UI tests). **Published** 2026-10-22: npm 12/12 (`workerdeck`, `ui`, `web` live a few minutes after the
   run), `latest` 4.0.0, Marketplace 4.0.0 a few minutes later; tag `v4.0.0` at `b4f50fa9`. Installs migrate with
   `_docs/NEXT-MIGRATE.md`.
+
+  **4.1.0** - **Agent faces, exact models, native lists** (cut 2026-10-29). A **minor** by decision (Tobias): protocol
+  stays **2**, relay wire **2**, though two changes break a strict reading. **Faces** replace pixel avatars:
+  `AgentRef.face` (a layered robot recipe rolled and validated in protocol, drawn as animated SVG by `ui` and from
+  the Rust `vm::face` tree on iOS and Android); `AgentRef.avatar`, the PNG and preview routes, `AvatarProvider`,
+  monkeyart and `--avatar-packs` are gone, and the gateway rolls a face from the old seed for records without one
+  (no migration; Tobias rerolls by hand). **Exact models**: every stored model is an exact id (`exactModel`), every
+  session carries `SessionInfo.modelName`, and create forms always send a model; existing stores were converted
+  once with the uncommitted `_docs/scratchpad/migrate-models/migrate.ts`, which each deck runs with its gateway
+  stopped. Also: step chips on session cards (`ViewConfig.expandedSteps`), the 48 px card, VS Code's native
+  right-click menu and thinking toggle, one cached client per gateway in the VS Code host (protocol 2 generation
+  header), mid-turn Claude sends confirmed via `user_message_uuids`, queued cuts never silent, the thinner attach
+  replay and one-render fold, dormant first open waiting for `Runner.backfilled()`. Native: the sessions list
+  mirrors the web one on iOS and Android (core `step_chips`, group order, Auto peek, goldens), iOS drag and drop
+  on a custom recognizer (`ListDragUITests`), PNG avatars out of core/FFI/apps. The question board is **not** in it
+  (parked on `feat/question-board`). Android stays behind iOS on features and UX (Tobias: good enough for now).
+  Known debt carried to the next release by decision: APNs over the wire, the device-only checks in
+  `_docs/VERIFICATION-DEBT.md`.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

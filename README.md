@@ -333,11 +333,12 @@ Dev never builds: apps and tests resolve packages straight to TS source via the
 
 ## Status
 
-**4.0.0**. Three engines, the protocol, server, client, headless React layer, styled UI,
+**4.1.0**. Three engines, the protocol, server, client, headless React layer, styled UI,
 dashboard, VS Code extension, relay, job queue, sandbox and deferred execution are all in and
 tested, with [`apps/embedded`](apps/embedded) as the reference embedding. 4.0.0 made an agent a
 session with a name: one record per session id, conversations under it, past conversations read
-from the engine's own store, and a generation token on every mutation. The iOS app's APNs push is
+from the engine's own store, and a generation token on every mutation. 4.1.0 drew agents as
+animated robot faces on every client and gave every session an exact model id. The iOS app's APNs push is
 confirmed end to end from a live gateway (registration, delivery, a tapped notification opening
 its session); the lock-screen Approve/Deny action is not yet. `PROTOCOL_VERSION` guards breaking
 changes and is at **2**, so every breaking wire change costs a bump and a mismatch banner.
