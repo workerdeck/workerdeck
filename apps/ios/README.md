@@ -73,9 +73,9 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
     last snapshot don't come back as unread. Renaming is a leading swipe or a context menu →
     `PATCH /sessions/:id`, a gateway edit rather than a local override, so the name reaches the
     dashboard and the extension too (and an empty one restores the derived title), and it is one
-    of the three ways into the same actions - the card's `···`, a long press, a swipe - all built
-    from one builder on the list. The **drawing** is a file per unit beside those two:
-    `SessionCardView` (with the disclosure and the overflow glyph), `SessionRowView`,
+    of the two ways into the same actions - a long press and a swipe - both built from one builder
+    on the list. The **drawing** is a file per unit beside those two:
+    `SessionCard` (in `AgentCardView.swift`: every card shape, chips, tray, `CardBackground`), `SessionRowView`,
     `SessionStatusIcon`, `SessionStepRow`, `SdkSessionRowView`, `SessionFilterMenu`. They were one
     1,240-line file until 2026-09-02, which is where two bugs in one day came from; the view is
     now what owns the stack, the poll and the actions, and nothing else.

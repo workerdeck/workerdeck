@@ -1112,7 +1112,7 @@ and is a smudge in front of a phone row.
 drawing the product otherwise has (see `docs/PACKAGES.md` §`packages/ui`), so every rule it does
 not carry is drift. `UIPREVIEW=sessions` (`SessionsPreview`) is the phone's copy of the
 `Sessions/SessionItem` `TheList` story, same sessions in the same order, so the two can be put
-side by side; `SessionCardView` exists so that preview can draw the composition the list ships
+side by side; `SessionCard` exists so that preview can draw the composition the list ships
 rather than the row alone - and its `onOpen` is **required** for that reason. The first version of
 this row shipped a collision the preview could not show: `route` was optional, the preview passed
 none, so the card drew bare while the app wrapped it in a `NavigationLink` whose platform chevron
@@ -1414,8 +1414,9 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 **Agents and teams** (Agent Teams phase 5). The kit mirrors `AgentRef`, `AgentInfo`,
 `StatusLabel`, `SessionInfo.agent`/`owner`/`statusLabel`, `GatewayMeta`, the `/agents` routes and
 `/meta` (`Agents.swift`), and the team half of the list view model (team units, `teamState`, the context lead, `teamView`, `teamLeads`/`teamMembers`) is the core's `SessionList`. The app draws agents with
-`AgentCardView` (44pt card, 32pt member row on a tree line, a team tray of the Members Auto hides; a tap on one opens it, and the member opened last stands in
-for the selected row)
+`SessionCard` (the web's geometry: 48pt card with a 40 face, 40pt Member cards inside the team's shared card, step
+chips that unfold a kind inside the card, a tray of the Members Auto hides; a tap on one opens it, and the member opened
+last stands in for the selected row; headings drag to reorder, a card dropped on a lead joins its team)
 and `AgentAvatarView`: an agent draws its face through `FaceView` (the core's draw ops in a `Canvas`, motions under a
 30 fps `TimelineView`, paused under Reduce Motion; the canvas keeps a 4-unit margin because the bubble, ring and chip reach
 past the 32-unit box), a plain session a dashed engine tile with the status badge. A card whose session or team needs an
