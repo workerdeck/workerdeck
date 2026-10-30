@@ -45,7 +45,7 @@
       }
     },
     {
-      "files": ["packages/ui/dev/**"],
+      "files": ["packages/ui/dev/**", "packages/server/src/services/shell-env.ts"],
       "rules": {
         "no-underscore-dangle": "off"
       }

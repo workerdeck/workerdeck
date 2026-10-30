@@ -325,8 +325,7 @@ withPty('limits', () => {
   })
 })
 
-// Retried because node-pty can drop unread output when the loop stalls 200ms at exit (docs/GOTCHAS.md), which a loaded CI runner hits.
-withPty('artifact', { retry: 2 }, () => {
+withPty('artifact', () => {
   it('keeps small output inline in the index and spills past the threshold', async () => {
     const dir = tempDir()
     const shells = makeRegistry({ artifactDir: dir, spillBytes: 1024 })
@@ -521,6 +520,28 @@ withPty('drain', () => {
     const shell = await settled(source)
     expect(shell).toMatchObject({ status: 'exited', exitCode: 0, endReason: 'exit' })
     expect(source.text()).toBe('line1\nline2\nline3\nline4\nline5\n')
+  })
+
+  // A grandchild that writes after the shell exits lands its bytes in the master after node-pty armed its 200ms destroy;
+  // the stall makes that timer run before any read, the loaded-CI ordering that cut records to 4095 bytes. Linux only:
+  // macOS revokes the tty at the leader's exit, so there the kernel has already discarded the late bytes.
+  it.runIf(process.platform === 'linux')('keeps output that reaches the master after the exit while the loop stalls past the destroy deadline', async () => {
+    const shells = makeRegistry()
+    const realSetTimeout = globalThis.setTimeout
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      if (ms === 200) {
+        setImmediate(() => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 600))
+      }
+      return realSetTimeout(fn, ms)
+    }) as typeof setTimeout)
+    try {
+      const command = `trap '' HUP; (sleep 0.2; head -c 8199 /dev/zero | tr '\\0' a) & exit 0`
+      const { shell, source } = await run(shells, runner('s1'), command)
+      expect(shell).toMatchObject({ status: 'exited', exitCode: 0, bytes: 8199 })
+      expect(source.text()).toBe('a'.repeat(8199))
+    } finally {
+      vi.mocked(globalThis.setTimeout).mockRestore()
+    }
   })
 })
 

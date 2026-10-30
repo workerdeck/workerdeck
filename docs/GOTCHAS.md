@@ -2425,16 +2425,17 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   exit code, the pid the kill paths hold and the command text all reach the login shell unchanged
   and nothing is re-quoted; it costs about 2 ms per command. The `drain` case in `shells.test.ts`
   stalls the loop past the deadline and fails on a direct spawn.
-- **node-pty drops unread output if the loop stalls 200 ms as a shell exits. Open, not fixed.** After
-  the child exits, `UnixTerminal` waits for the master socket's `close` for `DESTROY_SOCKET_TIMEOUT_MS`
-  (200 ms), then **destroys the socket** and emits `exit`, discarding whatever the kernel still held.
-  Linux lets a writer finish into the tty buffers well past 4 KB, so a starved event loop reads only
-  the first 4095 bytes and settles the record `exited` with the rest gone. It shows as the
-  `artifact` cases in `shells.test.ts` receiving `bytes: 4095` on a loaded CI runner (it failed the
-  2.15.0 CI and the first 3.0.0 publish attempt), never on macOS, and it would bite a real gateway
-  stalled that long as a `$` finishes. The `artifact` block runs with `retry: 2` so the gate stops
-  flaking on it, which hides the symptom and fixes nothing: the fix is to drain the fd on our side
-  before settling, or to stop node-pty's destroy.
+- **node-pty drops unread output if the loop stalls 200 ms as a shell exits; `drainingPty` reads it first.**
+  After the child exits, `UnixTerminal` waits for the master socket's `close` for `DESTROY_SOCKET_TIMEOUT_MS`
+  (200 ms), then **destroys the socket** and emits `exit`, discarding whatever the kernel still held. A loop stalled
+  past that deadline runs the timer before the poll phase reads, so on Linux the record settled `exited` with only
+  the first 4095 bytes (or none). It failed the 2.15.0 CI, the first 3.0.0 publish and the 4.1.0 publish, hidden for
+  a while by `retry: 2` on the `artifact` block. `loadPty` wraps node-pty so every child's socket `destroy` first
+  reads the master fd with `readSync` until `EAGAIN`/`EIO` and emits those bytes as `data` through the socket's own
+  decoder (so a split UTF-8 sequence stays whole). The handle fd is libuv's non-blocking one, so the drain never
+  blocks. The `drain` regression in `shells.test.ts` has a grandchild write after the shell exits and stalls the loop
+  once node-pty arms its timer; it runs on Linux only, because macOS revokes the tty at the leader's exit and the
+  kernel has already discarded those bytes. Bun hosts use `bun-pty.ts` and never reach this wrapper.
 - **The artifact is on disk under `<stateDir>/shells/`, index per session, spill per shell.** Small
   outputs live inline in the index; `SHELL_SPILL_BYTES` decides. The cap stops the file, never the
   process; the tail ring keeps advancing. Without a state dir the index is memory-only and every

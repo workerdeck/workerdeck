@@ -1,3 +1,5 @@
+import { readSync } from 'node:fs'
+import type { StringDecoder } from 'node:string_decoder'
 import { withoutGatewaySecrets } from '@workerdeck/core'
 import { SHELL_COLS, SHELL_MAX_COLS, SHELL_MAX_ROWS, SHELL_MIN_COLS, SHELL_MIN_ROWS, SHELL_ROWS } from '@workerdeck/protocol'
 import { bunRuntime, createBunPty } from './bun-pty.ts'
@@ -20,11 +22,63 @@ export async function loadPty(): Promise<PtyModule | null> {
     return ptyModule
   }
   try {
-    ptyModule = (await import('@lydell/node-pty')) as unknown as PtyModule
+    ptyModule = drainingPty((await import('@lydell/node-pty')) as unknown as PtyModule)
   } catch {
     ptyModule = null
   }
   return ptyModule
+}
+
+type NodePtySocket = {
+  destroy: (...args: unknown[]) => unknown
+  emit: (event: 'data', data: string | Buffer) => boolean
+  _handle?: { fd?: number } | null
+  _readableState?: { decoder?: StringDecoder | null }
+}
+
+export function drainingPty(pty: PtyModule): PtyModule {
+  return {
+    spawn: (file, args, options) => {
+      const child = pty.spawn(file, args, options)
+      drainBeforeDestroy((child as { _socket?: NodePtySocket })._socket)
+      return child
+    },
+  }
+}
+
+// node-pty destroys the master 200 ms after the child exits, before a stalled loop has read what the kernel holds.
+function drainBeforeDestroy(socket: NodePtySocket | undefined): void {
+  if (!socket || typeof socket.destroy !== 'function') {
+    return
+  }
+  const destroy = socket.destroy
+  socket.destroy = function (this: NodePtySocket, ...args: unknown[]) {
+    const fd = this._handle?.fd
+    if (typeof fd === 'number' && fd >= 0) {
+      const decoder = this._readableState?.decoder ?? null
+      for (const chunk of readAvailable(fd)) {
+        this.emit('data', decoder ? decoder.write(chunk) : chunk)
+      }
+    }
+    return destroy.apply(this, args)
+  }
+}
+
+function readAvailable(fd: number): Buffer[] {
+  const chunks: Buffer[] = []
+  const buffer = Buffer.alloc(65_536)
+  for (;;) {
+    let read: number
+    try {
+      read = readSync(fd, buffer, 0, buffer.length, null)
+    } catch {
+      return chunks
+    }
+    if (read <= 0) {
+      return chunks
+    }
+    chunks.push(Buffer.from(buffer.subarray(0, read)))
+  }
 }
 
 // A spawn env replaces the inherited one wholesale, so the copy has to be complete; the gateway's own environment is
