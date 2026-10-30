@@ -17,18 +17,20 @@ import {
   type Runner,
   type SessionRunnerConfig,
 } from '@workerdeck/core'
-import { createShellDirectory, createShellRegistry, loadPty, type ShellRegistry } from '../src/services/shells.ts'
+import { createShellDirectory, loadPty, type ShellRegistry } from '../src/services/shells.ts'
 import { createFileSessionRecordStore, type EngineRunnerContext, sandboxedProviderProfile, type WorkerServerOptions } from '../src/index.ts'
 import { fakeHarness, fakeRunner, fileRuntimeStore } from './helpers.ts'
-import { attachSocket, createSession, registryFixture, shellFixture } from './shell-helpers.ts'
+import { attachSocket, createSession, ptySuite, registryFixture, shellFixture, type ScriptedChild } from './shell-helpers.ts'
 
 const ECHO_KEYS = 'echo reloaded; while read -r k; do echo "got $k"; done'
 
-const pty = await loadPty()
-const withPty = describe.skipIf(pty === null)
+const withPty = ptySuite(await loadPty(), 'shell-directory.test')
 
-const { tempDir, track, makeRegistry, runner, cleanup } = registryFixture('wd-shell-dir-')
-afterEach(cleanup)
+const { tempDir, makeRegistry, makeScripted, pty, runner, cleanup } = registryFixture('wd-shell-dir-')
+afterEach(async () => {
+  vi.useRealTimers()
+  await cleanup()
+})
 
 // A live runner as the directory sees it: the shell it starts must land a transcript row through queueLocalCommand.
 function agentRunner(id: string): Runner & { rows: LocalShellSource[] } {
@@ -40,28 +42,50 @@ function agentDirectory(registry: ShellRegistry, ...runners: Runner[]) {
   return createShellDirectory(registry, { runnerFor: (id) => runners.find((r) => r.id === id) })
 }
 
-async function run(shells: ShellRegistry, owner: Runner, command: string): Promise<string> {
-  const spawned = await shells.spawn({ runner: owner, command, owner: 'user' })
-  await new Promise<void>((resolve) => {
-    if (spawned.source.info().status !== 'running') {
-      resolve()
-      return
-    }
-    const off = spawned.source.subscribe(() => {
-      if (spawned.source.info().status !== 'running') {
-        off()
-        resolve()
-      }
-    })
-  })
+async function finished(shells: ShellRegistry, owner: Runner, chunks: string[]): Promise<string> {
+  const spawned = await shells.spawn({ runner: owner, command: 'scripted', owner: 'user' })
+  const child = pty.last()
+  for (const chunk of chunks) {
+    child.emit(chunk)
+  }
+  child.exit(0)
   return spawned.shell.id
 }
 
-withPty('createShellDirectory', () => {
+// The screen behind a write settles on xterm's own timers, which the fake clock holds until it is advanced.
+async function flushed<T>(promise: Promise<T>): Promise<T> {
+  const settled = promise.then(
+    () => true,
+    () => true,
+  )
+  for (;;) {
+    await vi.advanceTimersByTimeAsync(1)
+    if (await Promise.race([settled, Promise.resolve(false)])) {
+      return promise
+    }
+  }
+}
+
+// The shell side of ECHO_KEYS: every line typed comes back as `got <line>`, after the tty's own echo of it.
+function echoKeys(child: ScriptedChild): void {
+  let line = ''
+  child.respond = (data) => {
+    for (const char of data) {
+      if (char === '\r' || char === '\n') {
+        child.emit(`${line}\r\ngot ${line}\r\n`)
+        line = ''
+      } else {
+        line += char
+      }
+    }
+  }
+}
+
+describe('createShellDirectory', () => {
   it('reads the text view tail for the session that owns the shell', async () => {
-    const registry = makeRegistry()
+    const registry = makeScripted()
     const directory = createShellDirectory(registry)
-    const id = await run(registry, runner('s1'), 'for i in 1 2 3 4 5; do echo line$i; done')
+    const id = await finished(registry, runner('s1'), ['line1\r\nline2\r\n', 'line3\r\nline4\r\nline5\r\n'])
 
     const all = await directory.read('s1', id)
     expect(all).toMatchObject({ lines: 5, totalLines: 5, truncated: false, text: 'line1\nline2\nline3\nline4\nline5' })
@@ -75,10 +99,10 @@ withPty('createShellDirectory', () => {
   })
 
   it("answers another session's shell id as missing, and lists nothing for it", async () => {
-    const registry = makeRegistry()
+    const registry = makeScripted()
     const directory = createShellDirectory(registry)
-    const id = await run(registry, runner('s1'), 'echo secret')
-    await run(registry, runner('s2'), 'echo mine')
+    const id = await finished(registry, runner('s1'), ['secret\r\n'])
+    await finished(registry, runner('s2'), ['mine\r\n'])
 
     expect(await directory.read('s2', id)).toBeUndefined()
     expect(await directory.read('nobody', id)).toBeUndefined()
@@ -87,9 +111,9 @@ withPty('createShellDirectory', () => {
   })
 
   it('reads a redrawing program as its current screen, and defaults an interactive shell to it', async () => {
-    const registry = makeRegistry()
+    const registry = makeScripted()
     const directory = createShellDirectory(registry)
-    const id = await run(registry, runner('s1'), "printf 'building 1/3\\nstep a\\n\\033[2A\\033[Jbuilt 3/3\\nall done\\n'")
+    const id = await finished(registry, runner('s1'), ['building 1/3\r\nstep a\r\n', '\x1b[2A\x1b[Jbuilt 3/3\r\nall done\r\n'])
 
     const lines = await directory.read('s1', id, { view: 'lines' })
     expect(lines!.text).toBe('building 1/3\nstep a\nbuilt 3/3\nall done')
@@ -101,47 +125,192 @@ withPty('createShellDirectory', () => {
 
   it('renders the screen of a shell this generation never ran from its artifact', async () => {
     const dir = tempDir()
-    const first = createShellRegistry({ generation: 'gen-a', artifactDir: dir })
-    const owner = runner('s1')
-    const id = await run(first, owner, "printf '\\033[?1049h\\033[5;3Hin the alt screen'")
+    const first = makeScripted({ artifactDir: dir })
+    const id = await finished(first, runner('s1'), ['\x1b[?1049h\x1b[5;3Hin the alt screen'])
     await first.flush()
-    const second = createShellRegistry({ generation: 'gen-b', artifactDir: dir })
-    track(first)
-    track(second)
+    const second = makeScripted({ artifactDir: dir, generation: 'gen-b' })
     await second.hydrate()
     const screen = await second.output('s1', id, { view: 'screen' })
     expect(screen).toBe('\n\n\n\n  in the alt screen')
   })
 
   it('waits for text to appear, returns at once when it is already there, and reports a timeout and an exit', async () => {
-    const registry = makeRegistry()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const registry = makeScripted()
     const directory = createShellDirectory(registry)
     const owner = runner('s1')
-    const spawned = await registry.spawn({
-      runner: owner,
-      command: 'echo starting; sleep 0.4; echo ready in 12ms; sleep 30',
-      owner: 'user',
-    })
+    const spawned = await registry.spawn({ runner: owner, command: 'echo starting; sleep 1; echo ready; sleep 30', owner: 'user' })
+    const child = pty.last()
     const id = spawned.shell.id
+    child.emit('starting\r\n')
 
-    const ready = await directory.read('s1', id, { waitFor: ['ready in', 'error'], timeoutMs: 5000 })
-    expect(ready!.wait).toMatchObject({ outcome: 'matched', match: 'ready in' })
-    expect(ready!.wait!.ms).toBeGreaterThan(100)
-    expect(ready!.text).toContain('ready in 12ms')
+    const pending = directory.read('s1', id, { waitFor: ['ready in', 'error'], timeoutMs: 5000 })
+    await vi.advanceTimersByTimeAsync(400)
+    child.emit('ready in 12ms\r\n')
+    await vi.advanceTimersByTimeAsync(250)
+    const ready = await pending
+    expect(ready!.wait).toEqual({ outcome: 'matched', match: 'ready in', ms: 650 })
+    expect(ready!.text).toBe('starting\nready in 12ms')
 
     const again = await directory.read('s1', id, { waitFor: ['ready in'], timeoutMs: 5000 })
-    expect(again!.wait).toMatchObject({ outcome: 'matched' })
-    expect(again!.wait!.ms).toBeLessThan(100)
+    expect(again!.wait).toEqual({ outcome: 'matched', match: 'ready in', ms: 0 })
 
-    const never = await directory.read('s1', id, { waitFor: ['never printed'], timeoutMs: 300 })
-    expect(never!.wait).toMatchObject({ outcome: 'timeout' })
-    expect(never!.wait!.ms).toBeGreaterThanOrEqual(300)
+    const waiting = directory.read('s1', id, { waitFor: ['never printed'], timeoutMs: 300 })
+    await vi.advanceTimersByTimeAsync(299)
+    child.emit('noise\r\n')
+    await vi.advanceTimersByTimeAsync(1)
+    const never = await waiting
+    expect(never!.wait).toEqual({ outcome: 'timeout', ms: 300 })
 
-    const quick = await run(registry, owner, 'echo bye')
+    const quick = await finished(registry, owner, ['bye\r\n'])
     const exited = await directory.read('s1', quick, { waitFor: ['never printed'], timeoutMs: 5000 })
-    expect(exited!.wait).toMatchObject({ outcome: 'exited' })
+    expect(exited!.wait).toEqual({ outcome: 'exited', ms: 0 })
   })
 
+  it('refuses to start a shell for a session it cannot reach a live runner for', async () => {
+    const registry = makeScripted()
+    await expect(createShellDirectory(registry).run('s1', { command: 'true' })).rejects.toThrow(SHELL_REFUSAL)
+    await expect(agentDirectory(registry, fakeRunner('s1', { cwd: tempDir() })).run('s1', { command: 'true' })).rejects.toThrow(
+      SHELL_REFUSAL,
+    )
+    expect(registry.list('s1')).toEqual([])
+    expect(pty.children).toEqual([])
+  })
+
+  it('types data then keys into an agent shell, and a wait after the write matches only what came after it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const registry = makeScripted()
+    const owner = agentRunner('s1')
+    const directory = agentDirectory(registry, owner)
+    const starting = directory.run('s1', { command: ECHO_KEYS, waitFor: ['reloaded'], timeoutMs: 5000 })
+    while (pty.children.length === 0) {
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+    const child = pty.last()
+    echoKeys(child)
+    child.emit('reloaded\r\n')
+    await vi.advanceTimersByTimeAsync(250)
+    const started = await starting
+    const id = started.shell.id
+    expect(started.wait).toMatchObject({ outcome: 'matched', match: 'reloaded' })
+
+    const staleWrite = directory.write('s1', id, { keys: ['r', 'enter'], waitFor: ['reloaded'], timeoutMs: 500 })
+    await vi.advanceTimersByTimeAsync(500)
+    const stale = await staleWrite
+    expect(child.writes).toEqual(['r\r'])
+    expect(stale!.wait).toEqual({ outcome: 'timeout', ms: 500 })
+    expect(stale!.text).toBe('reloaded\nr\ngot r')
+
+    const typed = await flushed(directory.write('s1', id, { data: 'hello', keys: ['enter'], waitFor: ['got hello'], timeoutMs: 5000 }))
+    expect(child.writes.at(-1)).toBe('hello\r')
+    expect(typed!.wait).toEqual({ outcome: 'matched', match: 'got hello', ms: 0 })
+    expect(typed!.shell).toMatchObject({ id, owner: 'agent', status: 'running' })
+
+    const plain = await flushed(directory.write('s1', id, { data: 'again\n' }))
+    expect(child.writes.at(-1)).toBe('again\n')
+    expect(plain!.wait).toBeUndefined()
+    const after = await directory.read('s1', id, { waitFor: ['got again'], timeoutMs: 5000 })
+    expect(after!.wait).toMatchObject({ outcome: 'matched' })
+    await expect(flushed(directory.write('s1', id, {}))).rejects.toThrow(/nothing to write/)
+    await expect(flushed(directory.write('s1', id, { keys: ['warp'] }))).rejects.toThrow(/unknown key "warp"/)
+    expect(child.writes).toHaveLength(3)
+  })
+
+  it('encodes a cursor key the way the program asked for it: CSI normally, SS3 under application cursor mode', async () => {
+    const registry = makeScripted()
+    const owner = agentRunner('s1')
+    const directory = agentDirectory(registry, owner)
+    const normal = await directory.run('s1', { command: 'cat -v' })
+    await directory.write('s1', normal.shell.id, { keys: ['up', 'enter'] })
+    expect(pty.last().writes).toEqual(['\x1b[A\r'])
+
+    const application = await directory.run('s1', { command: 'less' })
+    pty.last().emit('\x1b[?1h')
+    await directory.write('s1', application.shell.id, { keys: ['up', 'enter'] })
+    expect(pty.last().writes).toEqual(['\x1bOA\r'])
+  })
+
+  it("refuses to type into or kill the user's shell with the rule named, and answers another session's as missing", async () => {
+    const registry = makeScripted()
+    const owner = agentRunner('s1')
+    const other = agentRunner('s2')
+    const directory = agentDirectory(registry, owner, other)
+    const spawned = await registry.spawn({ runner: owner, command: 'sleep 30', owner: 'user' })
+    const users = pty.last()
+    const id = spawned.shell.id
+    await expect(directory.write('s1', id, { keys: ['q'] })).rejects.toThrow(shellOwnershipRefusal(id))
+    await expect(directory.kill('s1', id)).rejects.toThrow(shellOwnershipRefusal(id))
+    expect(registry.get('s1', id)?.status).toBe('running')
+
+    const mine = await directory.run('s1', { command: 'sleep 30' })
+    expect(await directory.write('s2', mine.shell.id, { keys: ['q'] })).toBeUndefined()
+    expect(await directory.kill('s2', mine.shell.id)).toBeUndefined()
+    expect(await directory.write('s2', id, { keys: ['q'] })).toBeUndefined()
+    expect(registry.get('s1', mine.shell.id)?.status).toBe('running')
+    expect(users.writes).toEqual([])
+    expect(pty.last().writes).toEqual([])
+  })
+
+  it("grants the agent a user's running shell, re-emits its row, types into it, and a revoke refuses the next write", async () => {
+    const registry = makeScripted()
+    const owner = agentRunner('s1')
+    const other = agentRunner('s2')
+    const directory = agentDirectory(registry, owner, other)
+    const spawned = await registry.spawn({ runner: owner, command: ECHO_KEYS, owner: 'user' })
+    const child = pty.last()
+    echoKeys(child)
+    const id = spawned.shell.id
+    const redraws = vi.fn()
+    spawned.source.subscribe(redraws)
+
+    expect(await directory.grant('s2', id)).toBeUndefined()
+    expect(registry.get('s1', id)?.agentWrite).toBeUndefined()
+    expect(await directory.grant('s1', id)).toMatchObject({ id, owner: 'user', agentWrite: true })
+    expect(spawned.source.info().agentWrite).toBe(true)
+    expect(redraws).toHaveBeenCalledTimes(1)
+
+    const typed = await directory.write('s1', id, { data: 'hi', keys: ['enter'], waitFor: ['got hi'], timeoutMs: 5000 })
+    expect(typed!.wait).toMatchObject({ outcome: 'matched' })
+    expect(child.writes).toEqual(['hi\r'])
+
+    expect(registry.setAgentWrite('s1', id, false)).toMatchObject({ id, owner: 'user' })
+    expect(registry.get('s1', id)?.agentWrite).toBeUndefined()
+    await expect(directory.write('s1', id, { keys: ['q'] })).rejects.toThrow(shellOwnershipRefusal(id))
+    await expect(directory.kill('s1', id)).rejects.toThrow(shellOwnershipRefusal(id))
+    expect(child.writes).toEqual(['hi\r'])
+  })
+
+  it('ends a grant with its shell, grants nothing on an ended one, and answers an agent shell as already writable', async () => {
+    const registry = makeScripted()
+    const owner = agentRunner('s1')
+    const directory = agentDirectory(registry, owner)
+    const spawned = await registry.spawn({ runner: owner, command: 'sleep 30', owner: 'user' })
+    const id = spawned.shell.id
+    await directory.grant('s1', id)
+    registry.kill('s1', id)
+    expect(registry.get('s1', id)).toMatchObject({ status: 'exited' })
+    expect(registry.get('s1', id)?.agentWrite).toBeUndefined()
+    await expect(directory.grant('s1', id)).rejects.toThrow(/already ended/)
+
+    const mine = await directory.run('s1', { command: 'sleep 30' })
+    expect(await directory.grant('s1', mine.shell.id)).toMatchObject({ owner: 'agent' })
+    expect(registry.get('s1', mine.shell.id)?.agentWrite).toBeUndefined()
+    expect(() => registry.setAgentWrite('s1', mine.shell.id, true)).toThrow(/started by the agent/)
+  })
+
+  it('clamps an absurd tail and defaults an absent one', async () => {
+    const registry = makeScripted()
+    const directory = createShellDirectory(registry)
+    const lines = Array.from({ length: 60 }, (_, i) => `line${i + 1}\r\n`)
+    const id = await finished(registry, runner('s1'), [lines.slice(0, 30).join(''), lines.slice(30).join('')])
+
+    expect(await directory.read('s1', id, { tail: SHELL_READ_MAX_LINES * 10 })).toMatchObject({ lines: 60, truncated: false })
+    const seen = await directory.read('s1', id)
+    expect(seen!.lines).toBe(Math.min(60, SHELL_READ_DEFAULT_LINES))
+  })
+})
+
+withPty('createShellDirectory over a real PTY', () => {
   it('starts a shell for the agent through the same spawn, owner agent, with a transcript row, and waits for its text', async () => {
     const registry = makeRegistry()
     const owner = agentRunner('s1')
@@ -163,128 +332,6 @@ withPty('createShellDirectory', () => {
     expect(killed).toMatchObject({ killed: true, shell: { id: result.shell.id, status: 'exited', endReason: 'killed' } })
     expect(await directory.kill('s1', result.shell.id)).toMatchObject({ killed: false, shell: { status: 'exited' } })
     await expect(directory.write('s1', result.shell.id, { keys: ['q'] })).rejects.toThrow(/has already ended/)
-  })
-
-  it('refuses to start a shell for a session it cannot reach a live runner for', async () => {
-    const registry = makeRegistry()
-    await expect(createShellDirectory(registry).run('s1', { command: 'true' })).rejects.toThrow(SHELL_REFUSAL)
-    await expect(agentDirectory(registry, fakeRunner('s1', { cwd: tempDir() })).run('s1', { command: 'true' })).rejects.toThrow(
-      SHELL_REFUSAL,
-    )
-    expect(await registry.list('s1')).toEqual([])
-  })
-
-  it('types data then keys into an agent shell, and a wait after the write matches only what came after it', async () => {
-    const registry = makeRegistry()
-    const owner = agentRunner('s1')
-    const directory = agentDirectory(registry, owner)
-    const started = await directory.run('s1', { command: ECHO_KEYS, waitFor: ['reloaded'], timeoutMs: 5000 })
-    const id = started.shell.id
-    expect(started.wait).toMatchObject({ outcome: 'matched' })
-
-    const stale = await directory.write('s1', id, { keys: ['r', 'enter'], waitFor: ['reloaded'], timeoutMs: 500 })
-    expect(stale!.wait).toMatchObject({ outcome: 'timeout' })
-    expect(stale!.text).toContain('got r')
-
-    const typed = await directory.write('s1', id, { data: 'hello', keys: ['enter'], waitFor: ['got hello'], timeoutMs: 5000 })
-    expect(typed!.wait).toMatchObject({ outcome: 'matched', match: 'got hello' })
-    expect(typed!.shell).toMatchObject({ id, owner: 'agent', status: 'running' })
-
-    const plain = await directory.write('s1', id, { data: 'again\n' })
-    expect(plain!.wait).toBeUndefined()
-    const after = await directory.read('s1', id, { waitFor: ['got again'], timeoutMs: 5000 })
-    expect(after!.wait).toMatchObject({ outcome: 'matched' })
-    await expect(directory.write('s1', id, {})).rejects.toThrow(/nothing to write/)
-    await expect(directory.write('s1', id, { keys: ['warp'] })).rejects.toThrow(/unknown key "warp"/)
-  })
-
-  it('encodes a cursor key the way the program asked for it: CSI normally, SS3 under application cursor mode', async () => {
-    const registry = makeRegistry()
-    const owner = agentRunner('s1')
-    const directory = agentDirectory(registry, owner)
-    const dump = 'while read -r k; do printf %s "$k" | od -An -tx1 | tr -s " "; done'
-    const normal = await directory.run('s1', { command: `echo go; ${dump}`, waitFor: ['go'], timeoutMs: 5000 })
-    const csi = await directory.write('s1', normal.shell.id, { keys: ['up', 'enter'], waitFor: ['1b 5b 41', '1b 4f 41'], timeoutMs: 5000 })
-    expect(csi!.wait).toMatchObject({ outcome: 'matched', match: '1b 5b 41' })
-
-    const application = await directory.run('s1', { command: `printf '\\033[?1h'; echo go; ${dump}`, waitFor: ['go'], timeoutMs: 5000 })
-    const ss3 = await directory.write('s1', application.shell.id, {
-      keys: ['up', 'enter'],
-      waitFor: ['1b 5b 41', '1b 4f 41'],
-      timeoutMs: 5000,
-    })
-    expect(ss3!.wait).toMatchObject({ outcome: 'matched', match: '1b 4f 41' })
-  }, 15_000)
-
-  it("refuses to type into or kill the user's shell with the rule named, and answers another session's as missing", async () => {
-    const registry = makeRegistry()
-    const owner = agentRunner('s1')
-    const other = agentRunner('s2')
-    const directory = agentDirectory(registry, owner, other)
-    const spawned = await registry.spawn({ runner: owner, command: 'sleep 30', owner: 'user' })
-    const id = spawned.shell.id
-    await expect(directory.write('s1', id, { keys: ['q'] })).rejects.toThrow(shellOwnershipRefusal(id))
-    await expect(directory.kill('s1', id)).rejects.toThrow(shellOwnershipRefusal(id))
-    expect(registry.get('s1', id)?.status).toBe('running')
-
-    const mine = await directory.run('s1', { command: 'sleep 30' })
-    expect(await directory.write('s2', mine.shell.id, { keys: ['q'] })).toBeUndefined()
-    expect(await directory.kill('s2', mine.shell.id)).toBeUndefined()
-    expect(await directory.write('s2', id, { keys: ['q'] })).toBeUndefined()
-    expect(registry.get('s1', mine.shell.id)?.status).toBe('running')
-  })
-
-  it("grants the agent a user's running shell, re-emits its row, types into it, and a revoke refuses the next write", async () => {
-    const registry = makeRegistry()
-    const owner = agentRunner('s1')
-    const other = agentRunner('s2')
-    const directory = agentDirectory(registry, owner, other)
-    const spawned = await registry.spawn({ runner: owner, command: ECHO_KEYS, owner: 'user' })
-    const id = spawned.shell.id
-    const redraws = vi.fn()
-    spawned.source.subscribe(redraws)
-
-    expect(await directory.grant('s2', id)).toBeUndefined()
-    expect(registry.get('s1', id)?.agentWrite).toBeUndefined()
-    expect(await directory.grant('s1', id)).toMatchObject({ id, owner: 'user', agentWrite: true })
-    expect(spawned.source.info().agentWrite).toBe(true)
-    expect(redraws).toHaveBeenCalled()
-
-    const typed = await directory.write('s1', id, { data: 'hi', keys: ['enter'], waitFor: ['got hi'], timeoutMs: 5000 })
-    expect(typed!.wait).toMatchObject({ outcome: 'matched' })
-
-    expect(registry.setAgentWrite('s1', id, false)).toMatchObject({ id, owner: 'user' })
-    expect(registry.get('s1', id)?.agentWrite).toBeUndefined()
-    await expect(directory.write('s1', id, { keys: ['q'] })).rejects.toThrow(shellOwnershipRefusal(id))
-    await expect(directory.kill('s1', id)).rejects.toThrow(shellOwnershipRefusal(id))
-  })
-
-  it('ends a grant with its shell, grants nothing on an ended one, and answers an agent shell as already writable', async () => {
-    const registry = makeRegistry()
-    const owner = agentRunner('s1')
-    const directory = agentDirectory(registry, owner)
-    const spawned = await registry.spawn({ runner: owner, command: 'sleep 30', owner: 'user' })
-    const id = spawned.shell.id
-    await directory.grant('s1', id)
-    registry.kill('s1', id)
-    expect(registry.get('s1', id)).toMatchObject({ status: 'exited' })
-    expect(registry.get('s1', id)?.agentWrite).toBeUndefined()
-    await expect(directory.grant('s1', id)).rejects.toThrow(/already ended/)
-
-    const mine = await directory.run('s1', { command: 'sleep 30' })
-    expect(await directory.grant('s1', mine.shell.id)).toMatchObject({ owner: 'agent' })
-    expect(registry.get('s1', mine.shell.id)?.agentWrite).toBeUndefined()
-    expect(() => registry.setAgentWrite('s1', mine.shell.id, true)).toThrow(/started by the agent/)
-  })
-
-  it('clamps an absurd tail and defaults an absent one', async () => {
-    const registry = makeRegistry()
-    const directory = createShellDirectory(registry)
-    const id = await run(registry, runner('s1'), 'for i in $(seq 1 60); do echo line$i; done')
-
-    expect(await directory.read('s1', id, { tail: SHELL_READ_MAX_LINES * 10 })).toMatchObject({ lines: 60, truncated: false })
-    const seen = await directory.read('s1', id)
-    expect(seen!.lines).toBe(Math.min(60, SHELL_READ_DEFAULT_LINES))
   })
 })
 

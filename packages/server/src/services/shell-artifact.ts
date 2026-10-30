@@ -34,6 +34,7 @@ export class LiveArtifact {
   #chunks: Buffer[] = []
   #chunkBytes = 0
   #bytes = 0
+  #textHead = 0
   #spilled = false
   #capped = false
   #closed = false
@@ -70,7 +71,8 @@ export class LiveArtifact {
     }
     const room = Math.max(0, this.#limits.cap - before)
     const kept = chunk.length <= room ? chunk : chunk.subarray(0, room)
-    this.#textAppend(kept === chunk ? data : kept.toString('utf8'))
+    const whole = kept === chunk ? kept : kept.subarray(0, completeUtf8(kept))
+    this.#textAppend(kept === chunk ? data : whole.toString('utf8'))
     let changed = false
     if (this.#spilled) {
       this.#write(kept)
@@ -84,6 +86,7 @@ export class LiveArtifact {
     }
     if (this.#bytes > this.#limits.cap) {
       this.#capped = true
+      this.#textHead = before + whole.length
       changed = true
     }
     return changed
@@ -93,10 +96,10 @@ export class LiveArtifact {
     if (this.#textCache === undefined) {
       let text = this.#done + ttyText(this.#pending)
       if (this.#capped) {
-        const after = this.#bytes - this.#limits.cap
+        const after = this.#bytes - this.#textHead
         const kept = Math.min(after, this.#ringLen)
         if (kept > 0) {
-          text += (after > kept ? '\n' : '') + ttyText(this.tail(kept).toString('utf8'))
+          text += (after > kept ? '\n' : '') + ttyText(fromCharStart(this.tail(kept)).toString('utf8'))
         }
       }
       this.#textCache = text
@@ -290,13 +293,14 @@ export class StoredArtifact {
 
   async textView(): Promise<string> {
     const head = await this.#head()
-    let text = ttyText(head.toString('utf8'))
+    const whole = this.#capped ? head.subarray(0, completeUtf8(head)) : head
+    let text = ttyText(whole.toString('utf8'))
     if (this.#capped) {
       const ring = await readWhole(this.#paths.tail)
-      const after = this.#bytes - head.length
+      const after = this.#bytes - whole.length
       const kept = Math.min(after, ring.length)
       if (kept > 0) {
-        text += (after > kept ? '\n' : '') + ttyText(ring.subarray(ring.length - kept).toString('utf8'))
+        text += (after > kept ? '\n' : '') + ttyText(fromCharStart(ring.subarray(ring.length - kept)).toString('utf8'))
       }
     }
     return text
@@ -318,6 +322,26 @@ export class StoredArtifact {
   #head(): Promise<Buffer> {
     return this.#stored.output !== undefined ? Promise.resolve(Buffer.from(this.#stored.output, 'utf8')) : readWhole(this.#paths.raw)
   }
+}
+
+// The cap and the tail ring cut bytes, not characters; neither seam of the text view may decode to U+FFFD.
+function completeUtf8(bytes: Buffer): number {
+  for (let at = bytes.length - 1; at >= Math.max(0, bytes.length - 4); at--) {
+    const byte = bytes[at]!
+    if ((byte & 0xc0) !== 0x80) {
+      const width = byte >= 0xf0 ? 4 : byte >= 0xe0 ? 3 : byte >= 0xc0 ? 2 : 1
+      return at + width > bytes.length ? at : bytes.length
+    }
+  }
+  return bytes.length
+}
+
+function fromCharStart(bytes: Buffer): Buffer {
+  let start = 0
+  while (start < bytes.length && start < 3 && (bytes[start]! & 0xc0) === 0x80) {
+    start++
+  }
+  return bytes.subarray(start)
 }
 
 async function readWhole(path: string): Promise<Buffer> {
