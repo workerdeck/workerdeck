@@ -64,7 +64,7 @@ async function until(check: () => boolean | Promise<boolean>, what: string, time
     if (Date.now() > deadline) {
       throw new Error(`timed out waiting for ${what}`)
     }
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await new Promise((resolve) => setTimeout(resolve, 2))
   }
 }
 
