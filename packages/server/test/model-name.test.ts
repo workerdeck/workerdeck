@@ -65,7 +65,7 @@ async function start(): Promise<string> {
 
 async function create(base: string, body: Record<string, unknown>): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  expect(res.status).toBeLessThan(300)
+  expect(res.status).toBe(201)
   return ((await res.json()) as { session: SessionInfo }).session
 }
 

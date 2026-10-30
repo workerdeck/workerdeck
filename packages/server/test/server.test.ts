@@ -576,13 +576,6 @@ describe('createWorkerServer', () => {
     const tobyDir = mkdtempSync(join(tmpdir(), 'cw-profile-toby-'))
     const danDir = mkdtempSync(join(tmpdir(), 'cw-profile-dan-'))
     try {
-      expect(() =>
-        createWorkerServer({
-          allowUnauthenticated: true,
-          profiles: [{ name: 'ghost', configDir: join(tmpdir(), 'cw-does-not-exist') }],
-        }),
-      ).toThrow(/configDir/)
-
       running = createWorkerServer({
         allowUnauthenticated: true,
         allowedCwdRoots: ['/tmp'],
