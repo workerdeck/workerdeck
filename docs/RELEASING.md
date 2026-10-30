@@ -1711,7 +1711,8 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   on a custom recognizer (`ListDragUITests`), PNG avatars out of core/FFI/apps. The question board is **not** in it
   (parked on `feat/question-board`). Android stays behind iOS on features and UX (Tobias: good enough for now).
   Known debt carried to the next release by decision: APNs over the wire, the device-only checks in
-  `_docs/VERIFICATION-DEBT.md`.
+  `_docs/VERIFICATION-DEBT.md`. **Published** 2026-10-30: tag `v4.1.0` moved to `7fef364e`, Publish green first
+  try (run 41061545927), npm 12/12 with `latest` 4.1.0 about 2 minutes after the run, Marketplace 4.1.0.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
