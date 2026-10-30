@@ -64,10 +64,13 @@ function drainBeforeDestroy(socket: NodePtySocket | undefined): void {
   }
 }
 
+// Far past what a kernel tty buffer holds: a descendant still writing after the exit cannot hold the loop.
+export const PTY_DRAIN_MAX_BYTES = 1 << 20
+
 function readAvailable(fd: number): Buffer[] {
   const chunks: Buffer[] = []
   const buffer = Buffer.alloc(65_536)
-  for (;;) {
+  for (let total = 0; total < PTY_DRAIN_MAX_BYTES; ) {
     let read: number
     try {
       read = readSync(fd, buffer, 0, buffer.length, null)
@@ -77,8 +80,11 @@ function readAvailable(fd: number): Buffer[] {
     if (read <= 0) {
       return chunks
     }
-    chunks.push(Buffer.from(buffer.subarray(0, read)))
+    const take = Math.min(read, PTY_DRAIN_MAX_BYTES - total)
+    chunks.push(Buffer.from(buffer.subarray(0, take)))
+    total += take
   }
+  return chunks
 }
 
 // A spawn env replaces the inherited one wholesale, so the copy has to be complete; the gateway's own environment is

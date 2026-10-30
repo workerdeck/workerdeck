@@ -2439,7 +2439,8 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   a while by `retry: 2` on the `artifact` block. `loadPty` wraps node-pty so every child's socket `destroy` first
   reads the master fd with `readSync` until `EAGAIN`/`EIO` and emits those bytes as `data` through the socket's own
   decoder (so a split UTF-8 sequence stays whole). The handle fd is libuv's non-blocking one, so the drain never
-  blocks. The `drain` regression in `shells.test.ts` has a grandchild write after the shell exits and stalls the loop
+  blocks, and it stops at `PTY_DRAIN_MAX_BYTES` (1 MiB) so a descendant still writing after the exit
+  cannot hold the event loop. The `drain` regression in `shells.test.ts` has a grandchild write after the shell exits and stalls the loop
   once node-pty arms its timer; it runs on Linux only, because macOS revokes the tty at the leader's exit and the
   kernel has already discarded those bytes. Bun hosts use `bun-pty.ts` and never reach this wrapper.
 - **The artifact is on disk under `<stateDir>/shells/`, index per session, spill per shell.** Small

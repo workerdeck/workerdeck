@@ -16,7 +16,7 @@ import {
   type ShellRegistry,
   type StoredShellIndex,
 } from '../src/services/shells.ts'
-import { drainingPty } from '../src/services/shell-env.ts'
+import { drainingPty, PTY_DRAIN_MAX_BYTES } from '../src/services/shell-env.ts'
 import { readProcessTable } from '../src/services/process-tree.ts'
 import type { PtyChild, PtyModule } from '../src/services/shell-types.ts'
 import { fakeRunner } from './helpers.ts'
@@ -556,6 +556,27 @@ describe('drainingPty', () => {
       socket.destroy('reason')
       expect(emitted).toEqual(['étail €\r\n'])
       expect(destroyed).toEqual([['reason']])
+    } finally {
+      closeSync(fd)
+    }
+  })
+
+  it('stops at its byte bound when the master never runs dry, and still destroys', () => {
+    const fd = openSync('/dev/zero', 'r')
+    try {
+      let bytes = 0
+      let destroyed = 0
+      const socket = {
+        _handle: { fd },
+        _readableState: { decoder: null },
+        emit: (_event: 'data', data: string | Buffer) => (bytes += data.length) > 0,
+        destroy: () => (destroyed += 1),
+      }
+      const inner: PtyModule = { spawn: () => ({ pid: 1, _socket: socket }) as unknown as PtyChild }
+      drainingPty(inner).spawn('/bin/sh', [], { name: 'x', cols: 1, rows: 1, cwd: '/', env: {} })
+      socket.destroy()
+      expect(bytes).toBe(PTY_DRAIN_MAX_BYTES)
+      expect(destroyed).toBe(1)
     } finally {
       closeSync(fd)
     }
