@@ -42,7 +42,6 @@ function agentDirectory(registry: ShellRegistry, ...runners: Runner[]) {
   return createShellDirectory(registry, { runnerFor: (id) => runners.find((r) => r.id === id) })
 }
 
-// A scripted shell that printed `chunks` and exited, settled before it returns.
 async function finished(shells: ShellRegistry, owner: Runner, chunks: string[]): Promise<string> {
   const spawned = await shells.spawn({ runner: owner, command: 'scripted', owner: 'user' })
   const child = pty.last()

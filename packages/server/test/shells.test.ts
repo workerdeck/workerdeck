@@ -58,7 +58,6 @@ async function scripted(shells: ShellRegistry, owner: Runner, command: string, k
   return { ...spawned, child: pty.last() }
 }
 
-// A scripted shell that printed `chunks` and exited with `exitCode`, settled before it returns.
 async function finished(shells: ShellRegistry, owner: Runner, chunks: string[], exitCode = 0) {
   const spawned = await scripted(shells, owner, 'scripted')
   for (const chunk of chunks) {
