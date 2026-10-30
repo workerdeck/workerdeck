@@ -1,6 +1,6 @@
 import type { LocalShellSource, Runner } from '@workerdeck/core'
 import type { SessionInfo, ShellEndReason, ShellInfo, ShellOwner } from '@workerdeck/protocol'
-import type { ProcessTable } from './process-tree.ts'
+import type { ProcessTable, TreeKillDeps } from './process-tree.ts'
 import type { ShellArtifact } from './shell-artifact.ts'
 import type { ShellScreen } from './shell-screen.ts'
 
@@ -33,6 +33,8 @@ export type ShellRegistryOptions = {
   tailFlushMs?: number
   sweepIntervalMs?: number
   processTable?: ProcessTable
+  signal?: TreeKillDeps['signal']
+  pty?: PtyModule
   onError?: ShellErrorReporter
 }
 

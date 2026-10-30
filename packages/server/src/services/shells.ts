@@ -98,7 +98,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
   const report: ShellErrorReporter = (error, context) => options.onError?.(error, context)
   const treeDeps: TreeKillDeps = {
     table: options.processTable ?? readProcessTable,
-    signal: (pid, name) => void process.kill(pid, name),
+    signal: options.signal ?? ((pid, name) => void process.kill(pid, name)),
     self: process.pid,
   }
 
@@ -156,7 +156,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
       throw new Error('the gateway is shutting down')
     }
     const state = await load(runner.id)
-    const pty = await loadPty()
+    const pty = options.pty ?? (await loadPty())
     if (!pty) {
       throw new Error(SHELL_REFUSAL)
     }
