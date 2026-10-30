@@ -1,5 +1,6 @@
 import type { Socket } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { WebSocket } from 'ws'
 import { SHELL_INPUT_MAX, SHELL_MAX_COLS, SHELL_MIN_ROWS } from '@workerdeck/protocol'
 import { SHELL_DETACHED_BACKPRESSURE, SHELL_SOCKET_BUFFERED_MAX } from '../src/routes/ws.ts'
 import { loadPty, SHELL_REFUSAL } from '../src/services/shells.ts'
@@ -8,14 +9,15 @@ import {
   attachedFrames,
   attachSocket,
   createSession,
+  type Collector,
   detachedFrames,
   isError,
   outputOf,
   sendAttach,
   sendInput,
+  ptySuite,
   shellFixture,
   shellFrames,
-  sleep,
   spawnShell,
   waitForAttached,
   waitForDetached,
@@ -23,11 +25,7 @@ import {
   waitForOutput,
 } from './shell-helpers.ts'
 
-const pty = await loadPty()
-if (pty === null) {
-  console.warn('shell-attach.test: @lydell/node-pty is not installed for this platform, skipping the PTY suites')
-}
-const withPty = describe.skipIf(pty === null)
+const withPty = ptySuite(await loadPty(), 'shell-attach.test')
 
 const fx = shellFixture('wd-shell-attach-')
 const serverSockets: Socket[] = []
@@ -44,6 +42,23 @@ function serverSocketOf(localPort: number): Socket {
     throw new Error('server socket not found')
   }
   return match
+}
+
+// Frames on one socket are answered in order, so once this error arrives every frame the server owed before it is in.
+async function barrier(ws: WebSocket, collector: Collector): Promise<void> {
+  const before = collector.frames.filter(isError).length
+  ws.send(JSON.stringify({ generation: 1, type: 'nonsense' }))
+  await vi.waitFor(() => expect(collector.frames.filter(isError).length).toBe(before + 1))
+}
+
+// The gateway has run its close handler for this socket once the TCP close reached it and the loop turned over.
+async function closedOnServer(ws: WebSocket, localPort: number): Promise<void> {
+  const serverSide = serverSocketOf(localPort)
+  ws.close()
+  if (!serverSide.destroyed) {
+    await new Promise<void>((resolve) => serverSide.once('close', () => resolve()))
+  }
+  await new Promise((resolve) => setImmediate(resolve))
 }
 
 async function operatorSession() {
@@ -94,16 +109,17 @@ describe('shell_attach gating', () => {
 withPty('shell_attach', () => {
   it('replays the scrollback, streams what follows, reports the exit, and logs none of it', async () => {
     const { wsBase, id, ws, collector } = await operatorSession()
-    const command = 'echo first; sleep 0.5; echo second'
+    const command = 'stty -echo; echo first; read -r go; echo second'
     const shell = await spawnShell(ws, collector, command)
     await vi.waitFor(async () => {
-      await expect(fx.server().shells!.output(id, shell.id, { view: 'raw' })).resolves.toContain('first')
+      await expect(fx.server().shells!.output(id, shell.id, { view: 'raw' })).resolves.toBe('first\r\n')
     })
     sendAttach(ws, shell.id, 100, 30)
     const attached = await waitForAttached(collector, shell.id)
     expect(attached.scrollback).toBe('first\r\n')
     expect(attached.shell).toMatchObject({ id: shell.id, status: 'running', cols: 100, rows: 30 })
     expect(attached).toMatchObject({ cols: 100, rows: 30 })
+    sendInput(ws, shell.id, 'go\r')
 
     const detached = await waitForDetached(collector, shell.id)
     expect(detached.reason).toBe('exit')
@@ -135,7 +151,7 @@ withPty('shell_attach', () => {
     sendInput(ws, shell.id, 'x')
     const error = await collector.waitFor(isError)
     expect(isError(error) && error.message).toBe('the shell has exited')
-    await sleep(150)
+    await barrier(ws, collector)
     expect(shellFrames(collector, shell.id).map((f) => f.type)).toEqual(['shell_attached'])
     ws.close()
   })
@@ -205,7 +221,7 @@ withPty('shell_attach', () => {
   })
 
   it('detaches on socket close and leaves the shell running', async () => {
-    const { wsBase, id, ws, collector } = await operatorSession()
+    const { wsBase, id, ws, collector, localPort } = await operatorSession()
     const shell = await spawnShell(ws, collector, 'read -r a; echo "after $a"')
     const other = await attachSocket(wsBase, id, 'operator')
     sendAttach(ws, shell.id, 80, 24)
@@ -213,9 +229,7 @@ withPty('shell_attach', () => {
     await waitForAttached(collector, shell.id)
     await waitForAttached(other.collector, shell.id)
 
-    ws.close()
-    await new Promise<void>((resolve) => ws.once('close', () => resolve()))
-    await sleep(100)
+    await closedOnServer(ws, localPort)
     expect(fx.server().shells!.get(id, shell.id)).toMatchObject({ status: 'running' })
 
     sendInput(other.ws, shell.id, 'close\r')
@@ -233,9 +247,7 @@ withPty('shell_attach', () => {
     sendAttach(other.ws, shell.id, 80, 24)
     await waitForAttached(collector, shell.id)
     await waitForAttached(other.collector, shell.id)
-    other.ws.close()
-    await new Promise<void>((resolve) => other.ws.once('close', () => resolve()))
-    await sleep(50)
+    await closedOnServer(other.ws, other.localPort)
     expect(fx.server().shells!.get(id, shell.id)).toMatchObject({ status: 'running' })
 
     expect(fx.server().shells!.kill(id, shell.id)).toMatchObject({ status: 'exited', endReason: 'killed' })
@@ -258,7 +270,6 @@ withPty('shell_attach', () => {
 
     ws.send(JSON.stringify({ generation: 1, type: 'shell_detach', shellId: shell.id }))
     ws.send(JSON.stringify({ generation: 1, type: 'shell_detach', shellId: shell.id }))
-    await sleep(50)
     sendInput(ws, shell.id, 'y\r')
     await waitForExit(collector, 'read -r a; echo one; read -r b; echo two')
     await expect(fx.server().shells!.output(id, shell.id, { view: 'text' })).resolves.toContain('two')

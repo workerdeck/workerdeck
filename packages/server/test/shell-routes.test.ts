@@ -3,13 +3,9 @@ import { ENGINE_CAPABILITIES, SHELL_COMMAND_MAX, SHELL_INLINE_LINES, type Server
 import { sandboxedProviderProfile } from '../src/index.ts'
 import { loadPty } from '../src/services/shells.ts'
 import { fakeHarness, fakeRunner } from './helpers.ts'
-import { attachSocket, createSession, get, isError, shellFixture, shellRow, waitForExit } from './shell-helpers.ts'
+import { attachSocket, createSession, get, isError, ptySuite, shellFixture, shellRow, waitForExit } from './shell-helpers.ts'
 
-const pty = await loadPty()
-if (pty === null) {
-  console.warn('shell-routes.test: @lydell/node-pty is not installed for this platform, skipping the PTY suites')
-}
-const withPty = describe.skipIf(pty === null)
+const withPty = ptySuite(await loadPty(), 'shell-routes.test')
 
 const fx = shellFixture('wd-shell-ws-')
 const { tempDir, startServer, startShellServer } = fx
@@ -84,6 +80,35 @@ describe('shell_command over WS', () => {
     const long = await collector.waitFor((f) => isError(f) && f.message !== 'shell command is empty')
     expect(isError(long) && long.message).toBe(`shell command exceeds ${SHELL_COMMAND_MAX} characters`)
     expect(collector.frames.some((f) => localOutput(f) !== undefined)).toBe(false)
+    ws.close()
+  })
+
+  it('refuses the kill route to a scoped principal', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await startShellServer(harness)
+    const id = await createSession(base, 'alice-a', { cwd: tempDir() })
+    const { ws } = await attachSocket(wsBase, id, 'alice-a')
+    const res = await fetch(`${base}/sessions/${id}/shells/anything/kill`, {
+      method: 'POST',
+      headers: { 'x-workerdeck-generation': '1', authorization: 'Bearer alice-a' },
+    })
+    expect(res.status).toBe(403)
+    expect(((await res.json()) as { error: string }).error).toBe('shell commands are not available on this session')
+    ws.close()
+  })
+
+  // Reading a shell is reading host output, so `canSee` on the session is not the gate: a scoped principal attached to
+  // a session an operator ran `$` in could otherwise list every command and fetch every byte it printed.
+  it('refuses the read routes to a scoped principal', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await startShellServer(harness)
+    const id = await createSession(base, 'alice-a', { cwd: tempDir() })
+    const { ws } = await attachSocket(wsBase, id, 'alice-a')
+    for (const path of [`/sessions/${id}/shells`, `/sessions/${id}/shells/sh_1`, `/sessions/${id}/shells/sh_1/output`]) {
+      const res = await get(base, path, 'alice-a')
+      expect(res.status).toBe(403)
+      expect(((await res.json()) as { error: string }).error).toBe('shell commands are not available on this session')
+    }
     ws.close()
   })
 
@@ -162,7 +187,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const text = await res.text()
     expect(text.split('\n').filter((line) => line.startsWith('line'))).toHaveLength(200)
     const tail = await (await get(base, `/sessions/${id}/shells/${row.shell.id}/output?view=raw&tail=32`)).text()
-    expect(tail.length).toBeLessThanOrEqual(64)
+    expect(tail).toBe('197\r\nline198\r\nline199\r\nline200\r\n')
     ws.close()
   })
 
@@ -241,35 +266,6 @@ withPty('shell_command spawns a tracked PTY', () => {
     })
     expect(res.status).toBe(409)
     expect(((await res.json()) as { error: string }).error).toMatch(/read-only/)
-    ws.close()
-  })
-
-  it('refuses the kill route to a scoped principal', async () => {
-    const harness = fakeHarness()
-    const { base, wsBase } = await startShellServer(harness)
-    const id = await createSession(base, 'alice-a', { cwd: tempDir() })
-    const { ws } = await attachSocket(wsBase, id, 'alice-a')
-    const res = await fetch(`${base}/sessions/${id}/shells/anything/kill`, {
-      method: 'POST',
-      headers: { 'x-workerdeck-generation': '1', authorization: 'Bearer alice-a' },
-    })
-    expect(res.status).toBe(403)
-    expect(((await res.json()) as { error: string }).error).toBe('shell commands are not available on this session')
-    ws.close()
-  })
-
-  // Reading a shell is reading host output, so `canSee` on the session is not the gate: a scoped principal attached to
-  // a session an operator ran `$` in could otherwise list every command and fetch every byte it printed.
-  it('refuses the read routes to a scoped principal', async () => {
-    const harness = fakeHarness()
-    const { base, wsBase } = await startShellServer(harness)
-    const id = await createSession(base, 'alice-a', { cwd: tempDir() })
-    const { ws } = await attachSocket(wsBase, id, 'alice-a')
-    for (const path of [`/sessions/${id}/shells`, `/sessions/${id}/shells/sh_1`, `/sessions/${id}/shells/sh_1/output`]) {
-      const res = await get(base, path, 'alice-a')
-      expect(res.status).toBe(403)
-      expect(((await res.json()) as { error: string }).error).toBe('shell commands are not available on this session')
-    }
     ws.close()
   })
 
