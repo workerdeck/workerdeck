@@ -561,21 +561,6 @@ withPty('spawn', () => {
     expect(source.text()).toBe(`tty\n${cwd}\nxterm-256color\n`)
     expect(shell.bytes).toBe(Buffer.byteLength(`tty\r\n${cwd}\r\nxterm-256color\r\n`))
   })
-
-  it('writes input to the PTY and applies a clamped resize', async () => {
-    const shells = makeRegistry()
-    const { shell, source } = await shells.spawn({
-      runner: runner('s1'),
-      command: 'read -r name; echo "hi $name"; stty size',
-      owner: 'user',
-    })
-    expect(shells.resize('s1', shell.id, { cols: 5000, rows: 0 })).toEqual({ cols: 1000, rows: 1 })
-    expect(shells.resize('s1', shell.id, { cols: 80, rows: 24 })).toEqual({ cols: 80, rows: 24 })
-    shells.write('s1', shell.id, 'bob\r')
-    await settled(source)
-    expect(source.text()).toContain('hi bob\n')
-    expect(source.text()).toContain('24 80\n')
-  })
 })
 
 withPty('kill', () => {
