@@ -1,3 +1,3 @@
 import { workspaceTestConfig } from '../../vitest.shared.ts'
 
-export default workspaceTestConfig()
+export default workspaceTestConfig({ test: { pool: 'forks' } })
