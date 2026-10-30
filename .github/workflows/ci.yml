@@ -21,7 +21,7 @@ jobs:
       - run: pnpm fixtures:golden --check
       - run: pnpm fixtures:vm --check
       - run: pnpm fixtures:frames --check
-      - run: pnpm test
+      - run: pnpm exec turbo run test --filter='!@workerdeck/server'
       - run: pnpm build
       # Side-loadable VS Code extension - not on the Marketplace yet, so the CI
       # artifact IS the distribution channel.
@@ -30,6 +30,34 @@ jobs:
         with:
           name: workerdeck-vsix
           path: apps/vscode/workerdeck.vsix
+
+  # The server suite is the gateway integration half (HTTP, WS, PTYs, persistence): its own runner, its own CPUs.
+  server-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run test --filter=@workerdeck/server
+
+  # macOS discards a finished session leader's unread pty output unless its session opened /dev/tty, a path Linux
+  # never takes: the real-PTY shell files run here too.
+  shell-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run test/shells.test.ts test/shell-directory.test.ts test/shell-attach.test.ts test/shell-routes.test.ts
+        working-directory: packages/server
 
   rust:
     runs-on: ubuntu-latest
