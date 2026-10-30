@@ -1684,7 +1684,11 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   run), `latest` 4.0.0, Marketplace 4.0.0 a few minutes later; tag `v4.0.0` at `b4f50fa9`. Installs migrate with
   `_docs/NEXT-MIGRATE.md`.
 
-  **4.1.0** - **Agent faces, exact models, native lists** (cut 2026-10-29). A **minor** by decision (Tobias): protocol
+  **4.1.0** - **Agent faces, exact models, native lists**. **POSTPONED, NOT PUBLISHED** (Tobias, 2026-10-30): the
+  tag `v4.1.0` is pushed at `9c9b4b36`, but Publish failed `pnpm test` on 5 attempts, each on a different
+  timing-dependent test (CI runs the suites 4 to 7 times slower than a Mac, and fixed wall-clock budgets lose there).
+  The release waits for a fast, stable test suite (`_docs/plans/TEST-SUITE-REVIEW-REPORT.md`); at release, move the
+  tag to the new head (the move needs Tobias's terminal: auto mode refuses remote tag deletion). A **minor** by decision (Tobias): protocol
   stays **2**, relay wire **2**, though two changes break a strict reading. **Faces** replace pixel avatars:
   `AgentRef.face` (a layered robot recipe rolled and validated in protocol, drawn as animated SVG by `ui` and from
   the Rust `vm::face` tree on iOS and Android); `AgentRef.avatar`, the PNG and preview routes, `AvatarProvider`,
