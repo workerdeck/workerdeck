@@ -13,7 +13,7 @@ import { AgentService } from '../src/services/agents.ts'
 import { createPeerService, relayEntry } from '../src/services/peers.ts'
 import { ProjectInfoService } from '../src/services/project-info.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
-import { fakeHarness, listenOn } from './helpers.ts'
+import { fakeHarness, listenOn, until } from './helpers.ts'
 import { PeerRunner } from './peer-runner.ts'
 
 const cleanups: Array<() => unknown> = []
@@ -229,7 +229,7 @@ describe('G review follow-ups', () => {
     }
     const registry = new SessionRegistry()
     const box = new PeerRunner('box')
-    let wake: () => void = () => {}
+    let wake: (() => void) | undefined
     const refs: LateBoundRefs = {
       registry,
       parking: {
@@ -254,17 +254,18 @@ describe('G review follow-ups', () => {
     }
 
     const lowered = service.send('stack', 'box', 'hello')
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await until(() => wake !== undefined, 'the send to wait on the wake')
     parties.box = { ...parties.box, agent: { id: 'B', name: 'Box-Lead' } }
-    wake()
+    wake!()
+    wake = undefined
     expect((await lowered).delivered).toBe(false)
 
     registry.evict('box')
     parties.box = { owner: 'silkweave', agent: { id: 'B', name: 'Box-Lead', shared: true } }
     const unprompted = service.relaySend(origin, 'box', 'hello', undefined, 'mini')
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await until(() => wake !== undefined, 'the relayed send to wait on the wake')
     parties.box = { ...parties.box, permissionMode: 'bypassPermissions' }
-    wake()
+    wake!()
     expect((await unprompted).delivered).toBe(false)
     expect(box.sent).toEqual([])
   })

@@ -4,7 +4,7 @@ import type { TeamFrameKind, TeamResult, TeamStatusAnswer } from '@workerdeck/re
 import { createMemoryAgentStore, type AgentStore, type StoredAgent } from '../src/services/agent-store.ts'
 import { AgentService, isAgentRefusal } from '../src/services/agents.ts'
 import { TeamLinks, type TeamTransport } from '../src/services/team-links.ts'
-import { deferred, until } from './helpers.ts'
+import { deferred, drained, until } from './helpers.ts'
 
 type Deferred<T> = ReturnType<typeof deferred<T>>
 
@@ -51,10 +51,6 @@ async function joinRig() {
   return { agents, transport, teams, mover, joining }
 }
 
-// Everything here is in memory: one macrotask turn drains every promise chain that is not waiting on a gate.
-function drained(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve))
-}
 
 describe('agent mutation transitions', () => {
   it('refuses the second of two concurrent moves that would form a cycle', async () => {

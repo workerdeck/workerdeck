@@ -75,18 +75,23 @@ async function attach(base: string, id: string): Promise<SessionEvent[]> {
   const socket = new WebSocket(url)
   const events: SessionEvent[] = []
   // Registered before the open handshake resolves: the replay is sent the moment the socket opens.
-  socket.on('message', (raw) => {
-    const frame = JSON.parse(String(raw)) as { type: string; event?: SessionEvent }
-    if (frame.type === 'event' && frame.event) {
-      events.push(frame.event)
-    }
+  // The replay is written in the attach itself, so the refusal of an untokened command lands behind all of it.
+  const answered = new Promise<void>((resolve) => {
+    socket.on('message', (raw) => {
+      const frame = JSON.parse(String(raw)) as { type: string; event?: SessionEvent }
+      if (frame.type === 'event' && frame.event) {
+        events.push(frame.event)
+      } else if (frame.type === 'protocol_error') {
+        resolve()
+      }
+    })
   })
   await new Promise<void>((resolve, reject) => {
     socket.on('open', () => resolve())
     socket.on('error', reject)
   })
-  // The replay arrives in bursts; a short quiet window is enough to have it all.
-  await new Promise((resolve) => setTimeout(resolve, 150))
+  socket.send(JSON.stringify({ type: 'interrupt' }))
+  await answered
   socket.close()
   return events
 }
@@ -111,7 +116,7 @@ describe('live sessions that survive a restart', () => {
     const session = await create(gateway.base)
     gateway.built[0]!.turn('hello', 'hi there')
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await gateway.server.parking.flush()
     expect(await store.get(session.id)).toBeNull()
   })
 

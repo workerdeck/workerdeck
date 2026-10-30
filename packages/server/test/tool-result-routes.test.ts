@@ -3,7 +3,7 @@ import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { TOOL_RESULT_HEAD_CHARS, type ServerFrame, type SessionEvent, type SessionInfo, type ToolResultBlock } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { fakeHarness } from './helpers.ts'
+import { fakeHarness, until } from './helpers.ts'
 
 const BIG = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 12_000)
 
@@ -35,16 +35,32 @@ async function createSession(base: string): Promise<string> {
 async function replay(wsBase: string, id: string, query = ''): Promise<SessionEvent[]> {
   const ws = new WebSocket(`${wsBase}/sessions/${id}/ws${query}`)
   const events: SessionEvent[] = []
-  ws.on('message', (data) => {
-    const frame = JSON.parse(String(data)) as ServerFrame
-    if (frame.type === 'event') {
-      events.push(frame.event)
-    }
+  // The replay is written in the attach itself, so the refusal of an untokened command lands behind all of it.
+  const answered = new Promise<void>((resolve) => {
+    ws.on('message', (data) => {
+      const frame = JSON.parse(String(data)) as ServerFrame
+      if (frame.type === 'event') {
+        events.push(frame.event)
+      } else if (frame.type === 'protocol_error') {
+        resolve()
+      }
+    })
   })
   await new Promise<void>((resolve) => ws.on('open', () => resolve()))
-  await new Promise((resolve) => setTimeout(resolve, 80))
+  ws.send(JSON.stringify({ type: 'interrupt' }))
+  await answered
   ws.close()
   return events
+}
+
+// Whether the runner's log holds the result yet: a subscribe replays the log before it returns.
+function logged(id: string, toolUseId: string): boolean {
+  let found = false
+  const unsubscribe = running!.registry.get(id)!.subscribe((event) => {
+    found ||= resultBlock(event)?.tool_use_id === toolUseId
+  })
+  unsubscribe()
+  return found
 }
 
 function resultBlock(event: SessionEvent | undefined): ToolResultBlock | undefined {
@@ -72,7 +88,7 @@ async function seed(harness: ReturnType<typeof fakeHarness>, base: string) {
       content: [{ type: 'tool_result', tool_use_id: 'call-1', content: BIG }],
     },
   } as unknown as SDKMessage)
-  await new Promise((resolve) => setTimeout(resolve, 60))
+  await until(() => logged(id, 'call-1'), 'the tool result in the log')
   return id
 }
 
@@ -178,7 +194,7 @@ async function seedImage(harness: ReturnType<typeof fakeHarness>, base: string, 
       ],
     },
   } as unknown as SDKMessage)
-  await new Promise((resolve) => setTimeout(resolve, 60))
+  await until(() => logged(id, 'call-img'), 'the image result in the log')
   return id
 }
 

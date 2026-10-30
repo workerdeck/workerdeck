@@ -339,7 +339,7 @@ describe('peer relay link', () => {
     const connectedAt = relay.status().gateways.find((row) => row.name === 'mac')!.connectedAt
     first.release()
     first.close()
-    await until(() => Date.now() > connectedAt, 'the clock to move past the first dial, which a fresh one is told apart by')
+    await until(() => Date.now() > (connectedAt ?? 0), 'the clock to move past the first dial, which a fresh one is told apart by')
     const second = createRelayLink({ url: relay.url, gateway: 'mac', key, teams: { acceptFrom: ['win'] } }, service, () => {})
     cleanups.push(() => second.close())
     await until(
@@ -363,7 +363,7 @@ describe('peer relay link', () => {
     first.close()
     const slot = (globalThis as Record<symbol, { identity: string } | undefined>)[Symbol.for('workerdeck.relay.carried')]!
     slot.identity = JSON.stringify([relay.url, 'mac', '', 'inline', '', null, null])
-    await until(() => Date.now() > connectedAt, 'the clock to move past the first dial, which a fresh one is told apart by')
+    await until(() => Date.now() > (connectedAt ?? 0), 'the clock to move past the first dial, which a fresh one is told apart by')
     const second = createRelayLink(options, service, () => {})
     cleanups.push(() => second.close())
     await until(

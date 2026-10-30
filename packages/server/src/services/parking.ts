@@ -43,7 +43,7 @@ export class SessionParkManager {
   #options: SessionParkOptions
   #owners = new Map<string, string>()
   #settled = new Map<string, string>()
-  #timers = new Map<string, ReturnType<typeof setTimeout>>()
+  #timers = new Map<string, { timer: ReturnType<typeof setTimeout>; at: number }>()
   #resuming = new Map<string, Promise<Runner | undefined>>()
   #detachTimers = new Map<string, ReturnType<typeof setTimeout>>()
   #configs = new Map<string, SessionRunnerConfig>()
@@ -424,7 +424,7 @@ export class SessionParkManager {
 
   close(): void {
     this.#closed = true
-    for (const timer of this.#timers.values()) {
+    for (const { timer } of this.#timers.values()) {
       clearTimeout(timer)
     }
     for (const timer of this.#detachTimers.values()) {
@@ -663,7 +663,12 @@ export class SessionParkManager {
       Math.max(0, expiresAt - Date.now()),
     )
     timer.unref?.()
-    this.#timers.set(execution.executionId, timer)
+    this.#timers.set(execution.executionId, { timer, at: expiresAt })
+  }
+
+  // When the watchdog of a parked execution will fail it, while one is armed.
+  deadlineOf(executionId: string): number | undefined {
+    return this.#timers.get(executionId)?.at
   }
 
   #forget(executionId: string): void {
@@ -679,11 +684,11 @@ export class SessionParkManager {
   }
 
   #clearTimer(executionId: string): void {
-    const timer = this.#timers.get(executionId)
-    if (timer === undefined) {
+    const armed = this.#timers.get(executionId)
+    if (armed === undefined) {
       return
     }
-    clearTimeout(timer)
+    clearTimeout(armed.timer)
     this.#timers.delete(executionId)
   }
 }

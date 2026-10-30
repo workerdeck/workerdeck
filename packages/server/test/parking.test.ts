@@ -208,10 +208,10 @@ describe('deferred execution: parking and result ingestion', () => {
     const h = await startServer()
     const session = await createSession(h.base)
     const ws = new WebSocket(`ws://127.0.0.1:${h.port}/v1/sessions/${session.id}/ws`)
-    await new Promise<void>((resolve) => ws.on('open', () => resolve()))
+    await new Promise<void>((resolve) => ws.once('message', () => resolve()))
 
+    // The park is declined synchronously, in the handler of the event that asked for it.
     h.runners[0]!.defer('exec-1')
-    await new Promise((r) => setTimeout(r, 60))
     expect(running!.registry.get(session.id)).toBeDefined()
     expect(await running!.parking.get(session.id)).toBeNull()
 
@@ -340,7 +340,6 @@ describe('deferred execution: parking and result ingestion', () => {
     await vi.waitFor(() => expect(refusing).toHaveLength(1))
 
     refusing[0]!.defer('exec-1')
-    await new Promise((resolve) => setTimeout(resolve, 100))
     const job = (await fetch(`${h.base}/jobs/${first.id}`).then((r) => r.json())) as { job: JobInfo }
     expect(job.job.status).toBe('running')
     expect(refusing).toHaveLength(1)
@@ -464,7 +463,7 @@ describe('deferred execution: durability across a restart', () => {
 
     const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     expect(deleted.status).toBe(200)
-    await new Promise((resolve) => setTimeout(resolve, 150))
+    await running!.parking.flush()
     expect(await runtimeFiles()).toEqual([])
     const listed = (await fetch(`${h.base}/sessions`).then((r) => r.json())) as {
       sessions: SessionInfo[]
@@ -482,12 +481,14 @@ describe('deferred execution: durability across a restart', () => {
     await running!.close()
     await backdateDeadline(session.id)
 
+    const hydrated = Date.now()
     const second = await withStore(10_000)
-    await new Promise((resolve) => setTimeout(resolve, 60))
     expect(second.runners).toHaveLength(0)
+    expect(running!.parking.deadlineOf('exec-1')).toBeGreaterThanOrEqual(hydrated + 10_000)
 
     expect((await submitResult(second.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 1 } })).status).toBe(200)
-    expect(second.runners[0]!.settled[0]).toMatchObject({ result: { status: 'ok' } })
+    expect(second.runners[0]!.settled).toEqual([expect.objectContaining({ result: expect.objectContaining({ status: 'ok' }) })])
+    expect(running!.parking.deadlineOf('exec-1')).toBeUndefined()
   })
 
   it('still fails an expired execution once the grace window is over', async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { SessionParkManager, type StoredSessionRecord } from '../src/index.ts'
-import { runtimeStore } from './helpers.ts'
+import { drained, runtimeStore, until } from './helpers.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
@@ -77,10 +77,10 @@ describe('owner rename against parking', () => {
     registry.register(runner)
     parking.remember(runner.id, config)
     parking.touch(runner)
-    await expect.poll(() => saving).toBe(true)
+    await until(() => saving, 'the save to be held')
 
     const rename = parking.renameOwner('ruli', 'tobias')
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await drained()
     release()
     expect(await rename).toEqual(['s1'])
     expect(owners(await store.get('s1'))).toEqual({ info: 'tobias', config: 'tobias' })
@@ -99,13 +99,13 @@ describe('owner rename against parking', () => {
     await store.save(record)
 
     const wake = parking.ensureLive('s1')
-    await expect.poll(() => building).toBe(true)
+    await until(() => building, 'the wake to reach the runner factory')
     let renameDone = false
     const rename = parking.renameOwner('ruli', 'tobias').then((count) => {
       renameDone = true
       return count
     })
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await drained()
     expect(renameDone).toBe(false)
 
     release()

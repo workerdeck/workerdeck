@@ -423,10 +423,10 @@ describe('sessions that survive a restart', () => {
     const store = await stateDir().then((dir) => fileRuntimeStore(dir))
     const gateway = await startGateway(store)
     const session = await create(gateway.base, 'plain')
-    // Give the save every chance to happen before asserting it did not.
     await vi.waitFor(async () => {
       expect((await list(gateway.base)).find((row) => row.id === session.id)?.status).toBe('idle')
     })
+    await gateway.server.parking.flush()
     expect(await store.get(session.id)).toBeNull()
   })
 

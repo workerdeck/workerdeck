@@ -3,7 +3,7 @@ import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ClearContextOptions, Runner } from '@workerdeck/core'
 import type { AgentInfo, AgentResponse, SessionEvent, SessionEventBody, SessionInfo, SessionStatus } from '@workerdeck/protocol'
 import { CONTEXT_RESET_SCHEDULED, ContextResetService } from '../src/services/context-resets.ts'
-import { fakeHarness } from './helpers.ts'
+import { drained, fakeHarness, manualStall, until } from './helpers.ts'
 import { createSession, get, shellFixture } from './shell-helpers.ts'
 
 const REQUEST = { prompt: 'continue from @NEXT.md', reason: 'context at 80%' }
@@ -111,7 +111,7 @@ describe('ContextResetService', () => {
 
     runner.emit(turnResult(true))
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await drained()
     expect(runner.cleared).toEqual([])
     await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
   })
@@ -195,13 +195,13 @@ describe('ContextResetService', () => {
     await service.request('s1', REQUEST)
     runner.emit({ type: 'session_closed', reason: 'server' })
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await drained()
     expect(runner.cleared).toEqual([])
 
     await service.request('s1', REQUEST)
     detach()
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await drained()
     expect(runner.cleared).toEqual([])
   })
 })
@@ -312,8 +312,7 @@ describe('context_reset through the gateway', () => {
     first!.emit(INIT)
     await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(1))
     first!.emit(REPLY)
-    // The reply names the turn's send once the runner has read it.
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await until(() => fx.server().registry.get(id)?.pendingInput?.() === 0, 'the reply to confirm the opening send')
 
     const result = await gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect(result.isError).toBeFalsy()
@@ -346,16 +345,20 @@ describe('context_reset through the gateway', () => {
     first!.emit(INIT)
     await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(1))
     first!.emit(REPLY)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    fx.server().cuts.stallMs = 40
+    await until(() => fx.server().registry.get(id)?.pendingInput?.() === 0, 'the reply to confirm the opening send')
+    const stall = manualStall(fx.server().cuts)
     const reset = () => gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect((await reset()).content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
     const runner = fx.server().registry.get(id)!
     runner.sendMessage('from a peer', undefined, { origin: { kind: 'peer', sessionId: 'p', name: 'P', engine: 'claude', hops: [] } })
     await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(2))
     first!.emit(RESULT)
-    await vi.waitFor(() => expect(runner.info().status).toBe('idle'))
-    await vi.waitFor(async () => expect((await reset()).content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED), { timeout: 2000 })
+    await until(() => runner.info().status === 'idle', 'the turn to end')
+    await until(() => stall.armed() === 1, 'the queued cut to wait on the unanswered peer message')
+    stall.expire()
+    expect(fx.server().cuts.queued(id)).toBe(false)
+    await drained()
+    expect((await reset()).content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
     expect(harnesses).toHaveLength(1)
     expect(await info(base, id)).toMatchObject({ conversation: 1 })
   })
@@ -380,8 +383,7 @@ describe('context_reset through the gateway', () => {
     first!.emit(INIT)
     await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(1))
     first!.emit(REPLY)
-    // The reply names the turn's send once the runner has read it.
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await until(() => fx.server().registry.get(agent.id)?.pendingInput?.() === 0, 'the reply to confirm the opening send')
 
     const result = await gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect(result.content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)

@@ -59,6 +59,11 @@ async function poll(attempt: () => Promise<true | Error>, what: string, watchdog
   }
 }
 
+// One macrotask turn: drains every in-memory promise chain that is not waiting on a gate, a timer or I/O.
+export function drained(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
 export function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => (resolve = done))
