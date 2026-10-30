@@ -1684,11 +1684,18 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   run), `latest` 4.0.0, Marketplace 4.0.0 a few minutes later; tag `v4.0.0` at `b4f50fa9`. Installs migrate with
   `_docs/NEXT-MIGRATE.md`.
 
-  **4.1.0** - **Agent faces, exact models, native lists**. **POSTPONED, NOT PUBLISHED** (Tobias, 2026-10-30): the
-  tag `v4.1.0` is pushed at `9c9b4b36`, but Publish failed `pnpm test` on 5 attempts, each on a different
-  timing-dependent test (CI runs the suites 4 to 7 times slower than a Mac, and fixed wall-clock budgets lose there).
-  The release waits for a fast, stable test suite (`_docs/plans/TEST-SUITE-REVIEW-REPORT.md`); at release, move the
-  tag to the new head (the move needs Tobias's terminal: auto mode refuses remote tag deletion). A **minor** by decision (Tobias): protocol
+  **4.1.0** - **Agent faces, exact models, native lists**. The first tag (`v4.1.0` at `9c9b4b36`) never published:
+  Publish failed `pnpm test` on 5 attempts, each on a different timing-dependent test, and Tobias held the release
+  until the suite was fast and stable. The rework on `fix/test-suite` (80th session, WD-Review's
+  `_docs/plans/TEST-SUITE-REVIEW-REPORT.md` and reduction report, reviewed clean) found real bugs behind four of the
+  flakes: node-pty destroyed a shell's master 200 ms after exit before a stalled loop read it (`drainingPty`), a
+  cut announced `conversation_started` and acked a typed `/clear` before lifting its gate, the shell text view cut
+  a character at the cap, and a client-reported bridge failure dropped the guest's logs. The rest were test
+  synchronisation (fixed sleeps, a freed port reused by a parallel suite). Tooling: `test`/`typecheck` depend on
+  `^transit`, the root no longer depends on workspace packages, one `vitest.shared.ts`, threads for the pure
+  suites, CI runs the server suite and the macOS real-PTY shell files as their own jobs, Publish runs tests
+  `--force`. Gate: 10/10 cold full-suite passes on the 4-CPU Linux rig. The tag moves to the new head at release
+  (Tobias's terminal: auto mode refuses remote tag deletion). A **minor** by decision (Tobias): protocol
   stays **2**, relay wire **2**, though two changes break a strict reading. **Faces** replace pixel avatars:
   `AgentRef.face` (a layered robot recipe rolled and validated in protocol, drawn as animated SVG by `ui` and from
   the Rust `vm::face` tree on iOS and Android); `AgentRef.avatar`, the PNG and preview routes, `AvatarProvider`,

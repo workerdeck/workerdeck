@@ -5,7 +5,7 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
-## [4.1.0] - 2026-10-29
+## [4.1.0] - 2026-10-30
 
 ### Added
 
@@ -29,6 +29,13 @@ gateway and protocol it talks to.
 
 ### Fixed
 
+- **A `$` command's output survives a busy gateway.** On Linux, output still in the terminal when a
+  shell exited could be lost (records stopped at 4095 bytes, or showed nothing) if the gateway was
+  busy at that moment.
+- A session's new conversation is announced only once it accepts commands, so acting on it at once
+  (or on a typed `/clear`'s acknowledgement) is no longer refused with "a new conversation is
+  starting".
+- A shell's text view no longer shows a broken character where its output reached the size cap.
 - Cmd+C in the transcript copies the selection instead of an empty string.
 - Host actions (kill shell, sleep, rename...) and the MCP section no longer fail with 409 "must name
   its conversation".
