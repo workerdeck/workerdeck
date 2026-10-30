@@ -10,8 +10,8 @@ have no in-repo caller and roam scores them as `dead_exports`. That number is no
 count.
 
 pnpm workspace + turbo (`pnpm typecheck|test|build|lint`); typecheck is `tsgo` (TS 7 preview) and
-covers `smoke/` + `examples/` too via `typecheck:extras` (they have tsconfigs but aren't packages,
-so turbo never ran them - one consequence bites the browser packages: `smoke/tsconfig.json` is
+covers `smoke/` + `examples/` too via `typecheck:extras` (they are private workspace packages
+with no scripts, so turbo never runs them - one consequence bites the browser packages: `smoke/tsconfig.json` is
 `lib: ["ES2022"]` with no DOM and `smoke/sdk-client.ts` imports `@workerdeck/react`, which the
 `@workerdeck/source` condition resolves to **source**, so a browser package's `src/` may not name
 `document`, `createImageBitmap` or any other DOM global directly - even though its own tsconfig
@@ -211,6 +211,22 @@ these, and **only with Tobias's approval**. The procedure, run before any reload
    on your own.
 
 ## Testing
+
+**The test task graph.** `test` and `typecheck` depend on `^transit`, a task with no script whose
+only job is to carry each dependency's source hash, so editing `core` re-runs its consumers'
+tests and leaves unrelated packages cached. The root `package.json` must never depend on a
+workspace package: turbo folds the root's internal dependencies into the global hash, so one such
+edge invalidates every task on every edit. That is why `smoke/`, `conformance/` and `examples/`
+are private workspace packages holding their own `workspace:*` deps. A test that reads a fixture
+outside its package names it in a package `turbo.json` (`packages/cli/turbo.json` hashes the iOS
+Live Activity fixtures). Check a change to any of this with `pnpm exec turbo run test --dry=json`:
+edit one package's source and confirm only it and its dependents change hash. Publish runs
+`turbo run test --force`; CI starts cold anyway.
+**One vitest config.** Every package's `vitest.config.ts` is `workspaceTestConfig()` from the root
+`vitest.shared.ts` (the source alias, the include glob, per-package overrides). Measured on the
+4-CPU Linux rig, the default worker pools beat any cap (default 40.9 s, turbo 2 x 2 workers
+48.3 s, 1 x 4 59.9 s) because the suites wait rather than compute; `--no-isolate` halves import
+time but leaks state between files (server and core both fail) and does not move wall time.
 
 `pnpm test` - core: fake `queryFn` harness (no CLI spawn) + a scripted JSON-RPC peer
 (`connectFn`) for `CodexRunner`; server: real HTTP+WS integration incl. job routes + webhook
