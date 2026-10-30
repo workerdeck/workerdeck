@@ -8,6 +8,7 @@ import type { SessionEvent } from '@workerdeck/protocol'
 import { QuickJsExecutor, connectMcpTools, createEngineSession, type McpConnection } from '../src/index.ts'
 import { generateText, streamCall, streamText } from './helpers/ai-sdk-mocks.ts'
 import type { ToolExecutionCall } from '../src/executors/tool-executor.ts'
+import { eventually } from './helpers/wait.ts'
 
 let engine: SandboxEngine
 beforeAll(async () => {
@@ -31,7 +32,7 @@ describe('createEngineSession', () => {
     void runner.start()
     runner.sendMessage('what is six times seven?')
 
-    await vi.waitFor(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
+    await eventually(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
       timeout: 15_000,
     })
     expect(selectExecutor).toHaveBeenCalled()
@@ -63,7 +64,7 @@ describe('createEngineSession', () => {
     })
     void runner.start()
     runner.sendMessage('push acme')
-    await vi.waitFor(() => expect(pushed).toEqual([{ lead: 'acme' }]), { timeout: 15_000 })
+    await eventually(() => expect(pushed).toEqual([{ lead: 'acme' }]), { timeout: 15_000 })
   }, 30_000)
 
   it('emits file_delivered when the agent hands a VFS file over', async () => {
@@ -85,7 +86,7 @@ describe('createEngineSession', () => {
     void runner.start()
     runner.sendMessage('write and deliver a summary')
 
-    await vi.waitFor(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
+    await eventually(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
       timeout: 15_000,
     })
     expect(events.find((e) => e.type === 'file_delivered')).toMatchObject({
@@ -121,7 +122,7 @@ describe('createEngineSession', () => {
     void runner.start()
     runner.sendMessage('what does the pricing page say?')
 
-    await vi.waitFor(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
+    await eventually(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
       timeout: 15_000,
     })
     const turn = events.find((e) => e.type === 'turn_result')!
@@ -153,7 +154,7 @@ describe('createEngineSession', () => {
     void runner.start()
     runner.sendMessage('go')
 
-    await vi.waitFor(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
+    await eventually(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
       timeout: 15_000,
     })
     expect(events.find((e) => e.type === 'execution_result')).toMatchObject({
@@ -186,7 +187,7 @@ describe('createEngineSession grants', () => {
     })
     void runner.start()
     runner.sendMessage('go')
-    await vi.waitFor(() => expect(toolNames.length).toBeGreaterThan(0), { timeout: 15_000 })
+    await eventually(() => expect(toolNames.length).toBeGreaterThan(0), { timeout: 15_000 })
     runner.close()
     return { toolNames, instructions }
   }
@@ -367,7 +368,7 @@ describe('createEngineSession host tools and MCP declarations', () => {
     })
     void runner.start()
     runner.sendMessage('go')
-    await vi.waitFor(() => expect(dispatched).toEqual(['lookup']), { timeout: 15_000 })
+    await eventually(() => expect(dispatched).toEqual(['lookup']), { timeout: 15_000 })
     runner.close()
   }, 30_000)
 

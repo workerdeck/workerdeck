@@ -43,16 +43,17 @@ export function checkClaudeAuth(
       { env: withoutGatewaySecrets(env) as NodeJS.ProcessEnv, timeout: options.timeoutMs ?? 10_000 },
       // The exit code is ignored on purpose: 2.1.217 exits 1 on a logged-out verdict where
       // other versions exit 0, so only the parsed `loggedIn` boolean is a verdict.
-      (_error, stdout) => {
-        try {
-          const parsed = JSON.parse(stdout) as { loggedIn?: unknown }
-          if (typeof parsed.loggedIn === 'boolean') {
-            resolve(parsed.loggedIn ? 'logged_in' : 'logged_out')
-            return
-          }
-        } catch {}
-        resolve('unknown')
-      },
+      (_error, stdout) => resolve(claudeAuthVerdict(stdout)),
     )
   })
+}
+
+export function claudeAuthVerdict(stdout: string): ClaudeAuthStatus {
+  try {
+    const parsed = JSON.parse(stdout) as { loggedIn?: unknown }
+    if (typeof parsed.loggedIn === 'boolean') {
+      return parsed.loggedIn ? 'logged_in' : 'logged_out'
+    }
+  } catch {}
+  return 'unknown'
 }

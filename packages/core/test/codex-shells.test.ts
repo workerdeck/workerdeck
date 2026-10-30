@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { PermissionMode } from '@workerdeck/protocol'
 import { CodexRunner, SHELL_WRITE_REFUSAL, type PeerDirectory, type ShellDirectory } from '../src/index.ts'
 import { collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 type ToolAnswer = { success: boolean; contentItems: Array<{ type: string; text: string }> }
 
@@ -77,7 +78,7 @@ async function started(config: { permissionMode?: PermissionMode; shellAgentWrit
   const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn, shells, ...config })
   const events = collect(runner)
   void runner.start()
-  await vi.waitFor(() => expect(threadStart(peer)).toBeDefined())
+  await eventually(() => expect(threadStart(peer)).toBeDefined())
   const call = (tool: string, args: unknown) =>
     peer.serverRequest('item/tool/call', {
       callId: 'call-1',
@@ -94,9 +95,10 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
     const both = scriptedPeer()
     scriptTurn(both, () => {})
     void new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: both.connectFn, peers: peerDirectory(), shells: shellDirectory() }).start()
-    await vi.waitFor(() => expect(threadStart(both)).toBeDefined())
+    await eventually(() => expect(threadStart(both)).toBeDefined())
     expect(threadStart(both).dynamicTools!.map((t) => t.name)).toEqual([
-      'session_info', 'set_status',
+      'session_info',
+      'set_status',
       'peers_list',
       'peers_peek',
       'peers_send',
@@ -107,12 +109,13 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
     const alone = scriptedPeer()
     scriptTurn(alone, () => {})
     void new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: alone.connectFn, shells: shellDirectory() }).start()
-    await vi.waitFor(() => expect(threadStart(alone)).toBeDefined())
+    await eventually(() => expect(threadStart(alone)).toBeDefined())
     expect(threadStart(alone).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status', 'shell_list', 'shell_read'])
 
     const writing = await started({ shellAgentWrite: 'gated' })
     expect(threadStart(writing.peer).dynamicTools!.map((t) => t.name)).toEqual([
-      'session_info', 'set_status',
+      'session_info',
+      'set_status',
       'shell_list',
       'shell_read',
       'shell_run',
@@ -129,7 +132,7 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
     const shells = shellDirectory()
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn, peers, shells })
     void runner.start()
-    await vi.waitFor(() => expect(threadStart(peer)).toBeDefined())
+    await eventually(() => expect(threadStart(peer)).toBeDefined())
     const answer = (await peer.serverRequest('item/tool/call', {
       callId: 'c1',
       threadId: 'thread-1',
@@ -148,7 +151,7 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
     scriptTurn(peer, () => {})
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn, shells: shellDirectory() })
     void runner.start()
-    await vi.waitFor(() => expect(threadStart(peer)).toBeDefined())
+    await eventually(() => expect(threadStart(peer)).toBeDefined())
     await expect(
       peer.serverRequest('item/tool/call', { callId: 'c', threadId: 't', turnId: 'u', tool: 'peers_list', arguments: {} }),
     ).rejects.toThrow('item/tool/call')
@@ -156,7 +159,7 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
     const bare = scriptedPeer()
     scriptTurn(bare, () => {})
     void new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: bare.connectFn }).start()
-    await vi.waitFor(() => expect(threadStart(bare)).toBeDefined())
+    await eventually(() => expect(threadStart(bare)).toBeDefined())
     expect(threadStart(bare).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status'])
     await expect(
       bare.serverRequest('item/tool/call', { callId: 'c', threadId: 't', turnId: 'u', tool: 'shell_read', arguments: { shellId: 'x' } }),
@@ -176,7 +179,7 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
   it('under gated, raises permission_requested with the payload before the call runs, and runs it on allow', async () => {
     const { shells, runner, events, call } = await started({ shellAgentWrite: 'gated' })
     const answer = call('shell_run', { command: 'npm run dev', waitFor: 'ready in' })
-    await vi.waitFor(() => expect(ofType(events, 'permission_requested')).toHaveLength(1))
+    await eventually(() => expect(ofType(events, 'permission_requested')).toHaveLength(1))
     expect(shells.calls).toEqual([])
     const request = ofType(events, 'permission_requested')[0]!.request
     expect(request).toMatchObject({
@@ -201,7 +204,7 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
   it('runs the edited input when the allow carries one', async () => {
     const { shells, runner, call } = await started({ shellAgentWrite: 'gated' })
     const answer = call('shell_write', { shellId: 'sh_a', keys: ['q'] })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow', updatedInput: { shellId: 'sh_a', keys: ['r'] } })
     expect((await answer).success).toBe(true)
     expect(shells.calls).toEqual([['write', runner.id, 'sh_a', { data: undefined, keys: ['r'], waitFor: undefined, timeoutMs: undefined }]])
@@ -210,7 +213,7 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
   it('answers a deny as a failed tool call that carries the reason, and never touches the directory', async () => {
     const { shells, runner, events, call } = await started({ shellAgentWrite: 'gated' })
     const answer = call('shell_kill', { shellId: 'sh_a' })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny', message: 'leave it running' })
     expect(await answer).toEqual({
       success: false,
@@ -220,7 +223,7 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
     expect(ofType(events, 'permission_resolved')[0]).toMatchObject({ behavior: 'deny', resolvedBy: 'client', message: 'leave it running' })
 
     const silent = call('shell_kill', { shellId: 'sh_a' })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny' })
     expect((await silent).contentItems[0]!.text).toBe('the user denied this shell_kill: Denied')
   })
@@ -228,7 +231,7 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
   it('settles a pending write card on interrupt and on close like every other approval', async () => {
     const interrupted = await started({ shellAgentWrite: 'gated' })
     const first = interrupted.call('shell_run', { command: 'vite' })
-    await vi.waitFor(() => expect(interrupted.runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(interrupted.runner.pendingApprovals).toHaveLength(1))
     // The scripted turn never completes, so the interrupt's own wait on the turn chain is not awaited here.
     void interrupted.runner.interrupt()
     expect(await first).toMatchObject({ success: false, contentItems: [{ text: 'the user denied this shell_run: interrupted' }] })
@@ -236,7 +239,7 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
 
     const closed = await started({ shellAgentWrite: 'gated' })
     const second = closed.call('shell_run', { command: 'vite' })
-    await vi.waitFor(() => expect(closed.runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(closed.runner.pendingApprovals).toHaveLength(1))
     closed.runner.close()
     expect(await second).toMatchObject({ success: false, contentItems: [{ text: 'the user denied this shell_run: Session closed' }] })
   })
@@ -255,7 +258,7 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
 
     const edits = await started({ shellAgentWrite: 'gated', permissionMode: 'acceptEdits' })
     void edits.call('shell_run', { command: 'vite' })
-    await vi.waitFor(() => expect(edits.runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(edits.runner.pendingApprovals).toHaveLength(1))
   })
 
   it('under allow, runs the write tools with no card at all', async () => {
@@ -268,7 +271,7 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
   it('under allow, still cards a grant request, and runs the grant only once it is allowed', async () => {
     const { shells, runner, events, call } = await started({ shellAgentWrite: 'allow' })
     const answer = call('shell_request_write', { shellId: 'sh_a', reason: 'answer the prompt' })
-    await vi.waitFor(() => expect(ofType(events, 'permission_requested')).toHaveLength(1))
+    await eventually(() => expect(ofType(events, 'permission_requested')).toHaveLength(1))
     expect(shells.calls).toEqual([])
     expect(ofType(events, 'permission_requested')[0]!.request).toMatchObject({
       toolName: 'shell_request_write',

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { checkClaudeAuth, resolveBundledClaudeExecutable } from '../src/index.ts'
+import { claudeAuthVerdict } from '../src/engines/claude/auth.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'cw-auth-probe-'))
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
@@ -34,12 +35,13 @@ describe('checkClaudeAuth', () => {
     await expect(checkClaudeAuth({}, { executable })).resolves.toBe('logged_out')
   })
 
-  it("is 'unknown' for output that is not this CLI's contract", async () => {
-    const garbage = fixture('garbage.sh', `echo 'Usage: claude [options]'\nexit 2`)
-    await expect(checkClaudeAuth({}, { executable: garbage })).resolves.toBe('unknown')
+  it("is 'unknown' for output that is not this CLI's contract", () => {
+    expect(claudeAuthVerdict('Usage: claude [options]\n')).toBe('unknown')
+    expect(claudeAuthVerdict('')).toBe('unknown')
     // parseable JSON, but no loggedIn boolean - a future shape, not a logout
-    const reshaped = fixture('reshaped.sh', `echo '{"status": "ok"}'`)
-    await expect(checkClaudeAuth({}, { executable: reshaped })).resolves.toBe('unknown')
+    expect(claudeAuthVerdict('{"status": "ok"}\n')).toBe('unknown')
+    expect(claudeAuthVerdict('{"loggedIn": "false"}')).toBe('unknown')
+    expect(claudeAuthVerdict('null')).toBe('unknown')
   })
 
   it("is 'unknown' when the executable cannot be spawned", async () => {

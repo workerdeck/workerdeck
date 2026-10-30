@@ -6,8 +6,8 @@ import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionEventBody } from '@workerdeck/protocol'
 import { SessionRunner } from '../src/index.ts'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
-import { ToolOutputTails, TOOL_OUTPUT_TAIL_LINES, toolOutputTail } from '../src/lib/tool-output.ts'
-import { findTaskOutput, tailTaskOutput, taskOutputRoots } from '../src/engines/claude/task-output.ts'
+import { ToolOutputTails, TOOL_OUTPUT_FLUSH_MS, TOOL_OUTPUT_TAIL_LINES, toolOutputTail } from '../src/lib/tool-output.ts'
+import { TASK_OUTPUT_POLL_MS, findTaskOutput, tailTaskOutput, taskOutputRoots } from '../src/engines/claude/task-output.ts'
 import { fakeHarness, tick } from './helpers/claude-harness.ts'
 import { collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
 
@@ -23,10 +23,6 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 const uid = typeof process.getuid === 'function' ? process.getuid() : undefined
 const claudeDir = uid === undefined ? 'claude' : `claude-${uid}`
@@ -83,17 +79,19 @@ describe('claude task output files', () => {
     expect(findTaskOutput(roots, 'sess-1', 'b-1')).toBe(file)
     expect(findTaskOutput(roots, 'sess-1', 'nope')).toBeUndefined()
 
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
     const out: SessionEventBody[] = []
     const tails = new ToolOutputTails((body) => out.push(body), 10)
     tailTaskOutput(tails, { toolUseId: 'bash-1', taskId: 'b-1', sessionId: 'sess-1', roots, pollMs: 10 })
-    await wait(40)
+    vi.advanceTimersByTime(10)
+    expect(out).toEqual([{ type: 'tool_output', toolUseId: 'bash-1', tail: 'first' }])
     appendFileSync(file, 'second\n')
-    await wait(60)
+    vi.advanceTimersByTime(20)
     expect(out.at(-1)).toEqual({ type: 'tool_output', toolUseId: 'bash-1', tail: 'first\nsecond' })
     tails.end('bash-1')
     appendFileSync(file, 'third\n')
-    await wait(60)
-    expect(out.at(-1)).toEqual({ type: 'tool_output', toolUseId: 'bash-1', tail: 'first\nsecond' })
+    vi.advanceTimersByTime(100)
+    expect(out).toHaveLength(2)
   })
 })
 
@@ -117,10 +115,12 @@ const init = {
 
 describe('SessionRunner live Bash output and backgrounding', () => {
   it('streams a foreground Bash task file as tool_output until the result lands', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
     const base = tempDir()
     const tasks = join(base, claudeDir, '-tmp-project', 'sdk-session-1', 'tasks')
     mkdirSync(tasks, { recursive: true })
-    writeFileSync(join(tasks, 'b-1.output'), 'Downloading torch\n')
+    const file = join(tasks, 'b-1.output')
+    writeFileSync(file, 'Downloading torch\n')
     const harness = fakeHarness()
     const runner = new SessionRunner({ cwd: '/tmp/project', queryFn: harness.queryFn, env: { CLAUDE_CODE_TMPDIR: base } })
     const events: SessionEventBody[] = []
@@ -138,10 +138,17 @@ describe('SessionRunner live Bash output and backgrounding', () => {
       uuid: 'u-1',
       session_id: 'sdk-session-1',
     } as unknown as SDKMessage)
-    await wait(1000)
+    await vi.advanceTimersByTimeAsync(TOOL_OUTPUT_FLUSH_MS)
     expect(events.filter((e) => e.type === 'tool_output')).toMatchObject([
       { type: 'tool_output', toolUseId: 'bash-1', tail: 'Downloading torch' },
     ])
+    appendFileSync(file, 'Installed 212 packages\n')
+    await vi.advanceTimersByTimeAsync(TASK_OUTPUT_POLL_MS + TOOL_OUTPUT_FLUSH_MS)
+    expect(events.filter((e) => e.type === 'tool_output').at(-1)).toMatchObject({
+      type: 'tool_output',
+      toolUseId: 'bash-1',
+      tail: 'Downloading torch\nInstalled 212 packages',
+    })
     harness.emit({
       type: 'user',
       message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'bash-1', content: 'ok' }] },
@@ -149,10 +156,10 @@ describe('SessionRunner live Bash output and backgrounding', () => {
       uuid: 'u-2',
       session_id: 'sdk-session-1',
     } as unknown as SDKMessage)
-    await tick()
-    appendFileSync(join(tasks, 'b-1.output'), 'more\n')
-    await wait(1000)
-    expect(events.filter((e) => e.type === 'tool_output')).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(0)
+    appendFileSync(file, 'more\n')
+    await vi.advanceTimersByTimeAsync(2 * (TASK_OUTPUT_POLL_MS + TOOL_OUTPUT_FLUSH_MS))
+    expect(events.filter((e) => e.type === 'tool_output')).toHaveLength(2)
     runner.close()
   })
 
@@ -173,25 +180,20 @@ describe('SessionRunner live Bash output and backgrounding', () => {
 
 describe('CodexRunner live command output', () => {
   it('maps commandExecution output deltas to a tool_output tail on the command row', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
     const on = scriptedPeer()
+    const item = { id: 'exec-1', type: 'commandExecution', command: 'uv sync', status: 'inProgress' }
+    const delta = (text: string) =>
+      on.emit('item/commandExecution/outputDelta', { threadId: 'thread-1', turnId: 'turn-1', itemId: 'exec-1', delta: text })
     scriptTurn(on, (emit, turnId) => {
-      const item = { id: 'exec-1', type: 'commandExecution', command: 'uv sync', status: 'inProgress' }
       emit('item/started', { threadId: 'thread-1', turnId, item })
-      emit('item/commandExecution/outputDelta', { threadId: 'thread-1', turnId, itemId: 'exec-1', delta: 'Resolved 212 packages\n' })
-      emit('item/commandExecution/outputDelta', { threadId: 'thread-1', turnId, itemId: 'exec-1', delta: 'Downloading torch\n' })
-      setTimeout(() => {
-        emit('item/completed', {
-          threadId: 'thread-1',
-          turnId,
-          item: { ...item, status: 'completed', exitCode: 0, aggregatedOutput: 'done' },
-        })
-        emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
-      }, 600)
+      delta('Resolved 212 packages\n')
+      delta('Downloading torch\n')
     })
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: on.connectFn })
     const events = collect(runner)
-    await runner.start()
-    await wait(700)
+    const started = runner.start()
+    await vi.advanceTimersByTimeAsync(TOOL_OUTPUT_FLUSH_MS)
     const outputs = ofType(events, 'tool_output')
     expect(outputs).toHaveLength(1)
     expect(outputs[0]!.tail).toBe('Resolved 212 packages\nDownloading torch')
@@ -199,6 +201,16 @@ describe('CodexRunner live command output', () => {
       .flatMap((e) => (Array.isArray(e.message.content) ? e.message.content : []))
       .find((block) => block.type === 'tool_use') as { id: string } | undefined
     expect(outputs[0]!.toolUseId).toBe(toolUse?.id)
+    delta('Built torch\n')
+    on.emit('item/completed', {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      item: { ...item, status: 'completed', exitCode: 0, aggregatedOutput: 'done' },
+    })
+    on.emit('turn/completed', { threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed' } })
+    await started
+    await vi.advanceTimersByTimeAsync(2 * TOOL_OUTPUT_FLUSH_MS)
+    expect(ofType(events, 'tool_output')).toHaveLength(1)
     runner.close()
   })
 })

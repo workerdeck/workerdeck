@@ -19,12 +19,13 @@ describe('modelOptionsFromSdk', () => {
     { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', displayName: 'Haiku' },
   ]
 
-  it("drops the CLI's 'default' row - it is a choice, not a model", () => {
-    expect(modelOptionsFromSdk(reported).map((m) => m.value)).not.toContain('default')
-  })
-
-  it('names each row with its version, in capability order', () => {
-    expect(modelOptionsFromSdk(reported).map((m) => m.displayName)).toEqual(['Fable 5.1', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
+  it("names each row with its version, in capability order, carrying resolvedModel and dropping the CLI's 'default' row", () => {
+    expect(modelOptionsFromSdk(reported).map(({ value, resolvedModel, displayName }) => [value, resolvedModel, displayName])).toEqual([
+      ['claude-fable-5-1[1m]', 'claude-fable-5-1', 'Fable 5.1'],
+      ['opus[1m]', 'claude-opus-5[1m]', 'Opus 5'],
+      ['sonnet', 'claude-sonnet-5', 'Sonnet 5'],
+      ['haiku', 'claude-haiku-4-5-20251001', 'Haiku 4.5'],
+    ])
   })
 
   it('marks the newest of each family primary and files older versions behind it', () => {
@@ -45,13 +46,6 @@ describe('modelOptionsFromSdk', () => {
       { value: 'opus', resolvedModel: 'claude-opus-5', displayName: 'Opus' },
     ])
     expect(options.map((m) => m.displayName)).toEqual(['Opus (1M context)', 'Opus'])
-  })
-
-  it('carries resolvedModel through, which is what matches a running session', () => {
-    expect(modelOptionsFromSdk(reported).find((m) => m.displayName === 'Opus 5')).toMatchObject({
-      value: 'opus[1m]',
-      resolvedModel: 'claude-opus-5[1m]',
-    })
   })
 
   it('reads an absent effort report as none, and keeps an explicit capability open', () => {

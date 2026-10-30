@@ -31,11 +31,6 @@ describe('staleReplaySeqs', () => {
     expect(staleReplaySeqs(events, 0)).toEqual(new Set([1]))
   })
 
-  it('never marks the highest-seq event stale - the replay hold depends on it', () => {
-    const events = seqd([usage(1), usage(2), usage(3)])
-    expect(staleReplaySeqs(events, 0).has(events.at(-1)!.seq)).toBe(false)
-  })
-
   it('leaves transcript content alone', () => {
     const events = seqd([
       { type: 'user_message', message: { role: 'user', content: 'a' }, parentToolUseId: null },

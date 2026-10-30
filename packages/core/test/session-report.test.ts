@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { CodexRunner, SessionRunner, buildSessionReport } from '../src/index.ts'
 import { resolveContextWindow, stepContextTokens } from '../src/engines/provider/turn.ts'
 import { fakeHarness, tick } from './helpers/claude-harness.ts'
 import { scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 const NOW = Date.parse('2026-10-03T12:00:00Z')
 
@@ -172,7 +173,7 @@ describe('session_info on the engines', () => {
     scriptTurn(peer, () => {})
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn })
     void runner.start()
-    await vi.waitFor(() => expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(true))
+    await eventually(() => expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(true))
     const answer = (await peer.serverRequest('item/tool/call', {
       callId: 'c',
       threadId: 't',

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { MockLanguageModelV3 } from 'ai/test'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import {
@@ -24,7 +24,7 @@ import {
 import { streamText } from './helpers/ai-sdk-mocks.ts'
 import { fakeHarness, tick } from './helpers/claude-harness.ts'
 import { collect, ofType, scriptTurn, scriptedPeer, THREAD_RESULT } from './helpers/codex-peer.ts'
-import { waitFor } from './helpers/wait.ts'
+import { waitFor, eventually } from './helpers/wait.ts'
 
 // The react reducer's own anchor, copied verbatim: every transcript text must be exactly one element.
 const LOCAL_COMMAND_OUTPUT = /^<local-command-(stdout|stderr)>([\s\S]*?)<\/local-command-\1>$/
@@ -180,7 +180,7 @@ describe('CodexRunner local commands', () => {
     expect(ofType(events, 'user_message')[0]).toMatchObject({ synthetic: true, message: { content: localCommandTranscript(OK) } })
 
     runner.sendMessage('so?')
-    await vi.waitFor(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
+    await eventually(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
     const input = (peer.requests.find((r) => r.method === 'turn/start')!.params as { input: Array<{ type: string; text?: string }> }).input
     expect(input.map((p) => p.type)).toEqual(['text', 'text'])
     expect(input[0]!.text).toBe(localCommandContext([localCommandTranscript(OK)]))
@@ -673,7 +673,7 @@ describe('shell sources on the runners', () => {
     expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(false)
 
     runner.sendMessage('and?')
-    await vi.waitFor(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
+    await eventually(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
     const start = peer.requests.find((r) => r.method === 'turn/start')!
     const input = (start.params as { input: Array<{ type: string; text?: string }> }).input
     expect(input).toEqual([

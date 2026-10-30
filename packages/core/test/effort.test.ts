@@ -6,6 +6,7 @@ import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { effortDefaultFor } from '../src/lib/effort.ts'
 import { fakeHarness, tick } from './helpers/claude-harness.ts'
 import { collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 const RESOLVED: Record<string, string> = { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-4-5' }
 
@@ -220,7 +221,7 @@ describe('codex reasoning effort', () => {
     await expect(runner.setEffort('minimal')).rejects.toThrow(/unsupported reasoning effort/)
     await runner.setEffort('ultra')
     runner.sendMessage('again')
-    await vi.waitFor(() => expect(turns()).toEqual(['xhigh', 'ultra']))
+    await eventually(() => expect(turns()).toEqual(['xhigh', 'ultra']))
 
     await runner.setModel('gpt-6-luna')
     expect(runner.info().effort).toBe('low')

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ToolOutputTails } from '../../lib/tool-output.ts'
 
-const POLL_MS = 500
+export const TASK_OUTPUT_POLL_MS = 500
 const FIRST_READ_MAX = 16_384
 const READ_MAX = 65_536
 const LOCATE_ATTEMPTS = 6
@@ -85,7 +85,7 @@ export function tailTaskOutput(
       }
     }
   }
-  const timer = setInterval(poll, options.pollMs ?? POLL_MS)
+  const timer = setInterval(poll, options.pollMs ?? TASK_OUTPUT_POLL_MS)
   timer.unref?.()
   tails.track(toolUseId, () => clearInterval(timer))
   poll()

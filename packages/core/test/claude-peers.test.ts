@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { SessionRunner, type PeerDirectory } from '../src/index.ts'
 import { fakeHarness } from './helpers/claude-harness.ts'
+import { eventually } from './helpers/wait.ts'
 
 function directory(): PeerDirectory & { sent: Array<{ from: string; to: string; text: string }> } {
   const sent: Array<{ from: string; to: string; text: string }> = []
@@ -26,7 +27,7 @@ describe('SessionRunner: peer tools', () => {
       mcpServers: { other: { type: 'http', url: 'http://x' } },
     })
     void runner.start()
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     const servers = harness.captured.options?.mcpServers as Record<string, { type?: string; name?: string }>
     expect(Object.keys(servers)).toEqual(['other', 'workerdeck'])
     expect(servers.workerdeck).toMatchObject({ type: 'sdk', name: 'workerdeck' })
@@ -37,7 +38,7 @@ describe('SessionRunner: peer tools', () => {
     const peers = directory()
     const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, peers })
     void runner.start()
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     const server = (harness.captured.options!.mcpServers as Record<string, { instance: unknown }>).workerdeck
     const instance = server.instance as Record<string, Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>>
     const tools = instance['_registeredTools'] ?? {}
@@ -56,7 +57,7 @@ describe('SessionRunner: peer tools', () => {
     runner.sendMessage('please look at auth.ts', undefined, {
       origin: { kind: 'peer', sessionId: 'src-1', name: 'Auth fix', engine: 'codex' },
     })
-    await vi.waitFor(() => expect(harness.captured.inputs).toHaveLength(1))
+    await eventually(() => expect(harness.captured.inputs).toHaveLength(1))
     const content = harness.captured.inputs[0]!.message.content as string
     expect(content).toContain('<peer-message from-session="src-1" from-name="Auth fix" from-engine="codex">')
     expect(content).toContain('please look at auth.ts')
@@ -78,7 +79,7 @@ describe('SessionRunner: peer tools', () => {
     runner.sendMessage('commit what #Astra did', undefined, {
       mentions: [{ typed: 'Astra', id: 'peer-1', name: 'Astra', engine: 'codex', status: 'idle', cwd: '/work/astra' }],
     })
-    await vi.waitFor(() => expect(harness.captured.inputs).toHaveLength(1))
+    await eventually(() => expect(harness.captured.inputs).toHaveLength(1))
     const content = harness.captured.inputs[0]!.message.content as string
     expect(content.startsWith('commit what #Astra did\n\n<peer-mentions>')).toBe(true)
     expect(content).toContain('session="peer-1"')

@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 describe('CodexRunner: approvals and user input', () => {
   it('surfaces a command escalation as permission_requested and accepts on allow', async () => {
@@ -44,7 +45,7 @@ describe('CodexRunner: approvals and user input', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
     const events = collect(runner)
     const run = runner.start()
-    await vi.waitFor(() => expect(ofType(events, 'permission_requested')).toHaveLength(1))
+    await eventually(() => expect(ofType(events, 'permission_requested')).toHaveLength(1))
 
     const request = ofType(events, 'permission_requested')[0]!.request
     expect(request.toolName).toBe('CodexCommand')
@@ -88,7 +89,7 @@ describe('CodexRunner: approvals and user input', () => {
       command: 'rm -rf /',
       availableDecisions: ['accept', 'cancel'],
     })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     runner.resolvePermission(runner.pendingApprovals[0]!.id, {
       behavior: 'deny',
       message: 'no thanks',
@@ -106,7 +107,7 @@ describe('CodexRunner: approvals and user input', () => {
       command: 'sleep 999',
       availableDecisions: ['accept', 'cancel'],
     })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny', interrupt: true })
     await expect(cancel).resolves.toEqual({ decision: 'cancel' })
 
@@ -116,7 +117,7 @@ describe('CodexRunner: approvals and user input', () => {
       command: 'echo hi',
       availableDecisions: ['acceptForSession', { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['echo'] } }, 'cancel'],
     })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
     await expect(noAccept).resolves.toEqual({ decision: 'decline' })
     expect(ofType(events, 'permission_resolved').at(-1)).toMatchObject({
@@ -173,7 +174,7 @@ describe('CodexRunner: approvals and user input', () => {
       't2',
     )
     runner.sendMessage('again')
-    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+    await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
   })
 
   it('maps requestUserInput onto the AskUserQuestion convention, with question policies', async () => {
@@ -201,7 +202,7 @@ describe('CodexRunner: approvals and user input', () => {
     await runner.start()
 
     const asked = peer.serverRequest('item/tool/requestUserInput', QUESTIONS)
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     const request = runner.pendingApprovals[0]!
     expect(request.toolName).toBe('AskUserQuestion')
     expect(request.input).toEqual({
@@ -280,7 +281,7 @@ describe('CodexRunner: approvals and user input', () => {
       permissions: PROFILE,
       reason: 'need to write build output',
     })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     expect(runner.pendingApprovals[0]).toMatchObject({
       toolName: 'CodexPermissions',
       title: 'need to write build output',
@@ -293,7 +294,7 @@ describe('CodexRunner: approvals and user input', () => {
       itemId: 'p2',
       permissions: PROFILE,
     })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny' })
     await expect(refused).resolves.toEqual({ permissions: {} })
 
@@ -303,7 +304,7 @@ describe('CodexRunner: approvals and user input', () => {
       message: 'API token?',
       mode: 'form',
     })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     expect(runner.pendingApprovals[0]!.toolName).toBe('CodexMcpElicitation')
     runner.resolvePermission(runner.pendingApprovals[0]!.id, {
       behavior: 'allow',
@@ -317,7 +318,7 @@ describe('CodexRunner: approvals and user input', () => {
       message: 'still there?',
       mode: 'form',
     })
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     runner.close()
     await expect(orphan).resolves.toEqual({ action: 'decline' })
     expect(ofType(events, 'permission_resolved').at(-1)).toMatchObject({
@@ -343,7 +344,7 @@ describe('CodexRunner: approvals and user input', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
     const events = collect(runner)
     const run = runner.start()
-    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(2))
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(2))
 
     peer.emit('serverRequest/resolved', { threadId: 'thread-1', requestId: 'wire-7' })
     expect(runner.pendingApprovals).toHaveLength(1)

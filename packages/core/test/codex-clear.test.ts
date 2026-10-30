@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { JsonRpcError } from '../src/engines/codex/jsonrpc.ts'
 import { THREAD_RESULT, USAGE_A, collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 describe('CodexRunner clearContext', () => {
   it('clears by starting a FRESH thread on the same session, not by resuming', async () => {
@@ -56,7 +57,7 @@ describe('CodexRunner clearContext', () => {
     expect(runner.info().activityCount).toBeGreaterThan(0)
 
     runner.sendMessage('after the clear')
-    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+    await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
     expect((peer.requests.filter((r) => r.method === 'turn/start')[1]!.params as { threadId: string }).threadId).toBe('thread-2')
     expect(runner.info().sdkSessionId).toBe('thread-2')
   })
@@ -120,7 +121,7 @@ describe('CodexRunner clearContext', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'first', connectFn: peer.connectFn })
     const events = collect(runner)
     const started = runner.start()
-    await vi.waitFor(() => expect(firstTurn).toBeDefined())
+    await eventually(() => expect(firstTurn).toBeDefined())
 
     runner.sendMessage('/clear')
     runner.sendMessage('after the clear')
@@ -129,7 +130,7 @@ describe('CodexRunner clearContext', () => {
 
     firstTurn!()
     await started
-    await vi.waitFor(() => expect(prompts).toHaveLength(2))
+    await eventually(() => expect(prompts).toHaveLength(2))
 
     expect(ofType(events, 'conversation_reset')).toHaveLength(1)
     expect(prompts[1]).toBe('after the clear')
