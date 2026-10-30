@@ -2,17 +2,29 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { accountExpiry, type CompleteAccountResponse, type ConnectAccountResponse, type ProfileInfo } from '@workerdeck/protocol'
 import { createMemoryProfileStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { ACCOUNT_FILE, accountSessionEnv, findAuthorizeUrl, parseDeviceLogin, screenText, writeAccount } from '../src/accounts/index.ts'
+import {
+  ACCOUNT_FILE,
+  accountSessionEnv,
+  findAuthorizeUrl,
+  parseDeviceLogin,
+  screenText,
+  SetupTokenError,
+  startClaudeSetupToken,
+  writeAccount,
+} from '../src/accounts/index.ts'
 import { loadPty } from '../src/services/shell-env.ts'
 import { fakeHarness } from './helpers.ts'
+import { ptySuite, scriptedPty } from './shell-helpers.ts'
 
 const FAKE_TOKEN = ['sk-ant-oat01', 'FAKE_token-123'].join('-')
 const FAKE_CLI = fileURLToPath(new URL('./fixtures/fake-setup-token.mjs', import.meta.url))
 const FAKE_CODEX = fileURLToPath(new URL('./fixtures/fake-codex-login.mjs', import.meta.url))
-const hasPty = (await loadPty()) !== null
+const withPty = ptySuite(await loadPty(), 'accounts.test')
+const AUTHORIZE_URL = 'https://claude.ai/oauth/authorize?code=true&state=x'
+const PROMPT = 'Paste\x1b[1Ccode\x1b[1Chere\x1b[1Cif\x1b[1Cprompted\x1b[1C> '
 
 let running: WorkerServer | undefined
 const roots: string[] = []
@@ -97,7 +109,115 @@ describe('account session env', () => {
   })
 })
 
-describe.skipIf(!hasPty)('account connect routes', () => {
+describe('claude setup-token over a scripted PTY', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function start(options: { urlTimeoutMs?: number; completeTimeoutMs?: number } = {}) {
+    const pty = scriptedPty()
+    const env = { PATH: '/bin', ANTHROPIC_API_KEY: 'k', CLAUDE_CODE_OAUTH_TOKEN: 'old', WORKERDECK_AUTH_KEY: 'gw' }
+    const attempt = startClaudeSetupToken({ pty: pty.module, executable: '/opt/claude', env, cwd: '/tmp/profile', ...options })
+    return { attempt, child: pty.last() }
+  }
+
+  async function linked() {
+    const started = start({ completeTimeoutMs: 10_000 })
+    started.child.emit(`Browser\x1b[1Cdidn't\x1b[1Copen?\x1b[2;1H${AUTHORIZE_URL}\x1b[4;1H`)
+    started.child.emit(PROMPT)
+    return { ...started, flow: await started.attempt }
+  }
+
+  it('spawns setup-token on a wide PTY without any credential, and answers once the link and the prompt are drawn', async () => {
+    const { attempt, child } = start()
+    expect(child.file).toBe('/opt/claude')
+    expect(child.args).toEqual(['setup-token'])
+    expect(child.options).toMatchObject({ cols: 400, rows: 50, cwd: '/tmp/profile' })
+    expect(child.options.env).toEqual({ PATH: '/bin', BROWSER: 'true', TERM: 'xterm-256color' })
+    let resolved = false
+    void attempt.then(() => {
+      resolved = true
+    })
+    child.emit(`\x1b]8;;${AUTHORIZE_URL}\x07${AUTHORIZE_URL}\x1b]8;;\x07\x1b[4;1HPaste\x1b[1Ccode\x1b[1Ch`)
+    await Promise.resolve()
+    expect(resolved).toBe(false)
+    child.emit('ere\x1b[1Cif\x1b[1Cprompted\x1b[1C> ')
+    expect((await attempt).authorizeUrl).toBe(AUTHORIZE_URL)
+    expect(child.kills).toEqual([])
+  })
+
+  it('fails as no-url when the CLI exits before the link, and as timeout when the link never comes', async () => {
+    const early = start()
+    early.child.emit('Error: not a terminal\r\n')
+    early.child.exit(1)
+    await expect(early.attempt).rejects.toMatchObject({ reason: 'no-url' })
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const slow = start({ urlTimeoutMs: 1000 })
+    const failed = expect(slow.attempt).rejects.toMatchObject({ reason: 'timeout' })
+    vi.advanceTimersByTime(999)
+    expect(slow.child.kills).toEqual([])
+    vi.advanceTimersByTime(1)
+    await failed
+    expect(slow.child.kills).toEqual([undefined])
+  })
+
+  it('pastes the code, presses Enter only after the paste settles, and keeps the token that finishes printing', async () => {
+    const { child, flow } = await linked()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const done = flow.complete('  good#abc \n')
+    expect(child.writes).toEqual(['good#abc'])
+    vi.advanceTimersByTime(799)
+    expect(child.writes).toEqual(['good#abc'])
+    vi.advanceTimersByTime(1)
+    expect(child.writes).toEqual(['good#abc', '\r'])
+    child.emit('Your\x1b[1COAuth\x1b[1Ctoken:\x1b[1C\x1b[32msk-ant-oat01-first')
+    vi.advanceTimersByTime(1499)
+    child.emit('half_rest\x1b[39m\r\n')
+    vi.advanceTimersByTime(1)
+    await expect(done).resolves.toEqual({ token: 'sk-ant-oat01-firsthalf_rest' })
+    expect(child.kills).toEqual([undefined])
+  })
+
+  it('settles at once when the CLI exits after printing the token', async () => {
+    const { child, flow } = await linked()
+    const done = flow.complete('good#abc')
+    child.emit('sk-ant-oat01-abc\r\n')
+    child.exit(0)
+    await expect(done).resolves.toEqual({ token: 'sk-ant-oat01-abc' })
+    expect(child.kills).toEqual([])
+  })
+
+  it('names a rejected code, an exit without a token, a late complete and a code never confirmed', async () => {
+    const rejected = await linked()
+    const refused = rejected.flow.complete('wrong#abc')
+    rejected.child.emit('\x1b[6;1HOAuth error: Request failed with status code 400\r\n')
+    await expect(refused).rejects.toMatchObject({ reason: 'rejected' })
+    expect(rejected.child.kills).toEqual([undefined])
+
+    const retry = await linked()
+    const again = retry.flow.complete('wrong#abc')
+    retry.child.emit('Press\x1b[1CEnter\x1b[1Cto\x1b[1Cretry.')
+    await expect(again).rejects.toMatchObject({ reason: 'rejected' })
+
+    const quit = await linked()
+    const empty = quit.flow.complete('good#abc')
+    quit.child.exit(0)
+    await expect(empty).rejects.toMatchObject({ reason: 'exited' })
+    await expect(quit.flow.complete('good#abc')).rejects.toMatchObject({ reason: 'exited' })
+
+    const silent = await linked()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const waiting = silent.flow.complete('good#abc')
+    const timedOut = expect(waiting).rejects.toBeInstanceOf(SetupTokenError)
+    vi.advanceTimersByTime(10_000)
+    await timedOut
+    await expect(waiting).rejects.toMatchObject({ reason: 'timeout' })
+    expect(silent.child.kills).toEqual([undefined])
+  })
+})
+
+withPty('account connect routes', () => {
   it('connects through the CLI, never returns the token and runs sessions on it', async () => {
     const { port, base, post, configDir, envOut, harness } = await serve()
     const started = await post('/account/connect')
