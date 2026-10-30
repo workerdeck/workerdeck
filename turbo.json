@@ -9,10 +9,16 @@
       "dependsOn": ["^prepack"],
       "outputs": ["build/**"]
     },
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
     "typecheck": {
+      "dependsOn": ["^transit"],
       "outputs": []
     },
     "test": {
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/vitest.shared.ts"],
       "outputs": []
     },
     "clean": {

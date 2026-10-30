@@ -1,0 +1,10 @@
+{
+  "name": "@workerdeck/conformance-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@workerdeck/client": "workspace:*",
+    "@workerdeck/protocol": "workspace:*",
+    "@workerdeck/react": "workspace:*"
+  }
+}

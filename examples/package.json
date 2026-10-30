@@ -1,0 +1,12 @@
+{
+  "name": "@workerdeck/examples-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@workerdeck/core": "workspace:*",
+    "@workerdeck/protocol": "workspace:*",
+    "@workerdeck/sandbox": "workspace:*",
+    "@workerdeck/server": "workspace:*",
+    "workerdeck": "workspace:*"
+  }
+}

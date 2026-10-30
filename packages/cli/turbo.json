@@ -1,0 +1,8 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/vitest.shared.ts", "$TURBO_ROOT$/apps/ios/WorkerDeckKit/Tests/WorkerDeckActivityTests/Fixtures/**"]
+    }
+  }
+}

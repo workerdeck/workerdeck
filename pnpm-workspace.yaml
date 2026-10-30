@@ -11,6 +11,9 @@
 packages:
   - packages/*
   - apps/*
+  - smoke
+  - conformance
+  - examples
 linkWorkspacePackages: true
 
 # Transitive advisories our direct deps pin below their fixed versions. Each of

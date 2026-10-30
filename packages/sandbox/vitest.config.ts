@@ -1,6 +1,3 @@
-import { defineConfig } from 'vitest/config'
+import { workspaceTestConfig } from '../../vitest.shared.ts'
 
-export default defineConfig({
-  resolve: { conditions: ['@workerdeck/source'] },
-  test: { include: ['test/**/*.test.ts'] },
-})
+export default workspaceTestConfig()

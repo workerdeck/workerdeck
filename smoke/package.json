@@ -1,0 +1,14 @@
+{
+  "name": "@workerdeck/smoke-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@workerdeck/client": "workspace:*",
+    "@workerdeck/core": "workspace:*",
+    "@workerdeck/protocol": "workspace:*",
+    "@workerdeck/react": "workspace:*",
+    "@workerdeck/relay": "workspace:*",
+    "@workerdeck/sandbox": "workspace:*",
+    "@workerdeck/server": "workspace:*"
+  }
+}

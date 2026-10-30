@@ -75,7 +75,7 @@ jobs:
       # can't be taken back.
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm exec turbo run test --force
       - run: pnpm build
 
       # The tag is the release's name; if it disagrees with what's in the tree,

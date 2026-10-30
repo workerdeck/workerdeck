@@ -1,14 +1,3 @@
-import { defineConfig } from 'vitest/config'
+import { workspaceTestConfig } from '../../vitest.shared.ts'
 
-export default defineConfig({
-  resolve: {
-    conditions: ['@workerdeck/source'],
-    alias: [
-      {
-        find: /^@workerdeck\/([a-z-]+)$/,
-        replacement: `${import.meta.dirname}/../$1/src/index.ts`,
-      },
-    ],
-  },
-  test: { include: ['test/**/*.test.ts'], testTimeout: 20_000 },
-})
+export default workspaceTestConfig({ test: { testTimeout: 20_000 } })
