@@ -55,15 +55,16 @@ async function finished(shells: ShellRegistry, owner: Runner, chunks: string[]):
 
 // The screen behind a write settles on xterm's own timers, which the fake clock holds until it is advanced.
 async function flushed<T>(promise: Promise<T>): Promise<T> {
-  let done = false
-  const settled = promise.finally(() => {
-    done = true
-  })
-  settled.catch(() => {})
-  while (!done) {
+  const settled = promise.then(
+    () => true,
+    () => true,
+  )
+  for (;;) {
     await vi.advanceTimersByTimeAsync(1)
+    if (await Promise.race([settled, Promise.resolve(false)])) {
+      return promise
+    }
   }
-  return settled
 }
 
 // The shell side of ECHO_KEYS: every line typed comes back as `got <line>`, after the tty's own echo of it.
