@@ -227,6 +227,18 @@ edit one package's source and confirm only it and its dependents change hash. Pu
 4-CPU Linux rig, the default worker pools beat any cap (default 40.9 s, turbo 2 x 2 workers
 48.3 s, 1 x 4 59.9 s) because the suites wait rather than compute; `--no-isolate` halves import
 time but leaks state between files (server and core both fail) and does not move wall time.
+The shared default pool is `threads` (8 to 10% less CPU on the pure suites); `server` and `cli`
+(native PTYs, process-wide state) and `sandbox` (WASM memory caps) override it with `forks`.
+With the fixed waits gone the suite is CPU-bound on 4 CPUs, and most of that CPU is evaluating
+each test file's module graph (the `core` barrel alone is ~0.4 s per file); vitest's
+`viteModuleRunner: false` cannot load `.tsx` or the server's parameter properties, and
+`fsModuleCache` only helps a warm local run. **Waiting in a test:** never a fixed sleep to
+establish readiness; await the event, or use `until`/`eventually` (`server/test/helpers.ts`,
+`eventually.ts` in core, react and client), whose deadline is a hang watchdog only. A PTY suite
+uses `ptySuite` (`server/test/shell-helpers.ts`), which fails at load on CI when
+`@lydell/node-pty` is missing instead of skipping. A refused connection dials port 1, never a
+port a closed server just freed (a parallel suite takes it). CI runs the server suite on its own
+runner and the real-PTY shell files again on macOS (the `/dev/tty` wrapper path).
 
 `pnpm test` - core: fake `queryFn` harness (no CLI spawn) + a scripted JSON-RPC peer
 (`connectFn`) for `CodexRunner`; server: real HTTP+WS integration incl. job routes + webhook
