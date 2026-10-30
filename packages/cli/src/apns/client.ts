@@ -185,7 +185,7 @@ export function createApnsClient(
   config: ApnsConfig,
   key: KeyObject,
   // Test seam only. The real endpoints are deliberately not configurable: redirecting them would exfiltrate every push.
-  options: { hosts?: Record<ApnsEnvironment, string>; retryDelayMs?: number } = {},
+  options: { hosts?: Record<ApnsEnvironment, string>; retryDelayMs?: number; wait?: (ms: number) => Promise<void> } = {},
 ): ApnsClient {
   const providerToken = createProviderToken(key, config.keyId, config.teamId)
   const pool = createSessionPool(options.hosts ?? HOSTS)
@@ -310,7 +310,7 @@ export function createApnsClient(
       stream.end(body)
     })
 
-  const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+  const wait = options.wait ?? ((ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms)))
 
   return {
     async send(request) {

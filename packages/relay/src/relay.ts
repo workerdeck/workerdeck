@@ -44,6 +44,7 @@ import {
 } from '@workerdeck/relay-client'
 import { enrollmentPath, keyMatches, ownersOf, readEnrollments, type EnrollmentFile } from './enrollment.ts'
 import { allowedOps, readRules, rulesPath, type RelayRule } from './rules.ts'
+import { rateLimiter, sendRefusal } from './limits.ts'
 import { serveStatusSocket, statusSocketPath } from './status.ts'
 import { accessOps, projectCard, projectForOtherOwner, sanitizeEntry, teamAllows, type TeamAccess, type TeamNode } from './teams.ts'
 
@@ -154,7 +155,6 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
   let rules: RelayRule[] = await readRules(options.stateDir)
   const gateways = new Map<string, Gateway>()
   const routed = new Map<string, Routed>()
-  const sent = new Map<string, number[]>()
   let nextId = 0
 
   const drop = (gateway: Gateway, code: number, reason: string): void => {
@@ -230,16 +230,8 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     return gateway.owners.length === 1 ? gateway.owners[0] : undefined
   }
 
-  const underRateLimit = (key: string, limit = perMinute, windowMs = WINDOW_MS): boolean => {
-    const now = Date.now()
-    const recent = (sent.get(key) ?? []).filter((at) => now - at < windowMs)
-    const ok = recent.length < limit
-    if (ok) {
-      recent.push(now)
-    }
-    sent.set(key, recent)
-    return ok
-  }
+  const admit = rateLimiter()
+  const underRateLimit = (key: string, limit = perMinute, windowMs = WINDOW_MS): boolean => admit(key, limit, windowMs)
 
   const route = (target: Gateway, frame: Outbound): Promise<unknown> => {
     const id = `r${++nextId}`
@@ -466,20 +458,12 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     if (!found || !sender) {
       return { delivered: false, reason: `no such session: ${label}` } satisfies RelaySendResult
     }
-    if (text.length === 0 || text.length > maxChars) {
-      return {
-        delivered: false,
-        reason: `message is ${text.length} characters; the limit is ${maxChars}. Write it to a file and send the path.`,
-      }
-    }
     const hops = (Array.isArray(frame.hops) ? frame.hops : [])
       .filter((hop): hop is string => typeof hop === 'string')
       .map((hop) => (parseRelayPeerId(hop) ? hop : relayPeerId(from.name, hop)))
-    if (hops.length > maxHops) {
-      return {
-        delivered: false,
-        reason: `${hops.length} messages have passed between sessions without a person speaking; stop and ask your user before continuing.`,
-      }
+    const refusal = sendRefusal(text, hops.length, { maxChars, maxHops })
+    if (refusal) {
+      return { delivered: false, reason: refusal }
     }
     if (!underRateLimit(`${relayPeerId(from.name, sender.id)}->${relayPeerId(found.target.name, found.entry.id)}`)) {
       return { delivered: false, reason: `rate limit: at most ${perMinute} messages a minute to one session. Batch what you have to say.` }

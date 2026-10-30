@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { WorkerDeckClient, type SessionHandle } from '../src/index.ts'
+import { eventually } from './eventually.ts'
 
 function idleQueryFn() {
   const query = {
@@ -50,29 +51,32 @@ async function start(bridgeTimeoutMs?: number) {
   return { client, sessionId: session.id, handle: handle! }
 }
 
-function dispatch(sessionId: string, executionId = 'exec-1') {
+const SEED = { '/doc.txt': 'body' }
+
+function dispatch(sessionId: string, executionId = 'exec-1', seed?: Record<string, string>) {
   return running!.bridge.executorFor(sessionId).dispatch({
     executionId,
     sessionId,
     tool: 'eval_script',
     input: { script: '1+1' },
+    vfs: seed && { read: () => undefined, write: () => {}, list: () => [], snapshot: () => seed },
   })
 }
 
 describe('SessionHandle tool-call bridge', () => {
   it('surfaces a bridged request and round-trips a result', async () => {
     const { sessionId, handle } = await start()
-    const requests: Array<{ executionId: string; toolName: string }> = []
+    const requests: Array<{ executionId: string; toolName: string; vfsSeed?: Record<string, string> }> = []
     handle.on('toolCallRequest', (frame) => {
-      requests.push({ executionId: frame.executionId, toolName: frame.toolName })
+      requests.push({ executionId: frame.executionId, toolName: frame.toolName, vfsSeed: frame.vfsSeed })
       handle.sendToolCallResult(frame.executionId, { type: 'json', value: { answer: 2 } }, ['[log] ok'])
     })
 
-    const pending = await dispatch(sessionId)
+    const pending = await dispatch(sessionId, 'exec-1', SEED)
     expect(pending).toEqual({ executionId: 'exec-1', status: 'pending' })
 
-    await vi.waitFor(() => expect(results).toHaveLength(1))
-    expect(requests).toEqual([{ executionId: 'exec-1', toolName: 'eval_script' }])
+    await eventually(() => expect(results).toHaveLength(1))
+    expect(requests).toEqual([{ executionId: 'exec-1', toolName: 'eval_script', vfsSeed: { '/doc.txt': 'body' } }])
     expect(results[0]).toMatchObject({
       executionId: 'exec-1',
       result: { status: 'ok', output: { answer: 2 }, logs: ['[log] ok'] },
@@ -86,7 +90,7 @@ describe('SessionHandle tool-call bridge', () => {
     })
 
     await dispatch(sessionId)
-    await vi.waitFor(() => expect(results).toHaveLength(1))
+    await eventually(() => expect(results).toHaveLength(1))
     expect(results[0]!.result).toMatchObject({
       status: 'failed',
       reason: 'unsupported_tool',
@@ -95,40 +99,15 @@ describe('SessionHandle tool-call bridge', () => {
   })
 
   it('receives a cancellation when the server gives up waiting', async () => {
-    const { sessionId, handle } = await start(150)
+    const { sessionId, handle } = await start(20)
     const canceled: Array<{ executionId: string; reason: string }> = []
     // Deliberately never answer.
     handle.on('toolCallRequest', () => {})
     handle.on('toolCallCanceled', (payload) => canceled.push(payload))
 
     await dispatch(sessionId)
-    await vi.waitFor(() => expect(canceled).toHaveLength(1))
+    await eventually(() => expect(canceled).toHaveLength(1))
     expect(canceled[0]).toMatchObject({ executionId: 'exec-1', reason: 'timeout' })
     expect(results[0]!.result).toMatchObject({ status: 'failed', reason: 'timeout' })
-  })
-
-  it('carries the VFS seed so the client can execute against the same files', async () => {
-    const { sessionId, handle } = await start()
-    const seeds: Array<Record<string, string> | undefined> = []
-    handle.on('toolCallRequest', (frame) => {
-      seeds.push(frame.vfsSeed)
-      handle.sendToolCallResult(frame.executionId, { type: 'text', value: 'done' })
-    })
-
-    await running!.bridge.executorFor(sessionId).dispatch({
-      executionId: 'exec-seed',
-      sessionId,
-      tool: 'eval_script',
-      input: { script: 'vfs.read("/doc.txt")' },
-      vfs: {
-        read: () => undefined,
-        write: () => {},
-        list: () => [],
-        snapshot: () => ({ '/doc.txt': 'body' }),
-      },
-    })
-
-    await vi.waitFor(() => expect(results).toHaveLength(1))
-    expect(seeds[0]).toEqual({ '/doc.txt': 'body' })
   })
 })

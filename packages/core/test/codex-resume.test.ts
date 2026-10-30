@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { withPeerContext } from '../src/lib/peers.ts'
 import { JsonRpcError } from '../src/engines/codex/jsonrpc.ts'
 import { THREAD_RESULT, collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 // Two historical turns whose item ids overlap on purpose: codex restarts item numbering per
 // turn, so the per-turn nonce is what keeps them apart.
@@ -291,7 +292,7 @@ describe('CodexRunner resume backfill', () => {
 
     peer.die('codex app-server exited (code 1): gone')
     runner.sendMessage('again')
-    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(1))
+    await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(1))
     expect(peer.requests.filter((r) => r.method === 'thread/resume')).toHaveLength(2)
     expect(replayCount()).toBe(2)
   })
@@ -325,7 +326,7 @@ describe('CodexRunner thread materialization', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
     const events = collect(runner)
     const started = runner.start()
-    await vi.waitFor(() => expect(finish).toBeDefined())
+    await eventually(() => expect(finish).toBeDefined())
 
     expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(true)
     expect(runner.sdkSessionId).toBeUndefined()
@@ -361,7 +362,7 @@ describe('CodexRunner thread materialization', () => {
 
     peer.die('codex app-server exited (code 1): gone')
     runner.sendMessage('again')
-    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+    await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
 
     expect(peer.requests.filter((r) => r.method === 'thread/resume')).toHaveLength(0)
     expect(peer.requests.filter((r) => r.method === 'thread/start')).toHaveLength(2)
@@ -404,7 +405,7 @@ describe('CodexRunner thread materialization', () => {
     expect(runner.info().sdkSessionId).toBeUndefined()
 
     runner.sendMessage('hello again')
-    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(1))
+    await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(1))
     const turn = peer.requests.find((r) => r.method === 'turn/start')!
     expect((turn.params as { threadId: string }).threadId).toBe('thread-fresh')
     expect(ofType(events, 'turn_result')[0]).toMatchObject({ subtype: 'success', result: 'fresh answer' })

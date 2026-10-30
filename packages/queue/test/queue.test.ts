@@ -419,49 +419,62 @@ describe('JobQueue', () => {
   })
 
   it('re-queues a failed run with backoff, then completes on a later attempt', async () => {
-    const { queue, runners, events } = makeQueue()
-    const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 200 }))
-    await tick()
-    runners[0]!.emit(assistantWithUsage(90))
-    runners[0]!.emit(errorResult())
-    await tick()
+    vi.useFakeTimers()
+    try {
+      const { queue, runners, events } = makeQueue()
+      const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 200 }))
+      await vi.advanceTimersByTimeAsync(0)
+      runners[0]!.emit(assistantWithUsage(90))
+      runners[0]!.emit(errorResult())
+      await vi.advanceTimersByTimeAsync(0)
 
-    const queued = await queue.get(job.id)
-    expect(queued).toMatchObject({
-      status: 'queued',
-      attempt: 2,
-      maxAttempts: 2,
-      error: 'hit max turns',
-    })
-    expect(queued?.nextRunAt).toBeDefined()
-    expect(queued?.sessionId).toBeUndefined()
-    expect(events.some((e) => e.type === 'job_retrying')).toBe(true)
-    expect(events.some((e) => e.type === 'job_completed')).toBe(false)
+      const queued = await queue.get(job.id)
+      expect(queued).toMatchObject({
+        status: 'queued',
+        attempt: 2,
+        maxAttempts: 2,
+        error: 'hit max turns',
+      })
+      expect(queued?.nextRunAt).toBe(Date.now() + 200)
+      expect(queued?.sessionId).toBeUndefined()
+      expect(events.some((e) => e.type === 'job_retrying')).toBe(true)
+      expect(events.some((e) => e.type === 'job_completed')).toBe(false)
 
-    await settles(() => expect(runners).toHaveLength(2))
-    runners[1]!.emit(successResult(100))
-    await tick()
-    const done = await queue.get(job.id)
-    expect(done).toMatchObject({ status: 'succeeded', attempt: 2 })
-    expect(done?.usage.tokens).toBe(200)
-    expect(done?.usage.numTurns).toBe(4)
-    expect(done?.usage.totalCostUsd).toBeCloseTo(0.25)
-    expect(done?.nextRunAt).toBeUndefined()
+      await vi.advanceTimersByTimeAsync(199)
+      expect(runners).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(runners).toHaveLength(2)
+      runners[1]!.emit(successResult(100))
+      await vi.advanceTimersByTimeAsync(0)
+      const done = await queue.get(job.id)
+      expect(done).toMatchObject({ status: 'succeeded', attempt: 2 })
+      expect(done?.usage.tokens).toBe(200)
+      expect(done?.usage.numTurns).toBe(4)
+      expect(done?.usage.totalCostUsd).toBeCloseTo(0.25)
+      expect(done?.nextRunAt).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('sums our own costUsd across attempts, for engines that report no cost of their own', async () => {
-    const { queue, runners } = makeQueue()
-    const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 200 }))
-    await tick()
-    runners[0]!.emit(priced(errorResult(), 0.4))
-    await tick()
-    await settles(() => expect(runners).toHaveLength(2))
-    runners[1]!.emit(priced(successResult(100), 0.1))
-    await tick()
+    vi.useFakeTimers()
+    try {
+      const { queue, runners } = makeQueue()
+      const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 200 }))
+      await vi.advanceTimersByTimeAsync(0)
+      runners[0]!.emit(priced(errorResult(), 0.4))
+      await vi.advanceTimersByTimeAsync(200)
+      expect(runners).toHaveLength(2)
+      runners[1]!.emit(priced(successResult(100), 0.1))
+      await vi.advanceTimersByTimeAsync(0)
 
-    const done = await queue.get(job.id)
-    expect(done?.usage.costUsd).toBeCloseTo(0.5)
-    expect(done?.usage.totalCostUsd).toBe(0)
+      const done = await queue.get(job.id)
+      expect(done?.usage.costUsd).toBeCloseTo(0.5)
+      expect(done?.usage.totalCostUsd).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('leaves costUsd unknown when no attempt priced itself, rather than banking a zero', async () => {
@@ -497,23 +510,37 @@ describe('JobQueue', () => {
   })
 
   it('kills runs that exceed the wall-clock cap, even when the CLI never responds', async () => {
-    const { queue, runners } = makeQueue({ maxJobDurationMs: 10, killGraceMs: 10 })
-    const job = await queue.submit(jobRequest())
-    await tick()
-    await settles(() => expect(runners[0]!.interrupt).toHaveBeenCalled())
-    await settles(async () => {
+    vi.useFakeTimers()
+    try {
+      const { queue, runners } = makeQueue({ maxJobDurationMs: 1000, killGraceMs: 500 })
+      const job = await queue.submit(jobRequest())
+      await vi.advanceTimersByTimeAsync(999)
+      expect(runners[0]!.interrupt).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(runners[0]!.interrupt).toHaveBeenCalled()
+      expect(runners[0]!.closed).toBe(false)
+      await vi.advanceTimersByTimeAsync(500)
       expect((await queue.get(job.id))?.status).toBe('failed')
-    })
-    expect((await queue.get(job.id))?.error).toMatch(/max duration/)
-    expect(runners[0]!.closed).toBe(true)
-    expect((await queue.stats()).running).toBe(0)
+      expect((await queue.get(job.id))?.error).toMatch(/max duration/)
+      expect(runners[0]!.closed).toBe(true)
+      expect((await queue.stats()).running).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('the per-job maxDurationMs tightens the server cap, never widens it', async () => {
-    const { queue, runners } = makeQueue({ maxJobDurationMs: 60_000, killGraceMs: 5 })
-    await queue.submit(jobRequest({ maxDurationMs: 5 }))
-    await tick()
-    await settles(() => expect(runners[0]!.interrupt).toHaveBeenCalled())
+    vi.useFakeTimers()
+    try {
+      const { queue, runners } = makeQueue({ maxJobDurationMs: 60_000, killGraceMs: 5 })
+      await queue.submit(jobRequest({ maxDurationMs: 500 }))
+      await vi.advanceTimersByTimeAsync(499)
+      expect(runners[0]!.interrupt).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(runners[0]!.interrupt).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('prunes terminal jobs past the retention window, never queued/running ones', async () => {

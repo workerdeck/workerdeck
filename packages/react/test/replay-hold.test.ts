@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import type { AttachedFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { initialReplayTarget } from '../src/hooks/use-session.ts'
+import { eventually } from './eventually.ts'
 
 function frame(replayingFrom: number, lastSeq: number): AttachedFrame {
   const session: SessionInfo = {
@@ -81,7 +82,7 @@ describe('the attach replay signal, over the wire', () => {
     writer.send('one')
     writer.send('two')
     writer.send('three')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const info = await client.getSession(session.id)
       expect(info.lastSeq).toBeGreaterThanOrEqual(3)
     })
@@ -100,7 +101,7 @@ describe('the attach replay signal, over the wire', () => {
       kinds.push('event')
       events.push(e)
     })
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(attached).toBeDefined()
       expect(events.at(-1)?.seq ?? 0).toBeGreaterThanOrEqual(attached!.session.lastSeq)
     })

@@ -79,22 +79,24 @@ describe('BrowserBridgeExecutor', () => {
     })
   })
 
-  it('times out a silent client and tells it to abandon the call', async () => {
-    const h = harness({ timeoutMs: 20 })
-    await h.executor.dispatch(call())
-    await vi.waitFor(() => expect(h.results).toHaveLength(1))
-    expect(h.results[0]!.result).toMatchObject({ status: 'failed', reason: 'timeout' })
-    expect(h.canceled).toEqual([{ executionId: 'exec-1', reason: 'timeout' }])
-  })
-
-  it('ignores a late answer that arrives after the timeout', async () => {
-    const h = harness({ timeoutMs: 20 })
-    await h.executor.dispatch(call())
-    await vi.waitFor(() => expect(h.results).toHaveLength(1))
-    expect(h.executor.resolve('exec-1', { output: { type: 'text', value: 'too late' } })).toBe(false)
-    await settle()
-    expect(h.results).toHaveLength(1)
-    expect(h.results[0]!.result).toMatchObject({ reason: 'timeout' })
+  it('times out a silent client, tells it to abandon the call, and ignores its late answer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const h = harness({ timeoutMs: 20 })
+      await h.executor.dispatch(call())
+      await vi.advanceTimersByTimeAsync(19)
+      expect(h.results).toEqual([])
+      await vi.advanceTimersByTimeAsync(1)
+      expect(h.results).toHaveLength(1)
+      expect(h.results[0]!.result).toMatchObject({ status: 'failed', reason: 'timeout' })
+      expect(h.canceled).toEqual([{ executionId: 'exec-1', reason: 'timeout' }])
+      expect(h.executor.resolve('exec-1', { output: { type: 'text', value: 'too late' } })).toBe(false)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(h.results).toHaveLength(1)
+      expect(h.results[0]!.result).toMatchObject({ status: 'failed', reason: 'timeout' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('ignores a duplicate answer', async () => {

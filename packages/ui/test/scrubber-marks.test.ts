@@ -66,6 +66,7 @@ describe('buildMarks', () => {
 
   it('flags a failed turn and a failed top-level call, red', () => {
     expect(kinds([user('x'), toolCall('failed'), assistant('sorry'), turn(true)])).toEqual(['user@0', 'toolFailed@1', 'turnFailed@2'])
+    expect(kinds([errorNotice('boom'), { kind: 'notice', id: `n${++seq}`, level: 'info', text: 'fyi' }])).toEqual(['error@0'])
   })
 
   it("marks a sub-agent dispatch in the input lane and ignores the sub-agent's own rows", () => {
@@ -105,6 +106,7 @@ describe('buildMarks', () => {
   it('reads a failure off either spelling, status or result flag', () => {
     const flagged: TranscriptItem = { ...toolCall('settled'), result: { text: 'no matches', isError: true } } as TranscriptItem
     expect(kinds([flagged]).map((k) => k.split('@')[0])).toEqual(['toolFailed'])
+    expect(kinds([{ ...toolCall('settled'), result: { text: 'ok', isError: false } } as TranscriptItem])).toEqual([])
     expect(kinds([toolCall('running')])).toEqual([])
   })
 

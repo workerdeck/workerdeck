@@ -118,7 +118,13 @@ describe('claude pendingInput', () => {
     await tick()
     harness.emit(assistant(harness.captured.inputs[0]!.uuid!, 1))
     harness.emit(result('success', [harness.captured.inputs[0]!.uuid!]))
-    harness.emit({ type: 'system', subtype: 'session_state_changed', state: 'idle', uuid: 'u-idle', session_id: 'sdk-1' } as unknown as SDKMessage)
+    harness.emit({
+      type: 'system',
+      subtype: 'session_state_changed',
+      state: 'idle',
+      uuid: 'u-idle',
+      session_id: 'sdk-1',
+    } as unknown as SDKMessage)
     await tick()
     runner.sendMessage('handed off')
     await tick()
@@ -133,12 +139,15 @@ describe('claude pendingInput', () => {
     await tick()
     harness.emit(assistant(harness.captured.inputs[0]!.uuid!, 0))
     await tick()
+    const seen: string[] = []
+    runner.subscribe((event) => seen.push(event.type))
     for (let n = 1; n <= 600; n++) {
       harness.emit(assistant(undefined, n))
-      await tick()
     }
     harness.emit(result())
     await tick()
+    expect(seen.filter((type) => type === 'assistant_message')).toHaveLength(601)
+    expect(seen).toContain('turn_result')
     expect(runner.pendingInput()).toBe(1)
   })
 

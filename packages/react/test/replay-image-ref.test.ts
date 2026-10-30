@@ -62,6 +62,7 @@ describe('image refs - the fold moves in exactly one field', () => {
 
     const call = refd.items.find((item) => item.kind === 'tool_call')!
     expect(call.result?.images).toEqual([{ partIndex: 1, mediaType: 'image/png', bytes: 340_000, sourceSeq: 2 }])
+    expect(call.result?.text).toBe('looked at the screenshot')
 
     const strip = (state: typeof refd) => ({
       ...state,
@@ -70,12 +71,6 @@ describe('image refs - the fold moves in exactly one field', () => {
       ),
     })
     expect(strip(refd)).toEqual(strip(whole))
-  })
-
-  it('does not move the text - which is the whole measured justification', () => {
-    const textOf = (state: ReturnType<typeof fold>) => state.items.find((item) => item.kind === 'tool_call')!.result?.text
-    expect(textOf(foldOf(events, { imageRefs: true }))).toBe('looked at the screenshot')
-    expect(textOf(foldOf(events, { imageRefs: true }))).toBe(textOf(foldOf(events, {})))
   })
 
   it('folds EXACTLY equal for a log with no pictures in it', () => {

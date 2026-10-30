@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
@@ -12,6 +12,7 @@ import {
   transcriptCacheKey,
   writeTranscriptCache,
 } from '../src/lib/transcript-cache.ts'
+import { eventually } from './eventually.ts'
 
 function info(overrides: Partial<SessionInfo> = {}): SessionInfo {
   return {
@@ -201,7 +202,7 @@ describe('warm attach over the wire', () => {
     writer.send('one')
     writer.send('two')
     const first = reduceAttach(client, session.id, initialTranscriptState, 0)
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(first.frames.length).toBe(1)
       expect(first.state().lastSeq).toBeGreaterThanOrEqual(first.frames[0].session.lastSeq)
     })
@@ -211,13 +212,13 @@ describe('warm attach over the wire', () => {
 
     writer.send('three')
     writer.send('four')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const now = await client.getSession(session.id)
       expect(now.lastSeq).toBeGreaterThan(cached.lastSeq)
     })
 
     const warm = reduceAttach(client, session.id, cached, cached.lastSeq)
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(warm.frames.length).toBe(1)
       expect(warm.state().lastSeq).toBeGreaterThanOrEqual(warm.frames[0].session.lastSeq)
     })
@@ -231,7 +232,7 @@ describe('warm attach over the wire', () => {
     }
 
     const full = reduceAttach(client, session.id, initialTranscriptState, 0)
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(full.frames.length).toBe(1)
       expect(full.state().lastSeq).toBeGreaterThanOrEqual(warm.state().lastSeq)
     })
@@ -246,21 +247,21 @@ describe('warm attach over the wire', () => {
     handles.push(writer)
     await new Promise<void>((resolve) => writer.on('attached', () => resolve()))
     writer.send('hello')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const now = await client.getSession(session.id)
       expect(now.lastSeq).toBeGreaterThanOrEqual(1)
     })
 
     const cached = held(500)
     const stale = reduceAttach(client, session.id, cached, cached.lastSeq)
-    await vi.waitFor(() => expect(stale.frames.length).toBe(1))
+    await eventually(() => expect(stale.frames.length).toBe(1))
     // A grace period, not a latency budget: the assertion is that nothing arrives, so there is no event to wait for.
     await new Promise((resolve) => setTimeout(resolve, 250))
     expect(stale.events.length).toBe(0)
     expect(staleAttach(stale.frames[0], cached)).toBe(true)
     stale.handle.detach()
     const recovered = reduceAttach(client, session.id, initialTranscriptState, 0)
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(recovered.frames.length).toBe(1)
       expect(recovered.state().lastSeq).toBeGreaterThanOrEqual(recovered.frames[0].session.lastSeq)
     })

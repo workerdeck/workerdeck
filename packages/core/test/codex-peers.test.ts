@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { CodexRunner, type PeerDirectory } from '../src/index.ts'
 import { collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 function directory(): PeerDirectory & { sent: Array<{ from: string; to: string; text: string }> } {
   const sent: Array<{ from: string; to: string; text: string }> = []
@@ -27,14 +28,14 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     scriptTurn(bare, () => {})
     const plain = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: bare.connectFn })
     void plain.start()
-    await vi.waitFor(() => expect(threadStart(bare)).toBeDefined())
+    await eventually(() => expect(threadStart(bare)).toBeDefined())
     expect(threadStart(bare).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status'])
 
     const peer = scriptedPeer()
     scriptTurn(peer, () => {})
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn, peers: directory() })
     void runner.start()
-    await vi.waitFor(() => expect(threadStart(peer)).toBeDefined())
+    await eventually(() => expect(threadStart(peer)).toBeDefined())
     const tools = threadStart(peer).dynamicTools!
     expect(tools.map((t) => [t.type, t.name])).toEqual([
       ['function', 'session_info'],
@@ -52,7 +53,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     const peers = directory()
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn, peers })
     void runner.start()
-    await vi.waitFor(() => expect(threadStart(peer)).toBeDefined())
+    await eventually(() => expect(threadStart(peer)).toBeDefined())
     const call = { callId: 'c1', threadId: 'thread-1', turnId: 'turn-1', tool: 'peers_send', arguments: { sessionId: 'b', text: 'ping' } }
     const answer = (await peer.serverRequest('item/tool/call', call)) as {
       success: boolean
@@ -71,7 +72,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     scriptTurn(peer, () => {})
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn })
     void runner.start()
-    await vi.waitFor(() => expect(threadStart(peer)).toBeDefined())
+    await eventually(() => expect(threadStart(peer)).toBeDefined())
     await expect(
       peer.serverRequest('item/tool/call', { callId: 'c', threadId: 't', turnId: 'u', tool: 'peers_list', arguments: {} }),
     ).rejects.toThrow('item/tool/call')
@@ -92,7 +93,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn, peers: directory() })
     const events = collect(runner)
     void runner.start()
-    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(1))
+    await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(1))
     const calls = ofType(events, 'assistant_message')
       .flatMap((e) => (typeof e.message.content === 'string' ? [] : e.message.content))
       .filter((b) => b.type === 'tool_use')
@@ -113,7 +114,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     const events = collect(runner)
     void runner.start()
     runner.sendMessage('/clear', undefined, { origin: { kind: 'peer', sessionId: 'src-1' } })
-    await vi.waitFor(() => expect(peer.requests.filter((r) => r.method === 'turn/start')).toHaveLength(1))
+    await eventually(() => expect(peer.requests.filter((r) => r.method === 'turn/start')).toHaveLength(1))
     const start = peer.requests.find((r) => r.method === 'turn/start')!.params as { input: Array<{ type: string; text?: string }> }
     expect(start.input[0]!.text).toContain('<peer-message from-session="src-1">\n/clear\n</peer-message>')
     expect(peer.requests.some((r) => r.method === 'thread/clear' || r.method === 'thread/rollback')).toBe(false)
@@ -130,7 +131,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     runner.sendMessage('commit what #Astra did', undefined, {
       mentions: [{ typed: 'Astra', id: 'peer-1', name: 'Astra', status: 'idle', cwd: '/work/astra' }],
     })
-    await vi.waitFor(() => expect(peer.requests.filter((r) => r.method === 'turn/start')).toHaveLength(1))
+    await eventually(() => expect(peer.requests.filter((r) => r.method === 'turn/start')).toHaveLength(1))
     const start = peer.requests.find((r) => r.method === 'turn/start')!.params as { input: Array<{ type: string; text?: string }> }
     expect(start.input[0]!.text).toContain('commit what #Astra did\n\n<peer-mentions>')
     const user = ofType(events, 'user_message').find((e) => !e.synthetic)!

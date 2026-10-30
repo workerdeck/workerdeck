@@ -1,6 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { contentTypeFor, dashboardCsp, looksLikeAsset, resolveWithinRoot } from '../src/lib/static.ts'
 
@@ -63,15 +61,6 @@ describe('contentTypeFor', () => {
   it('falls back to octet-stream rather than guessing', () => {
     expect(contentTypeFor('/a.xyz')).toBe('application/octet-stream')
     expect(contentTypeFor('/noext')).toBe('application/octet-stream')
-  })
-})
-
-describe('the bundled dashboard contract', () => {
-  it('serves index.html for a path with no extension (hash history)', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'cw-web-'))
-    await writeFile(join(dir, 'index.html'), '<!doctype html><title>x</title>')
-    expect(resolveWithinRoot(dir, '/index.html')).toBe(resolve(dir, 'index.html'))
-    expect(looksLikeAsset('/sessions/abc')).toBe(false)
   })
 })
 

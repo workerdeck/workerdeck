@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { MockLanguageModelV3 } from 'ai/test'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import type { ProfileInfo, SessionEvent } from '@workerdeck/protocol'
@@ -12,6 +12,7 @@ import { ancestorInstructionExcludes, foreignHomeExcludes, withInstructionExclud
 import { fakeHarness, tick } from './helpers/claude-harness.ts'
 import { scriptTurn, scriptedPeer, THREAD_RESULT } from './helpers/codex-peer.ts'
 import { streamText } from './helpers/ai-sdk-mocks.ts'
+import { eventually } from './helpers/wait.ts'
 
 const CONTEXT = { sessionId: 'session-1' }
 
@@ -175,7 +176,7 @@ describe('instruction scope', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn, instructionScope: 'cwd' })
     await runner.start()
     const starts = () => peer.requests.filter((request) => request.method === 'thread/start')
-    await vi.waitFor(() => expect(starts()).toHaveLength(1))
+    await eventually(() => expect(starts()).toHaveLength(1))
     expect((starts()[0]!.params as { config?: Record<string, unknown> }).config).toMatchObject({ project_root_markers: [] })
   })
 })
@@ -189,7 +190,7 @@ describe('CodexRunner instructions', () => {
     scriptTurn(peer, (emit, turnId) => emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } }))
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn, instructions: 'be a builder' })
     await runner.start()
-    await vi.waitFor(() => expect(threadOptions(peer, 'thread/start')).toHaveLength(1))
+    await eventually(() => expect(threadOptions(peer, 'thread/start')).toHaveLength(1))
     expect(threadOptions(peer, 'thread/start')[0]!.developerInstructions).toBe('be a builder')
   })
 
@@ -204,7 +205,7 @@ describe('CodexRunner instructions', () => {
       instructions: 'be a builder',
     })
     await runner.start()
-    await vi.waitFor(() => expect(threadOptions(peer, 'thread/resume')).toHaveLength(1))
+    await eventually(() => expect(threadOptions(peer, 'thread/resume')).toHaveLength(1))
     expect(threadOptions(peer, 'thread/resume')[0]!.developerInstructions).toBe('be a builder')
   })
 
@@ -259,7 +260,7 @@ describe('AiSdkRunner instructions', () => {
     })
     void runner.start()
     runner.sendMessage('one')
-    await vi.waitFor(() => expect(seen).toHaveLength(1), { timeout: 15_000 })
+    await eventually(() => expect(seen).toHaveLength(1), { timeout: 15_000 })
     expect(seen[0]).toBe('profile text\n\nhost default\n\nsession text')
     runner.close()
   }, 30_000)
@@ -274,10 +275,10 @@ describe('AiSdkRunner instructions', () => {
     })
     void runner.start()
     runner.sendMessage('one')
-    await vi.waitFor(() => expect(seen).toHaveLength(1), { timeout: 15_000 })
+    await eventually(() => expect(seen).toHaveLength(1), { timeout: 15_000 })
     await runner.clearContext()
     runner.sendMessage('two')
-    await vi.waitFor(() => expect(seen).toHaveLength(2), { timeout: 15_000 })
+    await eventually(() => expect(seen).toHaveLength(2), { timeout: 15_000 })
     expect(seen).toEqual(['profile text\n\nsession text', 'profile text\n\nsession text'])
     runner.close()
   }, 30_000)

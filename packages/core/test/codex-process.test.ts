@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { JsonRpcError } from '../src/engines/codex/jsonrpc.ts'
 import { USAGE_A, USAGE_B, collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 describe('CodexRunner: process contract, usage and rate limits', () => {
   it('fails loudly when initialize rejects the experimentalApi capability', async () => {
@@ -39,7 +40,7 @@ describe('CodexRunner: process contract, usage and rate limits', () => {
         data: Buffer.from('hello').toString('base64'),
       },
     ])
-    await vi.waitFor(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
+    await eventually(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
     const input = (
       peer.requests.find((r) => r.method === 'turn/start')!.params as {
         input: Array<{ type: string; path?: string; text?: string }>
@@ -213,7 +214,7 @@ describe('CodexRunner: process contract, usage and rate limits', () => {
       errors: ['invalid params: input'],
     })
     runner.sendMessage('again')
-    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+    await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
     expect(ofType(events, 'turn_result')[1]).toMatchObject({ subtype: 'success' })
   })
 })

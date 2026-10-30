@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { withSkillItems } from '../src/engines/codex/skills.ts'
 import type { Runner } from '../src/runner-interface.ts'
 import { collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 describe('CodexRunner: skills and MCP servers', () => {
   it('lists skills over skills/list, and re-lists when the watcher says they changed', async () => {
@@ -65,14 +66,14 @@ describe('CodexRunner: skills and MCP servers', () => {
     ])
 
     peer.emit('skills/changed', {})
-    await vi.waitFor(() => expect(ofType(events, 'skills')).toHaveLength(2))
+    await eventually(() => expect(ofType(events, 'skills')).toHaveLength(2))
     const second = ofType(events, 'skills')[1]!
     expect(second.skills.map((s) => s.name)).toEqual(['imagegen', 'pdf-fill'])
     expect(second.skills[1]).toMatchObject({ name: 'pdf-fill', enabled: false })
 
     peer.emit('skills/changed', {})
     peer.emit('skills/changed', {})
-    await vi.waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(3))
+    await eventually(() => expect(listCalls).toBeGreaterThanOrEqual(3))
     expect(ofType(events, 'skills')).toHaveLength(2)
   })
 
@@ -105,7 +106,7 @@ describe('CodexRunner: skills and MCP servers', () => {
     ])
 
     runner.sendMessage('now $imagegen again, $imagegen, and $nothing')
-    await vi.waitFor(() => expect(peer.requests.filter((r) => r.method === 'turn/start')).toHaveLength(2))
+    await eventually(() => expect(peer.requests.filter((r) => r.method === 'turn/start')).toHaveLength(2))
     const second = peer.requests.filter((r) => r.method === 'turn/start')[1]!
     expect((second.params as { input: unknown }).input).toEqual([
       { type: 'text', text: 'now $imagegen again, $imagegen, and $nothing' },
@@ -123,10 +124,10 @@ describe('CodexRunner: skills and MCP servers', () => {
     const events = collect(runner)
     void runner.start()
 
-    await vi.waitFor(() => expect(ofType(events, 'skills')).toHaveLength(1))
+    await eventually(() => expect(ofType(events, 'skills')).toHaveLength(1))
     expect(ofType(events, 'skills')[0]!.skills.map((s) => s.name)).toEqual(['scratch-notes'])
     expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(false)
-    await vi.waitFor(() => expect(peer.closed()).toBe(1))
+    await eventually(() => expect(peer.closed()).toBe(1))
     expect(runner.status).toBe('idle')
   })
 
@@ -298,7 +299,7 @@ describe('CodexRunner: skills and MCP servers', () => {
     expect((await runner.mcpServers())?.map((s) => `${s.name}:${s.status}`)).toEqual(['gamma:pending', 'a:pending'])
 
     runner.sendMessage('go')
-    await vi.waitFor(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
+    await eventually(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
     expect((await runner.mcpServers())?.map((s) => `${s.name}:${s.status}`)).toEqual(['gamma:pending', 'a:connected'])
     expect(statusParams.at(-1)).toEqual({ threadId: 'thread-1' })
   })

@@ -81,7 +81,7 @@ async function until(check: () => boolean | Promise<boolean>, what: string, time
     if (Date.now() > deadline) {
       throw new Error(`timed out waiting for ${what}`)
     }
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await new Promise((resolve) => setTimeout(resolve, 2))
   }
 }
 
@@ -393,6 +393,13 @@ describe('team frames', () => {
     expect(await connPi.team('team.join', 'mac:X', 'mac:L')).toEqual({ ok: false, reason: 'no such agent' })
     expect(await connPi.team('team.join', 'M', 'mac:nobody')).toEqual({ ok: false, reason: 'no such agent' })
     expect(pi.team).toEqual([])
+
+    await connPi.team('team.join', 'M', 'mac:L', 'op-1')
+    await connPi.team('team.leave', 'M', 'mac:L', 'x'.repeat(65))
+    expect(mac.team.slice(1).map((call) => [call.kind, call.op])).toEqual([
+      ['team.join', 'op-1'],
+      ['team.leave', undefined],
+    ])
   })
 
   it('refuses team frames to a gateway whose ceiling lacks team or that did not announce the feature', async () => {
@@ -497,16 +504,6 @@ describe('team frames', () => {
     expect(answer.seen).toEqual([{ lead: 'mac:L', epoch: 'e1', rev: 3 }])
   })
 
-  it('passes a join operation id through to the target gateway', async () => {
-    const { stateDir, relay } = await setup({ rules: [{ from: '*', to: '*', allow: ['send', 'peek', 'team'] }] })
-    const mac = fakeGateway([entry('lead', { agent: { id: 'L', name: 'Lead' } })])
-    const pi = fakeGateway([entry('m', { agent: { id: 'M', name: 'M' } })])
-    await attach(relay, stateDir, 'mac', mac)
-    const connPi = await attach(relay, stateDir, 'pi', pi)
-    await connPi.team('team.join', 'M', 'mac:L', 'op-1')
-    await connPi.team('team.leave', 'M', 'mac:L', 'x'.repeat(65))
-    expect(mac.team.map((call) => call.op)).toEqual(['op-1', undefined])
-  })
 })
 
 describe('several owners on one gateway', () => {
@@ -538,7 +535,9 @@ describe('several owners on one gateway', () => {
   }
 
   it('welcomes a multi-owner gateway with its owner set', async () => {
-    const { connMini, connMac, relay } = await three()
+    const { stateDir, relay } = await setup(SAME_ONLY)
+    const connMini = await attach(relay, stateDir, 'mini', mini(), { owners: ['silkweave', 'tobias', 'ruli'] })
+    const connMac = await attach(relay, stateDir, 'mac', fakeGateway([entry('plain')]), { owner: 'tobias' })
     expect(connMini.owners()).toEqual(['silkweave', 'tobias', 'ruli'])
     expect(connMac.owners()).toEqual(['tobias'])
     expect(relay.status().gateways.find((row) => row.name === 'mini')?.owners).toEqual(['silkweave', 'tobias', 'ruli'])

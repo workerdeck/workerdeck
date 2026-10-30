@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { SessionRunner, type PeerDirectory, type ShellDirectory } from '../src/index.ts'
 import { fakeHarness } from './helpers/claude-harness.ts'
+import { eventually } from './helpers/wait.ts'
 
 function peerDirectory(): PeerDirectory {
   return {
@@ -72,17 +73,18 @@ describe('SessionRunner: shell tools', () => {
   it('rides the one workerdeck MCP server, alone or beside the peer tools', async () => {
     const alone = fakeHarness()
     void new SessionRunner({ cwd: '/tmp/p', queryFn: alone.queryFn, shells: shellDirectory() }).start()
-    await vi.waitFor(() => expect(alone.captured.options).toBeDefined())
+    await eventually(() => expect(alone.captured.options).toBeDefined())
     expect(Object.keys(registered(alone)).sort()).toEqual(['session_info', 'set_status', 'shell_list', 'shell_read'])
 
     const both = fakeHarness()
     void new SessionRunner({ cwd: '/tmp/p', queryFn: both.queryFn, peers: peerDirectory(), shells: shellDirectory() }).start()
-    await vi.waitFor(() => expect(both.captured.options).toBeDefined())
+    await eventually(() => expect(both.captured.options).toBeDefined())
     expect(Object.keys(registered(both)).sort()).toEqual([
       'peers_list',
       'peers_peek',
       'peers_send',
-      'session_info', 'set_status',
+      'session_info',
+      'set_status',
       'shell_list',
       'shell_read',
     ])
@@ -91,7 +93,7 @@ describe('SessionRunner: shell tools', () => {
   it('declares session_info alone when neither directory is configured', async () => {
     const harness = fakeHarness()
     void new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn }).start()
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     expect(Object.keys(registered(harness))).toEqual(['session_info', 'set_status'])
   })
 
@@ -100,7 +102,7 @@ describe('SessionRunner: shell tools', () => {
     const shells = shellDirectory()
     const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, shells })
     void runner.start()
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     const result = await registered(harness).shell_read!.handler({ shellId: 'sh_b' }, {})
     expect(result).toMatchObject({ isError: false, content: [{ type: 'text', text: expect.stringContaining('FAIL auth.ts') }] })
     expect(shells.calls).toEqual([['read', runner.id, 'sh_b']])
@@ -111,9 +113,10 @@ describe('SessionRunner: shell tools', () => {
     const shells = shellDirectory()
     const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, shells, shellAgentWrite: 'gated' })
     void runner.start()
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     expect(Object.keys(registered(harness)).sort()).toEqual([
-      'session_info', 'set_status',
+      'session_info',
+      'set_status',
       'shell_kill',
       'shell_list',
       'shell_read',
@@ -138,7 +141,7 @@ describe('SessionRunner: shell tools', () => {
     const events: SessionEvent[] = []
     runner.subscribe((e) => events.push(e))
     void runner.start()
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     const pending = canUseTool(harness, 'mcp__workerdeck__shell_run', { command: 'npm run dev' })
     expect(runner.pendingApprovals).toHaveLength(1)
     expect(runner.pendingApprovals[0]).toMatchObject({ toolName: 'mcp__workerdeck__shell_run', input: { command: 'npm run dev' } })
@@ -153,7 +156,7 @@ describe('SessionRunner: shell tools', () => {
     const events: SessionEvent[] = []
     runner.subscribe((e) => events.push(e))
     void runner.start()
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     await expect(canUseTool(harness, 'mcp__workerdeck__shell_write', { shellId: 'sh_a', keys: ['r'] })).resolves.toEqual({
       behavior: 'allow',
       updatedInput: { shellId: 'sh_a', keys: ['r'] },
@@ -179,7 +182,7 @@ describe('SessionRunner: shell tools', () => {
       const events: SessionEvent[] = []
       runner.subscribe((e) => events.push(e))
       void runner.start()
-      await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+      await eventually(() => expect(harness.captured.options).toBeDefined())
       await expect(canUseTool(harness, 'mcp__workerdeck__shell_read', { shellId: 'sh_a' })).resolves.toMatchObject({ behavior: 'allow' })
       await expect(canUseTool(harness, 'mcp__workerdeck__shell_list', {})).resolves.toMatchObject({ behavior: 'allow' })
       expect(runner.pendingApprovals).toHaveLength(0)
@@ -188,7 +191,7 @@ describe('SessionRunner: shell tools', () => {
     const bare = fakeHarness()
     const unstamped = new SessionRunner({ cwd: '/tmp/p', queryFn: bare.queryFn })
     void unstamped.start()
-    await vi.waitFor(() => expect(bare.captured.options).toBeDefined())
+    await eventually(() => expect(bare.captured.options).toBeDefined())
     void canUseTool(bare, 'mcp__workerdeck__shell_read', { shellId: 'sh_a' })
     expect(unstamped.pendingApprovals).toHaveLength(1)
   })
@@ -198,7 +201,7 @@ describe('SessionRunner: shell tools', () => {
     const shells = shellDirectory()
     const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, shells, shellAgentWrite: 'gated' })
     void runner.start()
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     void canUseTool(harness, 'mcp__workerdeck__shell_request_write', { shellId: 'sh_a', reason: 'answer the prompt' })
     expect(runner.pendingApprovals).toHaveLength(1)
     const granted = await registered(harness).shell_request_write!.handler({ shellId: 'sh_a', reason: 'answer the prompt' }, {})

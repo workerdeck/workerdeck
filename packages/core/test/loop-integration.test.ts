@@ -103,7 +103,7 @@ describe('agent loop + sandboxed tool execution', () => {
       sessionId: runner.id,
       tool: pending.toolName,
       input: pending.input,
-      limits: { timeoutMs: 150 },
+      limits: { timeoutMs: 50 },
     })
     const result = (dispatch as { result: { status: string; reason?: string; error?: string } }).result
     expect(result).toMatchObject({ status: 'failed', reason: 'timeout' })

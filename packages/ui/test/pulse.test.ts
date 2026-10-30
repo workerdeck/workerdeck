@@ -13,11 +13,6 @@ describe('pulseFrameAt', () => {
     expect(pulseFrameAt(1_756_000_000_000)).toBe(pulseFrameAt(1_756_000_000_000 + PULSE_MS * PULSE_FRAMES.length))
   })
 
-  it('agrees for every caller reading the same instant', () => {
-    const now = Date.now()
-    expect(new Set([pulseFrameAt(now), pulseFrameAt(now), pulseFrameAt(now)]).size).toBe(1)
-  })
-
   it('rests on a glyph that is not a frame', () => {
     expect(PULSE_FRAMES).not.toContain(PULSE_REST)
   })

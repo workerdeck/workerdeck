@@ -14,7 +14,8 @@ import {
   type RelaySessionEntry,
 } from '@workerdeck/relay-client'
 import { enrollGateway, revokeGateway } from '../src/enrollment.ts'
-import { startRelay, type Relay } from '../src/relay.ts'
+import { rateLimiter, sendRefusal } from '../src/limits.ts'
+import { startRelay, type Relay, type RelayOptions } from '../src/relay.ts'
 import { fetchRelayStatus, statusSocketPath } from '../src/status.ts'
 
 type FakeGateway = {
@@ -63,22 +64,45 @@ async function until(check: () => boolean | Promise<boolean>, what: string, time
     if (Date.now() > deadline) {
       throw new Error(`timed out waiting for ${what}`)
     }
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await new Promise((resolve) => setTimeout(resolve, 2))
   }
 }
 
-async function setup(rules: unknown = { rules: [{ from: '*', to: '*' }] }): Promise<{ stateDir: string; relay: Relay }> {
+async function setup(
+  rules: unknown = { rules: [{ from: '*', to: '*' }] },
+  options: Partial<RelayOptions> = {},
+): Promise<{ stateDir: string; relay: Relay; enroll: (name: string) => Promise<string> }> {
   const stateDir = await mkdtemp(join(tmpdir(), 'wd-relay-'))
   cleanups.push(() => rm(stateDir, { recursive: true, force: true }))
   await writeFile(join(stateDir, 'rules.json'), JSON.stringify(rules))
-  const relay = await startRelay({ stateDir, port: 0, log: () => {}, watchIntervalMs: 50, heartbeatMs: 60_000 })
+  const relay = await startRelay({ stateDir, port: 0, log: () => {}, watchIntervalMs: 60_000, heartbeatMs: 60_000, ...options })
   cleanups.push(() => relay.close())
-  return { stateDir, relay }
+  const enroll = async (name: string): Promise<string> => {
+    const key = await enrollGateway(stateDir, name)
+    await relay.reload()
+    return key
+  }
+  return { stateDir, relay, enroll }
 }
 
-async function connectGateway(relay: Relay, name: string, key: string, gateway: FakeGateway, allow?: RelayOp[]): Promise<RelayConnection> {
+function logLine(match: RegExp): { log: (line: string) => void; seen: Promise<string> } {
+  let found: (line: string) => void = () => {}
+  const seen = new Promise<string>((resolve) => {
+    found = resolve
+  })
+  return { log: (line) => match.test(line) && found(line), seen }
+}
+
+async function connectGateway(
+  relay: Relay,
+  name: string,
+  key: string,
+  gateway: FakeGateway,
+  allow?: RelayOp[],
+  log?: (line: string) => void,
+): Promise<RelayConnection> {
   const connection = connectRelay(
-    { url: relay.url, gateway: name, key, allow, tickMs: 30, digestMs: 60_000, backoffMinMs: 20, backoffMaxMs: 100 },
+    { url: relay.url, gateway: name, key, allow, tickMs: 30, digestMs: 60_000, backoffMinMs: 20, backoffMaxMs: 100, log },
     gateway.host,
   )
   cleanups.push(() => connection.close())
@@ -89,13 +113,13 @@ async function connectGateway(relay: Relay, name: string, key: string, gateway: 
 
 describe('relay', () => {
   it('lists, peeks and sends across two gateways with a relay-stamped origin', async () => {
-    const { stateDir, relay } = await setup()
+    const { relay, enroll } = await setup()
     const a = fakeGateway([
       entry('a1', { title: 'Astra', model: 'opus', contextUsage: { totalTokens: 10, maxTokens: 100, percentage: 10 } }),
     ])
     const b = fakeGateway([entry('b1', { title: 'Bolt', project: { name: 'srv', root: '/srv' } })])
-    const connA = await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), a)
-    await connectGateway(relay, 'pi', await enrollGateway(stateDir, 'pi'), b)
+    const connA = await connectGateway(relay, 'mac', await enroll('mac'), a)
+    await connectGateway(relay, 'pi', await enroll('pi'), b)
 
     const rows = await connA.list('a1')
     expect(rows).toEqual([
@@ -113,11 +137,11 @@ describe('relay', () => {
   })
 
   it('denies by default and answers every miss the same way', async () => {
-    const { stateDir, relay } = await setup({ rules: [] })
+    const { relay, enroll } = await setup({ rules: [] })
     const a = fakeGateway([entry('a1')])
     const b = fakeGateway([entry('b1')])
-    const connA = await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), a)
-    await connectGateway(relay, 'pi', await enrollGateway(stateDir, 'pi'), b)
+    const connA = await connectGateway(relay, 'mac', await enroll('mac'), a)
+    await connectGateway(relay, 'pi', await enroll('pi'), b)
     expect(await connA.list('a1')).toEqual([])
     expect(await connA.peek('a1', { gateway: 'pi', id: 'b1' })).toBeUndefined()
     const denied = await connA.send('a1', { gateway: 'pi', id: 'b1' }, 'hi', [])
@@ -128,41 +152,41 @@ describe('relay', () => {
   })
 
   it('a rule without allow permits peek; the gateway ceiling beats the rule', async () => {
-    const { stateDir, relay } = await setup({ rules: [{ from: 'mac', to: 'pi' }] })
+    const { relay, enroll } = await setup({ rules: [{ from: 'mac', to: 'pi' }] })
     const a = fakeGateway([entry('a1')])
     const b = fakeGateway([entry('b1')])
-    const connA = await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), a)
-    await connectGateway(relay, 'pi', await enrollGateway(stateDir, 'pi'), b, ['send'])
+    const connA = await connectGateway(relay, 'mac', await enroll('mac'), a)
+    await connectGateway(relay, 'pi', await enroll('pi'), b, ['send'])
     expect((await connA.list('a1')).map((row) => row.allow)).toEqual([['send']])
     expect(await connA.peek('a1', { gateway: 'pi', id: 'b1' })).toBeUndefined()
     expect(b.peeks).toEqual([])
   })
 
   it('scopes a rule to project paths', async () => {
-    const { stateDir, relay } = await setup({ rules: [{ from: '*', to: '*', scope: { projects: ['/srv/ci'] } }] })
+    const { relay, enroll } = await setup({ rules: [{ from: '*', to: '*', scope: { projects: ['/srv/ci'] } }] })
     const a = fakeGateway([entry('a1')])
     const b = fakeGateway([entry('b1', { cwd: '/srv/ci/web' }), entry('b2', { cwd: '/srv/cia' })])
-    const connA = await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), a)
-    await connectGateway(relay, 'pi', await enrollGateway(stateDir, 'pi'), b)
+    const connA = await connectGateway(relay, 'mac', await enroll('mac'), a)
+    await connectGateway(relay, 'pi', await enroll('pi'), b)
     expect((await connA.list('a1')).map((row) => row.id)).toEqual(['b1'])
   })
 
   it('refuses a sender session the gateway never published', async () => {
-    const { stateDir, relay } = await setup()
+    const { relay, enroll } = await setup()
     const a = fakeGateway([entry('a1')])
     const b = fakeGateway([entry('b1')])
-    const connA = await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), a)
-    await connectGateway(relay, 'pi', await enrollGateway(stateDir, 'pi'), b)
+    const connA = await connectGateway(relay, 'mac', await enroll('mac'), a)
+    await connectGateway(relay, 'pi', await enroll('pi'), b)
     expect(await connA.list('hidden')).toEqual([])
     expect((await connA.send('hidden', { gateway: 'pi', id: 'b1' }, 'hi', [])).delivered).toBe(false)
   })
 
   it('converges a delete within a tick and clears a gateway on disconnect', async () => {
-    const { stateDir, relay } = await setup()
+    const { relay, enroll } = await setup()
     const a = fakeGateway([entry('a1')])
     const b = fakeGateway([entry('b1'), entry('b2')])
-    const connA = await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), a)
-    const connB = await connectGateway(relay, 'pi', await enrollGateway(stateDir, 'pi'), b)
+    const connA = await connectGateway(relay, 'mac', await enroll('mac'), a)
+    const connB = await connectGateway(relay, 'pi', await enroll('pi'), b)
     b.entries = [entry('b2', { status: 'running' })]
     await until(async () => JSON.stringify((await connA.list('a1')).map((row) => [row.id, row.status])) === '[["b2","running"]]', 'delta')
     connB.close()
@@ -170,28 +194,31 @@ describe('relay', () => {
     expect(relay.status().gateways.find((row) => row.name === 'pi')?.online).toBe(false)
   })
 
-  it('enforces hops, size and rate limits', async () => {
-    const stateDir = await mkdtemp(join(tmpdir(), 'wd-relay-'))
-    cleanups.push(() => rm(stateDir, { recursive: true, force: true }))
-    await writeFile(join(stateDir, 'rules.json'), JSON.stringify({ rules: [{ from: '*', to: '*' }] }))
-    const relay = await startRelay({ stateDir, port: 0, log: () => {}, perMinute: 2, maxHops: 2, maxMessageChars: 10 })
-    cleanups.push(() => relay.close())
+  it('refuses an empty, an oversized, a too-many-hops and an over-the-rate send over the wire', async () => {
+    const { relay, enroll } = await setup({ rules: [{ from: '*', to: '*' }] }, { perMinute: 2, maxHops: 2, maxMessageChars: 10 })
     const a = fakeGateway([entry('a1')])
     const b = fakeGateway([entry('b1')])
-    const connA = await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), a)
-    await connectGateway(relay, 'pi', await enrollGateway(stateDir, 'pi'), b)
+    const connA = await connectGateway(relay, 'mac', await enroll('mac'), a)
+    await connectGateway(relay, 'pi', await enroll('pi'), b)
     const to = { gateway: 'pi', id: 'b1' }
-    expect((await connA.send('a1', to, 'x'.repeat(11), [])).delivered).toBe(false)
-    expect((await connA.send('a1', to, 'x', ['a', 'b', 'c'])).delivered).toBe(false)
+    expect(await connA.send('a1', to, 'x'.repeat(11), [])).toEqual({
+      delivered: false,
+      reason: sendRefusal('x'.repeat(11), 0, { maxChars: 10, maxHops: 2 }),
+    })
+    expect(await connA.send('a1', to, 'x', ['a', 'b', 'c'])).toEqual({
+      delivered: false,
+      reason: sendRefusal('x', 3, { maxChars: 10, maxHops: 2 }),
+    })
     expect((await connA.send('a1', to, 'one', [])).delivered).toBe(true)
     expect((await connA.send('a1', to, 'two', [])).delivered).toBe(true)
     const third = await connA.send('a1', to, 'three', [])
-    expect(third.delivered === false && third.reason).toMatch(/rate limit/)
+    expect(third.delivered === false && third.reason).toMatch(/rate limit: at most 2 messages a minute/)
+    expect(b.sent.map((row) => row.text)).toEqual(['one', 'two'])
   })
 
-  it('refuses a wrong key, a bad version and a missing hello, and drops a revoked gateway', async () => {
-    const { stateDir, relay } = await setup()
-    await enrollGateway(stateDir, 'mac')
+  it('refuses a wrong key, a bad version and a missing hello', async () => {
+    const { relay, enroll } = await setup()
+    await enroll('mac')
     const closeOf = (frames: unknown[]): Promise<number> =>
       new Promise((resolve) => {
         const ws = new WebSocket(relay.url)
@@ -203,19 +230,38 @@ describe('relay', () => {
     )
     expect(await closeOf([{ t: 'hello', gateway: 'mac', key: 'x', version: 999, ceiling: { ops: [] } }])).toBe(RELAY_CLOSE.versionMismatch)
     expect(await closeOf([{ t: 'peer.list', id: '1', from: 'x' }])).toBe(RELAY_CLOSE.badHello)
+  })
 
+  it('drops a revoked gateway: its link closes as revoked and nothing routes to it', async () => {
+    const { stateDir, relay, enroll } = await setup()
+    const a = fakeGateway([entry('a1')])
     const b = fakeGateway([entry('b1')])
-    const key = await enrollGateway(stateDir, 'pi')
-    const connB = await connectGateway(relay, 'pi', key, b)
+    const connA = await connectGateway(relay, 'mac', await enroll('mac'), a)
+    const revoked = logLine(/not enrolled at the relay/)
+    const connB = await connectGateway(relay, 'pi', await enroll('pi'), b, undefined, revoked.log)
     await revokeGateway(stateDir, 'pi')
-    await until(() => relay.status().gateways.every((row) => row.name !== 'pi'), 'revocation')
+    await relay.reload()
+    expect(relay.status().gateways.map((row) => row.name)).toEqual(['mac'])
+    expect(await revoked.seen).toMatch(/\(revoked\)/)
     expect(connB.state()).not.toBe('online')
+    expect(await connA.list('a1')).toEqual([])
+    expect(await connA.send('a1', { gateway: 'pi', id: 'b1' }, 'hi', [])).toEqual({ delivered: false, reason: 'no such session: pi:b1' })
+    expect(b.sent).toEqual([])
+  })
+
+  it('follows enrollment and revocation from the file watcher, without a reload', async () => {
+    const { stateDir, relay } = await setup(undefined, { watchIntervalMs: 50 })
+    const revoked = logLine(/not enrolled at the relay/)
+    const connB = await connectGateway(relay, 'pi', await enrollGateway(stateDir, 'pi'), fakeGateway([entry('b1')]), undefined, revoked.log)
+    await revokeGateway(stateDir, 'pi')
+    expect(await revoked.seen).toMatch(/\(revoked\)/)
+    expect(connB.state()).not.toBe('online')
+    expect(relay.status().gateways.map((row) => row.name)).toEqual([])
   })
 
   it('asks for a snapshot when a delta skips a seq', async () => {
-    const { stateDir, relay } = await setup()
-    const key = await enrollGateway(stateDir, 'raw')
-    await relay.reload()
+    const { relay, enroll } = await setup()
+    const key = await enroll('raw')
     const ws = new WebSocket(relay.url)
     cleanups.push(() => ws.terminate())
     const frames: Array<{ t: string }> = []
@@ -231,8 +277,8 @@ describe('relay', () => {
   })
 
   it('answers status on the state dir socket only, and once per state dir', async () => {
-    const { stateDir, relay } = await setup()
-    await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), fakeGateway([entry('a1')]))
+    const { stateDir, relay, enroll } = await setup()
+    await connectGateway(relay, 'mac', await enroll('mac'), fakeGateway([entry('a1')]))
     expect((await fetchRelayStatus(stateDir)).gateways).toEqual([expect.objectContaining({ name: 'mac', online: true, sessions: 1 })])
     expect((await fetch(`http://127.0.0.1:${relay.port}/status`)).status).toBe(404)
     await expect(startRelay({ stateDir, port: 0, log: () => {} })).rejects.toThrow(/already serving/)
@@ -251,9 +297,9 @@ describe('relay', () => {
   })
 
   it('reconnects and republishes after the relay restarts', async () => {
-    const { stateDir, relay } = await setup()
+    const { stateDir, relay, enroll } = await setup()
     const a = fakeGateway([entry('a1')])
-    const conn = await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), a)
+    const conn = await connectGateway(relay, 'mac', await enroll('mac'), a)
     const port = relay.port
     await relay.close()
     await until(() => conn.state() !== 'online', 'offline')
@@ -261,5 +307,45 @@ describe('relay', () => {
     const again = await startRelay({ stateDir, port, log: () => {} })
     cleanups.push(() => again.close())
     await until(() => again.status().gateways.find((row) => row.name === 'mac')?.sessions === 1, 'republish', 8_000)
+  })
+})
+
+describe('send limits (pure)', () => {
+  const limits = { maxChars: 10, maxHops: 2 }
+
+  it.each([
+    ['an empty message', '', 0, /message is 0 characters; the limit is 10/],
+    ['a message one over the size', 'x'.repeat(11), 0, /message is 11 characters; the limit is 10/],
+    ['one hop too many', 'x', 3, /^3 messages have passed between sessions/],
+    ['an oversized message with too many hops, by size first', 'x'.repeat(11), 3, /message is 11 characters/],
+  ])('refuses %s', (_label, text, hops, reason) => {
+    expect(sendRefusal(text, hops, limits)).toMatch(reason)
+  })
+
+  it('takes a message at exactly the size and hop limits', () => {
+    expect(sendRefusal('x'.repeat(10), 2, limits)).toBeUndefined()
+  })
+
+  it('admits up to the limit per key inside the window, and again once the oldest send leaves it', () => {
+    let now = 1_000
+    const admit = rateLimiter(() => now)
+    expect([admit('a->b', 2, 60_000), admit('a->b', 2, 60_000), admit('a->b', 2, 60_000)]).toEqual([true, true, false])
+    expect(admit('a->c', 2, 60_000)).toBe(true)
+    now = 1_000 + 59_999
+    expect(admit('a->b', 2, 60_000)).toBe(false)
+    now = 1_000 + 60_000
+    expect(admit('a->b', 2, 60_000)).toBe(true)
+    expect(admit('a->b', 2, 60_000)).toBe(true)
+    expect(admit('a->b', 2, 60_000)).toBe(false)
+  })
+
+  it('does not count a refused send against the window', () => {
+    let now = 0
+    const admit = rateLimiter(() => now)
+    admit('k', 1, 1_000)
+    now = 500
+    expect(admit('k', 1, 1_000)).toBe(false)
+    now = 1_000
+    expect(admit('k', 1, 1_000)).toBe(true)
   })
 })

@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { GRANULAR_NEVER, collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
+import { eventually } from './helpers/wait.ts'
 
 describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
   it('interrupts via turn/interrupt and lands as an interrupted turn result', async () => {
@@ -16,7 +17,7 @@ describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'spin', connectFn: peer.connectFn })
     const events = collect(runner)
     const run = runner.start()
-    await vi.waitFor(() => expect(runner.status).toBe('running'))
+    await eventually(() => expect(runner.status).toBe('running'))
     await runner.interrupt()
     await run
     expect(peer.requests.find((r) => r.method === 'turn/interrupt')?.params).toEqual({
@@ -57,7 +58,7 @@ describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
 
     peer.die('codex app-server exited (code 1): boom')
     runner.sendMessage('again')
-    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+    await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
     const resumed = peer.requests.filter((r) => r.method === 'thread/resume')
     expect(resumed).toHaveLength(2)
     expect(resumed[1]).toMatchObject({ params: { threadId: 'thread-1' }, connection: 2 })
@@ -74,7 +75,7 @@ describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
     const events = collect(runner)
     const run = runner.start()
-    await vi.waitFor(() => expect(runner.status).toBe('running'))
+    await eventually(() => expect(runner.status).toBe('running'))
     peer.die('codex app-server exited (SIGKILL): stderr tail here')
     await run
     expect(ofType(events, 'turn_result')[0]).toMatchObject({
@@ -149,7 +150,7 @@ describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
     void runner.start()
     runner.sendMessage('2+2')
     runner.sendMessage('3+3')
-    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+    await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
 
     const answers = ofType(events, 'assistant_message').filter(
       (e) => Array.isArray(e.message.content) && e.message.content[0]!.type === 'text',
@@ -194,7 +195,7 @@ describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
     await runner.setModel('gpt-5.5')
     await runner.setPermissionMode('bypassPermissions')
     runner.sendMessage('next')
-    await vi.waitFor(() => expect(turnParams()).toHaveLength(2))
+    await eventually(() => expect(turnParams()).toHaveLength(2))
     expect(turnParams()[1]!.params).toMatchObject({
       model: 'gpt-5.5',
       sandboxPolicy: { type: 'dangerFullAccess' },
@@ -206,7 +207,7 @@ describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
     expect(runner.info().model).toBe('gpt-5.6-terra')
 
     runner.sendMessage('spin')
-    await vi.waitFor(() => expect(turnParams()).toHaveLength(3))
+    await eventually(() => expect(turnParams()).toHaveLength(3))
     expect(turnParams()[2]!.params).toMatchObject({ model: 'gpt-5.6-terra' })
     await expect(runner.setModel('gpt-5.2')).rejects.toThrow(/mid-turn/)
     await expect(runner.setPermissionMode('default')).rejects.toThrow(/mid-turn/)

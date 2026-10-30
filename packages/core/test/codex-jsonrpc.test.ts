@@ -1,6 +1,7 @@
 import { PassThrough } from 'node:stream'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { JsonRpcError, JsonRpcStdioConnection } from '../src/engines/codex/jsonrpc.ts'
+import { eventually } from './helpers/wait.ts'
 
 function harness() {
   const toClient = new PassThrough() // server stdout → client input
@@ -27,7 +28,7 @@ describe('JsonRpcStdioConnection', () => {
     const { connection, written, send } = harness()
     const promise = connection.request('initialize', { clientInfo: { name: 'x', version: '0' } })
     connection.notify('initialized')
-    await vi.waitFor(() => expect(written).toHaveLength(2))
+    await eventually(() => expect(written).toHaveLength(2))
     // The 0.146.0 binary's envelope: no `jsonrpc` key, and no `params` key when there are none.
     expect(written[0]).toEqual({
       id: 1,
@@ -64,7 +65,7 @@ describe('JsonRpcStdioConnection', () => {
     connection.onNotification((method, params) => seen.push([method, params]))
     sendRaw('not json at all\n')
     send({ method: 'item/agentMessage/delta', params: { delta: 'He' }, emittedAtMs: 1 })
-    await vi.waitFor(() => expect(seen).toHaveLength(1))
+    await eventually(() => expect(seen).toHaveLength(1))
     expect(seen[0]).toEqual(['item/agentMessage/delta', { delta: 'He' }])
   })
 
@@ -78,7 +79,7 @@ describe('JsonRpcStdioConnection', () => {
     })
     send({ id: 'srv-1', method: 'item/fileChange/requestApproval', params: {} })
     send({ id: 'srv-2', method: 'account/chatgptAuthTokens/refresh', params: {} })
-    await vi.waitFor(() => expect(written).toHaveLength(2))
+    await eventually(() => expect(written).toHaveLength(2))
     expect(written[0]).toEqual({ id: 'srv-1', result: { decision: 'decline' } })
     expect(written[1]).toEqual({
       id: 'srv-2',

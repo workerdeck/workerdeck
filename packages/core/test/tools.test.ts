@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { MockLanguageModelV3 } from 'ai/test'
 import { tool } from 'ai'
 import { z } from 'zod'
@@ -7,6 +7,7 @@ import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { AiSdkRunner, QuickJsExecutor, createToolContext, withMcpTools, type ToolExecutionResult, type ToolExecutor } from '../src/index.ts'
 import { streamCall, streamText } from './helpers/ai-sdk-mocks.ts'
+import { eventually } from './helpers/wait.ts'
 
 let engine: SandboxEngine
 beforeAll(async () => {
@@ -198,7 +199,7 @@ describe('runner-driven tool execution', () => {
     void runner.start()
     runner.sendMessage('evaluate the acme lead')
 
-    await vi.waitFor(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
+    await eventually(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
       timeout: 15_000,
     })
 
@@ -227,14 +228,14 @@ describe('runner-driven tool execution', () => {
       tools: context.tools,
       executor: new QuickJsExecutor({ engine }),
       executableTools: context.sandboxedToolNames,
-      executionLimits: { timeoutMs: 200 },
+      executionLimits: { timeoutMs: 50 },
     })
     const events: SessionEvent[] = []
     runner.subscribe((e) => events.push(e))
     void runner.start()
     runner.sendMessage('go')
 
-    await vi.waitFor(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
+    await eventually(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
       timeout: 15_000,
     })
     expect(events.find((e) => e.type === 'execution_failed')).toMatchObject({
@@ -266,7 +267,7 @@ describe('runner-driven tool execution', () => {
     void runner.start()
     runner.sendMessage('go')
 
-    await vi.waitFor(() => expect(runner.pendingToolCalls).toHaveLength(1))
+    await eventually(() => expect(runner.pendingToolCalls).toHaveLength(1))
     expect(dispatched).toEqual([])
     expect(runner.resolveToolCall('c1', { type: 'text', value: 'yes' })).toBe(true)
   })
