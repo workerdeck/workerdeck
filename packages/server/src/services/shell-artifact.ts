@@ -152,7 +152,12 @@ export class LiveArtifact {
   }
 
   stored(): StoredOutput {
-    return this.#spilled ? { artifact: this.#paths.rel } : { output: Buffer.concat(this.#chunks, this.#chunkBytes).toString('utf8') }
+    if (this.#spilled) {
+      return { artifact: this.#paths.rel }
+    }
+    const head = Buffer.concat(this.#chunks, this.#chunkBytes)
+    // A string cannot hold half a character: a capped head stops at the last whole one and the ring carries the rest.
+    return { output: (this.#capped ? head.subarray(0, completeUtf8(head)) : head).toString('utf8') }
   }
 
   writeTail(): void {

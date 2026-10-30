@@ -304,6 +304,20 @@ describe('artifact', () => {
     expect(stored).toEqual(texts)
   })
 
+  it('keeps a straddling character whole in the inline stored output, which never spilled', async () => {
+    const dir = tempDir()
+    const limits = { artifactDir: dir, spillBytes: 100, artifactMaxBytes: 11, tailRingBytes: 8, tailFlushMs: 60_000 }
+    const shells = makeScripted(limits)
+    const { shell, source } = await finished(shells, runner('s1'), ['0123456789', 'é!'])
+    expect(shell).toMatchObject({ bytes: 13, capped: true })
+    expect(source.text()).toBe('0123456789é!')
+    await shells.flush()
+    expect(readIndex(dir, 's1').shells[0]).toMatchObject({ output: '0123456789' })
+    const next = makeScripted({ ...limits, generation: 'gen-b' })
+    await next.hydrate()
+    await expect(next.output('s1', shell.id, { view: 'text' })).resolves.toBe('0123456789é!')
+  })
+
   it('sweeps expired records and their files after the TTL', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(1_000_000)
