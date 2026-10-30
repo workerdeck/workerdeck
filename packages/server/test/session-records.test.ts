@@ -15,6 +15,7 @@ import {
 } from '../src/index.ts'
 import type { DormantSessionRecord } from '../src/services/session-store.ts'
 import type { ConversationEntry } from '../src/services/session-records.ts'
+import { eventually } from './helpers.ts'
 
 let dir: string
 beforeEach(async () => {
@@ -146,7 +147,7 @@ describe('the conversation cache', () => {
     const records = new SessionRecords(store)
     await records.transact('s1', () => ledger('s1'))
     const listing = records.list()
-    await vi.waitFor(() => expect(release).toBeDefined())
+    await eventually(() => expect(release).toBeDefined())
     await records.transact('s1', (current) => ({ ...current!, conversation: 2 }))
     release!()
     await listing

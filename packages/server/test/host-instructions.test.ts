@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
 import { createFileSessionRecordStore, createWorkerServer } from '../src/index.ts'
-import { fakeHarness, fakeRunner, fileRuntimeStore, gatewayFixture, listenOn } from './helpers.ts'
+import { eventually, fakeHarness, fakeRunner, fileRuntimeStore, gatewayFixture, listenOn } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -70,9 +70,9 @@ describe('host-supplied instructions', () => {
     first.harness.emit(initMessage)
 
     const expected = `Builder box box-1. Run: box builder browser --session ${session.id}`
-    await vi.waitFor(() => expect(appended(first.harness)).toBe(expected))
+    await eventually(() => expect(appended(first.harness)).toBe(expected))
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     const raw = await readFile(join(dir, `${encodeURIComponent(session.id)}.json`), 'utf8')
@@ -94,7 +94,7 @@ describe('host-supplied instructions', () => {
     expect(woken?.info().engineAsleep).toBe(true)
     woken?.sendMessage('wake')
 
-    await vi.waitFor(() => expect(appended(second.harness)).toBe(expected))
+    await eventually(() => expect(appended(second.harness)).toBe(expected))
   })
 
   it('refuses to build a session for an engine whose record forswears them', async () => {

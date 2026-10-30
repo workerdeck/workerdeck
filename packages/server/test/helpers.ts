@@ -46,13 +46,13 @@ export async function eventually<T>(assertion: () => T | Promise<T>, what = 'an 
 }
 
 async function poll(attempt: () => Promise<true | Error>, what: string, watchdogMs: number): Promise<void> {
-  const deadline = Date.now() + watchdogMs
+  const deadline = performance.now() + watchdogMs
   for (;;) {
     const outcome = await attempt()
     if (outcome === true) {
       return
     }
-    if (Date.now() > deadline) {
+    if (performance.now() > deadline) {
       throw new Error(`gave up after ${watchdogMs} ms waiting for ${what}: ${outcome.message}`, { cause: outcome })
     }
     await new Promise((resolve) => setTimeout(resolve, 5))
@@ -222,13 +222,14 @@ export function frameCollector(ws: WebSocket) {
       }
     }
   })
-  const waitFor = (match: (f: ServerFrame) => boolean, timeoutMs = 2000): Promise<ServerFrame> => {
+  const waitFor = (match: (f: ServerFrame) => boolean, timeoutMs = WATCHDOG_MS): Promise<ServerFrame> => {
     const existing = frames.find(match)
     if (existing) {
       return Promise.resolve(existing)
     }
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timed out waiting for frame')), timeoutMs)
+      const seen = (): string => frames.map((frame) => frame.type).join(', ')
+      const timer = setTimeout(() => reject(new Error(`gave up after ${timeoutMs} ms waiting for a frame; got: ${seen()}`)), timeoutMs)
       waiters.push({
         match,
         resolve: (f) => {

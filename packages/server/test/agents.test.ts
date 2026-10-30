@@ -24,7 +24,7 @@ import {
 } from '../src/index.ts'
 import { createMemoryAgentStore } from '../src/services/agent-store.ts'
 import { AgentService } from '../src/services/agents.ts'
-import { fakeHarness, fileRuntimeStore, gatewayFixture, listenOn } from './helpers.ts'
+import { eventually, fakeHarness, fileRuntimeStore, gatewayFixture, listenOn } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -156,10 +156,10 @@ describe('agents', () => {
     })
     const sessionId = body.session!.id
     first.harness.emit(initMessage)
-    await vi.waitFor(() => expect(appended(first.harness)).toBe('You own the iOS client.'))
-    await vi.waitFor(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
+    await eventually(() => expect(appended(first.harness)).toBe('You own the iOS client.'))
+    await eventually(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
     // The brief rides the pending identity only until the first start is durable.
-    await vi.waitFor(async () => expect((await first.server.records.get(sessionId))?.identity).toBeUndefined())
+    await eventually(async () => expect((await first.server.records.get(sessionId))?.identity).toBeUndefined())
     const raw = await readFile(join(dir, 'sessions', `${encodeURIComponent(sessionId)}.json`), 'utf8')
     expect(raw).not.toContain('You own the iOS client.')
 
@@ -175,7 +175,7 @@ describe('agents', () => {
     ws.close()
     const woken = await second.server.parking.ensureLive(sessionId)
     woken?.sendMessage('wake')
-    await vi.waitFor(() => expect(appended(second.harness)).toBe('You own the iOS client.'))
+    await eventually(() => expect(appended(second.harness)).toBe('You own the iOS client.'))
     expect((await call<{ sessions: SessionInfo[] }>(second.base, '/sessions')).body.sessions[0]?.agent?.name).toBe('Wren')
   })
 
@@ -184,7 +184,7 @@ describe('agents', () => {
     const first = await startGateway(dir)
     const { body } = await call<AgentResponse>(first.base, '/agents', 'POST', { name: 'Wren', config: { cwd: '/tmp/project' } })
     const sessionId = body.session!.id
-    await vi.waitFor(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
+    await eventually(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
@@ -194,7 +194,7 @@ describe('agents', () => {
     expect(listed.find((session) => session.id === sessionId)?.agent?.name).toBe('Wren')
     const woken = await second.server.parking.ensureLive(sessionId)
     woken?.sendMessage('wake')
-    await vi.waitFor(() => expect(second.harness.captured.options).toBeDefined())
+    await eventually(() => expect(second.harness.captured.options).toBeDefined())
     expect(second.harness.captured.options?.resume).toBeUndefined()
   })
 
@@ -207,8 +207,8 @@ describe('agents', () => {
     })
     const sessionId = body.session!.id
     first.harness.emit(initMessage)
-    await vi.waitFor(() => expect(excludes(first.harness)).toContain('/tmp/AGENTS.md'))
-    await vi.waitFor(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
+    await eventually(() => expect(excludes(first.harness)).toContain('/tmp/AGENTS.md'))
+    await eventually(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
 
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
@@ -216,14 +216,14 @@ describe('agents', () => {
     const second = await startGateway(dir)
     const woken = await second.server.parking.ensureLive(sessionId)
     woken?.sendMessage('wake')
-    await vi.waitFor(() => expect(excludes(second.harness)).toContain('/tmp/AGENTS.md'))
+    await eventually(() => expect(excludes(second.harness)).toContain('/tmp/AGENTS.md'))
   })
 
   it('leaves instruction loading alone by default and refuses an unknown scope', async () => {
     const { base, harness } = await startGateway()
     await call<AgentResponse>(base, '/agents', 'POST', { name: 'Wren', config: { cwd: '/tmp/project' } })
     harness.emit(initMessage)
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     expect(excludes(harness)).toBeUndefined()
     const refused = await call<{ error: string }>(base, '/agents', 'POST', { config: { cwd: '/tmp/project', instructionScope: 'repo' } })
     expect(refused).toEqual({ status: 400, body: { error: 'config.instructionScope must be one of ancestors, cwd' } })
@@ -380,7 +380,7 @@ describe('agents', () => {
   it('offers change_avatar to an agent session, which rerolls or merges the parts it names', async () => {
     const { base, harness } = await startGateway()
     const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     const servers = (harness.captured.options?.mcpServers ?? {}) as Record<string, { instance: unknown }>
     const tools = (
       servers.workerdeck!.instance as Record<string, Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>>

@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { ProfileInfo, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { fileRuntimeStore, gatewayFixture, type RuntimeStore } from './helpers.ts'
+import { eventually, fileRuntimeStore, gatewayFixture, type RuntimeStore } from './helpers.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
 function profile(name: string): ProfileInfo {
@@ -103,7 +103,7 @@ describe('live sessions that survive a restart', () => {
     const session = await create(gateway.base)
     gateway.built[0]!.turn('hello', 'hi there')
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect((await store.get(session.id))?.kind).toBe('live')
     })
     const rows = await list(gateway.base)
@@ -132,7 +132,7 @@ describe('live sessions that survive a restart', () => {
     expect(runner.info().status).toBe('parked')
     runner.changeModel('other-model')
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const record = await store.get(session.id)
       // The end of the turn already wrote a live idle record: only the one with the deferred execution is this one.
       expect(record && 'executions' in record ? record.executions : []).toHaveLength(1)
@@ -149,7 +149,7 @@ describe('live sessions that survive a restart', () => {
     first.built[0]!.writeFile('/out/notes.md', 'kept across the restart')
     first.built[0]!.turn('what is the plan', 'the plan is this')
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
 
@@ -178,7 +178,7 @@ describe('live sessions that survive a restart', () => {
     const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
     first.built[0]!.turn('hello', 'hi')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
@@ -199,12 +199,12 @@ describe('live sessions that survive a restart', () => {
     const gateway = await startGateway(fileRuntimeStore(dir))
     const session = await create(gateway.base)
     gateway.built[0]!.turn('hello', 'hi')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
 
     await fetch(`${gateway.base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).toBeNull()
     })
   })
@@ -220,7 +220,7 @@ describe('live sessions that survive a restart', () => {
       body: JSON.stringify({ title: 'renamed by hand' }),
     })
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const record = await fileRuntimeStore(dir).get(session.id)
       expect(record?.info.title).toBe('renamed by hand')
     })

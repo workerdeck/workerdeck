@@ -20,6 +20,7 @@ import {
   type HistoryTarget,
   type ReaderChild,
 } from '../src/services/history-reader.ts'
+import { eventually } from './helpers.ts'
 
 const dirs: string[] = []
 
@@ -157,7 +158,7 @@ async function runnerBackfill(messages: Messages): Promise<SessionEventBody[]> {
   const events: SessionEvent[] = []
   runner.subscribe((event) => events.push(event), undefined, { coalesceReplay: false })
   await runner.start()
-  await vi.waitFor(() => expect(events.some((e) => e.type === 'engine_sleep')).toBe(true))
+  await eventually(() => expect(events.some((e) => e.type === 'engine_sleep')).toBe(true))
   runner.close()
   return events
     .filter((e) => e.type === 'user_message' || e.type === 'assistant_message')
@@ -229,7 +230,7 @@ describe('history reader: claude', () => {
       claudeSdkEntry: () => '/sdk/sdk.mjs',
     })
     const pending = reader.read({ ...claudeTarget, profile: 'work' })
-    await vi.waitFor(() => expect(children).toHaveLength(1))
+    await eventually(() => expect(children).toHaveLength(1))
     const child = children[0]!
     expect(child.env.CLAUDE_CONFIG_DIR).toBe(profileDir)
     expect(child.env.WORKERDECK_AUTH_KEY).toBeUndefined()
@@ -259,13 +260,13 @@ describe('history reader: claude', () => {
     const reader = createHistoryReader(options(10_000))
     const controller = new AbortController()
     const aborted = reader.read(target, controller.signal)
-    await vi.waitFor(() => expect(children).toHaveLength(2))
+    await eventually(() => expect(children).toHaveLength(2))
     controller.abort()
     expect(await aborted).toEqual({ kind: 'failed', error: 'history read aborted' })
     expect(children[1]!.killed).toEqual(['SIGKILL'])
 
     const crashed = reader.read(target)
-    await vi.waitFor(() => expect(children).toHaveLength(3))
+    await eventually(() => expect(children).toHaveLength(3))
     children[2]!.exit(1)
     expect(await crashed).toMatchObject({ kind: 'failed', error: expect.stringContaining('code 1') })
   })
@@ -342,7 +343,7 @@ describe('history reader: codex', () => {
 
     const controller = new AbortController()
     const pending = createHistoryReader({ codexConnect: hung.connect }).read(codexTarget, controller.signal)
-    await vi.waitFor(() => expect(hung.connections).toHaveLength(2))
+    await eventually(() => expect(hung.connections).toHaveLength(2))
     controller.abort()
     expect(await pending).toEqual({ kind: 'failed', error: 'history read aborted' })
     expect(hung.connections[1]!.closed).toBeGreaterThanOrEqual(1)
@@ -367,7 +368,7 @@ describe('history reader: scheduling and engines', () => {
     const reader = createHistoryReader({ codexConnect: connect })
     const reads = Array.from({ length: 5 }, () => reader.read(codexTarget))
     for (let released = 0; released < 5; released++) {
-      await vi.waitFor(() => expect(releases.length).toBeGreaterThan(released))
+      await eventually(() => expect(releases.length).toBeGreaterThan(released))
       expect(active).toBeLessThanOrEqual(2)
       releases[released]!()
     }
@@ -421,7 +422,7 @@ describe('history reader: the engine home recorded at archive time', () => {
       claudeSdkEntry: () => '/sdk/sdk.mjs',
     })
     const pending = reader.read({ ...claudeTarget, profile: 'work', home: { claudeConfigDir: recorded } })
-    await vi.waitFor(() => expect(children).toHaveLength(1))
+    await eventually(() => expect(children).toHaveLength(1))
     expect(children[0]!.env.CLAUDE_CONFIG_DIR).toBe(recorded)
     children[0]!.exit(0, JSON.stringify(CLAUDE_FIXTURE))
     expect((await pending).kind).toBe('ok')
@@ -440,7 +441,7 @@ describe('history reader: the engine home recorded at archive time', () => {
       claudeSdkEntry: () => '/sdk/sdk.mjs',
     })
     const pending = reader.read({ ...claudeTarget, profile: 'gone', home: { claudeConfigDir: recorded } })
-    await vi.waitFor(() => expect(children).toHaveLength(1))
+    await eventually(() => expect(children).toHaveLength(1))
     expect(children[0]!.env.CLAUDE_CONFIG_DIR).toBe(recorded)
     children[0]!.exit(0, JSON.stringify(CLAUDE_FIXTURE))
     expect((await pending).kind).toBe('ok')

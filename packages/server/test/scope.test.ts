@@ -6,7 +6,7 @@ import WebSocket from 'ws'
 import type { CreateSessionRequest, JobInfo, ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { ParkableRunner } from './parkable-runner.ts'
 import { createWorkerServer, type EngineRunnerContext, sandboxedProviderProfile, type WorkerServer } from '../src/index.ts'
-import { fakeRunner, fileRuntimeStore, idleQuery, runtimeStore } from './helpers.ts'
+import { eventually, fakeRunner, fileRuntimeStore, idleQuery, runtimeStore } from './helpers.ts'
 
 let running: WorkerServer | undefined
 const tempDirs: string[] = []
@@ -446,7 +446,7 @@ describe('session scope', () => {
 
     const id = await sessionIdOf(await createSession(base, 'alice-a'))
     parkable[0]!.defer('exec-1')
-    await vi.waitFor(async () => expect(await running!.parking.get(id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(id)).not.toBeNull())
 
     const post = (token: string, executionId: string): Promise<Response> =>
       fetch(`${base}/executions/${executionId}/result`, {
@@ -485,7 +485,7 @@ describe('session scope', () => {
 
     const id = await sessionIdOf(await createSession(base, 'alice-a'))
     parkable[0]!.defer('exec-9')
-    await vi.waitFor(async () => expect(await store.get(id)).not.toBeNull())
+    await eventually(async () => expect(await store.get(id)).not.toBeNull())
     await store.delete(id)
 
     const post = (token: string, executionId: string): Promise<Response> =>

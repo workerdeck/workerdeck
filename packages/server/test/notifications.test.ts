@@ -4,7 +4,7 @@ import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionEvent, SessionInfo, SessionNotification } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 import { SessionNotifier, type NotificationErrorContext } from '../src/services/notifications.ts'
-import { fakeHarness, fakeRunner } from './helpers.ts'
+import { eventually, fakeHarness, fakeRunner } from './helpers.ts'
 
 const turnResult = {
   type: 'result',
@@ -79,7 +79,7 @@ describe('session notifications', () => {
       const base = `http://127.0.0.1:${port}/v1`
       const session = await createSession(base)
 
-      await vi.waitFor(() => expect(harness.captured.options?.canUseTool).toBeDefined())
+      await eventually(() => expect(harness.captured.options?.canUseTool).toBeDefined())
       void harness.captured.options!.canUseTool!(
         'Bash',
         { command: 'rm -rf /' },
@@ -87,7 +87,7 @@ describe('session notifications', () => {
       )
       harness.emit(turnResult)
 
-      await vi.waitFor(() => expect(receiver.received.length).toBeGreaterThanOrEqual(2))
+      await eventually(() => expect(receiver.received.length).toBeGreaterThanOrEqual(2))
 
       const permission = receiver.received.find((n) => n.type === 'permission_requested')!
       expect(permission.sessionId).toBe(session.id)
@@ -130,7 +130,7 @@ describe('session notifications', () => {
       const base = `http://127.0.0.1:${port}/v1`
       const session = await createSession(base)
 
-      await vi.waitFor(() => expect(harness.captured.options?.canUseTool).toBeDefined())
+      await eventually(() => expect(harness.captured.options?.canUseTool).toBeDefined())
       harness.emit(turnResult)
       void harness.captured.options!.canUseTool!(
         'Bash',
@@ -138,8 +138,8 @@ describe('session notifications', () => {
         { signal: new AbortController().signal, requestId: 'creq-1', toolUseID: 'tool-1' },
       )
 
-      await vi.waitFor(() => expect(receiver.received.length).toBe(1))
-      await vi.waitFor(() =>
+      await eventually(() => expect(receiver.received.length).toBe(1))
+      await eventually(() =>
         expect(observed.map((n) => n.type)).toEqual(expect.arrayContaining(['turn_completed', 'permission_requested'])),
       )
       expect(receiver.received.map((n) => n.type)).toEqual(['permission_requested'])
@@ -166,7 +166,7 @@ describe('session notifications', () => {
       expect(
         (await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })).status,
       ).toBe(200)
-      await vi.waitFor(() => expect(receiver.received.length).toBe(1))
+      await eventually(() => expect(receiver.received.length).toBe(1))
       expect(receiver.received[0]!.type).toBe('session_closed')
       expect(receiver.received[0]!.reason).toBe('server')
       expect(receiver.received[0]!.session.status).toBe('closed')
@@ -194,10 +194,10 @@ describe('session notifications', () => {
       const base = `http://127.0.0.1:${port}/v1`
       const session = await createSession(base)
 
-      await vi.waitFor(() => expect(harness.captured.options?.canUseTool).toBeDefined())
+      await eventually(() => expect(harness.captured.options?.canUseTool).toBeDefined())
       harness.emit(turnResult)
 
-      await vi.waitFor(() => expect(receiver.received.length).toBe(3))
+      await eventually(() => expect(receiver.received.length).toBe(3))
       expect(new Set(receiver.received.map((n) => n.type))).toEqual(new Set(['turn_completed']))
       expect((await fetch(`${base}/sessions/${session.id}`)).status).toBe(200)
     } finally {
@@ -216,7 +216,7 @@ describe('session notifications', () => {
     const base = `http://127.0.0.1:${port}/v1`
     const session = await createSession(base)
     harness.emit(turnResult)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const res = await fetch(`${base}/sessions/${session.id}`)
       // 2 = the turn_result's own num_turns, which SessionInfo accumulates.
       expect(((await res.json()) as { session: SessionInfo }).session.numTurns).toBe(2)
@@ -256,7 +256,7 @@ describe('SessionNotifier diagnostics', () => {
       const { runner, emit } = emittingRunner()
       notifier.watch(runner)
       emit()
-      await vi.waitFor(() => expect(errors).toHaveLength(2))
+      await eventually(() => expect(errors).toHaveLength(2))
       expect(errors).toEqual([
         { op: 'hook', message: 'hook failed' },
         { op: 'webhook', message: 'webhook answered HTTP 500' },
@@ -285,7 +285,7 @@ describe('SessionNotifier and policy', () => {
     const request = { id: 'q1', toolName: 'AskUserQuestion', input: {}, toolUseId: 'tu1' }
     listener?.({ type: 'permission_requested', request, byPolicy: true, seq: 1, ts: 1 } as SessionEvent)
     listener?.({ type: 'permission_requested', request: { ...request, id: 'p2' }, seq: 2, ts: 2 } as SessionEvent)
-    await vi.waitFor(() => expect(observed).toHaveLength(1))
+    await eventually(() => expect(observed).toHaveLength(1))
     expect(observed[0]).toMatchObject({ type: 'permission_requested', request: { id: 'p2' } })
   })
 })

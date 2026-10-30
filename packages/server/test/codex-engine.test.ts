@@ -8,6 +8,7 @@ import type { EngineAdapter, EngineAvailability, SessionRunnerConfig } from '@wo
 import type { AppServerConnection } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type ProfileInfo, type ServerFrame } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { eventually } from './helpers.ts'
 
 const USAGE = {
   inputTokens: 100,
@@ -145,7 +146,7 @@ describe('codex engine over the gateway', () => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/sessions/${session.id}/ws`)
     const frames: ServerFrame[] = []
     ws.on('message', (data) => frames.push(JSON.parse(String(data)) as ServerFrame))
-    await vi.waitFor(() => {
+    await eventually(() => {
       const attached = frames.find((f) => f.type === 'attached')
       expect(attached).toBeDefined()
       expect((attached as { session: { capabilities?: { streaming?: string } } }).session.capabilities?.streaming).toBe('token')
@@ -195,7 +196,7 @@ describe('codex engine over the gateway', () => {
     const { session } = (await created.json()) as { session: { id: string } }
 
     let fileId = ''
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const res = await fetch(`${base}/sessions/${session.id}/produced`)
       const body = (await res.json()) as {
         files: Array<{ fileId: string; path: string; mediaType?: string; bytes?: number }>
@@ -252,7 +253,7 @@ describe('codex engine over the gateway', () => {
     })
     const { session } = (await created.json()) as { session: { id: string } }
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const res = await fetch(`${base}/sessions/${session.id}/mcp`)
       expect(res.status).toBe(200)
       const body = (await res.json()) as {
@@ -520,7 +521,7 @@ describe('availability', () => {
     const { port } = await running.listen(0, '127.0.0.1')
     const base = `http://127.0.0.1:${port}/v1`
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const { profiles } = (await (await fetch(`${base}/profiles`)).json()) as {
         profiles: ProfileInfo[]
       }
@@ -534,7 +535,7 @@ describe('availability', () => {
     verdict = { available: true }
     vi.setSystemTime(Date.now() + 61_000)
     await fetch(`${base}/profiles`)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(probeCalls()).toBeGreaterThan(afterLaunch)
       const { profiles } = (await (await fetch(`${base}/profiles`)).json()) as {
         profiles: ProfileInfo[]
@@ -649,7 +650,7 @@ describe('availability', () => {
       checkCredentials: true,
     })
     const { port } = await running.listen(0, '127.0.0.1')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const { profiles } = (await (await fetch(`http://127.0.0.1:${port}/v1/profiles`)).json()) as { profiles: ProfileInfo[] }
       expect(profiles[0]!.available).toBeUndefined()
       expect(profiles[0]!.unavailableReason).toBeUndefined()

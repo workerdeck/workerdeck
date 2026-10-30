@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { SessionInfo, ToolCallRequestFrame } from '@workerdeck/protocol'
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { frameCollector, idleHarness, listenOn, until } from './helpers.ts'
+import { eventually, frameCollector, idleHarness, listenOn, until } from './helpers.ts'
 
 let running: WorkerServer | undefined
 const results: Array<{ sessionId: string; executionId: string; result: ToolExecutionResult }> = []
@@ -88,7 +88,7 @@ describe('browser-bridged tool execution over the wire', () => {
       }),
     )
 
-    await vi.waitFor(() => expect(results).toHaveLength(1))
+    await eventually(() => expect(results).toHaveLength(1))
     expect(results[0]).toMatchObject({
       sessionId: session.id,
       executionId: 'exec-1',
@@ -114,7 +114,7 @@ describe('browser-bridged tool execution over the wire', () => {
       }),
     )
 
-    await vi.waitFor(() => expect(results).toHaveLength(1))
+    await eventually(() => expect(results).toHaveLength(1))
     expect(results[0]!.result).toMatchObject({
       status: 'failed',
       reason: 'timeout',
@@ -144,7 +144,7 @@ describe('browser-bridged tool execution over the wire', () => {
 
     const canceled = await collector.waitFor((f) => f.type === 'tool_call_canceled')
     expect(canceled).toMatchObject({ executionId: 'exec-1', reason: 'timeout' })
-    await vi.waitFor(() => expect(results).toHaveLength(1))
+    await eventually(() => expect(results).toHaveLength(1))
     expect(results[0]!.result).toMatchObject({ status: 'failed', reason: 'timeout' })
     ws.close()
   })
@@ -200,7 +200,7 @@ describe('browser-bridged tool execution over the wire', () => {
 
     await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
 
-    await vi.waitFor(() => expect(results).toHaveLength(1))
+    await eventually(() => expect(results).toHaveLength(1))
     expect(results[0]!.result).toMatchObject({ status: 'failed', reason: 'session_closed' })
     ws.close()
   })

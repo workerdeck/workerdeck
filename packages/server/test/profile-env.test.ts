@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { withoutGatewaySecrets, type ClaudeAuthStatus } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { eventually } from './helpers.ts'
 
 let fakeHome = ''
 vi.mock('node:os', async (importOriginal) => {
@@ -71,7 +72,7 @@ describe('CLAUDE_CONFIG_DIR pinning', () => {
     })
     const { port } = await running.listen(0, '127.0.0.1')
     expect((await createSession(port)).status).toBe(201)
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     // Unpinned means the process env as-is; the runner only ever removes the gateway's own key from it.
     expect(harness.captured.options?.env).toEqual(withoutGatewaySecrets(process.env))
   })
@@ -85,7 +86,7 @@ describe('CLAUDE_CONFIG_DIR pinning', () => {
     })
     const { port } = await running.listen(0, '127.0.0.1')
     expect((await createSession(port, 'me')).status).toBe(201)
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     expect(harness.captured.options?.env).toEqual({ SOME: 'x' })
   })
 
@@ -99,7 +100,7 @@ describe('CLAUDE_CONFIG_DIR pinning', () => {
     })
     const { port } = await running.listen(0, '127.0.0.1')
     expect((await createSession(port, 'iso')).status).toBe(201)
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     expect(harness.captured.options?.env?.CLAUDE_CONFIG_DIR).toBe(iso)
   })
 
@@ -118,7 +119,7 @@ describe('CLAUDE_CONFIG_DIR pinning', () => {
     })
     const { port } = await running.listen(0, '127.0.0.1')
     expect((await createSession(port, 'iso')).status).toBe(201)
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     expect(harness.captured.options?.env?.CLAUDE_CONFIG_DIR).toBe(iso)
   })
 
@@ -133,7 +134,7 @@ describe('CLAUDE_CONFIG_DIR pinning', () => {
     })
     const { port } = await running.listen(0, '127.0.0.1')
     expect((await createSession(port, 'iso')).status).toBe(201)
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     expect(harness.captured.options?.env?.CLAUDE_CONFIG_DIR).toBe(iso)
   })
 
@@ -147,7 +148,7 @@ describe('CLAUDE_CONFIG_DIR pinning', () => {
     })
     const { port } = await running.listen(0, '127.0.0.1')
     expect((await createSession(port)).status).toBe(201)
-    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    await eventually(() => expect(harness.captured.options).toBeDefined())
     // Unpinned means the process env as-is; the runner only ever removes the gateway's own key from it.
     expect(harness.captured.options?.env).toEqual(withoutGatewaySecrets(process.env))
   })
@@ -176,7 +177,7 @@ describe('credential preflight', () => {
     })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     await running.listen(0, '127.0.0.1')
-    await vi.waitFor(() => expect(probed).toHaveLength(2))
+    await eventually(() => expect(probed).toHaveLength(2))
     expect(probed[0]!.CLAUDE_CONFIG_DIR).toBe(iso)
     expect(probed[1]!.CLAUDE_CONFIG_DIR).toBeUndefined()
     expect(warn).not.toHaveBeenCalled()
@@ -203,7 +204,7 @@ describe('credential preflight', () => {
     })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     await running.listen(0, '127.0.0.1')
-    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1))
+    await eventually(() => expect(warn).toHaveBeenCalledTimes(1))
     expect(warn.mock.calls[0]![0]).toContain("Profile 'out'")
     expect(warn.mock.calls[0]![0]).not.toContain('boom')
   })
@@ -225,7 +226,7 @@ describe('credential preflight', () => {
       },
     })
     await running.listen(0, '127.0.0.1')
-    await vi.waitFor(() => expect(probed).toHaveLength(1))
+    await eventually(() => expect(probed).toHaveLength(1))
     expect(probed[0]!.CLAUDE_CONFIG_DIR).toBe(iso)
   })
 })
@@ -246,7 +247,7 @@ describe('requireAvailableProfile', () => {
     running = withProbe(true, 'logged_out')
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { port } = await running.listen(0, '127.0.0.1')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const res = await createSession(port, 'iso')
       expect(res.status).toBe(503)
       expect(((await res.json()) as { error: string }).error).toContain('unavailable')
@@ -257,7 +258,7 @@ describe('requireAvailableProfile', () => {
     running = withProbe(false, 'logged_out')
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { port } = await running.listen(0, '127.0.0.1')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const { profiles } = (await (await fetch(`http://127.0.0.1:${port}/v1/profiles`)).json()) as {
         profiles: Array<{ available?: boolean }>
       }

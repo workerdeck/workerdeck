@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { fakeHarness, frameCollector, listenOn, runtimeStore } from './helpers.ts'
+import { eventually, fakeHarness, frameCollector, listenOn, runtimeStore } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -127,7 +127,7 @@ describe('createWorkerServer', () => {
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'system_init')
 
     ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'follow-up' }))
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(harness.captured.inputs.map((m) => m.message.content)).toContain('follow-up')
     })
 
@@ -230,7 +230,7 @@ describe('createWorkerServer', () => {
       requestId: 'creq-1',
       toolUseID: 'q-1',
     })
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const res = await fetch(`${base}/sessions/${session.id}`)
       const body = (await res.json()) as { session: SessionInfo }
       expect(body.session.pendingPermissionCount).toBe(1)
@@ -284,7 +284,7 @@ describe('createWorkerServer', () => {
     const { session } = (await createRes.json()) as { session: SessionInfo }
 
     harness.emit({ ...(initMessage as object), apiKeySource: 'oauth' } as typeof initMessage)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const res = await fetch(`${base}/sessions/${session.id}`)
       const body = (await res.json()) as { session: SessionInfo }
       expect(body.session.status).toBe('failed')
@@ -316,7 +316,7 @@ describe('createWorkerServer', () => {
     runner?.sendMessage('wake')
 
     harness.emit({ ...(initMessage as object), apiKeySource: 'oauth' } as typeof initMessage)
-    await vi.waitFor(() => expect(runner?.info().status).toBe('failed'))
+    await eventually(() => expect(runner?.info().status).toBe('failed'))
   })
 
   it('enforces cwd roots and auth', async () => {
@@ -400,7 +400,7 @@ describe('createWorkerServer', () => {
       const { job } = (await createRes.json()) as { job: JobInfo }
       expect(job.status).toBe('queued')
 
-      await vi.waitFor(async () => {
+      await eventually(async () => {
         const res = await fetch(`${base}/jobs/${job.id}`)
         const body = (await res.json()) as { job: JobInfo }
         expect(body.job.status).toBe('running')
@@ -428,7 +428,7 @@ describe('createWorkerServer', () => {
         session_id: 'sdk-1',
       } as unknown as SDKMessage)
 
-      await vi.waitFor(async () => {
+      await eventually(async () => {
         const res = await fetch(`${base}/jobs/${job.id}`)
         const body = (await res.json()) as { job: JobInfo }
         expect(body.job.status).toBe('succeeded')
@@ -441,7 +441,7 @@ describe('createWorkerServer', () => {
         meta: { source: 'test' },
       })
 
-      await vi.waitFor(() => {
+      await eventually(() => {
         expect(deliveries.map((e) => e.type)).toEqual(['job_started', 'job_completed'])
       })
       expect(deliveries[1]!.job.status).toBe('succeeded')
@@ -478,7 +478,7 @@ describe('createWorkerServer', () => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/queue/ws`)
     const frames: QueueServerFrame[] = []
     ws.on('message', (data) => frames.push(JSON.parse(String(data)) as QueueServerFrame))
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(frames.some((f) => f.type === 'queue_attached')).toBe(true)
     })
     const attached = frames.find((f) => f.type === 'queue_attached')
@@ -492,7 +492,7 @@ describe('createWorkerServer', () => {
     const { job } = (await createRes.json()) as { job: JobInfo }
 
     const eventTypes = () => frames.filter((f) => f.type === 'job_event').map((f) => (f as { event: JobEvent }).event.type)
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(eventTypes()).toContain('job_submitted')
       expect(eventTypes()).toContain('job_started')
     })
@@ -515,11 +515,11 @@ describe('createWorkerServer', () => {
       session_id: 'sdk-1',
     } as unknown as SDKMessage)
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       const completed = frames.find((f) => f.type === 'job_event' && f.event.type === 'job_completed' && f.event.job.id === job.id)
       expect(completed).toBeDefined()
     })
-    await vi.waitFor(() => {
+    await eventually(() => {
       const stats = frames.filter((f) => f.type === 'queue_stats')
       expect(stats.length).toBeGreaterThan(0)
     })
@@ -615,7 +615,7 @@ describe('createWorkerServer', () => {
       expect(createRes.status).toBe(201)
       const { session } = (await createRes.json()) as { session: SessionInfo }
       expect(session.profile).toBe('toby')
-      await vi.waitFor(() => {
+      await eventually(() => {
         expect(harness.captured.options?.env?.CLAUDE_CONFIG_DIR).toBe(tobyDir)
       })
       expect(harness.captured.options?.model).toBe('claude-opus-5-5')
@@ -626,7 +626,7 @@ describe('createWorkerServer', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ cwd: '/tmp/project', prompt: 'hi', profile: 'toby', model: 'sonnet' }),
       })
-      await vi.waitFor(() => {
+      await eventually(() => {
         expect(harness.captured.options?.model).toBe('claude-sonnet-5-5')
       })
 
@@ -640,7 +640,7 @@ describe('createWorkerServer', () => {
           allowDangerouslySkipPermissions: true,
         }),
       })
-      await vi.waitFor(() => {
+      await eventually(() => {
         expect(harness.captured.options?.allowDangerouslySkipPermissions).toBe(true)
       })
     } finally {
@@ -751,7 +751,7 @@ describe('createWorkerServer', () => {
         }),
       })
       expect(stripped.status).toBe(201)
-      await vi.waitFor(() => {
+      await eventually(() => {
         expect(harness.captured.options).toBeDefined()
       })
       expect(harness.captured.options?.allowDangerouslySkipPermissions).toBeUndefined()
@@ -778,7 +778,7 @@ describe('createWorkerServer', () => {
     expect(created.status).toBe(201)
     const { job } = (await created.json()) as { job: JobInfo }
     let sessionId: string | undefined
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       sessionId = ((await (await fetch(`${base}/jobs/${job.id}`)).json()) as { job: JobInfo }).job.sessionId
       expect(sessionId).toBeDefined()
     })
@@ -815,7 +815,7 @@ describe('createWorkerServer', () => {
       }),
     })
     expect(res.status).toBe(201)
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(harness.captured.options?.allowDangerouslySkipPermissions).toBe(true)
     })
   })
@@ -930,12 +930,12 @@ describe('createWorkerServer', () => {
       const { job } = (await createRes.json()) as { job: JobInfo }
       expect(job.profile).toBe('main')
 
-      await vi.waitFor(async () => {
+      await eventually(async () => {
         const res = await fetch(`${base}/jobs/${job.id}`)
         const body = (await res.json()) as { job: JobInfo }
         expect(body.job.sessionId).toBeDefined()
       })
-      await vi.waitFor(() => {
+      await eventually(() => {
         expect(harness.captured.options?.env?.CLAUDE_CONFIG_DIR).toBe(mainDir)
       })
 
