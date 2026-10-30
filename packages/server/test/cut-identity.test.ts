@@ -14,7 +14,7 @@ import {
 } from '../src/index.ts'
 import type { StoredAgent } from '../src/services/agent-store.ts'
 import { EngineRunner } from './engine-runner.ts'
-import { frameCollector, gatewayFixture } from './helpers.ts'
+import { deferred, eventually, frameCollector, gatewayFixture, lockAsked, settled } from './helpers.ts'
 
 const CLAUDE_HOME = '/tmp/wd-cut-identity-claude'
 const CODEX_HOME = '/tmp/wd-cut-identity-codex'
@@ -166,27 +166,13 @@ async function createPlain(base: string, request: Record<string, unknown> = {}):
   return (res.body.session as SessionInfo).id
 }
 
-// A start settles through several record writes: a loaded host can take more than waitFor's default second.
-const SETTLE = { timeout: 5000 }
-
-async function idle(server: WorkerServer, id: string): Promise<void> {
-  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'), SETTLE)
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined(), SETTLE)
-}
-
 async function stop(server: WorkerServer): Promise<void> {
   await server.parking.flush()
   await server.close()
   fixture.servers.splice(fixture.servers.indexOf(server), 1)
 }
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve!: () => void
-  const promise = new Promise<void>((done) => (resolve = done))
-  return { promise, resolve }
-}
-
-function tick(ms = 30): Promise<void> {
+function tick(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
@@ -212,17 +198,18 @@ describe('retire with crew under one multi-lock', () => {
     })
     const lead = await createNamed(base, 'Lead')
     member = (await createNamed(base, 'Member', { lead: lead.id })).id
-    await idle(server, lead.id)
-    await idle(server, member)
+    await settled(server, lead.id)
+    await settled(server, member)
 
     const cutting = cut(base, member, 1)
-    await vi.waitFor(() => expect(runnersOf(built, member)).toHaveLength(2))
+    await eventually(() => expect(runnersOf(built, member)).toHaveLength(2))
     let retired = false
+    const asked = lockAsked(server, member)
     const retiring = call(base, `/agents/${lead.id}`, 'DELETE', { members: 'retire', expectedGeneration: 1 }).then((res) => {
       retired = true
       return res
     })
-    await tick()
+    await asked
     expect(retired).toBe(false)
     expect(server.registry.get(lead.id)).toBeDefined()
 
@@ -241,15 +228,17 @@ describe('retire with crew under one multi-lock', () => {
     const { server, base, built } = await gateway(dir)
     const lead = await createNamed(base, 'Lead')
     const member = await createNamed(base, 'Member', { lead: lead.id })
-    await idle(server, lead.id)
-    await idle(server, member.id)
+    await settled(server, lead.id)
+    await settled(server, member.id)
 
     const gate = deferred()
     const blocking = server.locks.run([lead.id], () => gate.promise)
+    const retireAsked = lockAsked(server, lead.id)
     const retiring = call(base, `/agents/${lead.id}`, 'DELETE', { members: 'retire', expectedGeneration: 1 })
-    await tick(20)
+    await retireAsked
+    const cutAsked = lockAsked(server, member.id)
     const late = cut(base, member.id, 1)
-    await tick(20)
+    await cutAsked
     gate.resolve()
     await blocking
     expect((await retiring).body).toEqual({ retired: [lead.id, member.id], released: [] })
@@ -264,11 +253,12 @@ describe('retire with crew under one multi-lock', () => {
     const lead = await createNamed(base, 'Lead')
     const first = await createNamed(base, 'First', { lead: lead.id })
     const late = await createNamed(base, 'Late')
-    await idle(server, lead.id)
+    await settled(server, lead.id)
     const gate = deferred()
     const blocking = server.locks.run([first.id], () => gate.promise)
+    const asked = lockAsked(server, first.id)
     const refused = call(base, `/agents/${lead.id}`, 'DELETE', { members: 'retire', expectedGeneration: 1 })
-    await tick(20)
+    await asked
     expect((await call(base, `/agents/${late.id}`, 'PATCH', { lead: lead.id })).status).toBe(200)
     gate.resolve()
     await blocking
@@ -279,7 +269,7 @@ describe('retire with crew under one multi-lock', () => {
       expect(server.parking.fenced(id)).toBe(false)
     }
     expect((await cut(base, lead.id, 1)).status).toBe(200)
-    await idle(server, lead.id)
+    await settled(server, lead.id)
     const retried = await call(base, `/agents/${lead.id}`, 'DELETE', { members: 'retire', expectedGeneration: 2 })
     expect(retried.body.retired.sort()).toEqual([lead.id, first.id, late.id].sort())
   })
@@ -292,8 +282,8 @@ describe('retire with crew under one multi-lock', () => {
     const { server, base } = await gateway(dir)
     const lead = await createNamed(base, 'Lead')
     const member = await createNamed(base, 'Member', { lead: lead.id })
-    await idle(server, lead.id)
-    await idle(server, member.id)
+    await settled(server, lead.id)
+    await settled(server, member.id)
     const target = isLead ? lead.id : member.id
     const res = await Promise.race([
       fetch(`${base}/sessions/${target}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } }),
@@ -313,7 +303,7 @@ describe('cross-store identity', () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir)
     const session = await createNamed(first.base, 'Atlas')
-    await idle(first.server, session.id)
+    await settled(first.server, session.id)
     await stop(first.server)
     await writeFile(join(dir, 'agents.json'), JSON.stringify([]))
 
@@ -323,7 +313,7 @@ describe('cross-store identity', () => {
     expect(listed[0]!.agent).toBeUndefined()
     expect((await call(second.base, '/agents')).body.agents).toEqual([])
     expect((await cut(second.base, session.id, 1, { prompt: 'go on' })).status).toBe(200)
-    await idle(second.server, session.id)
+    await settled(second.server, session.id)
     expect(second.built.at(-1)!.sent).toEqual(['go on'])
     const renamed = await call(second.base, `/sessions/${session.id}`, 'PATCH', { agent: { name: 'Atlas' } }, { generation: 2 })
     expect(renamed.body.session.agent).toMatchObject({ id: session.id, name: 'Atlas' })
@@ -334,8 +324,8 @@ describe('cross-store identity', () => {
     const first = await gateway(dir)
     const lead = await createNamed(first.base, 'Lead')
     const member = await createNamed(first.base, 'Member', { lead: lead.id })
-    await idle(first.server, lead.id)
-    await idle(first.server, member.id)
+    await settled(first.server, lead.id)
+    await settled(first.server, member.id)
     await stop(first.server)
     const path = join(dir, 'agents.json')
     const rows = JSON.parse(await readFile(path, 'utf8')) as StoredAgent[]
@@ -355,8 +345,8 @@ describe('cross-store identity', () => {
     const first = await gateway(dir)
     const lead = await createNamed(first.base, 'Lead')
     const member = await createNamed(first.base, 'Member', { lead: lead.id })
-    await idle(first.server, lead.id)
-    await idle(first.server, member.id)
+    await settled(first.server, lead.id)
+    await settled(first.server, member.id)
     await stop(first.server)
     await createFileSessionRecordStore({ dir: join(dir, 'sessions') }).delete(member.id)
 
@@ -372,8 +362,8 @@ describe('cross-store identity', () => {
     const { server, base } = await gateway(dir)
     const lead = await createNamed(base, 'Lead')
     const member = await createNamed(base, 'Member', { lead: lead.id })
-    await idle(server, lead.id)
-    await idle(server, member.id)
+    await settled(server, lead.id)
+    await settled(server, member.id)
     const index = await readFile(join(dir, 'agents.json'), 'utf8')
     for (const id of [lead.id, member.id]) {
       const before = await server.records.get(id)
@@ -394,13 +384,13 @@ describe('history under its frozen auth across an owner move', () => {
     const { server, base, wsBase } = await gateway(dir, { owners: true })
     const session = await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')
     const id = session.id
-    await idle(server, id)
+    await settled(server, id)
     expect((await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'alice' })).status).toBe(200)
     expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     expect((await call(base, `/agents/${id}`, 'PATCH', { owner: 'bob' }, { token: 'operator' })).status).toBe(200)
     expect((await cut(base, id, 2, {}, 'operator')).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     expect((await server.records.get(id))?.conversations.map((entry) => [entry.n, entry.auth.owner])).toEqual([
       [1, 'alice'],
       [2, 'bob'],
@@ -442,9 +432,9 @@ describe('history under its frozen auth across an owner move', () => {
     const session = await createNamed(first.base, 'Atlas', {}, {}, 'operator')
     const id = session.id
     expect(session.owner).toBeUndefined()
-    await idle(first.server, id)
+    await settled(first.server, id)
     expect((await cut(first.base, id, 1, {}, 'operator')).status).toBe(200)
-    await idle(first.server, id)
+    await settled(first.server, id)
     await stop(first.server)
 
     const { base, wsBase } = await gateway(dir, { owners: true, owner: undefined })
@@ -487,10 +477,10 @@ describe('history under its frozen auth across an owner move', () => {
       },
     })
     const id = await createPlain(base)
-    await idle(server, id)
+    await settled(server, id)
     built[0]!.emit({ type: 'execution_dispatched', executionId: 'erase-x', toolName: 'tool', backend: 'server', deferred: true })
     expect((await cut(base, id, 1)).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     expect((await call(base, `/sessions/${id}/conversations/1`)).body.events).toHaveLength(1)
     expect(reads).toHaveLength(1)
     const before = (await server.records.get(id))!.conversations[0]!
@@ -524,7 +514,7 @@ describe('history under its frozen auth across an owner move', () => {
     expect((await call(base, `/sessions/${id}/conversations/1`, 'DELETE')).status).toBe(200)
 
     expect((await cut(base, id, 2)).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     expect((await server.records.get(id))?.conversations.map((candidate) => candidate.n)).toEqual([1, 2])
     expect((await fetch(`${base}/sessions/${id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '3' } })).status).toBe(200)
     expect((await call(base, `/sessions/${id}/conversations/3`, 'DELETE')).status).toBe(200)
@@ -539,9 +529,9 @@ describe('history under its frozen auth across an owner move', () => {
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir, { owners: true })
     const session = await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')
-    await idle(server, session.id)
+    await settled(server, session.id)
     expect((await cut(base, session.id, 1, {}, 'operator')).status).toBe(200)
-    await idle(server, session.id)
+    await settled(server, session.id)
     expect((await call(base, `/sessions/${session.id}/conversations/1`, 'DELETE', undefined, { token: 'bob' })).status).toBe(404)
     expect((await call(base, `/sessions/${session.id}/conversations/1`, 'DELETE', undefined, { token: 'alice' })).status).toBe(403)
     expect((await server.records.get(session.id))?.conversations[0]?.transcript).toBeUndefined()
@@ -555,14 +545,14 @@ describe('the list from records: runtime absent is not a status', () => {
     const first = await gateway(dir)
     const closed = await createPlain(first.base)
     const dormant = await createPlain(first.base)
-    await idle(first.server, closed)
-    await idle(first.server, dormant)
+    await settled(first.server, closed)
+    await settled(first.server, dormant)
     expect(
       (await fetch(`${first.base}/sessions/${closed}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })).status,
     ).toBe(200)
 
     const running = await createPlain(first.base)
-    await idle(first.server, running)
+    await settled(first.server, running)
     const runner = first.built.find((candidate) => candidate.id === running)!
     runner.busy()
     await first.server.records.transactDurable(running, (current) => {
@@ -608,10 +598,10 @@ describe('engine switch at the cut', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const id = await createPlain(base, { model: 'claude-model', permissionMode: 'plan' })
-    await idle(server, id)
+    await settled(server, id)
     expect(built[0]!.config).toMatchObject({ model: 'claude-model', permissionMode: 'plan' })
     expect((await cut(base, id, 1, { target: { profile: 'codex-b' } })).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     const fresh = built.at(-1)!
     expect(fresh.engine).toBe('codex')
     expect(fresh.config.profile).toBe('codex-b')
@@ -637,9 +627,9 @@ describe('engine switch at the cut', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const id = await createPlain(base, { model: 'claude-model', permissionMode: 'acceptEdits' })
-    await idle(server, id)
+    await settled(server, id)
     expect((await cut(base, id, 1, { target: { profile: 'codex-b', model: 'codex-model' } })).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     expect(built.at(-1)!.config).toMatchObject({ profile: 'codex-b', model: 'codex-model', permissionMode: 'acceptEdits' })
   })
 
@@ -655,15 +645,16 @@ describe('engine switch at the cut', () => {
       },
     })
     id = (await createNamed(base, 'Wren', {}, { model: 'm1' })).id
-    await idle(server, id)
+    await settled(server, id)
     const cutting = cut(base, id, 1)
-    await vi.waitFor(() => expect(runnersOf(built, id)).toHaveLength(2))
+    await eventually(() => expect(runnersOf(built, id)).toHaveLength(2))
+    const asked = lockAsked(server, id)
     const editing = call(base, `/agents/${id}`, 'PATCH', { config: { model: 'm2' } })
-    await tick()
+    await asked
     held.resolve()
     expect((await cutting).status).toBe(200)
     expect((await editing).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
 
     expect(runnersOf(built, id)[1]!.config.model).toBe('m1')
     const record = (await server.records.get(id))!
@@ -672,7 +663,7 @@ describe('engine switch at the cut', () => {
     expect((await call(base, `/agents/${id}`)).body.agent.config.model).toBe('m2')
 
     expect((await cut(base, id, 2)).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     expect(runnersOf(built, id)[2]!.config.model).toBe('m2')
     expect((await server.records.get(id))?.running?.model).toBe('m2')
     expect((await server.records.get(id))?.conversations.map((entry) => entry.running?.model)).toEqual(['m1', 'm1'])
@@ -684,7 +675,7 @@ describe('a job run refuses every cut door', () => {
     const dir = await fixture.stateDir()
     const { server, base, wsBase, built } = await gateway(dir, { options: { agentContextReset: { default: true } } })
     const job = await createPlain(base, { meta: { jobId: 'j1' } })
-    await idle(server, job)
+    await settled(server, job)
     const runner = built[0]!
 
     const rest = await cut(base, job, 1)
@@ -699,7 +690,7 @@ describe('a job run refuses every cut door', () => {
     expect(await frames.waitFor((frame) => frame.type === 'protocol_error')).toMatchObject({ message: expect.stringContaining('job') })
     const errors = () => frames.frames.filter((frame) => frame.type === 'protocol_error').length
     ws.send(JSON.stringify({ generation: 1, type: 'clear_context' }))
-    await vi.waitFor(() => expect(errors()).toBe(2))
+    await eventually(() => expect(errors()).toBe(2))
     expect(frames.frames.filter((frame) => frame.type === 'protocol_error').at(-1)).toMatchObject({
       message: expect.stringContaining('job'),
     })
@@ -720,7 +711,7 @@ describe('settings of the next conversation on every session', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const id = await createPlain(base, { model: 'm1', permissionMode: 'plan' })
-    await idle(server, id)
+    await settled(server, id)
     expect((await call(base, `/sessions/${id}/conversations`)).body.settings).toEqual({
       cwd: '/tmp',
       profile: 'claude-a',
@@ -740,7 +731,7 @@ describe('settings of the next conversation on every session', () => {
     expect(built[0]!.config.model).toBe('m1')
 
     expect((await cut(base, id, 1)).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     expect(built.at(-1)!.config).toMatchObject({ model: 'm2' })
     expect(built.at(-1)!.config.permissionMode).toBeUndefined()
     expect(built.at(-1)!.config.contextReset).toBeUndefined()
@@ -751,7 +742,7 @@ describe('settings of the next conversation on every session', () => {
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir)
     const id = await createPlain(base, { model: 'm1' })
-    await idle(server, id)
+    await settled(server, id)
     const before = await server.records.get(id)
     for (const extra of [{ agent: 42 }, { agent: { name: 'Wren' } }, { title: 'x' }, { statusLabel: null }]) {
       const mixed = await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2' }, ...extra }, { generation: 1 })
@@ -764,7 +755,7 @@ describe('settings of the next conversation on every session', () => {
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir)
     const id = await createPlain(base, { model: 'm1' })
-    await idle(server, id)
+    await settled(server, id)
     const before = await server.records.get(id)
     for (const [config, status] of [
       [{ brief: 'x' }, 400],
@@ -783,13 +774,13 @@ describe('settings of the next conversation on every session', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const { id } = await createNamed(base, 'Wren', {}, { model: 'm1' })
-    await idle(server, id)
+    await settled(server, id)
     const edited = await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2' } }, { generation: 1 })
     expect(edited.body.settings).toMatchObject({ model: 'm2', agentContextReset: true })
     expect((await call(base, `/agents/${id}`)).body.agent.config.model).toBe('m2')
     expect((await server.records.get(id))?.requested?.model).toBe('m2')
     expect((await cut(base, id, 1)).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     expect(runnersOf(built, id).at(-1)!.config.model).toBe('m2')
   })
 
@@ -805,19 +796,19 @@ describe('settings of the next conversation on every session', () => {
       },
     })
     id = await createPlain(base, { model: 'm1' })
-    await idle(server, id)
+    await settled(server, id)
     const cutting = cut(base, id, 1)
-    await vi.waitFor(() => expect(runnersOf(built, id)).toHaveLength(2))
+    await eventually(() => expect(runnersOf(built, id)).toHaveLength(2))
     const during = await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2' } }, { generation: 1 })
     expect(during.status).toBe(409)
     held.resolve()
     expect((await cutting).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     expect((await server.records.get(id))?.requested?.model).toBe('m1')
     expect((await call(base, `/sessions/${id}`, 'PATCH', { config: { model: 'm2' } }, { generation: 2 })).status).toBe(200)
 
     const job = await createPlain(base, { meta: { jobId: 'j1' } })
-    await idle(server, job)
+    await settled(server, job)
     expect((await call(base, `/sessions/${job}`, 'PATCH', { config: { model: 'm2' } }, { generation: 1 })).status).toBe(409)
   })
 })
@@ -828,12 +819,12 @@ describe('owner authority on the record', () => {
     const unowned = PROFILES.filter((profile) => profile.owner === undefined)
     const first = await gateway(dir, { owners: true, owner: undefined, profiles: unowned })
     const id = (await createNamed(first.base, 'Atlas', {}, {}, 'operator')).id
-    await idle(first.server, id)
+    await settled(first.server, id)
     await stop(first.server)
     expect((await first.server.records.get(id))?.owner).toBeUndefined()
 
     const { server, base } = await gateway(dir, { owners: true, owner: 'alice', profiles: unowned })
-    await vi.waitFor(async () => expect((await server.records.get(id))?.owner).toBe('alice'))
+    await eventually(async () => expect((await server.records.get(id))?.owner).toBe('alice'))
     expect((await server.records.get(id))?.requested?.owner ?? 'alice').toBe('alice')
     const seen = await call(base, `/sessions/${id}`, 'GET', undefined, { token: 'alice' })
     expect(seen).toMatchObject({ status: 200, body: { session: { owner: 'alice' } } })
@@ -843,9 +834,9 @@ describe('owner authority on the record', () => {
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir, { owners: true })
     const id = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
-    await idle(server, id)
+    await settled(server, id)
     expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
 
     const renamed = await call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
     expect(renamed).toMatchObject({ status: 200, body: { agents: 1, sessions: 1 } })
@@ -878,15 +869,16 @@ describe('owner rename against a cut and ended executions', () => {
       },
     })
     target = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
-    await idle(server, target)
+    await settled(server, target)
     const cutting = cut(base, target, 1, {}, 'operator')
-    await vi.waitFor(() => expect(factoryPaused).toBe(true))
+    await eventually(() => expect(factoryPaused).toBe(true))
+    const asked = lockAsked(server, target)
     const renaming = call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
-    await tick(60)
+    await asked
     held.resolve()
     expect((await cutting).status).toBe(200)
     expect((await renaming).status).toBe(200)
-    await idle(server, target)
+    await settled(server, target)
     expect(server.registry.get(target)?.info().owner).toBe('bob')
     expect(server.parking.configOf(target)?.owner).toBe('bob')
     await server.parking.flush()
@@ -898,10 +890,10 @@ describe('owner rename against a cut and ended executions', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir, { owners: true })
     const id = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
-    await idle(server, id)
+    await settled(server, id)
     built[0]!.emit({ type: 'execution_dispatched', executionId: 'x-r', toolName: 'tool', backend: 'server', deferred: true } as never)
     expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     const result = { status: 'ok', output: { value: 1 } }
     expect((await call(base, '/executions/x-r/result', 'POST', result, { token: 'alice' })).status).toBe(409)
     expect((await call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })).status).toBe(200)
@@ -919,7 +911,7 @@ describe('owner rename moves every copy of one session in one locked step', () =
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir, { owners: true })
     const id = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
-    await idle(server, id)
+    await settled(server, id)
     const parked = deferred()
     const original = server.parking.renameOwner.bind(server.parking)
     let reached = false
@@ -929,9 +921,9 @@ describe('owner rename moves every copy of one session in one locked step', () =
       return original(from, to)
     })
     const renaming = call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
-    await vi.waitFor(() => expect(reached).toBe(true))
+    await eventually(() => expect(reached).toBe(true))
     expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
-    await idle(server, id)
+    await settled(server, id)
     parked.resolve()
     expect((await renaming).status).toBe(200)
     spy.mockRestore()
@@ -943,7 +935,7 @@ describe('owner rename moves every copy of one session in one locked step', () =
     const dir = await fixture.stateDir()
     const first = await gateway(dir, { owners: true })
     const id = (await createNamed(first.base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
-    await idle(first.server, id)
+    await settled(first.server, id)
     await stop(first.server)
 
     const wakeHeld = deferred()
@@ -959,7 +951,7 @@ describe('owner rename moves every copy of one session in one locked step', () =
       },
     })
     const waking = server.parking.ensureLive(id).catch(() => undefined)
-    await vi.waitFor(() => expect(wakePaused).toBe(true))
+    await eventually(() => expect(wakePaused).toBe(true))
     const parked = deferred()
     const original = server.parking.renameOwner.bind(server.parking)
     let reached = false
@@ -968,17 +960,18 @@ describe('owner rename moves every copy of one session in one locked step', () =
       await parked.promise
       return original(from, to)
     })
+    const asked = lockAsked(server, id)
     const renaming = call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
-    await tick(60)
+    await asked
     wakeHeld.resolve()
     await waking
-    await vi.waitFor(() => expect(reached).toBe(true))
+    await eventually(() => expect(reached).toBe(true))
     expect(server.registry.get(id)?.info().owner).not.toBe('alice')
     expect((await cut(base, id, 1, {}, 'operator')).status).toBe(200)
     parked.resolve()
     expect((await renaming).status).toBe(200)
     spy.mockRestore()
-    await idle(server, id)
+    await settled(server, id)
     expect((await server.records.get(id))?.conversations.map((entry) => [entry.n, entry.auth.owner])).toEqual([[1, 'bob']])
   })
 
@@ -986,7 +979,7 @@ describe('owner rename moves every copy of one session in one locked step', () =
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir, { owners: true })
     const id = (await createNamed(base, 'Atlas', { owner: 'alice' }, {}, 'operator')).id
-    await idle(server, id)
+    await settled(server, id)
     const listing = deferred()
     const original = server.records.list.bind(server.records)
     let reached = false
@@ -998,7 +991,7 @@ describe('owner rename moves every copy of one session in one locked step', () =
       return original()
     })
     const renaming = call(base, '/owners/rename', 'POST', { from: 'alice', to: 'bob' }, { token: 'operator' })
-    await vi.waitFor(() => expect(reached).toBe(true))
+    await eventually(() => expect(reached).toBe(true))
     expect(await indexOwner(base, id)).toBe('bob')
     expect((await call(base, `/agents/${id}`, 'PATCH', { config: { model: 'm2' } }, { token: 'operator' })).status).toBe(200)
     expect(await indexOwner(base, id)).toBe('alice')

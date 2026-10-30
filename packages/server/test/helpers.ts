@@ -3,7 +3,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { vi } from 'vitest'
+import { expect, vi } from 'vitest'
 import type WebSocket from 'ws'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
@@ -18,6 +18,92 @@ import {
   type WorkerServer,
 } from '../src/index.ts'
 import type { RuntimeClear } from '../src/services/session-store.ts'
+
+// A hang watchdog, kept under vitest's 5 s test timeout so the message below is what a stuck wait reports.
+const WATCHDOG_MS = 4_000
+
+// Polls until `check` holds. The deadline only catches a hang; it never decides what the test asserts.
+export async function until(check: () => boolean | Promise<boolean>, what: string, watchdogMs = WATCHDOG_MS): Promise<void> {
+  await poll(async () => ((await check()) ? true : new Error('still false')), what, watchdogMs)
+}
+
+// Polls until `assertion` stops throwing, and hands back what it returned.
+export async function eventually<T>(assertion: () => T | Promise<T>, what = 'an assertion to hold', watchdogMs = WATCHDOG_MS): Promise<T> {
+  let value!: T
+  await poll(
+    async () => {
+      try {
+        value = await assertion()
+        return true
+      } catch (error) {
+        return error instanceof Error ? error : new Error(String(error))
+      }
+    },
+    what,
+    watchdogMs,
+  )
+  return value
+}
+
+async function poll(attempt: () => Promise<true | Error>, what: string, watchdogMs: number): Promise<void> {
+  const deadline = Date.now() + watchdogMs
+  for (;;) {
+    const outcome = await attempt()
+    if (outcome === true) {
+      return
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`gave up after ${watchdogMs} ms waiting for ${what}: ${outcome.message}`, { cause: outcome })
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
+export function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => (resolve = done))
+  return { promise, resolve }
+}
+
+// A cut is over only when its gate is down: the record drops `cut` a few awaits before the gate lifts.
+export async function settled(server: WorkerServer, id: string): Promise<void> {
+  await eventually(() => expect(server.registry.get(id)?.info().status).toBe('idle'), `${id} to be idle`)
+  await until(async () => (await server.records.get(id))?.cut === undefined, `${id}'s cut intent to clear`)
+  await until(() => !server.locks.gated(id), `${id}'s cut gate to lift`)
+}
+
+// Resolves once anything asks for `id`'s lifecycle lock, from here on: the request it waits for has reached the queue.
+export function lockAsked(server: WorkerServer, id: string): Promise<void> {
+  const asked = deferred()
+  const locks = server.locks
+  const run = locks.run
+  locks.run = <T>(ids: readonly string[], step: () => Promise<T>): Promise<T> => {
+    if (ids.includes(id)) {
+      asked.resolve()
+    }
+    return run.call(locks, ids, step) as Promise<T>
+  }
+  return asked.promise
+}
+
+// Takes over a queued cut's stall bound: nothing expires until the test calls `expire`.
+export function manualStall(cuts: { armStall: (expire: () => void, ms: number) => () => void }) {
+  const armed = new Set<() => void>()
+  cuts.armStall = (expire) => {
+    armed.add(expire)
+    return () => armed.delete(expire)
+  }
+  return {
+    armed: (): number => armed.size,
+    expire: (): void => {
+      const due = Array.from(armed)
+      armed.clear()
+      for (const expire of due) {
+        expire()
+      }
+    },
+  }
+}
 
 // Controllable stand-in for the Claude Agent SDK. `models` makes the fake query answer
 // `supportedModels`, which is what makes a runner emit `capabilities`.

@@ -85,6 +85,8 @@ export class ConversationCuts {
   readonly faults = new Set<CutFault>()
   // How long a cut queued on an idle session waits for the turn its unanswered input should start.
   stallMs = 10_000
+  // Test seam: arms the stall bound and hands back its disarm.
+  armStall: (expire: () => void, ms: number) => () => void = armTimer
 
   bind(ctx: ServerContext): void {
     this.#context = ctx
@@ -239,7 +241,7 @@ export class ConversationCuts {
     // Level-triggered: the state is read again on every event and when the stall bound expires, never inferred from
     // one transition, because a status that is already idle emits nothing more. Idle with unanswered input is a turn
     // about to start or input the engine took and never confirmed; only the bound tells them apart.
-    let stall: ReturnType<typeof setTimeout> | undefined
+    let disarm: (() => void) | undefined
     let stalled = false
     const drop = (why: string): void => {
       tell(leave(), false, why)
@@ -254,8 +256,8 @@ export class ConversationCuts {
         return
       }
       if (runner.info().status !== 'idle') {
-        clearTimeout(stall)
-        stall = undefined
+        disarm?.()
+        disarm = undefined
         stalled = false
         return
       }
@@ -279,14 +281,13 @@ export class ConversationCuts {
         drop(UNANSWERED_STALLED)
         return
       }
-      stall ??= setTimeout(() => {
+      disarm ??= this.armStall(() => {
         stalled = true
         evaluate()
       }, this.stallMs)
-      stall.unref?.()
     }
     const leave = (): CutOutcome[] => {
-      clearTimeout(stall)
+      disarm?.()
       this.#queued.delete(id)
       unsubscribe()
       const heard = this.#waiting.get(id) ?? []
@@ -1026,4 +1027,10 @@ async function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined
   } finally {
     clearTimeout(timer)
   }
+}
+
+function armTimer(expire: () => void, ms: number): () => void {
+  const timer = setTimeout(expire, ms)
+  timer.unref?.()
+  return () => clearTimeout(timer)
 }

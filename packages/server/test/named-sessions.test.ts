@@ -15,7 +15,7 @@ import {
 import type { StoredAgent } from '../src/services/agent-store.ts'
 import { LifecycleLocks } from '../src/services/lifecycle-locks.ts'
 import { EngineRunner } from './engine-runner.ts'
-import { gatewayFixture } from './helpers.ts'
+import { deferred, eventually, gatewayFixture, lockAsked, settled } from './helpers.ts'
 
 const PROFILES: ProfileInfo[] = [{ name: 'claude-a', engine: 'claude', configDir: '/tmp' }]
 
@@ -115,24 +115,10 @@ async function createNamed(base: string, name: string, extra: Record<string, unk
   return res.body.session as SessionInfo
 }
 
-// A start settles through several record writes: a loaded host can take more than waitFor's default second.
-const SETTLE = { timeout: 5000 }
-
-async function idle(server: WorkerServer, id: string): Promise<void> {
-  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'), SETTLE)
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined(), SETTLE)
-}
-
 async function stop(server: WorkerServer): Promise<void> {
   await server.parking.flush()
   await server.close()
   fixture.servers.splice(fixture.servers.indexOf(server), 1)
-}
-
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve!: () => void
-  const promise = new Promise<void>((done) => (resolve = done))
-  return { promise, resolve }
 }
 
 describe('a named session', () => {
@@ -182,7 +168,7 @@ describe('a named session', () => {
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir)
     const plain = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a' })).body.session as SessionInfo
-    await idle(server, plain.id)
+    await settled(server, plain.id)
     const named = await call(base, `/sessions/${plain.id}`, 'PATCH', { agent: { name: 'Quill' } }, 1)
     expect(named.status).toBe(200)
     expect(named.body.session.agent).toMatchObject({ id: plain.id, name: 'Quill' })
@@ -207,7 +193,7 @@ describe('a named session', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const session = await createNamed(base, 'Wren')
-    await idle(server, session.id)
+    await settled(server, session.id)
     const restarted = await call(base, `/sessions/${session.id}/conversations`, 'POST', { prompt: 'again', expectedGeneration: 1 })
     expect(restarted.status).toBe(200)
     expect(restarted.body.conversation).toBe(2)
@@ -224,7 +210,7 @@ describe('retiring a named session', () => {
     const { server, base } = await gateway(dir)
     const lead = await createNamed(base, 'Lead')
     const member = await createNamed(base, 'Member', { lead: lead.id })
-    await idle(server, lead.id)
+    await settled(server, lead.id)
     const res = await fetch(`${base}/sessions/${lead.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     expect(res.status).toBe(200)
     expect(await server.records.get(lead.id)).toMatchObject({ closedAt: expect.any(Number), conversations: [{ n: 1 }] })
@@ -241,16 +227,17 @@ describe('retiring a named session', () => {
     const { server, base } = await gateway(dir)
     const lead = await createNamed(base, 'Lead')
     const member = await createNamed(base, 'Member', { lead: lead.id })
-    await idle(server, member.id)
+    await settled(server, member.id)
 
     const held = deferred()
     const holding = server.locks.run([member.id], () => held.promise)
     let finished = false
+    const asked = lockAsked(server, member.id)
     const retiring = call(base, `/agents/${lead.id}`, 'DELETE', { members: 'retire', expectedGeneration: 1 }).then((res) => {
       finished = true
       return res
     })
-    await new Promise((resolve) => setTimeout(resolve, 30))
+    await asked
     expect(finished).toBe(false)
     expect(server.registry.get(lead.id)).toBeDefined()
     held.resolve()
@@ -266,8 +253,9 @@ describe('retiring a named session', () => {
     const late = await createNamed(base, 'Late')
     const gate = deferred()
     const blocking = server.locks.run([first.id], () => gate.promise)
+    const refusing = lockAsked(server, first.id)
     const refused = call(base, `/agents/${next.id}`, 'DELETE', { members: 'retire', expectedGeneration: 1 })
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await refusing
     expect((await call(base, `/agents/${late.id}`, 'PATCH', { lead: next.id })).status).toBe(200)
     gate.resolve()
     await blocking
@@ -281,7 +269,7 @@ describe('startup reconciliation', () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir)
     const session = await createNamed(first.base, 'Atlas')
-    await idle(first.server, session.id)
+    await settled(first.server, session.id)
     await stop(first.server)
     const path = join(dir, 'agents.json')
     const rows = JSON.parse(await readFile(path, 'utf8')) as StoredAgent[]
@@ -330,7 +318,7 @@ describe('the session list from records', () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir)
     const id = (await call(first.base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
-    await idle(first.server, id)
+    await settled(first.server, id)
     first.built[0]!.answer()
     expect((await call(first.base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
     await stop(first.server)
@@ -358,7 +346,7 @@ describe('peer messages across a cut', () => {
     const { server, base, built } = await gateway(dir)
     const sender = await createNamed(base, 'Sender')
     const target = await createNamed(base, 'Target')
-    await idle(server, target.id)
+    await settled(server, target.id)
     const peers = built[0]!.config.peers!
     const first = built[1]!
 
@@ -372,7 +360,7 @@ describe('peer messages across a cut', () => {
     server.locks.ungate(target.id)
 
     expect((await call(base, `/sessions/${target.id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
-    await idle(server, target.id)
+    await settled(server, target.id)
     const next = built.at(-1)!
     expect(next).not.toBe(first)
     expect(await peers.send(sender.id, target.id, 'after')).toMatchObject({ delivered: true, sessionId: target.id })
@@ -388,7 +376,7 @@ describe('review probes', () => {
     const sender = await createNamed(base, 'Sender')
     const lead = await createNamed(base, 'Lead')
     const member = await createNamed(base, 'Member', { lead: lead.id })
-    await idle(server, member.id)
+    await settled(server, member.id)
     const original = server.records.transactDurable.bind(server.records)
     const failing = new Set([lead.id])
     server.records.transactDurable = ((id, merge) =>
@@ -428,7 +416,7 @@ describe('review probes', () => {
     const dir = await fixture.stateDir()
     const { server, base } = await gateway(dir)
     const session = await createNamed(base, 'Wren')
-    await idle(server, session.id)
+    await settled(server, session.id)
     for (const path of ['', '/retry', '/pending']) {
       expect((await call(base, `/sessions/${session.id}/conversations${path}`, 'POST', {})).status).toBe(400)
     }
@@ -468,7 +456,7 @@ describe('review probes', () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir)
     const plain = (await call(first.base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'do the thing' })).body.session.id as string
-    await idle(first.server, plain)
+    await settled(first.server, plain)
     await stop(first.server)
     const records = createFileSessionRecordStore({ dir: join(dir, 'sessions') })
     const { runtime: _runtime, ...bare } = (await records.get(plain))!
@@ -480,7 +468,7 @@ describe('review probes', () => {
 
     const second = await gateway(dir)
     expect(second.built.map((runner) => [runner.id, runner.sent])).toEqual([[plain, ['do the thing']]])
-    await vi.waitFor(async () => expect((await second.server.records.get(plain))?.cut).toBeUndefined())
+    await eventually(async () => expect((await second.server.records.get(plain))?.cut).toBeUndefined())
     expect((await second.server.records.get(plain))?.pendingPrompt).toBeUndefined()
   })
 
@@ -489,7 +477,7 @@ describe('review probes', () => {
     const first = await gateway(dir)
     const named = (await call(first.base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp', profile: 'claude-a' }, prompt: 'plan it' })).body
       .agent.id as string
-    await idle(first.server, named)
+    await settled(first.server, named)
     await stop(first.server)
     const records = createFileSessionRecordStore({ dir: join(dir, 'sessions') })
     const { runtime: _runtime, ...bare } = (await records.get(named))!
@@ -501,7 +489,7 @@ describe('review probes', () => {
 
     const second = await gateway(dir)
     expect(second.built.map((runner) => [runner.id, runner.sent])).toEqual([[named, []]])
-    await vi.waitFor(async () => expect((await second.server.records.get(named))?.cut).toBeUndefined())
+    await eventually(async () => expect((await second.server.records.get(named))?.cut).toBeUndefined())
     const agent = (await call(second.base, `/agents/${named}`)).body.agent as AgentInfo
     expect(agent).toMatchObject({ id: named, name: 'Atlas', undelivered: 'plan it' })
     expect((await call(second.base, `/sessions/${named}/conversations/pending`, 'POST', { send: true, expectedGeneration: 1 })).status).toBe(200)
@@ -539,7 +527,7 @@ describe('review probes', () => {
     const owned = { profiles: [...PROFILES.map((profile) => ({ ...profile, owner: 'alice' })), { name: 'claude-b', engine: 'claude' as const, configDir: '/tmp', owner: 'bob' }] }
     const first = await gateway(dir, { options: owned })
     const session = await createNamed(first.base, 'Wren')
-    await idle(first.server, session.id)
+    await settled(first.server, session.id)
     expect((await call(first.base, `/agents/${session.id}`, 'PATCH', { owner: 'bob' })).status).toBe(200)
     const record = (await first.server.records.get(session.id))!
     expect([record.owner, record.requested?.owner, record.running?.owner]).toEqual(['bob', 'bob', 'bob'])
@@ -549,9 +537,9 @@ describe('review probes', () => {
     const second = await gateway(dir, { options: owned })
     const woken = await second.server.parking.ensureLive(session.id)
     expect((woken as unknown as { config: SessionRunnerConfig }).config.owner).toBe('bob')
-    await idle(second.server, session.id)
+    await settled(second.server, session.id)
     expect((await call(second.base, `/sessions/${session.id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
-    await idle(second.server, session.id)
+    await settled(second.server, session.id)
     expect(second.built.at(-1)!.config.owner).toBe('bob')
     expect((await second.server.records.get(session.id))?.owner).toBe('bob')
   })
@@ -562,8 +550,8 @@ describe('recheck probes', () => {
     const first = await gateway(dir)
     const victim = await createNamed(first.base, 'Atlas')
     const other = await createNamed(first.base, 'Other')
-    await idle(first.server, victim.id)
-    await idle(first.server, other.id)
+    await settled(first.server, victim.id)
+    await settled(first.server, other.id)
     await stop(first.server)
     const path = join(dir, 'agents.json')
     const rows = JSON.parse(await readFile(path, 'utf8')) as StoredAgent[]
@@ -601,7 +589,7 @@ describe('recheck probes', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
-    await idle(server, id)
+    await settled(server, id)
     built[0]!.confirmable = false
     const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
     expect(refused).toMatchObject({ status: 409, body: { code: 'unconfirmed_input', error: expect.stringContaining('cannot confirm') } })
@@ -612,7 +600,7 @@ describe('recheck probes', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
-    await idle(server, id)
+    await settled(server, id)
     built[0]!.confirmable = false
     const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
     expect(refused).toMatchObject({
@@ -634,7 +622,7 @@ describe('recheck probes', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
-    await idle(server, id)
+    await settled(server, id)
     built[0]!.confirmable = false
     const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
     built[0]!.sendMessage('a second thought')
@@ -657,7 +645,7 @@ describe('recheck probes', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
-    await idle(server, id)
+    await settled(server, id)
     const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
     expect(refused).toMatchObject({
       status: 409,
@@ -672,7 +660,7 @@ describe('recheck probes', () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir)
     const id = (await call(first.base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
-    await idle(first.server, id)
+    await settled(first.server, id)
     first.built[0]!.confirmable = false
     const refused = await call(first.base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
     expect(refused.body.code).toBe('unconfirmed_input')
@@ -685,7 +673,7 @@ describe('recheck probes', () => {
     expect(second.built).toHaveLength(0)
 
     await second.server.parking.ensureLive(id)
-    await idle(second.server, id)
+    await settled(second.server, id)
     second.built[0]!.confirmable = false
     second.built[0]!.sendMessage('again')
     const rebuilt = await call(second.base, `/sessions/${id}/conversations/discard`, 'POST', { expectedGeneration: 1, inputRevision: refused.body.inputRevision })
@@ -698,7 +686,7 @@ describe('recheck probes', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
-    await idle(server, id)
+    await settled(server, id)
     built[0]!.confirmable = false
     const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
     const wrong = await call(base, `/sessions/${id}/conversations/discard`, 'POST', {
@@ -716,7 +704,7 @@ describe('recheck probes', () => {
     const dir = await fixture.stateDir()
     const { server, base, built } = await gateway(dir)
     const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a' })).body.session.id as string
-    await idle(server, id)
+    await settled(server, id)
     built[0]!.confirmable = false
     built[0]!.sendMessage('from a peer', undefined, { origin: { kind: 'peer', sessionId: 'p', name: 'P', engine: 'claude', hops: [] } })
     const refused = await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
@@ -728,7 +716,7 @@ describe('recheck probes', () => {
     const diagnostics: unknown[] = []
     const { server, base, built } = await gateway(dir, { diagnostics })
     const id = (await call(base, '/sessions', 'POST', { cwd: '/tmp', profile: 'claude-a', prompt: 'hi' })).body.session.id as string
-    await idle(server, id)
+    await settled(server, id)
     const runner = built[0]!
     runner.confirmable = false
     await expect(server.cuts.clearOnIdle(runner, 'context_reset', 'next')).rejects.toThrow(/cannot confirm/)
@@ -737,7 +725,7 @@ describe('recheck probes', () => {
     expect(await server.cuts.clearOnIdle(runner, 'context_reset', 'next')).toBeUndefined()
     runner.confirmable = false
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await vi.waitFor(() => expect(diagnostics.map(String).join()).toContain('dropped'))
+    await eventually(() => expect(diagnostics.map(String).join()).toContain('dropped'))
     expect(built).toHaveLength(1)
     expect(server.registry.get(id)).toBe(runner)
     expect((await server.records.get(id))?.conversation).toBe(1)
