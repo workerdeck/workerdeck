@@ -86,9 +86,7 @@ export class BrowserBridgeExecutor implements ToolExecutor {
   }
 
   #applyAnswer(executionId: string, answer: BridgeAnswer): boolean {
-    return 'output' in answer
-      ? this.registry.settle(executionId, answer, 'client')
-      : this.registry.fail(executionId, answer.reason, answer.error, 'client')
+    return this.registry.settle(executionId, answer, 'client')
   }
 }
 

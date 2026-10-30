@@ -61,12 +61,12 @@ describe('BrowserBridgeExecutor', () => {
     expect(h.results).toEqual([{ executionId: 'exec-1', result: { status: 'ok', output: { n: 2 }, logs: ['[log] hi'] } }])
   })
 
-  it('delivers a client-side failure as a failed result, not an exception', async () => {
+  it('delivers a client-side failure, with the guest logs, as a failed result, not an exception', async () => {
     const h = harness()
     await h.executor.dispatch(call())
-    h.executor.resolve('exec-1', { reason: 'guest_error', error: 'boom' })
+    h.executor.resolve('exec-1', { reason: 'guest_error', error: 'boom', logs: ['[log] spinning'] })
     await settle()
-    expect(h.results[0]!.result).toMatchObject({ status: 'failed', reason: 'guest_error', error: 'boom' })
+    expect(h.results[0]!.result).toEqual({ status: 'failed', reason: 'guest_error', error: 'boom', logs: ['[log] spinning'] })
     expect(h.canceled).toEqual([])
   })
 

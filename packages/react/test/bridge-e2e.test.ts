@@ -109,10 +109,10 @@ describe('bridged execution, end to end', () => {
     })
   }, 20_000)
 
-  it('returns a guest timeout as a failed result the agent can adapt to', async () => {
+  it('returns a guest timeout, with what the guest logged, as a failed result the agent can adapt to', async () => {
     const { sessionId } = await start(50)
-    await dispatch(sessionId, 'while (true) {}')
+    await dispatch(sessionId, "console.log('spinning'); while (true) {}")
     await eventually(() => expect(results).toHaveLength(1), { timeout: 15_000 })
-    expect(results[0]!.result).toEqual({ status: 'failed', reason: 'timeout', error: 'InternalError: interrupted' })
+    expect(results[0]!.result).toEqual({ status: 'failed', reason: 'timeout', error: 'InternalError: interrupted', logs: ['[log] spinning'] })
   }, 20_000)
 })
