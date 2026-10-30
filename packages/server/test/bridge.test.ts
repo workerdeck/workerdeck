@@ -43,8 +43,7 @@ async function attach(wsBase: string, sessionId: string) {
   return { ws, collector }
 }
 
-// Two refusals in turn: the second is only sent once the first came back, so anything the frames before them made the
-// server send, even from a later microtask, is on the wire ahead of it.
+// The second refusal is asked for only once the first came back, so whatever earlier frames made the server send is ahead.
 async function roundTrips(ws: WebSocket, collector: ReturnType<typeof frameCollector>): Promise<void> {
   for (let i = 0; i < 2; i++) {
     const seen = collector.frames.length

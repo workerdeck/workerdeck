@@ -243,8 +243,7 @@ function holdingStore(dir: string, matches: (record: Parameters<SessionRecordSto
   return { store, reached: reached.promise, release: released.resolve }
 }
 
-// Joins the socket's prompt queue: its ack proves every prompt sent before it was handled. The unknown attachment keeps
-// it from ever reaching the runner.
+// Its ack proves every prompt queued before it was handled; the unknown attachment keeps it from the runner.
 async function drained(socket: Awaited<ReturnType<typeof attach>>, clientId: string, conversation = 1): Promise<void> {
   socket.send({ generation: conversation, type: 'user_message', text: 'probe', clientId, attachmentIds: ['none'] })
   expect(await ackOf(socket.frames, clientId)).toEqual({ type: 'ack', clientId, notDelivered: true })
