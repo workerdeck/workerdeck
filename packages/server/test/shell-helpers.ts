@@ -18,8 +18,10 @@ export type AttachedFrame = Extract<ServerFrame, { type: 'shell_attached' }>
 export type DetachedFrame = Extract<ServerFrame, { type: 'shell_detached' }>
 export type PtySpawnOptions = Parameters<PtyModule['spawn']>[2]
 
-// A PTY child a test drives by hand: `emit` is a chunk the master read, `exit` is node-pty's exit event.
+// A PTY child a test drives by hand: `emit` is a chunk the master read, `exit` is node-pty's exit event, and
+// `respond` (when set) answers every write, the way a program reading its input would.
 export type ScriptedChild = PtyChild & {
+  respond?: (data: string) => void
   readonly file: string
   readonly args: string[]
   readonly options: PtySpawnOptions
@@ -96,7 +98,7 @@ function scriptedChild(pid: number, file: string, args: string[], options: PtySp
   const writes: string[] = []
   const sizes: Array<[number, number]> = []
   const kills: Array<string | undefined> = []
-  return {
+  const child: ScriptedChild = {
     pid,
     file,
     args,
@@ -106,7 +108,10 @@ function scriptedChild(pid: number, file: string, args: string[], options: PtySp
     kills,
     onData: (listener) => void dataListeners.push(listener),
     onExit: (listener) => void exitListeners.push(listener),
-    write: (data) => void writes.push(data),
+    write: (data) => {
+      writes.push(data)
+      child.respond?.(data)
+    },
     resize: (cols, rows) => void sizes.push([cols, rows]),
     kill: (signal) => void kills.push(signal),
     emit: (data) => {
@@ -120,6 +125,7 @@ function scriptedChild(pid: number, file: string, args: string[], options: PtySp
       }
     },
   }
+  return child
 }
 
 // The PTY suites are a release gate: on CI a missing native module fails the file instead of skipping it.
