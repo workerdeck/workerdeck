@@ -1613,6 +1613,12 @@ code map in `docs/PACKAGES.md` server.
   the dormant rebuild re-applies it after the host's hook. Without it a read mark of n (keyed by the
   stable id, max-merged) swallows n+1's first messages. `numTurns` stays per conversation because
   `newConversationGate` reads 0 as an empty conversation.
+- **A cut announces only after it lifts its gate.** `#startCommitted` reaches `#announce` (the
+  `conversation_started` frame, and the `executed` ack of a typed `/clear`) a few awaits before
+  `#cut`'s `finally` ungates, so a client acting on either at once met `CUT_IN_PROGRESS`. Inside the
+  gate an announcement is held in `#announcing` and sent after the ungate; recovery and retry-start
+  run ungated and announce at once. The same gap made tests race: `settled()` in
+  `test/helpers.ts` waits for `record.cut` to clear and for the gate to lift.
 
 ## Named sessions (the identity index, retire, history)
 

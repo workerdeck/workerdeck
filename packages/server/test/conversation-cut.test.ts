@@ -217,6 +217,22 @@ describe('conversation cut under a stable id', () => {
     await eventually(() => expect(built.at(-1)!.sent).toEqual(['p']))
   })
 
+  it('announces the new conversation only once the cut has lifted its gate', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir)
+    const id = await create(base)
+    await settled(server, id)
+    const announced = deferred<{ conversation: number; gated: boolean }>()
+    server.cuts.socket(id, {
+      conversation: 1,
+      detach: () => {},
+      announce: (conversation) => announced.resolve({ conversation, gated: server.locks.gated(id) }),
+      drop: () => {},
+    })
+    await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    expect(await announced.promise).toEqual({ conversation: 2, gated: false })
+  })
+
   it('binds a socket to its conversation: announced and closed at the cut, a stale generation refused after', async () => {
     const dir = await fixture.stateDir()
     const { server, base, wsBase, built } = await gateway(dir)

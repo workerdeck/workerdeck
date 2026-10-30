@@ -72,6 +72,8 @@ export type CutOutcome = (cut: boolean, reason?: string) => void
 export class ConversationCuts {
   #context: ServerContext | undefined
   #sockets = new Map<string, Set<CutSocket>>()
+  // Inside a cut's gate an announcement waits for the ungate: a client acting on it must not meet CUT_IN_PROGRESS.
+  #announcing = new Map<string, { conversation: number; epoch: number } | null>()
   #ended = new Map<string, EndedExecution>()
   #leaving = new Map<string, string>()
   #queued = new Map<string, { runner: Runner; leave: (why?: string) => void }>()
@@ -349,6 +351,7 @@ export class ConversationCuts {
     const target = this.#target(record?.requested ?? record?.running ?? stored?.config ?? ctx.parking.configOf(id), request.target)
 
     ctx.locks.gate(id)
+    this.#announcing.set(id, null)
     try {
       await ctx.parking.fence(id)
       // A wake already under way when the checks ran registers before the fence settles: that runner was never vetted.
@@ -399,6 +402,11 @@ export class ConversationCuts {
       ctx.locks.ungate(id)
       if (!this.#failedStarts.has(id)) {
         ctx.parking.unfence(id)
+      }
+      const held = this.#announcing.get(id)
+      this.#announcing.delete(id)
+      if (held) {
+        this.#announce(id, held.conversation, held.epoch)
       }
     }
   }
@@ -784,6 +792,10 @@ export class ConversationCuts {
 
   // A socket that attached while n+1 started is already on it: it stays, and the next cut finds it.
   #announce(id: string, conversation: number, epoch: number): void {
+    if (this.#announcing.has(id)) {
+      this.#announcing.set(id, { conversation, epoch })
+      return
+    }
     const sockets = this.#sockets.get(id)
     for (const socket of sockets ?? []) {
       if (socket.conversation < conversation) {
