@@ -237,7 +237,8 @@ establish readiness; await the event, or use `until`/`eventually` (`server/test/
 `eventually.ts` in core, react and client), whose deadline is a hang watchdog only. A PTY suite
 uses `ptySuite` (`server/test/shell-helpers.ts`), which fails at load on CI when
 `@lydell/node-pty` is missing instead of skipping. A refused connection dials port 1, never a
-port a closed server just freed (a parallel suite takes it). CI runs the server suite on its own
+port a closed server just freed (a parallel suite's `listen(0)` takes it); a test that must free
+a port and bind it again picks one below the ephemeral range (`reservedPort` in `apns.test.ts`). CI runs the server suite on its own
 runner and the real-PTY shell files again on macOS (the `/dev/tty` wrapper path).
 
 `pnpm test` - core: fake `queryFn` harness (no CLI spawn) + a scripted JSON-RPC peer

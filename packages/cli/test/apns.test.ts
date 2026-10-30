@@ -34,6 +34,22 @@ const CONFIG: ApnsConfig = {
 
 const TOKEN = 'a'.repeat(64)
 
+// listen(0) hands out ephemeral ports only (Linux from 32768, macOS from 49152), so a port below that which this test
+// freed is one no parallel suite can be given while it is closed.
+async function reservedPort(server: Http2Server): Promise<number> {
+  for (;;) {
+    const port = 20_000 + Math.floor(Math.random() * 12_000)
+    const bound = await new Promise<boolean>((resolve) => {
+      server.once('error', () => resolve(false))
+      server.listen(port, () => resolve(true))
+    })
+    server.removeAllListeners('error')
+    if (bound) {
+      return port
+    }
+  }
+}
+
 // A port a closed fake had held is free for any parallel suite to listen on; nothing unprivileged can take port 1.
 const REFUSED_PORT = 1
 
@@ -200,7 +216,8 @@ describe('apns client', () => {
       stream.respond({ ':status': 200, 'apns-id': 'id-redial' })
       stream.end()
     })
-    const { port } = fake.server.address() as { port: number }
+    await new Promise((resolve) => fake.server.close(resolve))
+    const port = await reservedPort(fake.server)
     await new Promise((resolve) => fake.server.close(resolve))
     const url = `http://localhost:${port}`
     const paused: number[] = []
