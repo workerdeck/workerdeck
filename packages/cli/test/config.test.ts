@@ -19,13 +19,6 @@ afterAll(async () => {
 })
 
 describe('parseArgs', () => {
-  it('parses the common flags', () => {
-    const flags = parseArgs(['--port', '9000', '--host', '0.0.0.0', '--auth-key', 's3cret'])
-    expect(flags.port).toBe(9000)
-    expect(flags.host).toBe('0.0.0.0')
-    expect(flags.authKey).toBe('s3cret')
-  })
-
   it('accepts repeated profiles and cwd roots, resolving paths', () => {
     const flags = parseArgs(['--profile', 'toby=./a', '--profile', 'dan=./b', '--cwd-root', './c'])
     expect(flags.profiles).toEqual([

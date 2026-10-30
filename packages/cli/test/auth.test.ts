@@ -1,6 +1,6 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createCliAuth, type CliAuth, type CliPrincipal, type CliSessionStore, type StoredSession } from '../src/auth/auth.ts'
 
 const SECRET = 'correct-horse-battery-staple'
@@ -23,6 +23,7 @@ function fakeReq(init: {
 
 const servers: Server[] = []
 afterEach(async () => {
+  vi.useRealTimers()
   for (const server of servers.splice(0)) {
     await new Promise((resolve) => server.close(resolve))
   }
@@ -89,8 +90,9 @@ async function login(base: string, secret: string): Promise<{ res: RawResponse; 
   return { res, cookie: res.setCookies[0]?.split(';')[0] ?? '' }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function freezeClock(): (ms: number) => void {
+  vi.useFakeTimers({ toFake: ['Date'], now: 1_000_000 })
+  return (ms) => vi.setSystemTime(Date.now() + ms)
 }
 
 describe('disabled mode (no secret)', () => {
@@ -448,13 +450,16 @@ describe('throttling', () => {
     })
 
   it('locks an IP out after repeated failures - even for the right secret - until the window passes', async () => {
-    const base = await startHost(createCliAuth({ secret: SECRET, throttle: { windowMs: 200, maxFailuresPerIp: 2 } }))
+    const advance = freezeClock()
+    const base = await startHost(createCliAuth({ secret: SECRET, throttle: { windowMs: 60_000, maxFailuresPerIp: 2 } }))
     expect((await jsonAttempt(base, 'wrong-one-111')).status).toBe(401)
     expect((await jsonAttempt(base, 'wrong-two-222')).status).toBe(401)
     const blocked = await jsonAttempt(base, SECRET)
     expect(blocked.status).toBe(429)
-    expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0)
-    await sleep(250)
+    expect(Number(blocked.headers['retry-after'])).toBe(60)
+    advance(59_999)
+    expect((await jsonAttempt(base, SECRET)).status).toBe(429)
+    advance(1)
     expect((await jsonAttempt(base, SECRET)).status).toBe(204)
   })
 
@@ -506,11 +511,13 @@ describe('login page model', () => {
 
 describe('expiry, logout, restart', () => {
   it('expires sessions after ttlMs', async () => {
-    const auth = createCliAuth({ secret: SECRET, ttlMs: 60 })
+    const advance = freezeClock()
+    const auth = createCliAuth({ secret: SECRET, ttlMs: 60_000 })
     const base = await startHost(auth)
     const { cookie } = await login(base, SECRET)
+    advance(59_999)
     expect((await request(`${base}/v1/sessions`, { headers: { cookie } })).status).toBe(200)
-    await sleep(100)
+    advance(1)
     expect((await request(`${base}/v1/sessions`, { headers: { cookie } })).status).toBe(401)
     expect((await request(`${base}/`, { headers: { cookie } })).body).toBe('LOGIN')
   })
@@ -597,9 +604,10 @@ describe('durable sessions', () => {
 
   it('an expired stored row is refused and swept', async () => {
     const store = fakeStore()
-    const base = await startHost(createCliAuth({ secret: SECRET, sessions: store, ttlMs: 20 }))
+    const advance = freezeClock()
+    const base = await startHost(createCliAuth({ secret: SECRET, sessions: store, ttlMs: 60_000 }))
     const { cookie } = await login(base, SECRET)
-    await sleep(30)
+    advance(60_000)
     const restarted = createCliAuth({ secret: SECRET, sessions: store })
     expect(await restarted.authenticate(fakeReq({ headers: { cookie } }))).toBeNull()
     expect(store.rows).toHaveLength(0)

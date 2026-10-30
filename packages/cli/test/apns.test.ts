@@ -86,9 +86,10 @@ async function startFakeApns(
 }
 
 describe('apns client', () => {
-  it('posts to /3/device/<token> with the topic and push-type headers', async () => {
+  it('posts to /3/device/<token> with the topic and push-type headers, and a Live Activity to the push-type topic', async () => {
+    let answered = 0
     const fake = await startFakeApns((_recorded, stream) => {
-      stream.respond({ ':status': 200, 'apns-id': 'id-1' })
+      stream.respond({ ':status': 200, 'apns-id': `id-${++answered}` })
       stream.end()
     })
     const client = createApnsClient(CONFIG, KEY, { hosts: fake.hosts })
@@ -99,7 +100,18 @@ describe('apns client', () => {
       collapseId: 'c1',
       priority: 5,
     })
+    const live = await client.send({
+      deviceToken: TOKEN,
+      environment: 'development',
+      payload: { aps: { event: 'update' } },
+      pushType: 'liveactivity',
+    })
     client.close()
+    expect(live).toEqual({ ok: true, apnsId: 'id-2' })
+    expect(fake.seen).toHaveLength(2)
+    expect(fake.seen[1]!.headers['apns-push-type']).toBe('liveactivity')
+    expect(fake.seen[1]!.headers['apns-topic']).toBe(`${CONFIG.topic}.push-type.liveactivity`)
+    expect(JSON.parse(fake.seen[1]!.body)).toEqual({ aps: { event: 'update' } })
     expect(result).toEqual({ ok: true, apnsId: 'id-1' })
     const sent = fake.seen[0]!
     expect(sent.headers[':path']).toBe(`/3/device/${TOKEN}`)
@@ -109,25 +121,6 @@ describe('apns client', () => {
     expect(sent.headers['apns-collapse-id']).toBe('c1')
     expect(String(sent.headers.authorization)).toMatch(/^bearer ey/)
     expect(JSON.parse(sent.body)).toEqual({ aps: { alert: 'hi' } })
-    await new Promise((resolve) => fake.server.close(resolve))
-  })
-
-  it('sends a Live Activity push to the push-type topic, which Apple rejects if mismatched', async () => {
-    const fake = await startFakeApns((_recorded, stream) => {
-      stream.respond({ ':status': 200, 'apns-id': 'id-2' })
-      stream.end()
-    })
-    const client = createApnsClient(CONFIG, KEY, { hosts: fake.hosts })
-    await client.send({
-      deviceToken: TOKEN,
-      environment: 'development',
-      payload: { aps: { event: 'update' } },
-      pushType: 'liveactivity',
-    })
-    client.close()
-    const sent = fake.seen[0]!
-    expect(sent.headers['apns-push-type']).toBe('liveactivity')
-    expect(sent.headers['apns-topic']).toBe(`${CONFIG.topic}.push-type.liveactivity`)
     await new Promise((resolve) => fake.server.close(resolve))
   })
 
@@ -213,12 +206,15 @@ describe('apns client', () => {
     const { port } = fake.server.address() as { port: number }
     await new Promise((resolve) => fake.server.close(resolve))
     const url = `http://localhost:${port}`
+    const paused: number[] = []
     const client = createApnsClient(CONFIG, KEY, {
       hosts: { development: url, production: url },
       retryDelayMs: 400,
+      wait: async (ms) => {
+        paused.push(ms)
+        await new Promise<void>((resolve) => fake.server.listen(port, resolve))
+      },
     })
-    // The first attempt fails in milliseconds (local refusal), so the server is back well inside the 400ms redial pause.
-    setTimeout(() => fake.server.listen(port), 100)
     const result = await client.send({
       deviceToken: TOKEN,
       environment: 'development',
@@ -226,6 +222,7 @@ describe('apns client', () => {
     })
     client.close()
     expect(result).toEqual({ ok: true, apnsId: 'id-redial' })
+    expect(paused).toEqual([400])
     expect(fake.seen).toHaveLength(1)
     await new Promise((resolve) => fake.server.close(resolve))
   })

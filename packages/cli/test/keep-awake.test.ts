@@ -116,15 +116,18 @@ describe('driveWakeLock', () => {
 })
 
 describe('the keep-awake flag', () => {
-  it('is on by default and off with --no-keep-awake', () => {
-    expect(resolveInstanceConfig(parseArgs([]), noConfig).keepAwake).toBe(true)
-    expect(resolveInstanceConfig(parseArgs(['--no-keep-awake']), noConfig).keepAwake).toBe(false)
-  })
-
-  it('takes the config file when the flag is absent, and the flag when it is not', () => {
-    const file = { path: null, options: { keepAwake: false } }
-    expect(resolveInstanceConfig(parseArgs([]), file).keepAwake).toBe(false)
-    expect(resolveInstanceConfig(parseArgs(['--no-keep-awake']), file).keepAwake).toBe(false)
+  it('is on by default, off with --no-keep-awake, and takes the config file only when the flag is absent', () => {
+    const fileOff = { path: null, options: { keepAwake: false } }
+    const fileOn = { path: null, options: { keepAwake: true } }
+    const rows = [
+      ['default', [], noConfig, true],
+      ['flag', ['--no-keep-awake'], noConfig, false],
+      ['config off, no flag', [], fileOff, false],
+      ['config on, flag off', ['--no-keep-awake'], fileOn, false],
+    ] as const
+    expect(rows.map(([label, argv, file]) => [label, resolveInstanceConfig(parseArgs([...argv]), file).keepAwake])).toEqual(
+      rows.map(([label, , , expected]) => [label, expected]),
+    )
   })
 
   it('is not passed through to the server, which owns no power policy', () => {
