@@ -4,14 +4,9 @@ import type { TeamFrameKind, TeamResult, TeamStatusAnswer } from '@workerdeck/re
 import { createMemoryAgentStore, type AgentStore, type StoredAgent } from '../src/services/agent-store.ts'
 import { AgentService, isAgentRefusal } from '../src/services/agents.ts'
 import { TeamLinks, type TeamTransport } from '../src/services/team-links.ts'
+import { deferred, until } from './helpers.ts'
 
-type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void }
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((r) => (resolve = r))
-  return { promise, resolve }
-}
+type Deferred<T> = ReturnType<typeof deferred<T>>
 
 type Frame = { kind: TeamFrameKind; from: string; to: string; op?: string }
 
@@ -52,15 +47,13 @@ async function joinRig() {
   const teams = new TeamLinks({ agents, transport })
   const mover = await stored(agents, 'Scout')
   const joining = teams.join(mover, 'mac:L1', (joined) => agents.update(mover.id, { lead: 'mac:L1' }, { joined }))
-  await until(() => transport.frames.length > 0)
+  await until(() => transport.frames.length > 0, 'the join frame')
   return { agents, transport, teams, mover, joining }
 }
 
-async function until(check: () => boolean): Promise<void> {
-  for (let i = 0; i < 100 && !check(); i++) {
-    await new Promise((resolve) => setTimeout(resolve, 1))
-  }
-  expect(check()).toBe(true)
+// Everything here is in memory: one macrotask turn drains every promise chain that is not waiting on a gate.
+function drained(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
 }
 
 describe('agent mutation transitions', () => {
@@ -126,7 +119,7 @@ describe('agent mutation transitions', () => {
     const teams = new TeamLinks({ agents, transport })
     const draft = agents.draft({ name: 'Draft' }) as StoredAgent
     const joining = teams.join(draft, 'mac:L1', (joined) => agents.create(draft, joined))
-    await until(() => transport.frames.length > 0)
+    await until(() => transport.frames.length > 0, 'the join frame')
     const op = transport.frames[0]!.op
     const ask = async (from: string, asked = op) =>
       (await teams.inboundStatus({ gateway: 'mac' }, { edges: [{ from, to: draft.id, op: asked, owner: 'tobias' }] })).edges
@@ -231,10 +224,10 @@ describe('agent mutation transitions', () => {
     const agent = await stored(old, 'Atlas')
     held = true
     const oldWrite = old.update(agent.id, { name: 'Old write' })
-    await until(() => entered === 1)
+    await until(() => entered === 1, 'the old write to reach the store')
     let closed = false
     const closing = old.close().then(() => (closed = true))
-    await new Promise((resolve) => setTimeout(resolve, 5))
+    await drained()
     expect(closed).toBe(false)
     gate.resolve()
     await closing
@@ -261,12 +254,12 @@ describe('agent mutation transitions', () => {
     process.on('unhandledRejection', onUnhandled)
     try {
       const pass = teams.reconcile()
-      await until(() => transport.frames.length > 0)
+      await until(() => transport.frames.length > 0, 'the status request')
       teams.stop()
       await agents.close()
       status.resolve({ edges: [] })
       await pass
-      await new Promise((resolve) => setTimeout(resolve, 5))
+      await drained()
     } finally {
       process.off('unhandledRejection', onUnhandled)
     }
@@ -289,7 +282,7 @@ describe('agent mutation transitions', () => {
     const agents = await service(slow)
     const first = agents.create(agents.draft({ name: 'First' }) as StoredAgent)
     const queued = agents.create(agents.draft({ name: 'Queued' }) as StoredAgent)
-    await until(() => writing === 1)
+    await until(() => writing === 1, 'the first write to reach the store')
     agents.close()
     gate.resolve()
     expect(await first).toMatchObject({ name: 'First' })

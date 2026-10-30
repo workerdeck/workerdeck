@@ -9,6 +9,7 @@ import { createPeerService, resolvePeerMentions } from '../src/services/peers.ts
 import { ProjectInfoService } from '../src/services/project-info.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
 import type { AgentRef } from '@workerdeck/protocol'
+import { until } from './helpers.ts'
 import { PeerRunner } from './peer-runner.ts'
 
 const cleanups: Array<() => unknown> = []
@@ -18,16 +19,6 @@ afterEach(async () => {
     await cleanup()
   }
 })
-
-async function until(check: () => boolean | Promise<boolean>, what: string): Promise<void> {
-  const deadline = Date.now() + 5_000
-  while (!(await check())) {
-    if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${what}`)
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20))
-  }
-}
 
 async function relayRig(): Promise<{ relay: Relay; stateDir: string }> {
   const stateDir = await mkdtemp(join(tmpdir(), 'wd-peer-relay-'))
@@ -348,7 +339,7 @@ describe('peer relay link', () => {
     const connectedAt = relay.status().gateways.find((row) => row.name === 'mac')!.connectedAt
     first.release()
     first.close()
-    await new Promise((resolve) => setTimeout(resolve, 5))
+    await until(() => Date.now() > connectedAt, 'the clock to move past the first dial, which a fresh one is told apart by')
     const second = createRelayLink({ url: relay.url, gateway: 'mac', key, teams: { acceptFrom: ['win'] } }, service, () => {})
     cleanups.push(() => second.close())
     await until(
@@ -372,7 +363,7 @@ describe('peer relay link', () => {
     first.close()
     const slot = (globalThis as Record<symbol, { identity: string } | undefined>)[Symbol.for('workerdeck.relay.carried')]!
     slot.identity = JSON.stringify([relay.url, 'mac', '', 'inline', '', null, null])
-    await new Promise((resolve) => setTimeout(resolve, 5))
+    await until(() => Date.now() > connectedAt, 'the clock to move past the first dial, which a fresh one is told apart by')
     const second = createRelayLink(options, service, () => {})
     cleanups.push(() => second.close())
     await until(

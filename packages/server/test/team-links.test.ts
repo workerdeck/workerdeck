@@ -9,7 +9,7 @@ import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 import { createFileAgentStore, createMemoryAgentStore, type StoredAgent } from '../src/services/agent-store.ts'
 import { AgentService } from '../src/services/agents.ts'
 import { TeamLinks, type TeamTransport } from '../src/services/team-links.ts'
-import { fakeHarness, listenOn } from './helpers.ts'
+import { fakeHarness, listenOn, until } from './helpers.ts'
 
 const cleanups: Array<() => unknown> = []
 
@@ -18,16 +18,6 @@ afterEach(async () => {
     await cleanup()
   }
 })
-
-async function until(check: () => boolean | Promise<boolean>, what: string): Promise<void> {
-  const deadline = Date.now() + 5_000
-  while (!(await check())) {
-    if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${what}`)
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20))
-  }
-}
 
 async function tempDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'wd-team-links-'))

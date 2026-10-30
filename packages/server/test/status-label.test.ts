@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionInfo } from '@workerdeck/protocol'
 import { createFileSessionRecordStore, createWorkerServer } from '../src/index.ts'
-import { fakeHarness, gatewayFixture, listenOn } from './helpers.ts'
+import { fakeHarness, gatewayFixture, listenOn, until } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -51,12 +51,6 @@ async function call<T>(base: string, path: string, method = 'GET', body?: unknow
   return { status: res.status, body: (await res.json()) as T }
 }
 
-async function until(check: () => Promise<boolean>): Promise<void> {
-  for (let i = 0; i < 250 && !(await check()); i++) {
-    await new Promise((r) => setTimeout(r, 20))
-  }
-}
-
 describe('status label', () => {
   it('is set and cleared over PATCH, refused when malformed, and survives a gateway restart as a dormant record', async () => {
     const dir = await stateDir()
@@ -64,7 +58,7 @@ describe('status label', () => {
     const created = await call<{ session: SessionInfo }>(first.base, '/sessions', 'POST', { cwd: '/tmp' })
     const id = created.body.session.id
     first.harness.emit(initMessage)
-    await until(async () => (await call<{ session: SessionInfo }>(first.base, `/sessions/${id}`)).body.session.sdkSessionId === 'sdk-1')
+    await until(async () => (await call<{ session: SessionInfo }>(first.base, `/sessions/${id}`)).body.session.sdkSessionId === 'sdk-1', 'the engine to name its session')
 
     const set = await call<{ session: SessionInfo }>(first.base, `/sessions/${id}`, 'PATCH', {
       statusLabel: { text: ' waiting on CI ', emoji: '⏳' },
@@ -73,7 +67,7 @@ describe('status label', () => {
     expect(set.body.session.statusLabel).toMatchObject({ text: 'waiting on CI', emoji: '⏳' })
     expect((await call(first.base, `/sessions/${id}`, 'PATCH', { statusLabel: { text: 'x'.repeat(81) } })).status).toBe(400)
 
-    await until(async () => (await readFile(join(dir, `${id}.json`), 'utf8').catch(() => '')).includes('waiting on CI'))
+    await until(async () => (await readFile(join(dir, `${id}.json`), 'utf8').catch(() => '')).includes('waiting on CI'), 'the label to reach the record file')
     await first.server.close()
     const second = await startGateway(dir)
     const listed = await call<{ sessions: SessionInfo[] }>(second.base, '/sessions')

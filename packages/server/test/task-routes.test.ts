@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionInfo } from '@workerdeck/protocol'
-import { fakeHarness } from './helpers.ts'
+import { fakeHarness, until } from './helpers.ts'
 import { createSession, get, shellFixture } from './shell-helpers.ts'
 
 const fx = shellFixture('wd-task-routes-')
@@ -11,15 +11,8 @@ function post(base: string, path: string, token = 'operator') {
   return fetch(`${base}${path}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'x-workerdeck-generation': '1' } })
 }
 
-async function waitForStoppable(base: string, id: string): Promise<SessionInfo> {
-  for (let i = 0; i < 100; i++) {
-    const info = ((await (await get(base, `/sessions/${id}`)).json()) as { session: SessionInfo }).session
-    if (info.subagents?.some((sub) => sub.stoppable)) {
-      return info
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10))
-  }
-  throw new Error('no stoppable task appeared')
+async function info(base: string, id: string): Promise<SessionInfo> {
+  return ((await (await get(base, `/sessions/${id}`)).json()) as { session: SessionInfo }).session
 }
 
 describe('POST /sessions/:id/tasks/:toolUseId/stop', () => {
@@ -37,7 +30,7 @@ describe('POST /sessions/:id/tasks/:toolUseId/stop', () => {
       uuid: 'u-1',
       session_id: 'sdk-1',
     } as unknown as SDKMessage)
-    await waitForStoppable(base, id)
+    await until(async () => (await info(base, id)).subagents?.some((sub) => sub.stoppable) === true, 'a stoppable task')
 
     const stopped = await post(base, `/sessions/${id}/tasks/bash-1/stop`)
     expect(stopped.status).toBe(200)
@@ -68,13 +61,8 @@ describe('POST /sessions/:id/tasks/:toolUseId/background', () => {
       apiKeySource: 'user',
       uuid: 'u-0',
     } as unknown as SDKMessage)
-    for (let i = 0; i < 50 && harness.backgroundTasks.mock.calls.length === 0; i++) {
-      const res = await post(base, `/sessions/${id}/tasks/bash-1/background`)
-      if (res.status === 200) {
-        break
-      }
-      await new Promise((resolve) => setTimeout(resolve, 10))
-    }
+    await until(async () => (await info(base, id)).sdkSessionId === 'sdk-1', 'the engine to name its session')
+    expect((await post(base, `/sessions/${id}/tasks/bash-1/background`)).status).toBe(200)
     expect(harness.backgroundTasks).toHaveBeenCalledWith('bash-1')
     expect((await post(base, `/sessions/${id}/tasks/unknown/background`)).status).toBe(404)
     expect((await post(base, `/sessions/${id}/tasks/background`)).status).toBe(200)
