@@ -275,9 +275,10 @@ describe('artifact', () => {
     expect(readFileSync(join(dir, 's1', `${shell.id}.tail.raw`)).toString('utf8')).toBe(tail)
   })
 
-  it('caps at exactly the byte limit and cuts a character that straddles it in the file', async () => {
+  it('caps at exactly the byte limit, cuts the file inside a straddling character, and keeps the text view whole', async () => {
     const dir = tempDir()
-    const shells = makeScripted({ artifactDir: dir, spillBytes: 4, artifactMaxBytes: 11, tailRingBytes: 8, tailFlushMs: 60_000 })
+    const limits = { artifactDir: dir, spillBytes: 4, artifactMaxBytes: 11, tailRingBytes: 8, tailFlushMs: 60_000 }
+    const shells = makeScripted(limits)
     const exact = await scripted(shells, runner('s1'), 'exact')
     exact.child.emit('0123456789a')
     expect(exact.source.info()).toMatchObject({ bytes: 11 })
@@ -288,12 +289,20 @@ describe('artifact', () => {
     exact.child.exit(0)
     const straddled = await finished(shells, runner('s1'), ['0123456789', 'é!'])
     expect(straddled.shell).toMatchObject({ bytes: 13, capped: true })
+    const gapped = await finished(shells, runner('s1'), ['0123456789a', 'bbbé', 'tuvwxyz'])
     await shells.flush()
     expect(readFileSync(join(dir, 's1', `${exact.shell.id}.raw`))).toEqual(Buffer.from('0123456789a'))
     expect(readFileSync(join(dir, 's1', `${straddled.shell.id}.raw`))).toEqual(Buffer.from([...Buffer.from('0123456789'), 0xc3]))
     await expect(shells.output('s1', exact.shell.id, { view: 'raw', tail: 8 })).resolves.toBe('89aéxyz')
-    expect(exact.source.text()).toBe('0123456789aéxyz')
     expect(readFileSync(join(dir, 's1', `${exact.shell.id}.tail.raw`))).toEqual(Buffer.from('89aéxyz'))
+    expect(readFileSync(join(dir, 's1', `${gapped.shell.id}.tail.raw`))).toEqual(Buffer.from([0xa9, ...Buffer.from('tuvwxyz')]))
+    const texts = ['0123456789aéxyz', '0123456789é!', '0123456789a\ntuvwxyz']
+    expect([exact.source.text(), straddled.source.text(), gapped.source.text()]).toEqual(texts)
+
+    const next = makeScripted({ ...limits, generation: 'gen-b' })
+    await next.hydrate()
+    const stored = await Promise.all([exact, straddled, gapped].map(({ shell }) => next.output('s1', shell.id, { view: 'text' })))
+    expect(stored).toEqual(texts)
   })
 
   it('sweeps expired records and their files after the TTL', async () => {
