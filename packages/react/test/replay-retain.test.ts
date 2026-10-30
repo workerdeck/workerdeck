@@ -98,17 +98,6 @@ describe('replay dropping is unobservable', () => {
     expect(state).toEqual(fold(full))
   })
 
-  it('never drops the highest-seq event - the replay hold depends on it', () => {
-    const full = seqd([
-      { type: 'user_message', message: { role: 'user', content: 'go' }, parentToolUseId: null },
-      args('{"a'),
-      args('":1}'),
-    ])
-    const thin = retain(full)
-    expect(thin.at(-1)?.seq).toBe(full.at(-1)?.seq)
-    expect(fold(thin).lastSeq).toBe(fold(full).lastSeq)
-  })
-
   it('touches nothing that is not a stream delta', () => {
     for (const body of [
       { type: 'sdk_event', payload: { type: 'system', subtype: 'status', status: 'requesting' } },

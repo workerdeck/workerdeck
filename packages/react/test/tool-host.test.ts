@@ -3,6 +3,7 @@ import type { SessionHandle } from '@workerdeck/client'
 import type { ToolCallRequestFrame } from '@workerdeck/protocol'
 import type { RunScriptResult } from '@workerdeck/sandbox'
 import { createToolCallHost, type ToolCallHostOptions } from '../src/lib/tool-host.ts'
+import { eventually } from './eventually.ts'
 
 function fakeHandle() {
   const listeners = {
@@ -64,7 +65,7 @@ describe('tool-call host', () => {
     const execute = vi.fn(async () => ok(2))
     const { cleanup } = mount(h.handle, { execute })
     h.request()
-    await vi.waitFor(() => expect(h.results).toHaveLength(1))
+    await eventually(() => expect(h.results).toHaveLength(1))
     expect(h.results[0]).toMatchObject({ executionId: 'exec-1', output: 2, logs: ['[log] hi'] })
     cleanup?.()
   })
@@ -74,7 +75,7 @@ describe('tool-call host', () => {
     const execute = vi.fn(async () => ok(1))
     const { cleanup } = mount(h.handle, { execute })
     h.request({ toolName: 'Bash', input: { command: 'rm -rf /' } })
-    await vi.waitFor(() => expect(h.errors).toHaveLength(1))
+    await eventually(() => expect(h.errors).toHaveLength(1))
     expect(h.errors[0]).toMatchObject({ reason: 'unsupported_tool' })
     expect(execute).not.toHaveBeenCalled()
     cleanup?.()
@@ -85,7 +86,7 @@ describe('tool-call host', () => {
     const execute = vi.fn(async () => ok(1))
     const { cleanup } = mount(h.handle, { execute })
     h.request({ input: { script: 42 } })
-    await vi.waitFor(() => expect(h.errors).toHaveLength(1))
+    await eventually(() => expect(h.errors).toHaveLength(1))
     expect(h.errors[0]).toMatchObject({ reason: 'invalid_input' })
     expect(execute).not.toHaveBeenCalled()
     cleanup?.()
@@ -96,7 +97,7 @@ describe('tool-call host', () => {
     const execute = vi.fn(async (): Promise<RunScriptResult> => ({ ok: false, reason: 'timeout', error: 'deadline', logs: [] }))
     const { cleanup } = mount(h.handle, { execute })
     h.request()
-    await vi.waitFor(() => expect(h.errors).toHaveLength(1))
+    await eventually(() => expect(h.errors).toHaveLength(1))
     expect(h.errors[0]).toMatchObject({ reason: 'timeout', error: 'deadline' })
     cleanup?.()
   })
@@ -108,7 +109,7 @@ describe('tool-call host', () => {
     })
     const { cleanup } = mount(h.handle, { execute })
     h.request()
-    await vi.waitFor(() => expect(h.errors).toHaveLength(1))
+    await eventually(() => expect(h.errors).toHaveLength(1))
     expect(h.errors[0]).toMatchObject({ reason: 'host_error', error: 'failed to load wasm' })
     cleanup?.()
   })
@@ -122,7 +123,7 @@ describe('tool-call host', () => {
     })
     const { cleanup } = mount(h.handle, { execute, timeoutMs: 30_000 })
     h.request({ limits: { timeoutMs: 500 } })
-    await vi.waitFor(() => expect(seen).toHaveLength(1))
+    await eventually(() => expect(seen).toHaveLength(1))
     expect(seen[0]).toBe(500)
     cleanup?.()
   })
@@ -139,7 +140,7 @@ describe('tool-call host', () => {
     )
     const { cleanup } = mount(h.handle, { execute })
     h.request()
-    await vi.waitFor(() => expect(captured).toBeDefined())
+    await eventually(() => expect(captured).toBeDefined())
     h.cancel('exec-1')
     expect(captured!.aborted).toBe(true)
     await new Promise((r) => setTimeout(r, 20))
@@ -168,7 +169,7 @@ describe('tool-call host', () => {
     })
     const { cleanup } = mount(h.handle, { execute })
     h.request({ vfsSeed: { '/doc.txt': 'body' } })
-    await vi.waitFor(() => expect(h.results).toHaveLength(1))
+    await eventually(() => expect(h.results).toHaveLength(1))
     expect(read).toBe('body')
     cleanup?.()
   })

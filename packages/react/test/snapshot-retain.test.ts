@@ -165,13 +165,6 @@ describe('snapshot retention is unobservable', () => {
     })
   })
 
-  it('never drops the last event - the replay hold depends on it', () => {
-    const full = seqd([user('hi'), textDelta('a', 'd1'), assistantText('a', 'a1'), turnEnd()])
-    const thin = retain(full)
-    expect(thin.at(-1)?.seq).toBe(full.at(-1)?.seq)
-    expect(fold(thin).lastSeq).toBe(fold(full).lastSeq)
-  })
-
   it('retains everything that is not a stream delta', () => {
     for (const body of [
       user('hi'),

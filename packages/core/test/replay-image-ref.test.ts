@@ -126,5 +126,23 @@ describe('replaySlice - the two rules composed', () => {
     const last = out[out.length - 1]!
     expect(last.seq).toBe(2)
     expect(partsOf(last)[0]!.type).toBe('image_ref')
+
+    const args = (seq: number, json: string) =>
+      ({
+        seq,
+        ts: seq,
+        type: 'stream_delta',
+        event: { type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: json } },
+        parentToolUseId: null,
+        uuid: 'u',
+      }) as unknown as SessionEvent
+    const trailing = [
+      { seq: 1, ts: 1, type: 'user_message', message: { role: 'user', content: 'go' }, parentToolUseId: null } as unknown as SessionEvent,
+      args(2, '{"a'),
+      args(3, '":1}'),
+    ]
+    const thin = replaySlice(trailing, { afterSeq: 0, imageRefs: true, coalesceReplay: true })
+    expect(thin.map((event) => event.seq)).toEqual([1, 3])
+    expect(thin.at(-1)).toEqual(trailing[2])
   })
 })

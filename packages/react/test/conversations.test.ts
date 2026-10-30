@@ -11,6 +11,7 @@ import {
 } from '@workerdeck/protocol'
 import { conversationReadOnly, useArchivedView } from '../src/hooks/use-archived-view.ts'
 import { renderHook } from './hook-runner.ts'
+import { eventually } from './eventually.ts'
 
 describe('session address', () => {
   it('keys the current conversation by the bare id and a past one by id and n', () => {
@@ -73,18 +74,18 @@ describe('useArchivedView', () => {
     const hiddenApi = client({ history: [] })
     const closedApi = client({ closed: true, history: [] })
     const hidden = renderHook(() => useArchivedView(hiddenApi, { id: 'a', conversation: 1 }, info))
-    await vi.waitFor(() => expect(hidden.current).toEqual({ kind: 'past', at: 1, unavailable: false }))
+    await eventually(() => expect(hidden.current).toEqual({ kind: 'past', at: 1, unavailable: false }))
     const closed = renderHook(() => useArchivedView(closedApi, { id: 'a', conversation: 1 }, info))
-    await vi.waitFor(() => expect(closed.current?.kind).toBe('deleted'))
+    await eventually(() => expect(closed.current?.kind).toBe('deleted'))
   })
 
   it('reads the current conversation again for every past conversation it shows', async () => {
     const api = client({ conversation: 3, history: [] })
     let address = { id: 'a', conversation: 1 }
     const view = renderHook(() => useArchivedView(api, address, info))
-    await vi.waitFor(() => expect(view.current?.current).toBe(3))
+    await eventually(() => expect(view.current?.current).toBe(3))
     address = { id: 'a', conversation: 2 }
     view.rerender()
-    await vi.waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(2))
+    await eventually(() => expect(api.conversations).toHaveBeenCalledTimes(2))
   })
 })

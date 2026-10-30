@@ -46,6 +46,8 @@ describe('a truncated replay', () => {
     expect({ ...cut, items: undefined }).toEqual({ ...whole, items: undefined })
     expect(cut.items.length).toBe(whole.items.length)
     expect(cut.items[1]).toEqual(whole.items[1])
+    const small = cut.items[1]
+    expect(small?.kind === 'tool_call' && small.result).toEqual({ text: 'export const a = 1', isError: false })
   })
 
   it('carries a prefix plus the three markers, and nothing else changes', () => {
@@ -59,14 +61,6 @@ describe('a truncated replay', () => {
     expect(item.result?.sourceSeq).toBe(2)
     expect(item.status).toBe('settled')
     expect({ ...item, result: undefined }).toEqual({ ...whole.items[0], result: undefined })
-  })
-
-  it('sets no marker on a result that was never cut', () => {
-    const item = cut.items[1]
-    if (item?.kind !== 'tool_call') {
-      throw new Error('expected a tool call')
-    }
-    expect(item.result).toEqual({ text: 'export const a = 1', isError: false })
   })
 })
 

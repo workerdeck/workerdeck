@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
@@ -6,6 +6,7 @@ import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import { createToolCallHost } from '../src/lib/tool-host.ts'
+import { eventually } from './eventually.ts'
 
 function idleQueryFn() {
   const query = {
@@ -40,13 +41,12 @@ afterEach(async () => {
   results.length = 0
 })
 
-async function start(bridgeTimeoutMs?: number) {
+async function start(guestTimeoutMs?: number) {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
     buildRunnerConfig: (req) => ({ ...req, queryFn: idleQueryFn() }),
     bridge: {
-      timeoutMs: bridgeTimeoutMs,
       onResult: (_s, executionId, result) => results.push({ executionId, result }),
     },
   })
@@ -58,7 +58,7 @@ async function start(bridgeTimeoutMs?: number) {
   const session = await client.createSession({ cwd: '/tmp/project' })
   handle = client.attach(session.id)
   await new Promise<void>((resolve) => handle!.on('attached', () => resolve()))
-  host = createToolCallHost(handle, { loadEngine: getEngine })
+  host = createToolCallHost(handle, { loadEngine: getEngine, timeoutMs: guestTimeoutMs })
   return { sessionId: session.id }
 }
 
@@ -69,7 +69,7 @@ function dispatch(sessionId: string, script: string, vfsSeed?: Record<string, st
     tool: 'eval_script',
     input: { script },
     vfs: vfsSeed ? createVfs(vfsSeed) : undefined,
-    limits: { timeoutMs: 3000 },
+    limits: { timeoutMs: 10_000 },
   })
 }
 
@@ -81,13 +81,15 @@ describe('bridged execution, end to end', () => {
       `const doc = vfs.read('/leads/acme.txt')
        const revenue = Number(doc.split('revenue:')[1].trim())
        vfs.write('/out/score.json', JSON.stringify({ revenue }))
+       console.log('working')
+       console.error('bad')
        revenue >= 100 ? 'qualified' : 'skip'`,
       { '/leads/acme.txt': 'revenue: 120' },
     )
     expect(pending).toEqual({ executionId: 'exec-1', status: 'pending' })
 
-    await vi.waitFor(() => expect(results).toHaveLength(1), { timeout: 15_000 })
-    expect(results[0]!.result).toMatchObject({ status: 'ok', output: 'qualified' })
+    await eventually(() => expect(results).toHaveLength(1), { timeout: 15_000 })
+    expect(results[0]!.result).toEqual({ status: 'ok', output: 'qualified', logs: ['[log] working', '[error] bad'] })
   }, 20_000)
 
   it('keeps the guest sandboxed on the client side of the wire', async () => {
@@ -97,7 +99,7 @@ describe('bridged execution, end to end', () => {
       `const G = ({}).constructor.constructor('return globalThis')()
        JSON.stringify({ process: typeof G.process, fetch: typeof G.fetch, ws: typeof G.WebSocket })`,
     )
-    await vi.waitFor(() => expect(results).toHaveLength(1), { timeout: 15_000 })
+    await eventually(() => expect(results).toHaveLength(1), { timeout: 15_000 })
     const result = results[0]!.result as { status: string; output: string }
     expect(result.status).toBe('ok')
     expect(JSON.parse(result.output)).toEqual({
@@ -108,16 +110,9 @@ describe('bridged execution, end to end', () => {
   }, 20_000)
 
   it('returns a guest timeout as a failed result the agent can adapt to', async () => {
-    const { sessionId } = await start()
+    const { sessionId } = await start(50)
     await dispatch(sessionId, 'while (true) {}')
-    await vi.waitFor(() => expect(results).toHaveLength(1), { timeout: 15_000 })
-    expect(results[0]!.result).toMatchObject({ status: 'failed', reason: 'timeout' })
-  }, 20_000)
-
-  it('carries guest console output back to the server', async () => {
-    const { sessionId } = await start()
-    await dispatch(sessionId, `console.log('working'); console.error('bad'); 1`)
-    await vi.waitFor(() => expect(results).toHaveLength(1), { timeout: 15_000 })
-    expect(results[0]!.result.logs).toEqual(['[log] working', '[error] bad'])
+    await eventually(() => expect(results).toHaveLength(1), { timeout: 15_000 })
+    expect(results[0]!.result).toEqual({ status: 'failed', reason: 'timeout', error: 'InternalError: interrupted' })
   }, 20_000)
 })
