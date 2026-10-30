@@ -34,6 +34,9 @@ const CONFIG: ApnsConfig = {
 
 const TOKEN = 'a'.repeat(64)
 
+// A port a closed fake had held is free for any parallel suite to listen on; nothing unprivileged can take port 1.
+const REFUSED_PORT = 1
+
 describe('provider token', () => {
   it('signs ES256 as a raw r||s pair, not the DER sequence node defaults to', () => {
     const jwt = createProviderToken(KEY, CONFIG.keyId, CONFIG.teamId).get()
@@ -156,10 +159,7 @@ describe('apns client', () => {
   })
 
   it('reports why the connection died, not just that the stream was canceled', async () => {
-    const dead = await startFakeApns(() => {})
-    const { port } = dead.server.address() as { port: number }
-    await new Promise((resolve) => dead.server.close(resolve))
-    const url = `http://127.0.0.1:${port}`
+    const url = `http://127.0.0.1:${REFUSED_PORT}`
     const client = createApnsClient(CONFIG, KEY, {
       hosts: { development: url, production: url },
       retryDelayMs: 0,
@@ -180,10 +180,7 @@ describe('apns client', () => {
   it('names the refusal even when every address family fails at once', async () => {
     // Depends on `localhost` resolving to both families, which is what makes net aggregate the attempts; on a v4-only
     // resolver this degrades to the single-error case the test above already pins.
-    const probe = await startFakeApns(() => {})
-    const { port } = probe.server.address() as { port: number }
-    await new Promise((resolve) => probe.server.close(resolve))
-    const url = `http://localhost:${port}`
+    const url = `http://localhost:${REFUSED_PORT}`
     const client = createApnsClient(CONFIG, KEY, {
       hosts: { development: url, production: url },
       retryDelayMs: 0,
