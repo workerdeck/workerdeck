@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 import { PromptAcks } from '../src/services/prompt-acks.ts'
 import { ParkableRunner } from './parkable-runner.ts'
-import { frameCollector, listenOn } from './helpers.ts'
+import { eventually, frameCollector, listenOn } from './helpers.ts'
 
 function providerProfile(): ProfileInfo {
   return { name: 'kimi', engine: 'provider', provider: { id: 'moonshotai', model: 'kimi-k3' } }
@@ -96,7 +96,7 @@ describe('prompt acks', () => {
     for (const text of ['a', 'b', 'c']) {
       ws.send(JSON.stringify({ generation: 1, type: 'user_message', text }))
     }
-    await vi.waitFor(() => expect(runner.sent.map((sent) => sent.text)).toEqual(['a', 'b', 'c']))
+    await eventually(() => expect(runner.sent.map((sent) => sent.text)).toEqual(['a', 'b', 'c']))
     expect(collector.frames.some((f) => f.type === 'ack')).toBe(false)
     ws.close()
   })

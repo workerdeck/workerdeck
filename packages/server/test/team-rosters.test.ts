@@ -3,6 +3,7 @@ import { parseRelayPeerId, readTeamRosters, type TeamFrameKind, type TeamResult,
 import { createMemoryAgentStore, type AgentStore, type StoredAgent } from '../src/services/agent-store.ts'
 import { AgentService, isAgentRefusal } from '../src/services/agents.ts'
 import { TeamLinks, type TeamTransport } from '../src/services/team-links.ts'
+import { until } from './helpers.ts'
 
 type Node = { agents: AgentService; teams: TeamLinks; store: AgentStore }
 
@@ -118,13 +119,6 @@ async function team(mesh: Mesh) {
   return { mac, win, pi, lead, leadId, member, mate }
 }
 
-async function until(check: () => boolean): Promise<void> {
-  for (let i = 0; i < 200 && !check(); i++) {
-    await new Promise((resolve) => setTimeout(resolve, 2))
-  }
-  expect(check()).toBe(true)
-}
-
 describe('team rosters', () => {
   it('vouches for a teammate on a third gateway only with a fresh roster from the lead that lists it', async () => {
     const mesh = new Mesh()
@@ -145,7 +139,7 @@ describe('team rosters', () => {
     expect(
       await pi.agents.update(mate.id, { lead: null }, { onLeadChanged: (prev) => pi.teams.left(mate.id, prev.lead, prev.remoteLead?.op) }),
     ).toMatchObject({ id: mate.id })
-    await until(() => (mac.agents.get(lead.id)?.remoteMembers ?? []).length === 1)
+    await until(() => (mac.agents.get(lead.id)?.remoteMembers ?? []).length === 1, 'the lead to list its remote member')
     await mac.teams.reconcile()
     expect(mac.agents.get(lead.id)?.roster).toMatchObject({ rev: 2 })
     expect(win.agents.vouches(mateClaim, 'pi')).toBe(false)
@@ -171,7 +165,7 @@ describe('team rosters', () => {
     const leadId = `mac:${lead.id}`
     await join(win, await agent(win, 'MagWin'), leadId)
     const mate = await join(pi, await agent(pi, 'Tee'), leadId)
-    await until(() => win.agents.vouches({ id: `pi:${mate.id}`, lead: leadId }, 'pi'))
+    await until(() => win.agents.vouches({ id: `pi:${mate.id}`, lead: leadId }, 'pi'), 'the fresh roster to vouch for the mate')
   })
 
   it('takes a higher revision or a new epoch, refuses a lower one, and never goes back to a replaced epoch', async () => {
@@ -414,7 +408,7 @@ describe('restart edge cases', () => {
     expect(cancelled).toMatchObject({ id: mover.id })
     expect(win.agents.get(mover.id)?.pendingJoin).toBeUndefined()
     expect(win.agents.restoredJoins()).toEqual([])
-    await until(() => (mac.agents.get(lead.id)?.remoteMembers ?? []).length === 0)
+    await until(() => (mac.agents.get(lead.id)?.remoteMembers ?? []).length === 0, 'the remote member to leave the lead')
     await win.teams.reconcile()
     expect(win.agents.get(mover.id)?.lead).toBeUndefined()
   })
@@ -471,7 +465,7 @@ describe('unconfirmed edges carried over by the migration', () => {
     expect(mac.agents.vouches({ id: 'win:M', lead: 'mac:L' }, 'win')).toBe(false)
     await mac.teams.reconcile()
     expect(mac.agents.get('L')?.remoteMembers).toEqual([])
-    await until(() => win.agents.get('M')?.lead === undefined)
+    await until(() => win.agents.get('M')?.lead === undefined, 'the member to drop its lead')
   })
 
   it('loads a record from a newer schema but never writes, publishes or reconciles it', async () => {

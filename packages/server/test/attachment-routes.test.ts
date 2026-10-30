@@ -3,7 +3,7 @@ import WebSocket from 'ws'
 import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ServerFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { fakeHarness, listenOn } from './helpers.ts'
+import { fakeHarness, listenOn, until } from './helpers.ts'
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
@@ -59,15 +59,8 @@ async function withSocket(wsBase: string, id: string, fn: (ws: WebSocket, events
 // A fixed sleep here was a flake: 60ms is plenty on an idle machine and not always
 // enough while the other nine packages' suites run beside this one, and the failure
 // lands on `inputs.at(-1)` reading a turn that has not arrived.
-async function until(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (!predicate() && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 5))
-  }
-}
-
 function awaitTurn(harness: ReturnType<typeof fakeHarness>) {
-  return until(() => harness.captured.inputs.length > 0)
+  return until(() => harness.captured.inputs.length > 0, 'the engine to take the turn')
 }
 
 describe('session attachments', () => {
@@ -108,7 +101,7 @@ describe('session attachments', () => {
       // The captured input and the broadcast frame are two independent signals: the runner can
       // have the turn before this socket has been written to, so waiting on one says nothing
       // about the other.
-      await until(() => events.some((e) => e.type === 'user_message'))
+      await until(() => events.some((e) => e.type === 'user_message'), 'the user_message event')
       const logged = events.find((e) => e.type === 'user_message')
       expect(logged).toMatchObject({
         message: { role: 'user', content: 'what is this?' },
@@ -212,7 +205,7 @@ describe('session attachments', () => {
       })
       ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'look', attachmentIds: ['nope'] }))
       // The rejection *is* the signal, so this waits for it rather than for a duration.
-      await until(() => errors.length > 0)
+      await until(() => errors.length > 0, 'the error to be reported')
       expect(errors.join()).toMatch(/unknown attachment\(s\): nope/)
       expect(harness.captured.inputs).toHaveLength(0)
     })

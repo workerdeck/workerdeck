@@ -1,7 +1,7 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import {
   TOOL_RESULT_HEAD_CHARS,
@@ -13,6 +13,7 @@ import {
 } from '@workerdeck/protocol'
 import { createFileSessionRecordStore, createWorkerServer, type SessionRecordStore, type WorkerServer } from '../src/index.ts'
 import { ParkableRunner } from './parkable-runner.ts'
+import { eventually } from './helpers.ts'
 
 function providerProfile(name = 'kimi'): ProfileInfo {
   return {
@@ -75,7 +76,7 @@ describe('deferred execution: parking and result ingestion', () => {
     const h = await startServer()
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect((await running!.parking.get(session.id))?.kind).toBe('parked')
     })
 
@@ -100,7 +101,7 @@ describe('deferred execution: parking and result ingestion', () => {
     const h = await startServer()
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
 
     const res = await submitResult(h.base, 'exec-1', {
       status: 'ok',
@@ -129,7 +130,7 @@ describe('deferred execution: parking and result ingestion', () => {
     const h = await startServer()
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
 
     const res = await submitResult(h.base, 'exec-1', {
       status: 'failed',
@@ -147,9 +148,9 @@ describe('deferred execution: parking and result ingestion', () => {
     const h = await startServer()
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1', 'remote_task', Date.now() + 40)
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
 
-    await vi.waitFor(() => expect(h.runners).toHaveLength(2), { timeout: 2000 })
+    await eventually(() => expect(h.runners).toHaveLength(2))
     expect(h.runners[1]!.settled[0]).toMatchObject({
       executionId: 'exec-1',
       result: { status: 'failed', reason: 'timeout' },
@@ -161,7 +162,7 @@ describe('deferred execution: parking and result ingestion', () => {
     expect((await submitResult(h.base, 'nope', { status: 'ok', output: { type: 'json', value: 1 } })).status).toBe(404)
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
     expect((await submitResult(h.base, 'exec-1', { status: 'weird' })).status).toBe(400)
     expect((await submitResult(h.base, 'exec-1', { status: 'failed' })).status).toBe(400)
     expect((await fetch(`${h.base}/executions/exec-1/result`)).status).toBe(405)
@@ -186,7 +187,7 @@ describe('deferred execution: parking and result ingestion', () => {
     const base = `http://127.0.0.1:${port}/v1`
     const session = await createSession(base, 'kimi')
     runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
 
     const refused = await submitResult(
       base,
@@ -208,22 +209,22 @@ describe('deferred execution: parking and result ingestion', () => {
     const h = await startServer()
     const session = await createSession(h.base)
     const ws = new WebSocket(`ws://127.0.0.1:${h.port}/v1/sessions/${session.id}/ws`)
-    await new Promise<void>((resolve) => ws.on('open', () => resolve()))
+    await new Promise<void>((resolve) => ws.once('message', () => resolve()))
 
+    // The park is declined synchronously, in the handler of the event that asked for it.
     h.runners[0]!.defer('exec-1')
-    await new Promise((r) => setTimeout(r, 60))
     expect(running!.registry.get(session.id)).toBeDefined()
     expect(await running!.parking.get(session.id)).toBeNull()
 
     ws.close()
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
   })
 
   it('rehydrates on attach, so a reconnect finds the session rather than a 404', async () => {
     const h = await startServer()
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
 
     const ws = new WebSocket(`ws://127.0.0.1:${h.port}/v1/sessions/${session.id}/ws`)
     const attached = await new Promise<{ session: SessionInfo }>((resolve, reject) => {
@@ -239,7 +240,7 @@ describe('deferred execution: parking and result ingestion', () => {
     const h = await startServer()
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
 
     const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     expect(((await deleted.json()) as { session: SessionInfo }).session.status).toBe('closed')
@@ -256,7 +257,7 @@ describe('deferred execution: parking and result ingestion', () => {
     const big = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 5_000)
     h.runners[0]!.toolResult('call-1', big)
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect((await running!.parking.get(session.id))?.kind).toBe('parked')
     })
     expect(running!.registry.get(session.id)).toBeUndefined()
@@ -289,15 +290,15 @@ describe('deferred execution: parking and result ingestion', () => {
     }
     const first = await submit()
     const second = await submit()
-    await vi.waitFor(() => expect(h.runners).toHaveLength(1))
+    await eventually(() => expect(h.runners).toHaveLength(1))
 
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const job = (await fetch(`${h.base}/jobs/${first.id}`).then((r) => r.json())) as { job: JobInfo }
       expect(job.job.status).toBe('parked')
       expect(job.job.parkedExecutionId).toBe('exec-1')
     })
-    await vi.waitFor(() => expect(h.runners).toHaveLength(2))
+    await eventually(() => expect(h.runners).toHaveLength(2))
     const stats = (await fetch(`${h.base}/queue`).then((r) => r.json())) as {
       stats: { running: number; parked: number }
     }
@@ -306,7 +307,7 @@ describe('deferred execution: parking and result ingestion', () => {
     await submitResult(h.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 7 } })
     const resumed = h.runners.at(-1)!
     resumed.finish()
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const job = (await fetch(`${h.base}/jobs/${first.id}`).then((r) => r.json())) as { job: JobInfo }
       expect(job.job.status).toBe('succeeded')
     })
@@ -337,10 +338,9 @@ describe('deferred execution: parking and result ingestion', () => {
     }
     const first = await submit()
     await submit()
-    await vi.waitFor(() => expect(refusing).toHaveLength(1))
+    await eventually(() => expect(refusing).toHaveLength(1))
 
     refusing[0]!.defer('exec-1')
-    await new Promise((resolve) => setTimeout(resolve, 100))
     const job = (await fetch(`${h.base}/jobs/${first.id}`).then((r) => r.json())) as { job: JobInfo }
     expect(job.job.status).toBe('running')
     expect(refusing).toHaveLength(1)
@@ -384,7 +384,7 @@ describe('deferred execution: durability across a restart', () => {
     const first = await withStore()
     const session = await createSession(first.base)
     first.runners[0]!.defer('exec-1')
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
     expect(await readdir(dir)).toEqual([`${session.id}.json`])
 
     await running!.close()
@@ -442,7 +442,7 @@ describe('deferred execution: durability across a restart', () => {
     const h = await startServer({ sessions: { store: slowSaveStore(80) }, parking: { parkDelayMs: 10 } })
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(() => expect(running!.registry.get(session.id)).toBeUndefined())
+    await eventually(() => expect(running!.registry.get(session.id)).toBeUndefined())
 
     const res = await submitResult(h.base, 'exec-1', {
       status: 'ok',
@@ -460,11 +460,11 @@ describe('deferred execution: durability across a restart', () => {
     const h = await startServer({ sessions: { store: slowSaveStore(80) }, parking: { parkDelayMs: 10 } })
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
-    await vi.waitFor(() => expect(running!.registry.get(session.id)).toBeUndefined())
+    await eventually(() => expect(running!.registry.get(session.id)).toBeUndefined())
 
     const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
     expect(deleted.status).toBe(200)
-    await new Promise((resolve) => setTimeout(resolve, 150))
+    await running!.parking.flush()
     expect(await runtimeFiles()).toEqual([])
     const listed = (await fetch(`${h.base}/sessions`).then((r) => r.json())) as {
       sessions: SessionInfo[]
@@ -478,16 +478,18 @@ describe('deferred execution: durability across a restart', () => {
     const first = await withStore()
     const session = await createSession(first.base)
     first.runners[0]!.defer('exec-1', 'remote_task', Date.now() + 5_000)
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
     await running!.close()
     await backdateDeadline(session.id)
 
+    const hydrated = Date.now()
     const second = await withStore(10_000)
-    await new Promise((resolve) => setTimeout(resolve, 60))
     expect(second.runners).toHaveLength(0)
+    expect(running!.parking.deadlineOf('exec-1')).toBeGreaterThanOrEqual(hydrated + 10_000)
 
     expect((await submitResult(second.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 1 } })).status).toBe(200)
-    expect(second.runners[0]!.settled[0]).toMatchObject({ result: { status: 'ok' } })
+    expect(second.runners[0]!.settled).toEqual([expect.objectContaining({ result: expect.objectContaining({ status: 'ok' }) })])
+    expect(running!.parking.deadlineOf('exec-1')).toBeUndefined()
   })
 
   it('still fails an expired execution once the grace window is over', async () => {
@@ -495,20 +497,19 @@ describe('deferred execution: durability across a restart', () => {
     const first = await withStore()
     const session = await createSession(first.base)
     first.runners[0]!.defer('exec-1', 'remote_task', Date.now() + 5_000)
-    await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
+    await eventually(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
     await running!.close()
     await backdateDeadline(session.id)
 
     const second = await withStore(0)
     // The settle is what this asserts, and it lands a tick after the resume that triggers it -
     // waiting only for the runner leaves the assertion racing the sweep on a loaded runner.
-    await vi.waitFor(
+    await eventually(
       () =>
         expect(second.runners[0]?.settled[0]).toMatchObject({
           executionId: 'exec-1',
           result: { status: 'failed', reason: 'timeout' },
         }),
-      { timeout: 2000 },
     )
   })
 })

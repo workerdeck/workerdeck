@@ -7,7 +7,7 @@ import { createVfs } from '@workerdeck/sandbox'
 import type { SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
 import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type EngineRunnerContext, type WorkerServer } from '../src/index.ts'
-import { fakeRunner, idleQuery } from './helpers.ts'
+import { eventually, fakeRunner, idleQuery } from './helpers.ts'
 
 let running: WorkerServer | undefined
 let configDir: string | undefined
@@ -162,7 +162,7 @@ describe('provider profiles and engine selection', () => {
     })
     expect(pending.status).toBe('pending')
 
-    await vi.waitFor(() => expect(settled).toHaveLength(1))
+    await eventually(() => expect(settled).toHaveLength(1))
     expect(settled[0]).toMatchObject({
       executionId: 'exec-1',
       result: { status: 'ok', output: 42 },

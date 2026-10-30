@@ -1,13 +1,13 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { ProfileInfo, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { fileRuntimeStore, type RuntimeStore } from './helpers.ts'
+import { eventually, fileRuntimeStore, type RuntimeStore } from './helpers.ts'
 
 // Stands in for claude/codex: no `park()`, but resumable from an engine-owned store keyed by `sdkSessionId`.
 class ResumableRunner implements Runner {
@@ -236,7 +236,7 @@ describe('sessions that survive a restart', () => {
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect((await store.get(session.id))?.kind).toBe('dormant')
     })
     const rows = await list(gateway.base)
@@ -248,7 +248,7 @@ describe('sessions that survive a restart', () => {
     const dir = await stateDir()
     const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
 
@@ -279,7 +279,7 @@ describe('sessions that survive a restart', () => {
     const dir = await stateDir()
     const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base, 'slow')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
@@ -305,7 +305,7 @@ describe('sessions that survive a restart', () => {
     const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
     expect(session.epoch).toBeUndefined()
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
@@ -325,13 +325,13 @@ describe('sessions that survive a restart', () => {
     const dir = await stateDir()
     const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
 
     const renamed = await rename(first.base, session.id, 'The one I named')
     expect(renamed.title).toBe('The one I named')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const record = await fileRuntimeStore(dir).get(session.id)
       expect((record as { config: SessionRunnerConfig }).config.meta?.title).toBe('The one I named')
     })
@@ -357,7 +357,7 @@ describe('sessions that survive a restart', () => {
     const dir = await stateDir()
     const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
@@ -377,7 +377,7 @@ describe('sessions that survive a restart', () => {
     const dir = await stateDir()
     const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base, 'resumable', 'Fix the flaky queue test')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
@@ -397,7 +397,7 @@ describe('sessions that survive a restart', () => {
     const session = await create(first.base, 'resumable', 'Summarize the repo')
     expect(first.built[0]!.sent).toEqual(['Summarize the repo'])
     expect(session.title).toBe('Summarize the repo')
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
 
@@ -423,10 +423,10 @@ describe('sessions that survive a restart', () => {
     const store = await stateDir().then((dir) => fileRuntimeStore(dir))
     const gateway = await startGateway(store)
     const session = await create(gateway.base, 'plain')
-    // Give the save every chance to happen before asserting it did not.
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect((await list(gateway.base)).find((row) => row.id === session.id)?.status).toBe('idle')
     })
+    await gateway.server.parking.flush()
     expect(await store.get(session.id)).toBeNull()
   })
 
@@ -435,13 +435,13 @@ describe('sessions that survive a restart', () => {
     const store = fileRuntimeStore(dir)
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await store.get(session.id)).not.toBeNull()
     })
 
     const res = await fetch(`${gateway.base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
-    expect(res.status).toBeLessThan(300)
-    await vi.waitFor(async () => {
+    expect(res.status).toBe(200)
+    await eventually(async () => {
       expect(await store.get(session.id)).toBeNull()
     })
     expect(await store.records.get(session.id)).toMatchObject({ closedAt: expect.any(Number), conversations: [{ n: 1 }] })
@@ -453,7 +453,7 @@ describe('sessions that survive a restart', () => {
     const dir = await stateDir()
     const first = await startGateway(fileRuntimeStore(dir))
     const session = await create(first.base)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect(await fileRuntimeStore(dir).get(session.id)).not.toBeNull()
     })
     await first.server.close()
@@ -477,13 +477,13 @@ describe('sessions that survive a restart', () => {
     const store = await stateDir().then((dir) => fileRuntimeStore(dir))
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect((await store.get(session.id))?.kind).toBe('dormant')
     })
 
     await gateway.built[0]!.clearContext()
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const record = await store.get(session.id)
       expect(record?.kind).toBe('dormant')
       expect(record && record.kind === 'dormant' ? record.sdkSessionId : 'stale').toBeUndefined()
@@ -495,13 +495,13 @@ describe('sessions that survive a restart', () => {
     const store = await stateDir().then((dir) => fileRuntimeStore(dir))
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       expect((await store.get(session.id))?.kind).toBe('dormant')
     })
 
     gateway.built[0]!.adoptReset('engine-session-2')
 
-    await vi.waitFor(async () => {
+    await eventually(async () => {
       const record = await store.get(session.id)
       expect(record && record.kind === 'dormant' ? record.sdkSessionId : undefined).toBe('engine-session-2')
     })

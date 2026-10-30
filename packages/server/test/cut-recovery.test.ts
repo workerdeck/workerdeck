@@ -17,7 +17,7 @@ import {
 import type { CutFault } from '../src/services/conversation-cuts.ts'
 import type { DormantSessionRecord } from '../src/services/session-store.ts'
 import { EngineRunner } from './engine-runner.ts'
-import { gatewayFixture, listenOn } from './helpers.ts'
+import { deferred, eventually, gatewayFixture, listenOn, settled, until } from './helpers.ts'
 
 let configDir: string
 let serial = 0
@@ -123,12 +123,8 @@ function cut(base: string, id: string, expectedGeneration: number, prompt?: stri
   return call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration, ...(prompt ? { prompt } : {}) })
 }
 
-// A start settles through several record writes: a loaded host can take more than waitFor's default second.
-const SETTLE = { timeout: 5000 }
-
 async function idle(server: WorkerServer, id: string): Promise<void> {
-  await vi.waitFor(() => expect(server.registry.get(id)?.info().status).toBe('idle'), SETTLE)
-  await vi.waitFor(async () => expect((await server.records.get(id))?.cut).toBeUndefined(), SETTLE)
+  await settled(server, id)
   await server.parking.flush()
 }
 
@@ -192,12 +188,13 @@ describe('every fault point leaves a record the next process finishes', () => {
     expect(recovered.startFailed).toBeUndefined()
     expect(recovered.pendingPrompt).toBeUndefined()
     expect(recovered.runtime).toMatchObject({ sdkSessionId: old.engineName, info: { conversation: 1 } })
+    expect((await call(second.base, `/sessions/${id}/conversations`)).body).toMatchObject({ conversation: 1, history: [] })
     await second.server.parking.ensureLive(id)
     expect(second.built[0]!.config.resume).toBe(old.engineName)
     expect(second.built.flatMap((runner) => runner.sent)).toEqual([])
   })
 
-  it('after-commit: n+1 is committed with no engine pointer, and the restart starts it once with the prompt', async () => {
+  it('after-commit: n+1 is committed with no engine pointer, the restart starts it once with the prompt, and a second restart resumes it', async () => {
     const { dir, id, old, res, crashed } = await crashAt('after-commit')
     expect(res.status).toBe(500)
     expect(crashed).toMatchObject({
@@ -224,6 +221,13 @@ describe('every fault point leaves a record the next process finishes', () => {
     expect(recovered.pendingPrompt).toBeUndefined()
     expect(recovered.startFailed).toBeUndefined()
     expect(recovered.runtime).toMatchObject({ sdkSessionId: fresh.engineName, info: { conversation: 2 } })
+    expect((await call(second.base, `/sessions/${id}/conversations`)).body).toMatchObject({ conversation: 2, history: [{ n: 1 }] })
+
+    await stop(second.server)
+    const third = await gateway(dir)
+    await third.server.parking.ensureLive(id)
+    expect(third.built.at(-1)!.config.resume).toBe(fresh.engineName)
+    expect(third.built.flatMap((runner) => runner.sent)).toEqual([])
   })
 
   it('start: the failure is durable with the prompt still pending, and the restart starts n+1 once and sends it', async () => {
@@ -292,22 +296,21 @@ describe('every fault point leaves a record the next process finishes', () => {
     expect((await retry()).status).toBe(409)
 
     releases[0]!()
-    await vi.waitFor(async () => expect((await onDisk(dir, id)).startFailed).toEqual({ n: 2, error: 'recovery fell over' }), SETTLE)
+    await eventually(async () => expect((await onDisk(dir, id)).startFailed).toEqual({ n: 2, error: 'recovery fell over' }))
     expect((await retry()).status).toBe(200)
     expect(second.built).toHaveLength(2)
-    await vi.waitFor(() => expect(releases).toHaveLength(2))
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await until(() => releases.length === 2, 'the retried start to be held')
     expect(await onDisk(dir, id)).toMatchObject({ cut: { phase: 'committed', to: 2 } })
     expect((await onDisk(dir, id)).startFailed).toBeUndefined()
 
     releases[1]!()
     await idle(second.server, id)
-    const settled = await onDisk(dir, id)
-    expect(settled.cut).toBeUndefined()
-    expect(settled.startFailed).toBeUndefined()
+    const after = await onDisk(dir, id)
+    expect(after.cut).toBeUndefined()
+    expect(after.startFailed).toBeUndefined()
     // The recovery start was handed the prompt before it failed: never resent, left for a person to settle.
     expect(second.built[1]!.sent).toEqual([])
-    expect(settled.pendingPrompt).toMatchObject({ text: 'next', state: 'uncertain' })
+    expect(after.pendingPrompt).toMatchObject({ text: 'next', state: 'uncertain' })
   })
 
   it('a context_reset committed before the crash still opens n+1 with the agent reason', async () => {
@@ -351,7 +354,7 @@ describe('every fault point leaves a record the next process finishes', () => {
       },
     })
     const id = await create(first.base)
-    await vi.waitFor(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
+    await eventually(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
     await stop(first.server)
     expect(await onDisk(dir, id)).toMatchObject({ conversation: 1, cut: { from: 0, to: 1, phase: 'committed' } })
 
@@ -439,7 +442,7 @@ describe('recovery is idempotent', () => {
     expect(second.built).toHaveLength(1)
     await idle(second.server, id)
     const successor = second.built[0]!.engineName
-    const settled = await onDisk(dir, id)
+    const before = await onDisk(dir, id)
     await second.server.cuts.recover((error) => {
       throw error
     })
@@ -452,7 +455,7 @@ describe('recovery is idempotent', () => {
     expect(again).toMatchObject({ conversation: 2, conversations: [{ n: 1 }], runtime: { sdkSessionId: successor } })
     expect(again.conversations).toHaveLength(1)
     expect(again.cut).toBeUndefined()
-    expect(again.runtime?.info.epoch).toBe(settled.runtime?.info.epoch)
+    expect(again.runtime?.info.epoch).toBe(before.runtime?.info.epoch)
     await third.server.parking.ensureLive(id)
     expect(third.built[0]!.config.resume).toBe(successor)
     expect(third.built[0]!.sent).toEqual([])
@@ -634,7 +637,7 @@ describe('a hot reload with a cut in flight', () => {
     await closeOld(first.server, gate.release)
     await pending
     // The closed generation's own rollback must land first: two writers on one file share its temp path.
-    await vi.waitFor(async () => expect((await onDisk(dir, id)).cut).toBeUndefined())
+    await eventually(async () => expect((await onDisk(dir, id)).cut).toBeUndefined())
     await first.server.records.flush()
 
     const second = build(dir)
@@ -674,9 +677,9 @@ describe('a hot reload with a cut in flight', () => {
     const id = await create(first.base)
     await idle(first.server, id)
     const pending = cut(first.base, id, 1, 'next').catch(() => undefined)
-    await vi.waitFor(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
+    await eventually(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
     // The intent is durable before the successor is built: wait for it to be the registered runner.
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(first.built[1]).toBeDefined()
       expect(first.server.registry.get(id)).toBe(first.built[1])
     })
@@ -695,7 +698,6 @@ describe('a hot reload with a cut in flight', () => {
     await listening
     await pending
     await idle(second.server, id)
-    await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(second.built).toHaveLength(0)
     expect(first.built).toHaveLength(2)
@@ -769,7 +771,7 @@ describe('a hot reload with a cut in flight', () => {
     resume!()
     await pending
     const late = first.built[1]!
-    await vi.waitFor(() => expect(late.info().status).toBe('closed'))
+    await eventually(() => expect(late.info().status).toBe('closed'))
     expect(first.server.registry.get(id)).toBeUndefined()
     expect(late.sent).toEqual([])
     const left = await onDisk(dir, id)
@@ -811,9 +813,9 @@ describe('a hot reload with a cut in flight', () => {
     const id = await create(first.base)
     await idle(first.server, id)
     const pending = cut(first.base, id, 1, 'next').catch(() => undefined)
-    await vi.waitFor(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
+    await eventually(async () => expect((await onDisk(dir, id)).pendingPrompt?.state).toBe('sending'))
     // The intent is durable before the successor is built: wait for it to be the registered runner.
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(first.built[1]).toBeDefined()
       expect(first.server.registry.get(id)).toBe(first.built[1])
     })
@@ -823,17 +825,24 @@ describe('a hot reload with a cut in flight', () => {
 
     const second = build(dir, { options: { agentStartupTimeoutMs: 5000 } })
     expect(second.server.adoptSession(carried)).toBe(true)
+    const watching = deferred()
+    const subscribe = fresh.subscribe.bind(fresh)
+    vi.spyOn(fresh, 'subscribe').mockImplementation((listener, afterSeq) => {
+      watching.resolve()
+      return subscribe(listener, afterSeq)
+    })
     const listening = listenOn(second.server)
+    // Recovery waits on the carried successor's startup, which only its engine naming the conversation can end.
+    await watching.promise
     idleNow!()
-    await vi.waitFor(() => expect(fresh.info().status).toBe('idle'))
+    await until(() => fresh.info().status === 'idle', 'the carried successor to go idle')
     await second.server.parking.flush()
-    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(await onDisk(dir, id)).toMatchObject({ cut: { phase: 'committed', to: 2 }, pendingPrompt: { text: 'next', state: 'sending' } })
 
     nameNow!()
     await listening
     await pending
-    await vi.waitFor(async () => expect((await onDisk(dir, id)).cut).toBeUndefined())
+    await eventually(async () => expect((await onDisk(dir, id)).cut).toBeUndefined())
     const record = await onDisk(dir, id)
     expect(record.pendingPrompt).toBeUndefined()
     expect(record.startFailed).toBeUndefined()

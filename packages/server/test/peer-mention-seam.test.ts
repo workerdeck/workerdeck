@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 import { ParkableRunner } from './parkable-runner.ts'
-import { frameCollector, listenOn } from './helpers.ts'
+import { eventually, frameCollector, listenOn } from './helpers.ts'
 
 function providerProfile(): ProfileInfo {
   return { name: 'kimi', engine: 'provider', provider: { id: 'moonshotai', model: 'kimi-k3' } }
@@ -57,7 +57,7 @@ describe('`#Name` over the wire', () => {
     const mine = await createSession(base, 'Mine')
     const { ws } = await send(wsBase, mine.id, 'commit what #Astra did')
     const runner = runners.at(-1)!
-    await vi.waitFor(() => expect(runner.sent).toHaveLength(1))
+    await eventually(() => expect(runner.sent).toHaveLength(1))
     expect(runner.sent[0]!.text).toBe('commit what #Astra did')
     expect(runner.sent[0]!.options?.mentions).toMatchObject([{ typed: 'Astra', name: 'Astra' }])
     ws.close()
@@ -69,7 +69,7 @@ describe('`#Name` over the wire', () => {
     const mine = await createSession(base, 'Mine')
     const { ws } = await send(wsBase, mine.id, '/clear #Astra')
     const runner = runners.at(-1)!
-    await vi.waitFor(() => expect(runner.sent).toHaveLength(1))
+    await eventually(() => expect(runner.sent).toHaveLength(1))
     expect(runner.sent[0]!.options).toBeUndefined()
     ws.close()
   })
@@ -80,7 +80,7 @@ describe('`#Name` over the wire', () => {
     const mine = await createSession(base, 'Mine')
     const { ws } = await send(wsBase, mine.id, 'commit what #Astra did')
     const runner = runners.at(-1)!
-    await vi.waitFor(() => expect(runner.sent).toHaveLength(1))
+    await eventually(() => expect(runner.sent).toHaveLength(1))
     expect(runner.sent[0]!.options).toBeUndefined()
     ws.close()
   })

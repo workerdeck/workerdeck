@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { SessionInfo, ToolCallRequestFrame } from '@workerdeck/protocol'
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { frameCollector, idleHarness, listenOn } from './helpers.ts'
+import { eventually, frameCollector, idleHarness, listenOn, until } from './helpers.ts'
 
 let running: WorkerServer | undefined
 const results: Array<{ sessionId: string; executionId: string; result: ToolExecutionResult }> = []
@@ -43,6 +43,15 @@ async function attach(wsBase: string, sessionId: string) {
   return { ws, collector }
 }
 
+// The second refusal is asked for only once the first came back, so whatever earlier frames made the server send is ahead.
+async function roundTrips(ws: WebSocket, collector: ReturnType<typeof frameCollector>): Promise<void> {
+  for (let i = 0; i < 2; i++) {
+    const seen = collector.frames.length
+    ws.send(JSON.stringify({ type: 'interrupt' }))
+    await collector.waitFor((f) => f.type === 'protocol_error' && collector.frames.indexOf(f) >= seen)
+  }
+}
+
 function dispatch(sessionId: string, executionId = 'exec-1', input: unknown = { script: '1+1' }) {
   return running!.bridge.executorFor(sessionId).dispatch({
     executionId,
@@ -78,7 +87,7 @@ describe('browser-bridged tool execution over the wire', () => {
       }),
     )
 
-    await vi.waitFor(() => expect(results).toHaveLength(1))
+    await eventually(() => expect(results).toHaveLength(1))
     expect(results[0]).toMatchObject({
       sessionId: session.id,
       executionId: 'exec-1',
@@ -104,7 +113,7 @@ describe('browser-bridged tool execution over the wire', () => {
       }),
     )
 
-    await vi.waitFor(() => expect(results).toHaveLength(1))
+    await eventually(() => expect(results).toHaveLength(1))
     expect(results[0]!.result).toMatchObject({
       status: 'failed',
       reason: 'timeout',
@@ -134,7 +143,7 @@ describe('browser-bridged tool execution over the wire', () => {
 
     const canceled = await collector.waitFor((f) => f.type === 'tool_call_canceled')
     expect(canceled).toMatchObject({ executionId: 'exec-1', reason: 'timeout' })
-    await vi.waitFor(() => expect(results).toHaveLength(1))
+    await eventually(() => expect(results).toHaveLength(1))
     expect(results[0]!.result).toMatchObject({ status: 'failed', reason: 'timeout' })
     ws.close()
   })
@@ -156,8 +165,11 @@ describe('browser-bridged tool execution over the wire', () => {
         output: { type: 'text', value: 'too late' },
       }),
     )
-    await new Promise((r) => setTimeout(r, 100))
-    expect(collector.frames.some((f) => f.type === 'protocol_error')).toBe(false)
+    await roundTrips(ws, collector)
+    expect(collector.frames.filter((f) => f.type === 'protocol_error')).toEqual([
+      expect.objectContaining({ message: expect.stringContaining('must name its conversation') }),
+      expect.objectContaining({ message: expect.stringContaining('must name its conversation') }),
+    ])
     expect(results).toHaveLength(1)
     ws.close()
   })
@@ -171,8 +183,7 @@ describe('browser-bridged tool execution over the wire', () => {
       ws.on('close', () => resolve())
       ws.close()
     })
-    // Give the server a tick to process the close.
-    await new Promise((r) => setTimeout(r, 50))
+    await until(() => running!.bridge.attachedCount(session.id) === 0, 'the server to detach the socket from the bridge')
 
     const settled = await dispatch(session.id, 'exec-after-detach')
     expect(settled).toMatchObject({ status: 'settled', result: { reason: 'no_client' } })
@@ -188,7 +199,7 @@ describe('browser-bridged tool execution over the wire', () => {
 
     await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE', headers: { 'x-workerdeck-generation': '1' } })
 
-    await vi.waitFor(() => expect(results).toHaveLength(1))
+    await eventually(() => expect(results).toHaveLength(1))
     expect(results[0]!.result).toMatchObject({ status: 'failed', reason: 'session_closed' })
     ws.close()
   })

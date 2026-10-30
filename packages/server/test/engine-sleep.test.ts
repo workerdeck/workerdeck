@@ -3,7 +3,7 @@ import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { Runner, SleepResult } from '@workerdeck/core'
 import type { SessionEvent, SessionInfo, SessionStatus } from '@workerdeck/protocol'
 import { EngineSleepTimers } from '../src/services/engine-sleep.ts'
-import { fakeHarness, fakeRunner } from './helpers.ts'
+import { fakeHarness, fakeRunner, until } from './helpers.ts'
 import { attachSocket, createSession, get, shellFixture } from './shell-helpers.ts'
 
 const fx = shellFixture('wd-engine-sleep-')
@@ -50,22 +50,13 @@ async function info(base: string, id: string): Promise<SessionInfo> {
   return ((await (await get(base, `/sessions/${id}`)).json()) as { session: SessionInfo }).session
 }
 
-async function waitFor(check: () => Promise<boolean>): Promise<void> {
-  for (let i = 0; i < 100; i++) {
-    if (await check()) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10))
-  }
-  throw new Error('condition never held')
-}
 
 describe('POST /sessions/:id/sleep', () => {
   it('refuses a session that has not started a conversation, then sleeps an idle one', async () => {
     const harness = fakeHarness()
     const { base } = await fx.startServer(harness)
     const id = await createSession(base, 'operator', { cwd: fx.tempDir() })
-    await waitFor(async () => (await info(base, id)).status === 'idle')
+    await until(async () => (await info(base, id)).status === 'idle', 'the session to go idle')
 
     const refused = await post(base, `/sessions/${id}/sleep`)
     expect(refused.status).toBe(409)
@@ -73,7 +64,7 @@ describe('POST /sessions/:id/sleep', () => {
 
     harness.emit(INIT)
     harness.emit(RESULT)
-    await waitFor(async () => (await info(base, id)).sdkSessionId === 'sdk-1' && (await info(base, id)).status === 'idle')
+    await until(async () => (await info(base, id)).sdkSessionId === 'sdk-1' && (await info(base, id)).status === 'idle', 'the named session to go idle')
     const slept = await post(base, `/sessions/${id}/sleep`)
     expect(slept.status).toBe(200)
     expect(((await slept.json()) as { session: SessionInfo }).session.engineAsleep).toBe(true)
@@ -87,7 +78,7 @@ describe('POST /sessions/:id/sleep', () => {
     const id = await createSession(base, 'operator', { cwd: fx.tempDir() })
     harness.emit(INIT)
     harness.emit(RESULT)
-    await waitFor(async () => (await info(base, id)).sdkSessionId === 'sdk-1' && (await info(base, id)).status === 'idle')
+    await until(async () => (await info(base, id)).sdkSessionId === 'sdk-1' && (await info(base, id)).status === 'idle', 'the named session to go idle')
     const { ws, collector } = await attachSocket(wsBase, id, 'operator')
     ws.send(JSON.stringify({ generation: 1, type: 'sleep' }))
     await collector.waitFor((frame) => frame.type === 'event' && frame.event.type === 'engine_sleep' && frame.event.asleep)

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, sandboxedProviderProfile, type EngineRunnerContext, type WorkerServer } from '../src/index.ts'
-import { fakeRunner, idleQuery } from './helpers.ts'
+import { fakeRunner, idleQuery, until } from './helpers.ts'
 
 let running: WorkerServer | undefined
 const tempDirs: string[] = []
@@ -107,7 +107,7 @@ describe('set_permission_mode from a non-operator', () => {
     await new Promise((resolve) => ws.once('open', resolve))
     ws.send(JSON.stringify({ generation: 1, type: 'set_permission_mode', mode: 'bypassPermissions' }))
     ws.send(JSON.stringify({ generation: 1, type: 'set_permission_mode', mode: 'dontAsk' }))
-    await expect.poll(() => errors).toHaveLength(2)
+    await until(() => errors.length === 2, 'both errors')
     expect(errors.every((message) => /reserved to operators/.test(message))).toBe(true)
     ws.close()
   })

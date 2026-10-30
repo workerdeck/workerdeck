@@ -5,6 +5,7 @@ import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest'
 import type { EngineAdapter, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type SessionEvent, type SessionEventBody, type SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, reloadPlan, type SessionRecord, type SessionRecordStore, type WorkerServer } from '../src/index.ts'
+import { drained, until } from './helpers.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
 // An engine that runs behind a child process: no `snapshot`, no `park`, resume-capable. This is the shape that a
@@ -236,8 +237,8 @@ describe('the hot-reload seam', () => {
     // `registry.register` silently loses.
     const before = store.deletes
     runner.close('client')
+    await until(() => store.deletes > before, 'the second server to discard the closed session')
     await second.server.parking.flush()
-    await new Promise((resolve) => setTimeout(resolve, 10))
     expect(store.deletes).toBe(before + 1)
     expect(await store.get(created.session.id)).toBeNull()
   })
@@ -260,7 +261,7 @@ describe('the hot-reload seam', () => {
     const saves = store.saves
     runner.work()
     await first.server.parking.flush()
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await drained()
     expect(store.saves).toBe(saves)
   })
 

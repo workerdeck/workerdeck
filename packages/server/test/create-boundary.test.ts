@@ -5,7 +5,7 @@ import type { JobRecord } from '@workerdeck/queue'
 import { InMemoryQueueAdapter } from '@workerdeck/queue'
 import { createWorkerServer, sandboxedProviderProfile, type EngineRunnerContext, type WorkerServer } from '../src/index.ts'
 import { HOST_ONLY_KEYS } from '../src/routes/create-vet.ts'
-import { fakeHarness, fakeRunner, listenOn } from './helpers.ts'
+import { eventually, fakeHarness, fakeRunner, listenOn } from './helpers.ts'
 
 let running: WorkerServer | undefined
 afterEach(async () => {
@@ -165,7 +165,7 @@ describe('the create boundary: an allowlist projection, never a cast', () => {
       expect(stored.request.session).toEqual({ cwd: '/tmp/project', prompt: 'summarize', meta: { source: 'test' } })
       expect(stored.request.meta).toEqual({ job: true })
 
-      await vi.waitFor(() => expect(buildRunnerConfig).toHaveBeenCalledOnce())
+      await eventually(() => expect(buildRunnerConfig).toHaveBeenCalledOnce())
       const handed = buildRunnerConfig.mock.calls[0]![0]
       expect(keysOutsideProtocol(handed)).toEqual([])
       expect(handed.meta).toEqual({ source: 'test', jobId: job.id })

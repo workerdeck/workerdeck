@@ -51,11 +51,13 @@ describe('drain', () => {
   it('waits for a running turn and reports when it finishes', async () => {
     const { server, steer } = await startWith('running')
     const seen: string[][] = []
-    setTimeout(() => steer.finish(), 60)
     const report = await server.drain({
       timeoutMs: 5_000,
       pollMs: 10,
-      onProgress: (r) => seen.push(r.working),
+      onProgress: (r) => {
+        seen.push(r.working)
+        steer.finish()
+      },
     })
     expect(report.working).toEqual([])
     expect(report.timedOut).toBe(false)
@@ -81,7 +83,6 @@ describe('drain', () => {
 
   it('refuses new sessions once draining, but leaves existing ones controllable', async () => {
     const { base, server, steer } = await startWith('running')
-    setTimeout(() => steer.finish(), 300)
     const draining = server.drain({ timeoutMs: 5_000, pollMs: 10 })
 
     const rejected = await fetch(`${base}/sessions`, {
@@ -92,7 +93,8 @@ describe('drain', () => {
     expect(rejected.status).toBe(503)
     // Reading and steering an existing session must keep working - that is how an operator clears an approval.
     expect((await fetch(`${base}/sessions/s-1`)).status).toBe(200)
-    await draining
+    steer.finish()
+    expect(await draining).toMatchObject({ working: [], timedOut: false })
   })
 
   it('pauses the queue and refuses new jobs, so a drain can converge', async () => {

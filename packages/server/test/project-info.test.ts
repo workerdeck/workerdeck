@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ProjectInfo, SessionInfo } from '@workerdeck/protocol'
 import { ProjectInfoService } from '../src/services/project-info.ts'
@@ -317,15 +317,22 @@ describe('ProjectInfoService cache', () => {
     mkdirSync(repo, { recursive: true })
     writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Before' }))
 
-    const cached = new ProjectInfoService() // default TTL - the second read must not walk
-    expect((cached.withProject(infoFor(repo)).project as ProjectInfo).name).toBe('Before')
-    writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'After' }))
-    expect((cached.withProject(infoFor(repo)).project as ProjectInfo).name).toBe('Before')
-
-    const expiring = new ProjectInfoService({ ttlMs: 0 })
-    expect((expiring.withProject(infoFor(repo)).project as ProjectInfo).name).toBe('After')
-    writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Again' }))
-    expect((expiring.withProject(infoFor(repo)).project as ProjectInfo).name).toBe('Again')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const cached = new ProjectInfoService({ ttlMs: 1000 })
+      const name = (): string | undefined => (cached.withProject(infoFor(repo)).project as ProjectInfo).name
+      expect(name()).toBe('Before')
+      writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'After' }))
+      vi.advanceTimersByTime(999)
+      expect(name()).toBe('Before')
+      vi.advanceTimersByTime(1)
+      expect(name()).toBe('After')
+      writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Again' }))
+      vi.advanceTimersByTime(1001)
+      expect(name()).toBe('Again')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('returns the same object when there is nothing to add', () => {

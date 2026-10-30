@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ClearContextOptions, Runner } from '@workerdeck/core'
 import type { AgentInfo, AgentResponse, SessionEvent, SessionEventBody, SessionInfo, SessionStatus } from '@workerdeck/protocol'
 import { CONTEXT_RESET_SCHEDULED, ContextResetService } from '../src/services/context-resets.ts'
-import { fakeHarness } from './helpers.ts'
+import { drained, eventually, fakeHarness, manualStall, until } from './helpers.ts'
 import { createSession, get, shellFixture } from './shell-helpers.ts'
 
 const REQUEST = { prompt: 'continue from @NEXT.md', reason: 'context at 80%' }
@@ -88,7 +88,7 @@ describe('ContextResetService', () => {
 
     runner.emit(turnResult(false))
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await vi.waitFor(() => expect(runner.sent).toEqual([REQUEST.prompt]))
+    await eventually(() => expect(runner.sent).toEqual([REQUEST.prompt]))
     expect(runner.cleared).toEqual([{ agentReason: REQUEST.reason }])
   })
 
@@ -111,7 +111,7 @@ describe('ContextResetService', () => {
 
     runner.emit(turnResult(true))
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await drained()
     expect(runner.cleared).toEqual([])
     await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
   })
@@ -130,7 +130,7 @@ describe('ContextResetService', () => {
     service.watch(runner)
     await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await vi.waitFor(() => expect(cuts).toEqual([['s1', REQUEST.prompt]]))
+    await eventually(() => expect(cuts).toEqual([['s1', REQUEST.prompt]]))
     expect(runner.cleared).toEqual([])
     expect(runner.sent).toEqual([])
     now += 60_000
@@ -145,7 +145,7 @@ describe('ContextResetService', () => {
     service.watch(runner)
     await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
     expect(cuts).toEqual([])
-    await vi.waitFor(() => expect(cuts).toEqual(['s1']))
+    await eventually(() => expect(cuts).toEqual(['s1']))
   })
 
   it('reports a failed cut and leaves the session as it was', async () => {
@@ -160,7 +160,7 @@ describe('ContextResetService', () => {
     service.watch(runner)
     await service.request('s1', REQUEST)
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await vi.waitFor(() => expect(errors).toHaveLength(1))
+    await eventually(() => expect(errors).toHaveLength(1))
     expect(runner.cleared).toEqual([])
     await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
   })
@@ -174,7 +174,7 @@ describe('ContextResetService', () => {
       await service.request('s1', REQUEST)
       const sent = runner.sent.length
       runner.emit({ type: 'status_changed', status: 'idle' })
-      await vi.waitFor(() => expect(runner.sent.length).toBe(sent + 1))
+      await eventually(() => expect(runner.sent.length).toBe(sent + 1))
     }
 
     await resetOnce()
@@ -195,13 +195,13 @@ describe('ContextResetService', () => {
     await service.request('s1', REQUEST)
     runner.emit({ type: 'session_closed', reason: 'server' })
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await drained()
     expect(runner.cleared).toEqual([])
 
     await service.request('s1', REQUEST)
     detach()
     runner.emit({ type: 'status_changed', status: 'idle' })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await drained()
     expect(runner.cleared).toEqual([])
   })
 })
@@ -271,7 +271,7 @@ describe('context_reset through the gateway', () => {
     const off = fakeHarness()
     const { base } = await fx.startServer(off)
     const plain = await createSession(base, 'operator', { cwd: fx.tempDir(), prompt: 'hi' })
-    await vi.waitFor(() => expect(off.captured.options).toBeDefined())
+    await eventually(() => expect(off.captured.options).toBeDefined())
     expect(Object.keys(gatewayTools(off))).not.toContain('context_reset')
     expect((await info(base, plain)).agentContextReset).toBeUndefined()
     await fx.cleanup()
@@ -279,7 +279,7 @@ describe('context_reset through the gateway', () => {
     const asked = fakeHarness()
     const { base: askedBase } = await fx.startServer(asked)
     const id = await createSession(askedBase, 'operator', { cwd: fx.tempDir(), prompt: 'hi', agentContextReset: true })
-    await vi.waitFor(() => expect(asked.captured.options).toBeDefined())
+    await eventually(() => expect(asked.captured.options).toBeDefined())
     expect(Object.keys(gatewayTools(asked)).slice(0, 3)).toEqual(['session_info', 'set_status', 'context_reset'])
     expect((await info(askedBase, id)).agentContextReset).toBe(true)
     await fx.cleanup()
@@ -287,14 +287,14 @@ describe('context_reset through the gateway', () => {
     const forbidden = fakeHarness()
     const { base: forbiddenBase } = await fx.startServer(forbidden, { agentContextReset: false })
     await createSession(forbiddenBase, 'operator', { cwd: fx.tempDir(), prompt: 'hi', agentContextReset: true })
-    await vi.waitFor(() => expect(forbidden.captured.options).toBeDefined())
+    await eventually(() => expect(forbidden.captured.options).toBeDefined())
     expect(Object.keys(gatewayTools(forbidden))).not.toContain('context_reset')
     await fx.cleanup()
 
     const byDefault = fakeHarness()
     const { base: defaultBase } = await fx.startServer(byDefault, { agentContextReset: { default: true } })
     await createSession(defaultBase, 'operator', { cwd: fx.tempDir(), prompt: 'hi', agentContextReset: false })
-    await vi.waitFor(() => expect(byDefault.captured.options).toBeDefined())
+    await eventually(() => expect(byDefault.captured.options).toBeDefined())
     expect(Object.keys(gatewayTools(byDefault))).not.toContain('context_reset')
   })
 
@@ -307,13 +307,12 @@ describe('context_reset through the gateway', () => {
     }
     const { base } = await fx.startServer({ queryFn } as ReturnType<typeof fakeHarness>, { agentContextReset: { default: true } })
     const id = await createSession(base, 'operator', { cwd: fx.tempDir(), prompt: 'work' })
-    await vi.waitFor(() => expect(harnesses).toHaveLength(1))
+    await eventually(() => expect(harnesses).toHaveLength(1))
     const [first] = harnesses
     first!.emit(INIT)
-    await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(1))
+    await eventually(() => expect(first!.captured.inputs).toHaveLength(1))
     first!.emit(REPLY)
-    // The reply names the turn's send once the runner has read it.
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await until(() => fx.server().registry.get(id)?.pendingInput?.() === 0, 'the reply to confirm the opening send')
 
     const result = await gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect(result.isError).toBeFalsy()
@@ -323,10 +322,10 @@ describe('context_reset through the gateway', () => {
     first!.emit(REPLY)
 
     first!.emit(RESULT)
-    await vi.waitFor(() => expect(harnesses).toHaveLength(2))
+    await eventually(() => expect(harnesses).toHaveLength(2))
     const second = harnesses[1]!
     expect(second.captured.options?.resume).toBeUndefined()
-    await vi.waitFor(() => expect(inputTexts(second)).toEqual([REQUEST.prompt]))
+    await eventually(() => expect(inputTexts(second)).toEqual([REQUEST.prompt]))
     expect(inputTexts(first!)).toEqual(['work'])
     const session = await info(base, id)
     expect(session).toMatchObject({ id, conversation: 2 })
@@ -341,21 +340,25 @@ describe('context_reset through the gateway', () => {
     }
     const { base } = await fx.startServer({ queryFn } as ReturnType<typeof fakeHarness>, { agentContextReset: { default: true } })
     const id = await createSession(base, 'operator', { cwd: fx.tempDir(), prompt: 'work' })
-    await vi.waitFor(() => expect(harnesses).toHaveLength(1))
+    await eventually(() => expect(harnesses).toHaveLength(1))
     const [first] = harnesses
     first!.emit(INIT)
-    await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(1))
+    await eventually(() => expect(first!.captured.inputs).toHaveLength(1))
     first!.emit(REPLY)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    fx.server().cuts.stallMs = 40
+    await until(() => fx.server().registry.get(id)?.pendingInput?.() === 0, 'the reply to confirm the opening send')
+    const stall = manualStall(fx.server().cuts)
     const reset = () => gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect((await reset()).content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
     const runner = fx.server().registry.get(id)!
     runner.sendMessage('from a peer', undefined, { origin: { kind: 'peer', sessionId: 'p', name: 'P', engine: 'claude', hops: [] } })
-    await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(2))
+    await eventually(() => expect(first!.captured.inputs).toHaveLength(2))
     first!.emit(RESULT)
-    await vi.waitFor(() => expect(runner.info().status).toBe('idle'))
-    await vi.waitFor(async () => expect((await reset()).content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED), { timeout: 2000 })
+    await until(() => runner.info().status === 'idle', 'the turn to end')
+    await until(() => stall.armed() === 1, 'the queued cut to wait on the unanswered peer message')
+    stall.expire()
+    expect(fx.server().cuts.queued(id)).toBe(false)
+    await drained()
+    expect((await reset()).content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
     expect(harnesses).toHaveLength(1)
     expect(await info(base, id)).toMatchObject({ conversation: 1 })
   })
@@ -375,21 +378,20 @@ describe('context_reset through the gateway', () => {
     })
     const { agent, session } = (await created.json()) as AgentResponse
     expect(session!.id).toBe(agent.id)
-    await vi.waitFor(() => expect(harnesses).toHaveLength(1))
+    await eventually(() => expect(harnesses).toHaveLength(1))
     const [first] = harnesses
     first!.emit(INIT)
-    await vi.waitFor(() => expect(first!.captured.inputs).toHaveLength(1))
+    await eventually(() => expect(first!.captured.inputs).toHaveLength(1))
     first!.emit(REPLY)
-    // The reply names the turn's send once the runner has read it.
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await until(() => fx.server().registry.get(agent.id)?.pendingInput?.() === 0, 'the reply to confirm the opening send')
 
     const result = await gatewayTools(first!).context_reset!.handler(REQUEST, {})
     expect(result.content[0]!.text).toBe(CONTEXT_RESET_SCHEDULED)
     first!.emit(RESULT)
 
-    await vi.waitFor(() => expect(harnesses).toHaveLength(2))
+    await eventually(() => expect(harnesses).toHaveLength(2))
     expect(harnesses[1]!.captured.options?.resume).toBeUndefined()
-    await vi.waitFor(() => expect(inputTexts(harnesses[1]!)).toEqual([REQUEST.prompt]))
+    await eventually(() => expect(inputTexts(harnesses[1]!)).toEqual([REQUEST.prompt]))
     const after = ((await (await get(base, `/agents/${agent.id}`)).json()) as AgentResponse).agent as AgentInfo
     expect(after).toMatchObject({ id: agent.id, name: 'Wren' })
     expect(await info(base, agent.id)).toMatchObject({
@@ -413,15 +415,15 @@ describe('context_reset through the gateway', () => {
     }
     const { base } = await fx.startServer({ queryFn } as ReturnType<typeof fakeHarness>)
     const id = await createSession(base, 'operator', { cwd: fx.tempDir(), prompt: 'work' })
-    await vi.waitFor(() => expect(harnesses).toHaveLength(1))
+    await eventually(() => expect(harnesses).toHaveLength(1))
     const first = harnesses[0]!
     first.emit(INIT)
     first.emit(REPLY)
     const runner = fx.server().registry.get(id)!
     runner.sendMessage('from a peer', undefined, { origin: { kind: 'peer', sessionId: 'p', name: 'P', engine: 'claude', hops: [] } })
-    await vi.waitFor(() => expect(first.captured.inputs).toHaveLength(2))
+    await eventually(() => expect(first.captured.inputs).toHaveLength(2))
     first.emit(RESULT)
-    await vi.waitFor(() => expect(runner.info().status).toBe('idle'))
+    await eventually(() => expect(runner.info().status).toBe('idle'))
     const cut = (generation: number) =>
       fetch(`${base}/sessions/${id}/conversations`, {
         method: 'POST',
@@ -433,13 +435,13 @@ describe('context_reset through the gateway', () => {
     expect(((await held.json()) as { error: string }).error).toContain('not answered')
     first.emit(REPLY)
     first.emit(RESULT)
-    await vi.waitFor(async () => expect((await cut(1)).status).toBe(200))
+    await eventually(async () => expect((await cut(1)).status).toBe(200))
 
-    await vi.waitFor(() => expect(harnesses).toHaveLength(2))
+    await eventually(() => expect(harnesses).toHaveLength(2))
     const next = fx.server().registry.get(id)!
-    await vi.waitFor(() => expect(next.info().status).toBe('idle'))
+    await eventually(() => expect(next.info().status).toBe('idle'))
     next.sendMessage('/cost')
-    await vi.waitFor(() => expect(harnesses[1]!.captured.inputs).toHaveLength(1))
+    await eventually(() => expect(harnesses[1]!.captured.inputs).toHaveLength(1))
     expect((await cut(2)).status).toBe(200)
   })
 })
