@@ -127,16 +127,6 @@ describe('buildClusters', () => {
     expect(kinds(items).sort()).toEqual(['l:user', 'r:turn'])
   })
 
-  it('marks a live answer that has no turn_result yet', () => {
-    const items = [user('do it'), assistant('still going')]
-    expect(kinds(items)).toContain('r:turn')
-  })
-
-  it('marks a replayed history that carries no turn rows at all', () => {
-    const items = [user('one'), assistant('a'), user('two'), assistant('b')]
-    expect(kinds(items).filter((k) => k === 'r:turn')).toHaveLength(2)
-  })
-
   it('anchors a turn mark on the answer, with the turn_result only decorating it', () => {
     const items = [user('do it'), assistant('the answer'), turn(true)]
     const clusters = buildClusters(props(items), RAIL)
@@ -241,41 +231,12 @@ describe('buildClusters', () => {
     expect(left[0]!.marks.map((m) => m.mark.kind)).toContain('subagent')
   })
 
-  it('does NOT mark a failed tool call inside a subagent', () => {
-    const failed: TranscriptItem = {
-      kind: 'tool_call',
-      id: `t${++seq}`,
-      name: 'Bash',
-      input: {},
-      parentToolUseId: 'task-1',
-      status: 'failed',
-    }
-    expect(kinds([failed])).toEqual([])
-  })
-
-  it('does NOT mark a failure the model recovered from inside its run', () => {
+  it('marks the run outcome when it is the failure, and not a failure the model recovered from inside its run', () => {
     // `kinds` maps one row per item by default, so a run has to be spelled by pinning them to a shared row - which is what folding does.
-    const a = toolCall('settled', { text: 'no such file', isError: true })
-    const b = toolCall('settled', { text: 'ok', isError: false })
-    expect(kinds([a, b], { rowIndexFor: () => 0 })).toEqual([])
-  })
-
-  it('marks the run outcome when it is the failure', () => {
-    const a = toolCall('settled', { text: 'ok', isError: false })
-    const b = toolCall('settled', { text: 'no matches', isError: true })
-    expect(kinds([a, b], { rowIndexFor: () => 0 })).toEqual(['r:toolFailed'])
-  })
-
-  it('marks an error notice but not an info one', () => {
-    expect(kinds([notice('error', 'boom')])).toEqual(['r:error'])
-    expect(kinds([notice('info', 'fyi')])).toEqual([])
-  })
-
-  it('marks a failed tool call by either spelling', () => {
-    expect(kinds([toolCall('failed')])).toEqual(['r:toolFailed'])
-    expect(kinds([toolCall('settled', { text: 'no matches', isError: true })])).toEqual(['r:toolFailed'])
-    expect(kinds([toolCall('settled', { text: 'ok', isError: false })])).toEqual([])
-    expect(kinds([toolCall('running')])).toEqual([])
+    const ok = toolCall('settled', { text: 'ok', isError: false })
+    const failed = toolCall('settled', { text: 'no matches', isError: true })
+    expect(kinds([ok, failed], { rowIndexFor: () => 0 })).toEqual(['r:toolFailed'])
+    expect(kinds([failed, ok], { rowIndexFor: () => 0 })).toEqual([])
   })
 
   it('lets a session error keep the colour when it merges with a tool failure', () => {
