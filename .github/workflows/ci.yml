@@ -79,7 +79,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
       - run: cargo install cargo-ndk --locked
       # The runner exports ANDROID_NDK_LATEST_HOME; the `env` context cannot see it, so the shell maps it.
       # The upload key from secrets when they exist, so every CI APK installs over the last; a fork's build falls back
