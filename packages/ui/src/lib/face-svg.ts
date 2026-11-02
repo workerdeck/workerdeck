@@ -344,7 +344,7 @@ function faceParts(options: FaceSvgOptions): FaceParts {
     }
   }
 
-  const { art, glint } = eyes()
+  const { art: eyeArt, glint } = eyes()
   return {
     className: `wd-face st-${state}${warn ? ' warn' : ''}`,
     delay: options.phase ? -(fnv1a(options.phase) % 7000) / 1000 : 0,
@@ -361,7 +361,7 @@ function faceParts(options: FaceSvgOptions): FaceParts {
       tile(`fill="${color(tileColor, 'base')}"`) +
       `<g clip-path="url(#${options.id}-t)"><rect x="0" y="25.5" width="32" height="9" fill="${color(tileColor, 'deep')}" opacity=".35"/>${visor()}</g>` +
       `<rect x="6.5" y="7.4" width="4.2" height="1.5" rx=".75" fill="${color(tileColor, 'soft')}" opacity=".55"/>`,
-    eyes: art,
+    eyes: eyeArt,
     ...(glint ? { glint } : {}),
     mouth: mouth(),
     overlay: statusOverlay(),
