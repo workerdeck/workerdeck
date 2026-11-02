@@ -2062,9 +2062,9 @@ selection's weight; the VS Code webview mixes the theme's warning colour into th
 card that asks for an action is the loudest one. Custom groups draw a badge (`GroupBadge`: the
 group's `icon`, else `customGroupColor`, a stable palette colour until one is picked) and keep the
 case the operator typed; an image from disk is scaled to 64 px and stored as a data URL in the view
-config (`CUSTOM_GROUP_ICON_MAX`). `AgentAvatar` draws the agent's face (`AgentRef.face`) as inline
-SVG through `faceSvg` (`lib/face-svg.ts`, pure, also exported from `./format` for hosts that need a
-file), posed and animated by the row's state (`faceStateOf`); on the agent card it also fills the
+config (`CUSTOM_GROUP_ICON_MAX`). `AgentAvatar` draws the agent's face (`AgentRef.face`) as composited
+HTML layers over inline SVG art through `faceHtml` (`lib/face-svg.ts`, pure; `faceSvg` draws the same
+face as one SVG, exported from `./format` for hosts that need a file), posed and animated by the row's state (`faceStateOf`); on the agent card it also fills the
 backdrop to context use, which replaces the context ring there. The agent card is 48 px (4 px
 padding, a 40 px face, radius 8 around a radius 4 face), a member row 40 px (a 32 px face and a
 12 px gap, so its text lines up with the lead's), rows 4 px apart, and agent names sit on

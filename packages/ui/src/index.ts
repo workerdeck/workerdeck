@@ -191,7 +191,7 @@ export {
   FACE_TONE_VALUES,
   faceOklch,
   faceProjectOf,
-  faceStateOf, faceSvg, faceThemeDeclarations, type FaceState, type FaceSvgOptions, type FaceTheme } from './lib/face-svg.ts'
+  faceHtml, faceStateOf, faceSvg, faceThemeDeclarations, type FaceState, type FaceSvgOptions, type FaceTheme } from './lib/face-svg.ts'
 export { AccountConnectDialog, type AccountConnectDialogProps } from './components/agent/AccountConnectDialog.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'

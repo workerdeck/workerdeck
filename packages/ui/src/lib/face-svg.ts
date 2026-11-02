@@ -120,8 +120,36 @@ export function faceRadiusPx(size: number): number {
   return size === 40 || size === 32 ? 4 : size * 0.1
 }
 
-export function faceSvg(options: FaceSvgOptions): string {
-  const { size, id, theme } = options
+const Z1 = 'M24 2.2h3.2l-3.2 3.4h3.2'
+const Z2 = 'M28.4 -2.4h2.6l-2.6 2.8h2.6'
+const SPARK = 'M28 -1.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z'
+const GLINT = `<rect x="14" y="13" width="3" height="7" fill="#ffffff" opacity=".6"/>`
+const DOTS = [22.2, 25.1, 28]
+
+type FaceParts = {
+  className: string
+  delay: number
+  rx: string
+  ring: string
+  backdrop: string
+  liquid?: { tide: string; waves: { kind: string; path: string }[] }
+  tileClip: string
+  body: string
+  eyes: string
+  glint?: string
+  mouth: string
+  overlay: {
+    zz?: string
+    bubble?: string
+    failed?: string
+    spark?: string
+    pill?: string
+    dot?: string
+  }
+}
+
+function faceParts(options: FaceSvgOptions): FaceParts {
+  const { size, theme } = options
   const state = options.state ?? 'idle'
   const face = resolveAgentFace(options.face)
   const color = (ref: string | undefined, tone: FaceTone): string => {
@@ -135,7 +163,7 @@ export function faceSvg(options: FaceSvgOptions): string {
   const pose = state === 'asleep' || state === 'closed' ? 'closed' : state === 'failed' ? 'x' : 'open'
   const tileColor = face.tile.color
   const tile = (attrs: string) => `<rect x="3" y="5" width="26" height="24" rx="${RADIUS[face.tile.shape]}" ${attrs}/>`
-  const delay = options.phase ? -(fnv1a(options.phase) % 7000) / 1000 : 0
+  const warn = options.context !== undefined && options.context >= (options.threshold ?? 0.4)
 
   const antenna = (): string => {
     const { kind, color: ref } = face.antenna
@@ -185,24 +213,25 @@ export function faceSvg(options: FaceSvgOptions): string {
     return ''
   }
 
-  const eyes = (): string => {
+  const eyes = (): { art: string; glint?: string } => {
     const fill = color(face.eyes.color, 'glow')
     if (pose === 'closed') {
-      return `<rect x="9" y="16" width="14" height="1.4" rx=".7" fill="${fill}" opacity=".5"/>`
+      return { art: `<rect x="9" y="16" width="14" height="1.4" rx=".7" fill="${fill}" opacity=".5"/>` }
     }
     if (pose === 'x') {
-      return [11, 21]
-        .map(
-          (x) =>
-            `<path d="M${x - 1.7} 14.8l3.4 3.4M${x + 1.7} 14.8l-3.4 3.4" stroke="${overlay('danger')}" stroke-width="1.6" stroke-linecap="round"/>`,
-        )
-        .join('')
+      return {
+        art: [11, 21]
+          .map(
+            (x) =>
+              `<path d="M${x - 1.7} 14.8l3.4 3.4M${x + 1.7} 14.8l-3.4 3.4" stroke="${overlay('danger')}" stroke-width="1.6" stroke-linecap="round"/>`,
+          )
+          .join(''),
+      }
     }
-    const glint = (shape: string): string =>
-      state === 'working'
-        ? `<clipPath id="${id}-v">${shape}</clipPath><g clip-path="url(#${id}-v)"><rect class="glint" x="14" y="13" width="3" height="7" fill="#ffffff" opacity=".6"/></g>`
-        : ''
-    const painted = (shape: string): string => shape.replaceAll('/>', ` fill="${fill}"/>`) + glint(shape)
+    const painted = (shape: string) => ({
+      art: shape.replaceAll('/>', ` fill="${fill}"/>`),
+      ...(state === 'working' ? { glint: shape } : {}),
+    })
     switch (face.eyes.kind) {
       case 'split': {
         return painted(
@@ -213,9 +242,13 @@ export function faceSvg(options: FaceSvgOptions): string {
         return painted(`<rect x="7" y="15.4" width="18" height="2.2" rx="1.1"/>`)
       }
       case 'segments': {
-        return [0, 1, 2, 3]
-          .map((i) => `<rect class="seg" style="--i:${i}" x="${8.1 + i * 4.2}" y="14.3" width="3.2" height="4.4" rx="1.3" fill="${fill}"/>`)
-          .join('')
+        return {
+          art: [0, 1, 2, 3]
+            .map(
+              (i) => `<rect class="seg" style="--i:${i}" x="${8.1 + i * 4.2}" y="14.3" width="3.2" height="4.4" rx="1.3" fill="${fill}"/>`,
+            )
+            .join(''),
+        }
       }
       default: {
         return painted(`<rect x="8" y="14.3" width="16" height="4.4" rx="2.2"/>`)
@@ -252,86 +285,183 @@ export function faceSvg(options: FaceSvgOptions): string {
     }
   }
 
-  const statusOverlay = (): string => {
+  const statusOverlay = (): FaceParts['overlay'] => {
+    if (small) {
+      return {}
+    }
     switch (state) {
       case 'asleep': {
-        return (
-          `<g fill="none" stroke="${overlay('zz')}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">` +
-          `<path class="z1" d="M24 2.2h3.2l-3.2 3.4h3.2"/><path class="z2" d="M28.4 -2.4h2.6l-2.6 2.8h2.6"/></g>`
-        )
+        return { zz: `fill="none" stroke="${overlay('zz')}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"` }
       }
       case 'attention': {
-        return (
-          `<g class="bubble"><rect x="20.5" y="-3.5" width="12.5" height="10" rx="5" fill="${overlay('bubble')}"/>` +
-          `<path d="M22.6 5.4l-1.6 3.1 4.1-2.4z" fill="${overlay('bubble')}"/>` +
-          `<rect x="26" y="-1.6" width="1.6" height="4.2" rx=".8" fill="${overlay('ink')}"/>` +
-          `<rect x="26" y="3.3" width="1.6" height="1.6" rx=".8" fill="${overlay('ink')}"/></g>`
-        )
+        return {
+          bubble:
+            `<rect x="20.5" y="-3.5" width="12.5" height="10" rx="5" fill="${overlay('bubble')}"/>` +
+            `<path d="M22.6 5.4l-1.6 3.1 4.1-2.4z" fill="${overlay('bubble')}"/>` +
+            `<rect x="26" y="-1.6" width="1.6" height="4.2" rx=".8" fill="${overlay('ink')}"/>` +
+            `<rect x="26" y="3.3" width="1.6" height="1.6" rx=".8" fill="${overlay('ink')}"/>`,
+        }
       }
       case 'failed': {
-        return (
-          `<rect x="23.5" y="23.5" width="9.5" height="9.5" rx="4.75" fill="${overlay('danger')}"/>` +
-          `<rect x="27.55" y="25.4" width="1.4" height="3.6" rx=".7" fill="#fff"/><rect x="27.55" y="29.7" width="1.4" height="1.4" rx=".7" fill="#fff"/>`
-        )
+        return {
+          failed:
+            `<rect x="23.5" y="23.5" width="9.5" height="9.5" rx="4.75" fill="${overlay('danger')}"/>` +
+            `<rect x="27.55" y="25.4" width="1.4" height="3.6" rx=".7" fill="#fff"/><rect x="27.55" y="29.7" width="1.4" height="1.4" rx=".7" fill="#fff"/>`,
+        }
       }
       case 'starting': {
-        return `<path class="spark" d="M28 -1.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" fill="${overlay('spark')}"/>`
+        return { spark: `fill="${overlay('spark')}"` }
       }
       case 'working': {
-        return (
-          `<g><rect x="20" y="-3" width="12" height="7" rx="3.5" fill="${color('steel', 'screen')}"/>` +
-          [22.2, 25.1, 28]
-            .map((x) => `<rect class="dot" x="${x}" y="-.3" width="1.8" height="1.8" rx=".9" fill="${color('steel', 'soft')}"/>`)
-            .join('') +
-          `</g>`
-        )
+        return {
+          pill: `<rect x="20" y="-3" width="12" height="7" rx="3.5" fill="${color('steel', 'screen')}"/>`,
+          dot: `y="-.3" width="1.8" height="1.8" rx=".9" fill="${color('steel', 'soft')}"`,
+        }
       }
       default: {
-        return ''
+        return {}
       }
     }
   }
 
-  const liquid = (): string => {
+  const liquid = (): FaceParts['liquid'] => {
     if (options.context === undefined) {
-      return ''
+      return undefined
     }
     const level = Math.min(1, Math.max(0, options.context))
-    const warn = level >= (options.threshold ?? 0.4)
     const fill = warn ? color('amber', 'base') : swatchTone(face.backdrop, 'deep')
-    const wave = (amp: number, cls: string, opacity: number, paint = fill) =>
-      `<path class="wave ${cls}" d="${waveTop(amp)}V40H-8Z" fill="${paint}" opacity="${opacity}"/>`
-    const back = warn ? wave(1.1, 'back', 0.7, color('amber', 'glow')) : wave(1.1, 'back', 0.45)
-    const crest = warn
-      ? `<path class="wave crest" d="${waveTop(0.8)}" fill="none" stroke="${color('amber', 'glow')}" stroke-width="1.1"/>`
-      : ''
-    return (
-      `<clipPath id="${id}-f"><rect x="0" y="0" width="32" height="32" rx="${rx}"/></clipPath>` +
-      `<g clip-path="url(#${id}-f)"><g class="tide" style="transform:translateY(${(32 * (1 - level)).toFixed(2)}px)">` +
-      `${back}${wave(0.8, 'front', warn ? 1 : 0.9)}${crest}</g></g>`
-    )
+    const wave = (amp: number, kind: string, opacity: number, paint = fill) => ({
+      kind,
+      path: `d="${waveTop(amp)}V40H-8Z" fill="${paint}" opacity="${opacity}"`,
+    })
+    return {
+      tide: (32 * (1 - level)).toFixed(2),
+      waves: [
+        warn ? wave(1.1, 'back', 0.7, color('amber', 'glow')) : wave(1.1, 'back', 0.45),
+        wave(0.8, 'front', warn ? 1 : 0.9),
+        ...(warn ? [{ kind: 'crest', path: `d="${waveTop(0.8)}" fill="none" stroke="${color('amber', 'glow')}" stroke-width="1.1"` }] : []),
+      ],
+    }
   }
 
-  const ring =
-    state === 'attention' && !small
-      ? `<rect class="ring" x="-1.4" y="-1.4" width="34.8" height="34.8" rx="${(Number(rx) + 1.4).toFixed(2)}" fill="none" stroke="${overlay('bubble')}" stroke-width="1.2"/>`
-      : ''
+  const { art, glint } = eyes()
+  return {
+    className: `wd-face st-${state}${warn ? ' warn' : ''}`,
+    delay: options.phase ? -(fnv1a(options.phase) % 7000) / 1000 : 0,
+    rx,
+    ring:
+      state === 'attention' && !small
+        ? `<rect class="ring" x="-1.4" y="-1.4" width="34.8" height="34.8" rx="${(Number(rx) + 1.4).toFixed(2)}" fill="none" stroke="${overlay('bubble')}" stroke-width="1.2"/>`
+        : '',
+    backdrop: `<rect x="0" y="0" width="32" height="32" rx="${rx}" fill="${color(face.backdrop, 'wash')}"/>`,
+    liquid: liquid(),
+    tileClip: tile(''),
+    body:
+      antenna() +
+      tile(`fill="${color(tileColor, 'base')}"`) +
+      `<g clip-path="url(#${options.id}-t)"><rect x="0" y="25.5" width="32" height="9" fill="${color(tileColor, 'deep')}" opacity=".35"/>${visor()}</g>` +
+      `<rect x="6.5" y="7.4" width="4.2" height="1.5" rx=".75" fill="${color(tileColor, 'soft')}" opacity=".55"/>`,
+    eyes: art,
+    ...(glint ? { glint } : {}),
+    mouth: mouth(),
+    overlay: statusOverlay(),
+  }
+}
+
+function overlaySvg({ zz, bubble, failed, spark, pill, dot }: FaceParts['overlay']): string {
+  if (zz) {
+    return `<g ${zz}><path class="z1" d="${Z1}"/><path class="z2" d="${Z2}"/></g>`
+  }
+  if (bubble) {
+    return `<g class="bubble">${bubble}</g>`
+  }
+  if (spark) {
+    return `<path class="spark" d="${SPARK}" ${spark}/>`
+  }
+  if (pill && dot) {
+    return `<g>${pill}${DOTS.map((x) => `<rect class="dot" x="${x}" ${dot}/>`).join('')}</g>`
+  }
+  return failed ?? ''
+}
+
+export function faceSvg(options: FaceSvgOptions): string {
+  const p = faceParts(options)
+  const { id } = options
+  const liquid = p.liquid
+    ? `<clipPath id="${id}-f"><rect x="0" y="0" width="32" height="32" rx="${p.rx}"/></clipPath>` +
+      `<g clip-path="url(#${id}-f)"><g class="tide" style="transform:translateY(${p.liquid.tide}px)">` +
+      p.liquid.waves.map((w) => `<path class="wave ${w.kind}" ${w.path}/>`).join('') +
+      `</g></g>`
+    : ''
+  const glint = p.glint
+    ? `<clipPath id="${id}-v">${p.glint}</clipPath><g clip-path="url(#${id}-v)">${GLINT.replace('<rect ', '<rect class="glint" ')}</g>`
+    : ''
   return (
-    `<svg class="wd-face st-${state}${options.context !== undefined && options.context >= (options.threshold ?? 0.4) ? ' warn' : ''}" ` +
-    `style="--d:${delay}s" width="${size}" height="${size}" viewBox="0 0 32 32" aria-hidden="true">` +
-    `<defs><clipPath id="${id}-t">${tile('')}</clipPath></defs>` +
-    ring +
-    `<rect x="0" y="0" width="32" height="32" rx="${rx}" fill="${color(face.backdrop, 'wash')}"/>` +
-    liquid() +
+    `<svg class="${p.className}" style="--d:${p.delay}s" width="${options.size}" height="${options.size}" viewBox="0 0 32 32" aria-hidden="true">` +
+    `<defs><clipPath id="${id}-t">${p.tileClip}</clipPath></defs>` +
+    p.ring +
+    p.backdrop +
+    liquid +
     `<g transform="translate(3.2 4.6) scale(.8)"><g class="body">` +
-    antenna() +
-    tile(`fill="${color(tileColor, 'base')}"`) +
-    `<g clip-path="url(#${id}-t)"><rect x="0" y="25.5" width="32" height="9" fill="${color(tileColor, 'deep')}" opacity=".35"/>${visor()}</g>` +
-    `<rect x="6.5" y="7.4" width="4.2" height="1.5" rx=".75" fill="${color(tileColor, 'soft')}" opacity=".55"/>` +
-    `<g class="eyes">${eyes()}</g>` +
-    mouth() +
+    p.body +
+    `<g class="eyes">${p.eyes}${glint}</g>` +
+    p.mouth +
     `</g></g>` +
-    (small ? '' : statusOverlay()) +
+    overlaySvg(p.overlay) +
     `</svg>`
+  )
+}
+
+function art(inner: string): string {
+  return `<svg viewBox="0 0 32 32" width="32" height="32">${inner}</svg>`
+}
+
+function layer(cls: string, inner: string, style?: string): string {
+  return `<span class="${cls}"${style ? ` style="${style}"` : ''}>${inner}</span>`
+}
+
+function overlayLayers({ zz, bubble, failed, spark, pill, dot }: FaceParts['overlay']): string {
+  if (zz) {
+    return layer('z1', art(`<path d="${Z1}" ${zz}/>`)) + layer('z2', art(`<path d="${Z2}" ${zz}/>`))
+  }
+  if (bubble) {
+    return layer('bubble', art(bubble))
+  }
+  if (spark) {
+    return layer('spark', art(`<path d="${SPARK}" ${spark}/>`))
+  }
+  if (pill && dot) {
+    return layer('dots', art(pill) + DOTS.map((x) => layer('dot', art(`<rect x="${x}" ${dot}/>`))).join(''))
+  }
+  return failed ? art(failed) : ''
+}
+
+// The same face as `faceSvg`, with every part that animates a transform lifted into its own HTML layer: Chromium never
+// composites a transform animation inside SVG at a device scale above 1, so the SVG form repaints the page every frame.
+// Sizes scale the geometry through `--k`, never a transform on the root, which costs a render pass per face per frame.
+export function faceHtml(options: FaceSvgOptions): string {
+  const p = faceParts(options)
+  const { id, size } = options
+  const liquid = p.liquid
+    ? layer(
+        'liquid',
+        layer(
+          'tide',
+          p.liquid.waves.map((w) => layer(`wave ${w.kind}`, art(`<path ${w.path}/>`))).join(''),
+          `transform:translateY(${((Number(p.liquid.tide) * size) / 32).toFixed(2)}px)`,
+        ),
+        `border-radius:${faceRadiusPx(size)}px`,
+      )
+    : ''
+  const glint = p.glint ? layer('lens', layer('glint', art(GLINT)), `clip-path:url(#${id}-v)`) : ''
+  const lens = p.glint ? `<clipPath id="${id}-v"${size === 32 ? '' : ` transform="scale(${size / 32})"`}>${p.glint}</clipPath>` : ''
+  const eyes = layer('eyes', art(p.eyes + lens) + glint)
+  return (
+    `<span class="${p.className}" style="--d:${p.delay}s;--k:${size / 32}" aria-hidden="true">` +
+    art(p.ring + p.backdrop) +
+    liquid +
+    layer('frame', layer('body', art(`<defs><clipPath id="${id}-t">${p.tileClip}</clipPath></defs>${p.body}`) + eyes + art(p.mouth))) +
+    overlayLayers(p.overlay) +
+    `</span>`
   )
 }

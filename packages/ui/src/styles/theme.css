@@ -875,7 +875,46 @@ svg.wd-face .body {
   transform-box: fill-box;
   transform-origin: 50% 100%;
 }
-svg.wd-face .tide {
+span.wd-face {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+span.wd-face :is(span, svg) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+span.wd-face .liquid {
+  overflow: hidden;
+}
+span.wd-face .frame {
+  transform: translate(calc(var(--k) * 3.2px), calc(var(--k) * 4.6px)) scale(0.8);
+  transform-origin: 0 0;
+}
+span.wd-face .body {
+  transform-origin: calc(var(--k) * 16px) calc(var(--k) * 34.5px);
+}
+span.wd-face .eyes {
+  transform-origin: calc(var(--k) * 16px) calc(var(--k) * 16.5px);
+}
+span.wd-face .bubble {
+  transform-origin: calc(var(--k) * 26.75px) calc(var(--k) * 2.5px);
+}
+span.wd-face .z1 {
+  transform-origin: calc(var(--k) * 25.6px) calc(var(--k) * 3.9px);
+}
+span.wd-face .z2 {
+  transform-origin: calc(var(--k) * 29.7px) calc(var(--k) * -1px);
+}
+span.wd-face .spark {
+  transform-origin: calc(var(--k) * 28px) calc(var(--k) * 2.1px);
+}
+.wd-face .tide {
   transition: transform 600ms ease-out;
 }
 .wd-face.st-idle .eyes {
@@ -933,14 +972,16 @@ svg.wd-face .tide {
   animation: wd-face-shake 0.45s ease-in-out 1;
   filter: saturate(0.3);
 }
+span.wd-face.st-closed,
 svg.wd-face.st-closed {
   filter: grayscale(1);
   opacity: 0.55;
 }
-svg.wd-face .wave {
+.wd-face .wave {
   animation: wd-face-wave 5s linear infinite var(--d, 0s);
 }
-svg.wd-face .wave.back {
+svg.wd-face .wave.back,
+span.wd-face .wave.back {
   animation-duration: 7s;
   animation-direction: reverse;
 }
@@ -950,7 +991,8 @@ svg.wd-face .wave.back {
 .wd-face.st-working .wave.back {
   animation-duration: 3.1s;
 }
-svg.wd-face .wave.crest {
+svg.wd-face .wave.crest,
+span.wd-face .wave.crest {
   animation:
     wd-face-wave 5s linear infinite var(--d, 0s),
     wd-face-crest 1.8s ease-in-out infinite;
@@ -963,17 +1005,20 @@ svg.wd-face .wave.crest {
 .wd-face:is(.st-asleep, .st-closed, .st-failed) .wave {
   animation: none;
 }
-[data-face-paused] svg.wd-face *,
-svg.wd-face[data-paused] * {
+span.wd-face:is(.st-asleep, .st-closed, .st-failed) .wave.crest {
+  animation: none;
+}
+[data-face-paused] .wd-face *,
+.wd-face[data-paused] * {
   animation-play-state: paused !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  svg.wd-face * {
+  .wd-face * {
     animation: none !important;
     transition: none !important;
   }
 }
-[data-reduce-motion] svg.wd-face * {
+[data-reduce-motion] .wd-face * {
   animation: none !important;
   transition: none !important;
 }
@@ -991,7 +1036,7 @@ svg.wd-face[data-paused] * {
     transform: translateX(0);
   }
   to {
-    transform: translateX(-8px);
+    transform: translateX(calc(var(--k, 1) * -8px));
   }
 }
 @keyframes wd-face-blink {
@@ -1010,7 +1055,7 @@ svg.wd-face[data-paused] * {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-0.9px);
+    transform: translateY(calc(var(--k, 1) * -0.9px));
   }
 }
 @keyframes wd-face-scan {
@@ -1020,11 +1065,11 @@ svg.wd-face[data-paused] * {
   }
   30%,
   45% {
-    transform: translateX(-1.6px);
+    transform: translateX(calc(var(--k, 1) * -1.6px));
   }
   65%,
   80% {
-    transform: translateX(1.6px);
+    transform: translateX(calc(var(--k, 1) * 1.6px));
   }
   100% {
     transform: translateX(0);
@@ -1040,11 +1085,11 @@ svg.wd-face[data-paused] * {
 }
 @keyframes wd-face-glint {
   0% {
-    transform: translateX(-14px);
+    transform: translateX(calc(var(--k, 1) * -14px));
   }
   60%,
   100% {
-    transform: translateX(14px);
+    transform: translateX(calc(var(--k, 1) * 14px));
   }
 }
 @keyframes wd-face-seg {
@@ -1064,7 +1109,7 @@ svg.wd-face[data-paused] * {
     opacity: 0.55;
   }
   30% {
-    transform: translateY(-1.2px);
+    transform: translateY(calc(var(--k, 1) * -1.2px));
     opacity: 1;
   }
 }
@@ -1079,14 +1124,14 @@ svg.wd-face[data-paused] * {
 }
 @keyframes wd-face-zz {
   0% {
-    transform: translate(0, 2px) scale(0.6);
+    transform: translate(0, calc(var(--k, 1) * 2px)) scale(0.6);
     opacity: 0;
   }
   25% {
     opacity: 1;
   }
   100% {
-    transform: translate(3px, -5px) scale(1.1);
+    transform: translate(calc(var(--k, 1) * 3px), calc(var(--k, 1) * -5px)) scale(1.1);
     opacity: 0;
   }
 }
@@ -1125,7 +1170,7 @@ svg.wd-face[data-paused] * {
     transform: scale(1) translateY(0);
   }
   60% {
-    transform: translateY(-1.4px);
+    transform: translateY(calc(var(--k, 1) * -1.4px));
   }
 }
 @keyframes wd-face-ring {
@@ -1143,16 +1188,16 @@ svg.wd-face[data-paused] * {
     transform: translateX(0);
   }
   20% {
-    transform: translateX(-1.2px);
+    transform: translateX(calc(var(--k, 1) * -1.2px));
   }
   40% {
-    transform: translateX(1.2px);
+    transform: translateX(calc(var(--k, 1) * 1.2px));
   }
   60% {
-    transform: translateX(-0.8px);
+    transform: translateX(calc(var(--k, 1) * -0.8px));
   }
   80% {
-    transform: translateX(0.8px);
+    transform: translateX(calc(var(--k, 1) * 0.8px));
   }
 }
 @keyframes wd-linger {

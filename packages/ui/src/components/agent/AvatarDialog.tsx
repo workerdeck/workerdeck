@@ -16,7 +16,7 @@ import {
   type FaceTone,
 } from '@workerdeck/protocol'
 import { Shuffle } from 'lucide-react'
-import { faceSvg, type FaceState } from '../../lib/face-svg.ts'
+import { faceHtml, type FaceState } from '../../lib/face-svg.ts'
 import { Button } from '../ui/Button.tsx'
 import { Dialog, DialogBody, DialogContent, DialogHeader } from '../ui/Dialog.tsx'
 import { OptionSelect } from '../ui/Select.tsx'
@@ -62,9 +62,9 @@ export function FaceView({ face, project, state = 'idle', size, phase }: FaceVie
   const id = `wdf${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   return (
     <span
-      className="inline-flex shrink-0"
+      className="relative inline-flex shrink-0"
       style={{ width: size, height: size }}
-      dangerouslySetInnerHTML={{ __html: faceSvg({ face, project, state, size, id, phase }) }}
+      dangerouslySetInnerHTML={{ __html: faceHtml({ face, project, state, size, id, phase }) }}
     />
   )
 }

@@ -2,7 +2,7 @@ import { useId } from 'react'
 import type { SessionRow, SessionState } from '@workerdeck/protocol'
 import { EngineIcon, vendorMarkClass } from './EngineIcon.tsx'
 import { SessionStatusIcon } from './SessionStatusIcon.tsx'
-import { CONTEXT_WRAP_UP_DEFAULT, faceProjectOf, faceStateOf, faceSvg } from '../../lib/face-svg.ts'
+import { CONTEXT_WRAP_UP_DEFAULT, faceHtml, faceProjectOf, faceStateOf } from '../../lib/face-svg.ts'
 import { cn } from '../../lib/utils.ts'
 
 export interface AgentAvatarProps {
@@ -26,7 +26,7 @@ export function AgentAvatar({ row, size = 32, state, context = false, wrapUp = C
     return <EngineTile row={row} size={size} state={state} badge={badge} title={title} className={className} />
   }
   const usage = context ? info.contextUsage : undefined
-  const markup = faceSvg({
+  const markup = faceHtml({
     face: agent.face,
     project: faceProjectOf(info),
     state: faceStateOf(row, state),

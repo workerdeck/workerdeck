@@ -1911,8 +1911,8 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   when it differs, as `never` for 0).
 - **An avatar is a face: a recipe, never an image.** `AgentInfo.face` / `AgentRef.face`
   (`AgentFace`, `packages/protocol/src/faces.ts`) names a kind and a colour for a fixed set of
-  slots (backdrop, tile, antenna, visor, eyes, mouth); clients draw it as SVG (`faceSvg`,
-  `packages/ui/src/lib/face-svg.ts`). The gateway draws nothing and serves no image route; it rolls,
+  slots (backdrop, tile, antenna, visor, eyes, mouth); clients draw it from one part builder in
+  `packages/ui/src/lib/face-svg.ts`: `faceHtml` for anything animated, `faceSvg` for files. The gateway draws nothing and serves no image route; it rolls,
   validates (`agentFaceError`, size capped at `AGENT_FACE_MAX_BYTES`) and stores. Unknown kinds draw
   as their slot's first kind, so an older client survives a newer kit.
 - **Colours are swatches, never hex.** A colour is `<swatch>[/<tone>]`; `project` stands for the
@@ -1928,8 +1928,16 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   session named by PATCH gets it at its next wake, not at once.
 - **The face carries the status, not a badge.** `faceStateOf` maps the row (a folded lead passes its
   team's state) to idle, asleep, starting, working, attention, failed or closed; CSS keyframes on
-  `svg.wd-face.st-<state>` animate transform and opacity only, offset per agent by `--d` from the id
-  hash, and stop under `prefers-reduced-motion`. The markup is set as `innerHTML` and React only
+  `.wd-face.st-<state>` animate transform and opacity only, offset per agent by `--d` from the id
+  hash, and stop under `prefers-reduced-motion`.
+- **An animated face is HTML layers, never one SVG.** Chromium (VS Code's Electron included) never
+  composites a transform animation inside SVG at a device scale above 1: on Retina every moving
+  part restyled, painted and committed the page 60 times a second (13 cards cost a webview renderer
+  about 40% CPU). `faceHtml` lifts each transform-animated part into its own `span` over static SVG
+  art; opacity animations stay in SVG, which composites. Sizes scale the geometry through `--k`
+  (`calc(var(--k, 1) * Npx)` in the keyframes, origins and offsets), never `zoom` (zoom is what
+  blocks compositing) nor a `transform` on the root (a render pass per face per frame). Verify with
+  a CDP trace: steady state is about 0 `ProxyMain::BeginMainFrame` and no `DrawRenderPass` per frame. The markup is set as `innerHTML` and React only
   rewrites it when the string changes, so a poll that changes nothing never restarts an animation.
   The agent card also fills the backdrop to context use, amber from `CONTEXT_WRAP_UP_DEFAULT`.
 
