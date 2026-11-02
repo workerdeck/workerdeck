@@ -1937,7 +1937,9 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   art; opacity animations stay in SVG, which composites. Sizes scale the geometry through `--k`
   (`calc(var(--k, 1) * Npx)` in the keyframes, origins and offsets), never `zoom` (zoom is what
   blocks compositing) nor a `transform` on the root (a render pass per face per frame). Verify with
-  a CDP trace: steady state is about 0 `ProxyMain::BeginMainFrame` and no `DrawRenderPass` per frame. The markup is set as `innerHTML` and React only
+  a CDP trace: steady state is about 0 `ProxyMain::BeginMainFrame` and no `DrawRenderPass` per frame.
+  The same rule binds every icon: never put `animate-spin` (or any transform animation) on an `<svg>`,
+  even the root of a lucide icon; spin a wrapping `span` (`Spinner` does). The markup is set as `innerHTML` and React only
   rewrites it when the string changes, so a poll that changes nothing never restarts an animation.
   The agent card also fills the backdrop to context use, amber from `CONTEXT_WRAP_UP_DEFAULT`.
 

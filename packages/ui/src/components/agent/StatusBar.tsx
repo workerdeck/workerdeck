@@ -176,7 +176,9 @@ export function StatusBar({
             {LINK_META[link].down ? (
               <WifiOff className="size-3 self-center text-current" />
             ) : (
-              <RefreshCw className="size-3 animate-spin self-center text-current" />
+              <span className="inline-flex size-3 animate-spin self-center text-current">
+                <RefreshCw className="size-full" />
+              </span>
             )}
             {LINK_META[link].label}
           </Badge>
