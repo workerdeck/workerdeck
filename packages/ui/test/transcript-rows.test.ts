@@ -3,7 +3,7 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { taskChildItems, terminalBlocks, type TaskBlock, type ToolCallItem } from '../src/components/terminal/blocks.ts'
 import { blockHeight, createHeightEpoch, estimateBlockPx, itemHeight, textLines } from '../src/components/terminal/height.ts'
 import { runSummary, taskSummary } from '../src/components/terminal/tool-run.ts'
-import { gapBefore, positionInRow, rowIndexForItem, rowItem, sameRow, type TranscriptRow } from '../src/components/agent/transcript-rows.ts'
+import { gapBefore, positionInRow, rowIndexForItem, rowItem, keepsRowKeys, sameRow, type TranscriptRow } from '../src/components/agent/transcript-rows.ts'
 
 let seq = 0
 function tool(name: string, parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem {
@@ -340,6 +340,37 @@ describe('sameRow', () => {
       const counterpart = blocks.find((row) => row.key === rows[at]!.key)
       expect(counterpart, name).toBeDefined()
       expect(sameRow(rows[at]!, counterpart!), name).toBe(false)
+    }
+  })
+})
+
+describe('keepsRowKeys', () => {
+  it('keeps the key callback only when no estimated row could have changed size', () => {
+    const say = text('hello')
+    const a = tool('Bash')
+    const b = tool('Read')
+    const reply = text('done')
+    const next = user('next')
+    const base = [say, a, next, b, reply]
+    const rows = terminalBlocks(base)
+    const all = () => true
+    const none = () => false
+    const tailed = { ...b, status: 'running', liveTail: 'line' } as TranscriptItem
+    const onlyLast = (key: string) => key === rows.at(-1)!.key
+    const absorbed = tool('Bash')
+    const cases: [string, TranscriptItem[], (key: string) => boolean, boolean][] = [
+      ['rows rebuilt from the same items', [...base], none, true],
+      ['an unmeasured row gets a live tail', [say, a, next, tailed, reply], none, false],
+      ['a measured row changes and the row below is measured', [say, a, next, tailed, reply], all, true],
+      ['a measured row changes above an unmeasured one', [say, a, next, tailed, reply], (key) => key !== rows.at(-1)!.key, false],
+      ['the measured last row grows', [say, a, next, b, { ...reply, text: 'done, and more' } as TranscriptItem], onlyLast, true],
+      ['a row appended', [...base, text('more')], all, false],
+      ['a measured run absorbs the next call', [say, a, absorbed, next, b, reply], all, true],
+      ['an unmeasured run absorbs the next call', [say, a, absorbed, next, b, reply], none, false],
+      ['same count, a key replaced', [say, tool('Bash'), next, b, reply], all, false],
+    ]
+    for (const [name, after, measured, kept] of cases) {
+      expect(keepsRowKeys(rows, terminalBlocks(after), measured), name).toBe(kept)
     }
   })
 })

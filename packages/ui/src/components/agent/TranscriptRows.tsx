@@ -12,7 +12,7 @@ import { briefPx, estimateBlockPx } from '../terminal/height.ts'
 import { PeerNamesProvider } from '../terminal/peer-names.tsx'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
 import { Scrubber } from './Scrubber.tsx'
-import { gapBefore, positionInRow, rowIndexForItem, sameRow, type TranscriptRow } from './transcript-rows.ts'
+import { gapBefore, keepsRowKeys, positionInRow, rowIndexForItem, sameRow, type TranscriptRow } from './transcript-rows.ts'
 import { useHeightEpoch } from './use-height-epoch.ts'
 import { absorbScrollerResize, useTranscriptJumps } from './use-transcript-jumps.ts'
 import { BriefRow, TaskRow } from '../terminal/TerminalTranscript.tsx'
@@ -255,6 +255,27 @@ export function TranscriptRows({
   const rowsRef = useRef<HTMLDivElement | null>(null)
   const epoch = useHeightEpoch({ terminal, fontSize, lineHeight, rowsRef })
 
+  // A fresh key callback makes the virtualizer rebuild every row's position, so it is handed over only when that is
+  // what changed (`keepsRowKeys`); the callback reads the latest rows either way.
+  const latestRows = useRef(rows)
+  latestRows.current = rows
+  const virtualizerRef = useRef<{ itemSizeCache: Map<unknown, number> } | null>(null)
+  const keyed = useRef<{ rows: readonly TranscriptRow[]; inputs: readonly unknown[]; getItemKey: (index: number) => string } | null>(null)
+  const keyInputs = [terminal, epoch, gap.px]
+  const previous = keyed.current
+  if (!previous || previous.rows !== rows || previous.inputs.some((input, index) => input !== keyInputs[index])) {
+    const keep =
+      previous !== null &&
+      previous.inputs.every((input, index) => input === keyInputs[index]) &&
+      keepsRowKeys(previous.rows, rows, (key) => virtualizerRef.current?.itemSizeCache.has(key) ?? false)
+    keyed.current = {
+      rows,
+      inputs: keyInputs,
+      getItemKey: keep ? previous.getItemKey : (index) => latestRows.current[index]!.key,
+    }
+  }
+  const getItemKey = keyed.current!.getItemKey
+
   const virtualizer = useVirtualizer<HTMLElement, HTMLDivElement>({
     count: rows.length,
     // The return type is annotated because the body reads `virtualizer` back: without it the inference is circular and tsgo gives up on the hook.
@@ -280,7 +301,7 @@ export function TranscriptRows({
       return (terminal ? 36 : 100) + gap.px
     },
     overscan: 8,
-    getItemKey: (index) => rows[index].key,
+    getItemKey,
     rangeExtractor: useCallback((range: Range) => {
       const indexes = new Set(defaultRangeExtractor(range))
       const { enabled, promptRows: prompts } = pinRef.current
@@ -302,6 +323,7 @@ export function TranscriptRows({
     }, []),
     useFlushSync: true,
   })
+  virtualizerRef.current = virtualizer
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
     if (stick.state.isAtBottom) {
       return false
