@@ -3,7 +3,7 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { taskChildItems, terminalBlocks, type TaskBlock, type ToolCallItem } from '../src/components/terminal/blocks.ts'
 import { blockHeight, createHeightEpoch, estimateBlockPx, itemHeight, textLines } from '../src/components/terminal/height.ts'
 import { runSummary, taskSummary } from '../src/components/terminal/tool-run.ts'
-import { gapBefore, positionInRow, rowIndexForItem, rowItem, type TranscriptRow } from '../src/components/agent/transcript-rows.ts'
+import { gapBefore, positionInRow, rowIndexForItem, rowItem, sameRow, type TranscriptRow } from '../src/components/agent/transcript-rows.ts'
 
 let seq = 0
 function tool(name: string, parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem {
@@ -312,5 +312,34 @@ describe('run block height', () => {
     const grown = runBlockOf([first, ...['Read', 'Edit', 'Grep', 'Write', 'Glob', 'WebFetch'].map((name) => tool(name))])
     expect(blockHeight(grown, epoch).px).not.toBe(px)
     expect(estimateBlockPx(grown, epoch)).toBe(blockHeight(grown, epoch).px)
+  })
+})
+
+describe('sameRow', () => {
+  it('keeps a rebuilt row only while its key, positions and member items are identical', () => {
+    const a = tool('Bash')
+    const b = tool('Bash')
+    const lead = task('S', { description: 'x' })
+    const child = tool('Read', 'S')
+    const say = text('hello')
+    const items = [say, a, b, lead, child]
+    const rows = terminalBlocks(items)
+    const rebuilt = terminalBlocks([...items])
+    rows.forEach((row, index) => expect(sameRow(row, rebuilt[index]!), row.key).toBe(true))
+    const settled = { ...b, status: 'failed' } as TranscriptItem
+    const changed: [string, TranscriptItem[], number][] = [
+      ['a run member replaced', [say, a, settled, lead, child], 1],
+      ['a run grown', [say, a, b, tool('Bash'), lead, child], 1],
+      ['a task child replaced', [say, a, b, lead, { ...child } as TranscriptItem], 2],
+      ['a task child added', [say, a, b, lead, child, tool('Grep', 'S')], 2],
+      ['an item row replaced', [{ ...say } as TranscriptItem, a, b, lead, child], 0],
+      ['rows shifted by an insert', [user('first'), say, a, b, lead, child], 1],
+    ]
+    for (const [name, next, at] of changed) {
+      const blocks = terminalBlocks(next)
+      const counterpart = blocks.find((row) => row.key === rows[at]!.key)
+      expect(counterpart, name).toBeDefined()
+      expect(sameRow(rows[at]!, counterpart!), name).toBe(false)
+    }
   })
 })

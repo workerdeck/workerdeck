@@ -1,10 +1,49 @@
 import type { TranscriptItem } from '@workerdeck/react'
-import { needsBlank, type TerminalBlock } from '../terminal/blocks.ts'
+import { needsBlank, type LeafBlock, type TerminalBlock } from '../terminal/blocks.ts'
 
 const absorbedCache = new WeakMap<readonly TranscriptRow[], Map<number, number>>()
 const positionCache = new WeakMap<readonly TranscriptRow[], Map<number, RowPosition>>()
 
 export type TranscriptRow = TerminalBlock | { key: 'recap'; line: string } | { key: 'brief'; text: string }
+
+function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index])
+}
+
+function sameLeaf(a: LeafBlock, b: LeafBlock): boolean {
+  if (a.key !== b.key || a.index !== b.index) {
+    return false
+  }
+  if ('run' in a) {
+    return 'run' in b && sameList(a.run, b.run) && sameList(a.indices, b.indices)
+  }
+  return 'item' in b && a.item === b.item
+}
+
+// Blocks are rebuilt on every pass; a row draws the same thing while its key, positions and member items are identical.
+export function sameRow(a: TranscriptRow, b: TranscriptRow): boolean {
+  if (a === b) {
+    return true
+  }
+  if ('line' in a) {
+    return 'line' in b && a.line === b.line
+  }
+  if ('text' in a) {
+    return 'text' in b && a.text === b.text
+  }
+  if ('task' in a) {
+    return (
+      'task' in b &&
+      a.key === b.key &&
+      a.index === b.index &&
+      a.task === b.task &&
+      sameList(a.childIndices, b.childIndices) &&
+      a.children.length === b.children.length &&
+      a.children.every((leaf, index) => sameLeaf(leaf, b.children[index]!))
+    )
+  }
+  return !('line' in b) && !('text' in b) && !('task' in b) && sameLeaf(a, b)
+}
 
 export function rowItem(row: TranscriptRow | undefined): TranscriptItem | undefined {
   if (!row) {

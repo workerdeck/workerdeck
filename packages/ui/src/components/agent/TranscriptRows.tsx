@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
@@ -12,7 +12,7 @@ import { briefPx, estimateBlockPx } from '../terminal/height.ts'
 import { PeerNamesProvider } from '../terminal/peer-names.tsx'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
 import { Scrubber } from './Scrubber.tsx'
-import { gapBefore, positionInRow, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
+import { gapBefore, positionInRow, rowIndexForItem, sameRow, type TranscriptRow } from './transcript-rows.ts'
 import { useHeightEpoch } from './use-height-epoch.ts'
 import { absorbScrollerResize, useTranscriptJumps } from './use-transcript-jumps.ts'
 import { BriefRow, TaskRow } from '../terminal/TerminalTranscript.tsx'
@@ -31,6 +31,67 @@ function nestedClass(item: TranscriptItem, frameParentId?: string): string | und
 function promptHeadText(item: Extract<TranscriptItem, { kind: 'user' }>): string {
   return item.text || (item.attachments ?? []).map((attachment) => attachment.name).join(', ')
 }
+
+type RowContentProps = {
+  row: TranscriptRow
+  dim: boolean
+  flushBelow: boolean
+  frameParentId?: string
+  since?: number
+  terminal?: boolean
+  fileUrl?: (path: string) => string
+  attachmentUrl?: (attachmentId: string) => string
+  hostImage?: (path: string) => Promise<string | undefined>
+  onOpenSubagent?: (toolUseId: string) => void
+}
+
+function sameRowContent(a: RowContentProps, b: RowContentProps): boolean {
+  return (
+    sameRow(a.row, b.row) &&
+    a.dim === b.dim &&
+    a.flushBelow === b.flushBelow &&
+    a.frameParentId === b.frameParentId &&
+    a.since === b.since &&
+    a.terminal === b.terminal &&
+    a.fileUrl === b.fileUrl &&
+    a.attachmentUrl === b.attachmentUrl &&
+    a.hostImage === b.hostImage &&
+    a.onOpenSubagent === b.onOpenSubagent
+  )
+}
+
+const RowContent = memo(function RowContent({
+  row,
+  dim,
+  flushBelow,
+  frameParentId,
+  since,
+  terminal,
+  fileUrl,
+  attachmentUrl,
+  hostImage,
+  onOpenSubagent,
+}: RowContentProps) {
+  const view =
+    'run' in row ? (
+      <div className={cn(dim && 'opacity-45')}>
+        <RunRow items={row.run} />
+      </div>
+    ) : 'item' in row ? (
+      <div className={cn(dim && 'opacity-45', nestedClass(row.item, frameParentId))}>
+        <TranscriptItemView item={row.item} fileUrl={fileUrl} attachmentUrl={attachmentUrl} hostImage={hostImage} terminal={terminal} />
+      </div>
+    ) : 'text' in row && row.key === 'brief' ? (
+      <BriefRow text={row.text} terminal={terminal} />
+    ) : 'line' in row ? (
+      <RecapRow line={row.line} since={since} terminal={terminal} />
+    ) : (
+      <div className={cn(dim && 'opacity-45')}>
+        <TaskRow block={row} fileUrl={fileUrl} onOpenSubagent={onOpenSubagent} />
+      </div>
+    )
+  return <ActionPlacementProvider value={flushBelow ? 'inline' : 'below'}>{view}</ActionPlacementProvider>
+}, sameRowContent)
 
 function StickyPromptLane({
   top,
@@ -325,31 +386,20 @@ export function TranscriptRows({
           const row = rows[virtualRow.index]
           const gapClass = virtualRow.index > 0 && (!terminal || gapBefore(rows, virtualRow.index)) ? gap.className : undefined
           const flushBelow = terminal && virtualRow.index < rows.length - 1 && !gapBefore(rows, virtualRow.index + 1)
-          const view =
-            'run' in row ? (
-              <div className={cn(read(boundary, row.index) && 'opacity-45')}>
-                <RunRow items={row.run} />
-              </div>
-            ) : 'item' in row ? (
-              <div className={cn(read(boundary, row.index) && 'opacity-45', nestedClass(row.item, frameParentId))}>
-                <TranscriptItemView
-                  item={row.item}
-                  fileUrl={fileUrl}
-                  attachmentUrl={attachmentUrl}
-                  hostImage={hostImage}
-                  terminal={terminal}
-                />
-              </div>
-            ) : 'text' in row && row.key === 'brief' ? (
-              <BriefRow text={row.text} terminal={terminal} />
-            ) : 'line' in row ? (
-              <RecapRow line={row.line} since={since} terminal={terminal} />
-            ) : (
-              <div className={cn(read(boundary, row.index) && 'opacity-45')}>
-                <TaskRow block={row} fileUrl={fileUrl} onOpenSubagent={onOpenSubagent} />
-              </div>
-            )
-          const content = <ActionPlacementProvider value={flushBelow ? 'inline' : 'below'}>{view}</ActionPlacementProvider>
+          const content = (
+            <RowContent
+              row={row}
+              dim={read(boundary, 'index' in row ? row.index : 0)}
+              flushBelow={flushBelow}
+              frameParentId={frameParentId}
+              since={since}
+              terminal={terminal}
+              fileUrl={fileUrl}
+              attachmentUrl={attachmentUrl}
+              hostImage={hostImage}
+              onOpenSubagent={onOpenSubagent}
+            />
+          )
           if (stickyPrompt && 'item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined) {
             const next = promptRows.find((index) => index > virtualRow.index)
             const laneEnd = next === undefined ? virtualizer.getTotalSize() : (measurements[next]?.start ?? virtualRow.start)

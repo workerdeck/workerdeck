@@ -17,14 +17,21 @@ export function useAffordances(): Required<TerminalAffordances> {
   return useContext(AffordanceContext)
 }
 
+const RESOLVED = new Map<string, Required<TerminalAffordances>>()
+
+// One object per combination: the result is a context value, and a fresh one re-renders every action on every commit.
 export function resolveAffordances(value: TerminalAffordances | boolean | undefined): Required<TerminalAffordances> {
-  if (value === false) {
-    return { hover: false, actions: false, labels: false }
-  }
   if (value === true || value === undefined) {
     return DEFAULTS
   }
-  return { ...DEFAULTS, ...value }
+  const { hover, actions, labels } = value === false ? { hover: false, actions: false, labels: false } : { ...DEFAULTS, ...value }
+  const key = `${hover}${actions}${labels}`
+  let resolved = RESOLVED.get(key)
+  if (!resolved) {
+    resolved = { hover, actions, labels }
+    RESOLVED.set(key, resolved)
+  }
+  return resolved
 }
 
 export function AffordanceProvider({ value, children }: { value: Required<TerminalAffordances>; children: ReactNode }) {
