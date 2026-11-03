@@ -1721,7 +1721,8 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   `docs/GOTCHAS.md`): looping animations pause under `data-motion-clock` and one interval advances them at about
   12 fps. Measured in Tobias's VS Code: list visible about 79% to 34%, the list itself about 12%. **Verified**:
   `pnpm lint`, typecheck, `turbo run test --force --concurrency=1` 13/13, gatekeeper; headed Chrome benches in
-  `_docs/scratchpad/face-perf/` (14 cards GPU 32% to 10%).
+  `_docs/scratchpad/face-perf/` (14 cards GPU 32% to 10%), Publish `dry_run` green on master. **Published** 2026-11-03:
+  tag `v4.1.1` at `6afe7012`, Publish green first try (run 41567595198), npm 12/12 with `latest` 4.1.1, Marketplace.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
