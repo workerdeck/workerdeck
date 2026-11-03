@@ -3497,6 +3497,28 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   `resizeItem` directly, never `measureElement(element)`, which is gated on scroll state and
   silently drops a measure that lands while a scroll is still hot, which a resize's own scroll
   anchoring makes routine.
+- **A streamed event must re-render only what it touched, and identity is how the panel knows.**
+  The panel commits on every event (~25/s while streaming), so anything rebuilt per pass that feeds
+  a memo boundary or a context costs once per mounted row. Four places hold that line
+  (`packages/ui`): `estimateBlockPx` caches run/task heights in `epoch.groups` by member identity
+  (blocks are rebuilt every pass; the virtualizer re-estimates every unmeasured row on each
+  recompute); `RowContent` is memoized on `sameRow` (key, positions, member items);
+  `resolveAffordances` returns one object per combination and `PeerNamesProvider` keeps its Map
+  while unchanged, because a fresh context value re-renders every row and action button; and
+  `Composer` is memoized behind stable send handlers. All of them rely on the reducer never
+  mutating an item in place. Count renders per commit with a fiber walk (`actualStartTime` of
+  this commit AND the `PerformedWork` flag; either alone over-counts) before and after a change.
+- **The virtualizer's key callback is its invalidation signal; `estimateSize` is not.** A fresh
+  `getItemKey` rebuilds every row's position, a stable one rebuilds nothing on content changes.
+  `keepsRowKeys` hands over a fresh callback when keys, count, the height epoch or gap change, or
+  when an UNMEASURED row changed content (its estimate would go stale silently); measured rows
+  correct from the DOM. Never make the callback stable through a ref alone.
+- **The scrubber rebuilds marks only when what they read changes.** `nextRail` keeps the marks
+  while the row keys, bookmarks, recap row and every item's mark inputs (`sameMarkInputs`: kind,
+  id, parent, failure, level, addressed) hold, and the clusters while the rounded placements hold.
+  A new field `buildMarks` reads must join `sameMarkInputs`, or its marks go stale. `buildClusters`
+  is the reference, checked step by step in `test/scrubber.test.ts`. The remaining per-event mark
+  style writes are real 1px moves of the proportional rail.
 - **`useFlushSync` looks like dead weight and is not.** Turning it off silences a React
   "flushSync was called from inside a lifecycle method" warning (corrections fire from
   `measureElement`'s ref callback, inside the commit) but costs anchoring: over the same walk up
