@@ -265,6 +265,44 @@ describe('run block height', () => {
     expect(blockHeight(sameParent, m).px).toBe(textLines(summary, cols).lines * m.line)
   })
 
+  it('refreshes a cached group estimate whenever its members change, never serving the old one', () => {
+    const blockOf = (items: TranscriptItem[]) => terminalBlocks(items)[0]!
+    const a = tool('Bash')
+    const b = tool('Bash')
+    const c = tool('Read')
+    const busy = { ...b, status: 'running', liveTail: 'one\ntwo\nthree' } as TranscriptItem
+    const lead = task('L', { description: 'x' })
+    const r1 = tool('Read', 'L')
+    const r2 = tool('Grep', 'L')
+    const r1b = { ...r1, status: 'running' } as TranscriptItem
+    const cases: [string, TranscriptItem[], TranscriptItem[]][] = [
+      ['a non-first run member replaced', [a, b, c], [a, busy, c]],
+      ['a run member added', [a, b], [a, b, c]],
+      ['a run member removed', [a, b, c], [a, b]],
+      ['run members reordered', [a, b, c], [a, c, b]],
+      ['a task child replaced', [lead, r1, r2], [lead, r1b, r2]],
+      ['a task child added', [lead, r1], [lead, r1, r2]],
+      ['a task child removed', [lead, r1, r2], [lead, r1]],
+      ['task children reordered', [lead, r1, r2], [lead, r2, r1]],
+    ]
+    for (const [name, before, after] of cases) {
+      const epoch = createHeightEpoch(152, 8, 18)
+      estimateBlockPx(blockOf(before), epoch)
+      const next = blockOf(after)
+      expect(estimateBlockPx(next, epoch), name).toBe(blockHeight(next, epoch).px)
+      expect(epoch.groups.get(after[0]!)?.members, name).toEqual(after)
+    }
+  })
+
+  it('never carries a group estimate into a new epoch', () => {
+    const run = runBlockOf([tool('Bash'), tool('Read'), tool('Edit')])
+    const wide = createHeightEpoch(800, 8, 18)
+    const narrow = createHeightEpoch(96, 8, 18)
+    expect(estimateBlockPx(run, wide)).toBe(18)
+    expect(estimateBlockPx(run, narrow)).toBe(blockHeight(run, narrow).px)
+    expect(blockHeight(run, narrow).px).toBeGreaterThan(18)
+  })
+
   it('reuses a run estimate across rebuilt blocks until a member changes', () => {
     const epoch = createHeightEpoch(152, 8, 18)
     const first = tool('Bash')
