@@ -31,5 +31,5 @@ export function useDraft(client: WorkerDeckClient, sessionId: string | undefined
       writeDraft(key, '')
     }
   }, [key])
-  return { initialText, save, clear }
+  return useMemo(() => ({ initialText, save, clear }), [initialText, save, clear])
 }

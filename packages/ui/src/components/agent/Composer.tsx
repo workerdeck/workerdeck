@@ -1,4 +1,5 @@
 import {
+  memo,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -73,7 +74,7 @@ export interface ComposerProps {
   ref?: Ref<ComposerHandle>
 }
 
-export function Composer({
+function ComposerBody({
   onSend,
   onSendNow,
   onInterrupt,
@@ -528,6 +529,9 @@ export function Composer({
     </div>
   )
 }
+
+// Memoized: the panel re-renders on every streamed event, and none of that reaches the composer.
+export const Composer = memo(ComposerBody)
 
 function GlyphButton({
   tone,

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -501,6 +502,8 @@ export function SessionPanel({
   )
   const windows = useMemo(() => orderUsageWindows(usage), [usage])
   const hostImage = useHostImage(client, sessionId, state.producedFiles)
+  const fileUrl = useMemo(() => (sessionId ? (path: string) => client.sessionFileUrl(sessionId, path) : undefined), [client, sessionId])
+  const attachmentUrl = useMemo(() => (sessionId ? (id: string) => client.attachmentUrl(sessionId, id) : undefined), [client, sessionId])
   const resultImages = useToolResultImages(client, sessionId)
   const composerRef = useRef<ComposerHandle>(null)
   const jumpToRecap = useRef<(() => void) | null>(null)
@@ -525,6 +528,12 @@ export function SessionPanel({
     handleSend(text, attachmentIds)
     backgroundTask()
   }
+  const latestSend = useRef({ handleSend, handleSendNow })
+  useLayoutEffect(() => {
+    latestSend.current = { handleSend, handleSendNow }
+  })
+  const stableSend = useCallback((text: string, attachmentIds: string[]) => latestSend.current.handleSend(text, attachmentIds), [])
+  const stableSendNow = useCallback((text: string, attachmentIds: string[]) => latestSend.current.handleSendNow(text, attachmentIds), [])
 
   const menuShows: Record<MenuPanel, boolean> = {
     context: capabilities.contextUsage,
@@ -708,8 +717,8 @@ export function SessionPanel({
                 <Transcript
                   key={subagentId ?? 'session'}
                   state={state}
-                  fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
-                  attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
+                  fileUrl={fileUrl}
+                  attachmentUrl={attachmentUrl}
                   canBrowseFiles={hostFiles.available}
                   sessionNames={peers.names}
                   hostImage={hostImage}
@@ -756,8 +765,8 @@ export function SessionPanel({
             <>
               <Composer
                 ref={composerRef}
-                onSend={handleSend}
-                onSendNow={runningForeground ? handleSendNow : undefined}
+                onSend={stableSend}
+                onSendNow={runningForeground ? stableSendNow : undefined}
                 onInterrupt={interrupt}
                 busy={busy}
                 disabled={ended || !sessionId}
