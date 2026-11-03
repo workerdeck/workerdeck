@@ -20,25 +20,48 @@ export type ComputedHeight = {
   exact: boolean
 }
 
+type GroupHeight = { members: readonly TranscriptItem[]; height: ComputedHeight }
+
 export type HeightEpoch = CellMetrics & {
   cache: WeakMap<TranscriptItem, ComputedHeight>
+  groups: WeakMap<TranscriptItem, GroupHeight>
 }
 
 export function createHeightEpoch(width: number, ch: number, line: number): HeightEpoch {
-  return { width, ch, line, cache: new WeakMap() }
+  return { width, ch, line, cache: new WeakMap(), groups: new WeakMap() }
 }
 
-export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): number {
-  if (!('item' in block)) {
-    return blockHeight(block, epoch).px
-  }
-  const hit = epoch.cache.get(block.item)
+function cachedItemPx(item: TranscriptItem, epoch: HeightEpoch): number {
+  const hit = epoch.cache.get(item)
   if (hit) {
     return hit.px
   }
-  const computed = itemHeight(block.item, epoch)
-  epoch.cache.set(block.item, computed)
+  const computed = itemHeight(item, epoch)
+  epoch.cache.set(item, computed)
   return computed.px
+}
+
+function sameMembers(a: readonly TranscriptItem[], b: readonly TranscriptItem[]): boolean {
+  return a.length === b.length && a.every((item, index) => item === b[index])
+}
+
+// A run or task block is rebuilt on every pass, but its height is a pure function of its member items, which keep
+// their identity until they change: the virtualizer re-estimates every unmeasured row on each recompute.
+export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): number {
+  if ('item' in block) {
+    return cachedItemPx(block.item, epoch)
+  }
+  if ('run' in block && block.run.length === 1) {
+    return cachedItemPx(block.run[0]!, epoch)
+  }
+  const members = 'run' in block ? block.run : [block.task, ...taskChildItems(block)]
+  const hit = epoch.groups.get(members[0]!)
+  if (hit && sameMembers(hit.members, members)) {
+    return hit.height.px
+  }
+  const height = blockHeight(block, epoch)
+  epoch.groups.set(members[0]!, { members: [...members], height })
+  return height.px
 }
 
 export const BRIEF_LINES = 4

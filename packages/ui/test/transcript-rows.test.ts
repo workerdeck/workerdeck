@@ -264,4 +264,15 @@ describe('run block height', () => {
     const summary = runSummary(sameParent.run, false)
     expect(blockHeight(sameParent, m).px).toBe(textLines(summary, cols).lines * m.line)
   })
+
+  it('reuses a run estimate across rebuilt blocks until a member changes', () => {
+    const epoch = createHeightEpoch(152, 8, 18)
+    const first = tool('Bash')
+    const two = [first, tool('Bash')]
+    const px = estimateBlockPx(runBlockOf(two), epoch)
+    expect(epoch.groups.get(first)?.members).toEqual(two)
+    const grown = runBlockOf([first, ...['Read', 'Edit', 'Grep', 'Write', 'Glob', 'WebFetch'].map((name) => tool(name))])
+    expect(blockHeight(grown, epoch).px).not.toBe(px)
+    expect(estimateBlockPx(grown, epoch)).toBe(blockHeight(grown, epoch).px)
+  })
 })
