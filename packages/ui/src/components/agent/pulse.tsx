@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useMotionClock } from './motion-clock.ts'
 
 export const PULSE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const
 export const PULSE_MS = 90
@@ -71,5 +72,6 @@ export function usePrefersReducedMotion(): boolean {
 export function usePulse(animated: boolean): string {
   const reduced = usePrefersReducedMotion()
   const running = animated && !reduced
+  useMotionClock(running)
   return useSyncExternalStore(running ? subscribe : subscribeRest, running ? readFrame : readRest, readRest)
 }

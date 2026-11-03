@@ -2,6 +2,7 @@ import { useId } from 'react'
 import type { SessionRow, SessionState } from '@workerdeck/protocol'
 import { EngineIcon, vendorMarkClass } from './EngineIcon.tsx'
 import { SessionStatusIcon } from './SessionStatusIcon.tsx'
+import { useMotionClock } from './motion-clock.ts'
 import { CONTEXT_WRAP_UP_DEFAULT, faceHtml, faceProjectOf, faceStateOf } from '../../lib/face-svg.ts'
 import { cn } from '../../lib/utils.ts'
 
@@ -21,6 +22,7 @@ export interface AgentAvatarProps {
 export function AgentAvatar({ row, size = 32, state, context = false, wrapUp = CONTEXT_WRAP_UP_DEFAULT, badge = true, title, className }: AgentAvatarProps) {
   const { info } = row
   const id = `wdf${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  useMotionClock()
   const agent = info.agent
   if (!agent) {
     return <EngineTile row={row} size={size} state={state} badge={badge} title={title} className={className} />

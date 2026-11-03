@@ -1,4 +1,5 @@
 import { cn } from '../../lib/utils.ts'
+import { useMotionClock } from './motion-clock.ts'
 
 export interface LoaderProps {
   label?: string
@@ -6,6 +7,7 @@ export interface LoaderProps {
 }
 
 export function Loader({ label, className }: LoaderProps) {
+  useMotionClock()
   return (
     <div data-slot="loader" className={cn('flex items-center gap-2 py-1 text-body-sm text-fg-4', className)}>
       <span className="flex items-center gap-1">

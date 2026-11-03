@@ -14,6 +14,7 @@ import { meterColorClass } from '../../lib/status.ts'
 import { cssColor } from '../../lib/css.ts'
 import { STATUS_META } from './status.ts'
 import { useTranscriptVariant } from './transcript-variant.tsx'
+import { useMotionClock } from './motion-clock.ts'
 
 export interface StatusBarProps {
   state: TranscriptState
@@ -154,6 +155,7 @@ export function StatusBar({
   const session = windows?.five_hour
   const weekly = windows?.seven_day
   const link: ConnectionState = connection ?? 'live'
+  useMotionClock(link !== 'live' && !LINK_META[link].down)
   const terminal = useTranscriptVariant() === 'terminal'
   const taskCount = tasks && tasks.length > 0 ? taskSummary(tasks) : undefined
   return (

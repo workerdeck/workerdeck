@@ -4,6 +4,7 @@ import { nearestMember, type Cluster, type Mark } from '../agent/scrubber-marks.
 import { peekContent, TERMINAL_PEEK } from '../agent/scrubber-peek.tsx'
 import { buildClusters, railScale, type RailInput } from './scrubber-rail.ts'
 import { TerminalSurface } from './surface.tsx'
+import { useMotionClock } from '../agent/motion-clock.ts'
 
 export { buildClusters, railScale } from './scrubber-rail.ts'
 
@@ -18,6 +19,7 @@ export interface TerminalScrubberProps extends RailInput {
 export function TerminalScrubber(props: TerminalScrubberProps) {
   const { scrollOffset, viewportH, totalSize, onJumpToRow, interactive, fontSize, lineHeight } = props
   const stick = useStickToBottomContext()
+  useMotionClock()
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const peekRef = useRef<HTMLDivElement | null>(null)
   const [railH, setRailH] = useState(0)

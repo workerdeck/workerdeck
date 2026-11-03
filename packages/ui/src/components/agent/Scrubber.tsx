@@ -12,6 +12,7 @@ import {
   type Mark,
 } from './scrubber-marks.ts'
 import { CARD_PEEK, peekContent } from './scrubber-peek.tsx'
+import { useMotionClock } from './motion-clock.ts'
 
 export interface ScrubberProps {
   items: readonly TranscriptItem[]
@@ -34,6 +35,7 @@ export function Scrubber({
   onJumpToItem,
   className,
 }: ScrubberProps) {
+  useMotionClock(pendingApprovals.length > 0)
   const railRef = useRef<HTMLDivElement | null>(null)
   const peekRef = useRef<HTMLDivElement | null>(null)
   const [railH, setRailH] = useState(0)

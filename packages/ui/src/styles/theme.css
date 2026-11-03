@@ -1008,6 +1008,7 @@ span.wd-face .wave.crest {
 span.wd-face:is(.st-asleep, .st-closed, .st-failed) .wave.crest {
   animation: none;
 }
+:root[data-motion-clock] :is(.wd-face *, .term-shimmer, .animate-spin, .animate-pulse, .term-scrub-mark, .wd-scrub-mark),
 [data-face-paused] .wd-face *,
 .wd-face[data-paused] * {
   animation-play-state: paused !important;

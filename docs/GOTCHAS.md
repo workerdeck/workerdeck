@@ -1941,6 +1941,18 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   The same rule binds every icon: never put `animate-spin` (or any transform animation) on an `<svg>`,
   even the root of a lucide icon; spin a wrapping `span` (`Spinner` does). The markup is set as `innerHTML` and React only
   rewrites it when the string changes, so a poll that changes nothing never restarts an animation.
+- **Looping UI motion runs at about 12 fps, on one shared clock.** Even a fully composited
+  animation makes the GPU process draw a frame on every vsync, 120 per second on a ProMotion Mac: one
+  moving face cost about 10% GPU, a visible list about 60% in VS Code. `motion-clock.ts` owns it: a
+  component that can show a loop calls `useMotionClock(active)`, which sets `data-motion-clock` on
+  the root while anyone is joined; `theme.css` then pauses every looping class (`.wd-face *`,
+  `.term-shimmer`, `.animate-spin`, `.animate-pulse`, the scrubber marks) and one interval advances
+  those paused `CSSAnimation`s by the elapsed time (14 cards: GPU 32% to 10%). The cost is the frame
+  rate, not the number of moving parts. A new looping animation joins the clock: add its class to
+  both the CSS rule and `CLOCKED_ANIMATIONS`, and call the hook where it renders; one-shot enter and
+  exit animations stay on the compositor. `term-shimmer` matters most: `background-position` never
+  composites, so free-running it repaints the transcript every vsync. `[data-face-paused]` and
+  `.wd-face[data-paused]` stay frozen.
   The agent card also fills the backdrop to context use, amber from `CONTEXT_WRAP_UP_DEFAULT`.
 
 ## Relay (cross-gateway peers)

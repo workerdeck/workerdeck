@@ -2,9 +2,11 @@ import { BellRing, CircleAlert, CircleSlash, Moon, PauseCircle } from 'lucide-re
 import type { SessionRow } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
+import { useMotionClock } from './motion-clock.ts'
 
 export function SessionStatusIcon({ row, className }: { row: SessionRow; className?: string }) {
   const { info } = row
+  useMotionClock(row.state === 'attention')
   const size = cn('size-4 shrink-0', className)
   if (row.state === 'attention') {
     return <BellRing className={cn(size, 'animate-pulse text-warning')} />

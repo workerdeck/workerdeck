@@ -17,6 +17,7 @@ import {
 } from '@workerdeck/protocol'
 import { Shuffle } from 'lucide-react'
 import { faceHtml, type FaceState } from '../../lib/face-svg.ts'
+import { useMotionClock } from './motion-clock.ts'
 import { Button } from '../ui/Button.tsx'
 import { Dialog, DialogBody, DialogContent, DialogHeader } from '../ui/Dialog.tsx'
 import { OptionSelect } from '../ui/Select.tsx'
@@ -60,6 +61,7 @@ export interface FaceViewProps {
 
 export function FaceView({ face, project, state = 'idle', size, phase }: FaceViewProps) {
   const id = `wdf${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  useMotionClock()
   return (
     <span
       className="relative inline-flex shrink-0"
