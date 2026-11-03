@@ -1713,6 +1713,15 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   Known debt carried to the next release by decision: APNs over the wire, the device-only checks in
   `_docs/VERIFICATION-DEBT.md`. **Published** 2026-10-30: tag `v4.1.0` moved to `7fef364e`, Publish green first
   try (run 41061545927), npm 12/12 with `latest` 4.1.0 about 2 minutes after the run, Marketplace 4.1.0.
+
+  **4.1.1** - **Motion CPU fix**, a **patch**: protocol stays **2**, relay wire **2**, no API change. Chromium makes
+  the GPU process draw a frame on every vsync while any animation runs, composited or not, so a visible list cost
+  VS Code about 80% CPU on a 120 Hz Mac even after 4.1.0's faces moved to HTML layers. Faces as HTML layers and
+  spinners that spin a span (`e94c6c03`, `e217ff5b`), then `ui`'s motion clock (`motion-clock.ts`,
+  `docs/GOTCHAS.md`): looping animations pause under `data-motion-clock` and one interval advances them at about
+  12 fps. Measured in Tobias's VS Code: list visible about 79% to 34%, the list itself about 12%. **Verified**:
+  `pnpm lint`, typecheck, `turbo run test --force --concurrency=1` 13/13, gatekeeper; headed Chrome benches in
+  `_docs/scratchpad/face-perf/` (14 cards GPU 32% to 10%).
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

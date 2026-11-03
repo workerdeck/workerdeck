@@ -5,6 +5,16 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [4.1.1] - 2026-11-03
+
+### Fixed
+
+- **Much lower CPU while the sessions list or a working session is visible.** Agent faces, spinners,
+  the working shimmer and the attention pulses now step at about 12 frames a second on one shared
+  clock, instead of making VS Code redraw at the display's full refresh rate (120 Hz on ProMotion
+  Macs). With the list open, VS Code went from about 80% CPU to about 35% in our measurement, most of
+  it the GPU process. Motion looks slightly steppier; nothing else changes.
+
 ## [4.1.0] - 2026-10-30
 
 ### Added
