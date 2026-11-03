@@ -12,7 +12,7 @@ import { briefPx, estimateBlockPx } from '../terminal/height.ts'
 import { PeerNamesProvider } from '../terminal/peer-names.tsx'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
 import { Scrubber } from './Scrubber.tsx'
-import { gapBefore, keepsRowKeys, positionInRow, rowIndexForItem, sameRow, type TranscriptRow } from './transcript-rows.ts'
+import { gapBefore, keepsRowKeys, positionInRow, rowIndexForItem, sameRow, sameRowKeys, type TranscriptRow } from './transcript-rows.ts'
 import { useHeightEpoch } from './use-height-epoch.ts'
 import { absorbScrollerResize, useTranscriptJumps } from './use-transcript-jumps.ts'
 import { BriefRow, TaskRow } from '../terminal/TerminalTranscript.tsx'
@@ -275,6 +275,10 @@ export function TranscriptRows({
     }
   }
   const getItemKey = keyed.current!.getItemKey
+  const structure = useRef<{ rows: readonly TranscriptRow[] }>({ rows })
+  if (structure.current.rows !== rows && !sameRowKeys(structure.current.rows, rows)) {
+    structure.current = { rows }
+  }
 
   const virtualizer = useVirtualizer<HTMLElement, HTMLDivElement>({
     count: rows.length,
@@ -459,6 +463,7 @@ export function TranscriptRows({
             terminal ? (
               <TerminalScrubber
                 items={items}
+                rowStructure={structure.current}
                 pendingApprovals={pendingApprovals}
                 recapRow={recapRow}
                 bookmarks={bookmarkIndexes}

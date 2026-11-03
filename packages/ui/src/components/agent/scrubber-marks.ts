@@ -192,6 +192,38 @@ export function buildMarks(
   return marks
 }
 
+// The fields `buildMarks` reads from one item: while every item agrees on them, at the same positions, the marks are
+// the same, so a streamed text delta does not rebuild them.
+function sameMarkInput(a: TranscriptItem, b: TranscriptItem): boolean {
+  if (a === b) {
+    return true
+  }
+  if (a.kind !== b.kind || a.id !== b.id || parentOf(a) !== parentOf(b)) {
+    return false
+  }
+  switch (a.kind) {
+    case 'tool_call': {
+      return toolCallFailed(a) === toolCallFailed(b)
+    }
+    case 'turn_result': {
+      return b.kind === 'turn_result' && a.isError === b.isError
+    }
+    case 'notice': {
+      return b.kind === 'notice' && a.level === b.level
+    }
+    case 'thinking': {
+      return b.kind === 'thinking' && a.addressed === b.addressed
+    }
+    default: {
+      return true
+    }
+  }
+}
+
+export function sameMarkInputs(prev: readonly TranscriptItem[], next: readonly TranscriptItem[]): boolean {
+  return prev === next || (prev.length === next.length && prev.every((item, index) => sameMarkInput(item, next[index]!)))
+}
+
 export function proportionalPlacement(railH: number, itemCount: number): Placement {
   const count = Math.max(1, itemCount)
   const h = Math.max(MIN_MARK, Math.round(railH / count))

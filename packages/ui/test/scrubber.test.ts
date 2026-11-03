@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { buildClusters, railScale, type TerminalScrubberProps } from '../src/components/terminal/scrubber.tsx'
+import { nextRail, type RailState } from '../src/components/terminal/scrubber-rail.ts'
 
 let seq = 0
 function user(text: string): TranscriptItem {
@@ -367,5 +368,43 @@ describe('marks inside a shared row', () => {
     const bookmark = clusters.find((c) => c.kind === 'bookmark')!
     expect(bookmark.h).toBe(2)
     expect(bookmark.y).toBe(25)
+  })
+})
+
+describe('nextRail', () => {
+  it('agrees with buildClusters after every update, and reuses marks only when nothing they read changed', () => {
+    const ask = user('go')
+    const reply = { ...assistant('a'), streaming: true } as TranscriptItem
+    const bash = toolCall('running')
+    const done = turn()
+    let structure = {}
+    let length = 0
+    let state: RailState | null = null
+    const step = (items: TranscriptItem[], extra: Partial<TerminalScrubberProps> = {}) => {
+      if (items.length !== length) {
+        structure = {}
+        length = items.length
+      }
+      const input = props(items, { rowStructure: structure, ...extra })
+      const before = state
+      state = nextRail(state, input, RAIL)
+      expect(state.clusters).toEqual(buildClusters(input, RAIL))
+      return { marksKept: before?.marks === state.marks, clustersKept: before?.clusters === state.clusters }
+    }
+    step([ask, reply])
+    expect(step([ask, { ...reply, text: 'a longer answer' } as TranscriptItem])).toEqual({ marksKept: true, clustersKept: true })
+    step([ask, reply, bash])
+    expect(step([ask, reply, { ...bash, status: 'failed' } as TranscriptItem]).marksKept).toBe(false)
+    const failed = { ...bash, status: 'failed' } as TranscriptItem
+    step([ask, reply, failed, done])
+    expect(step([ask, reply, failed, done], { totalSize: 9000 })).toEqual({ marksKept: true, clustersKept: false })
+    expect(step([ask, reply, failed, done], { totalSize: 9000, scrollOffset: 400 })).toEqual({ marksKept: true, clustersKept: true })
+    expect(step([ask, reply, failed, done], { totalSize: 9000, bookmarks: [1] }).marksKept).toBe(false)
+    step([ask, reply, failed, done], { totalSize: 9000, bookmarks: [1], pendingApprovals: [{ id: 'p' } as PermissionRequest] })
+    step([ask, reply, failed, done], { totalSize: 9000, bookmarks: [1], recapRow: { rowIndex: 2, label: 'since' } })
+    expect(step([ask, reply, failed, done], { totalSize: 9000, bookmarks: [1], recapRow: { rowIndex: 2, label: 'since' }, frameParentId: 'x' }).marksKept).toBe(
+      false,
+    )
+    expect(step([ask, reply, failed, notice('error', 'boom')]).marksKept).toBe(false)
   })
 })

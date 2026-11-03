@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { nearestMember, type Cluster, type Mark } from '../agent/scrubber-marks.ts'
 import { peekContent, TERMINAL_PEEK } from '../agent/scrubber-peek.tsx'
-import { buildClusters, railScale, type RailInput } from './scrubber-rail.ts'
+import { nextRail, railScale, type RailInput, type RailState } from './scrubber-rail.ts'
 import { TerminalSurface } from './surface.tsx'
 import { useMotionClock } from '../agent/motion-clock.ts'
 
@@ -50,9 +50,6 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
     return () => scroller.removeEventListener('scroll', onScroll)
   }, [stick.scrollRef])
 
-  useEffect(() => {
-    setPeek(null)
-  }, [props.items])
 
   // Manual listener because it must `preventDefault` - React's root wheel listeners are passive.
   useEffect(() => {
@@ -85,12 +82,12 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
     element.style.top = `${Math.max(4, Math.min(railHeight - height - 4, peek.y - height / 2))}px`
   }, [peek])
 
-  // Deps are content and geometry: `rowIndexFor`/`offsetOfRow` are per-render closures, and `totalSize` stands in for their measurements.
-  const clusters = useMemo(
-    () => (railH > 0 ? buildClusters(props, railH) : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.items, props.bookmarks, props.recapRow, props.pendingApprovals, totalSize, railH, viewportH],
-  )
+  const clusters = useRailClusters(props, railH)
+  useEffect(() => {
+    setPeek(null)
+  }, [clusters])
+  const clustersRef = useRef(clusters)
+  clustersRef.current = clusters
   const scale = railScale(railH, totalSize, viewportH)
   const bandH = Math.max(2, Math.min(railH, Math.round(viewportH * scale)))
   const bandTop = Math.max(0, Math.min(railH - bandH, Math.round(liveOffset * scale)))
@@ -128,6 +125,23 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
         : { cluster, mark, y: Math.min(Math.max(y, cluster.y), cluster.y + cluster.h) },
     )
   }
+
+  const clusterOf = (event: ReactPointerEvent<HTMLDivElement>) => clustersRef.current[Number(event.currentTarget.dataset.ci)]
+  const latestPeek = useRef(showPeek)
+  latestPeek.current = showPeek
+  const onMarkEnter = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const cluster = clusterOf(event)
+    if (cluster) {
+      latestPeek.current(cluster, event.clientY)
+    }
+  }, [])
+  const onMarkMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const cluster = clusterOf(event)
+    if (cluster && !drag.current) {
+      latestPeek.current(cluster, event.clientY)
+    }
+  }, [])
+  const onMarkLeave = useCallback(() => setPeek(null), [])
 
   const maxOffset = Math.max(1, totalSize - viewportH)
   return (
@@ -187,27 +201,12 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
           : null)}
       >
         <div className="term-scrub-band" style={{ top: bandTop, height: bandH }} />
-        {clusters.map((cluster, index) => (
-          <div
-            key={index}
-            data-ci={index}
-            className="term-scrub-mark"
-            data-lane={cluster.lane}
-            data-kind={cluster.kind}
-            style={{ top: cluster.y, height: cluster.h }}
-            {...(interactive
-              ? {
-                  onPointerEnter: (event) => showPeek(cluster, event.clientY),
-                  onPointerMove: (event) => {
-                    if (!drag.current) {
-                      showPeek(cluster, event.clientY)
-                    }
-                  },
-                  onPointerLeave: () => setPeek(null),
-                }
-              : null)}
-          />
-        ))}
+        <ScrubMarks
+          clusters={clusters}
+          onEnter={interactive ? onMarkEnter : undefined}
+          onMove={interactive ? onMarkMove : undefined}
+          onLeave={interactive ? onMarkLeave : undefined}
+        />
         {peek ? (
           <div ref={peekRef} className="term-scrub-peek" style={{ top: peek.y }}>
             {peekContent(
@@ -225,4 +224,39 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
       </div>
     </TerminalSurface>
   )
+}
+
+type MarkHandler = (event: ReactPointerEvent<HTMLDivElement>) => void
+
+// Its own memo so a scroll, which moves only the band, does not reconcile every mark.
+const ScrubMarks = memo(function ScrubMarks({
+  clusters,
+  onEnter,
+  onMove,
+  onLeave,
+}: {
+  clusters: readonly Cluster[]
+  onEnter?: MarkHandler
+  onMove?: MarkHandler
+  onLeave?: () => void
+}) {
+  return clusters.map((cluster, index) => (
+    <div
+      key={index}
+      data-ci={index}
+      className="term-scrub-mark"
+      data-lane={cluster.lane}
+      data-kind={cluster.kind}
+      style={{ top: cluster.y, height: cluster.h }}
+      onPointerEnter={onEnter}
+      onPointerMove={onMove}
+      onPointerLeave={onLeave}
+    />
+  ))
+})
+
+function useRailClusters(props: TerminalScrubberProps, railH: number): Cluster[] {
+  const cache = useRef<RailState | null>(null)
+  cache.current = railH > 0 ? nextRail(cache.current, props, railH) : null
+  return cache.current?.clusters ?? []
 }

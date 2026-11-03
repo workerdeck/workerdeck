@@ -20,6 +20,10 @@ function sameLeaf(a: LeafBlock, b: LeafBlock): boolean {
   return 'item' in b && a.item === b.item
 }
 
+export function sameRowKeys(prev: readonly TranscriptRow[], next: readonly TranscriptRow[]): boolean {
+  return prev === next || (prev.length === next.length && prev.every((row, index) => row.key === next[index]!.key))
+}
+
 // Whether the virtualizer may keep its key callback, and so its measurements, across a rows update. It re-reads
 // `estimateSize` only when the callback or the count changes, so any row whose size is still an estimate must not
 // change what it draws; an estimate also reads the row before it, for its gap. Measured rows correct from the DOM.
