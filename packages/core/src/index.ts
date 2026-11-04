@@ -156,7 +156,7 @@ export type { EngineAdapter, EngineAvailability, EngineRunnerRequest, ModelCatal
 export { claudeAdapter } from './engines/claude/adapter.ts'
 export { CLAUDE_CATALOG } from './engines/claude/catalog.ts'
 export { claudeHistoryEvent, claudeHistoryEvents, claudeSessionMessages, resolveClaudeSdkEntry } from './engines/claude/history.ts'
-export { codexAdapter, listCodexSessions, resolveBundledCodexExecutable } from './engines/codex/adapter.ts'
+export { codexAdapter, listCodexSessions, resolveBundledCodexExecutable, resolveBundledRipgrep } from './engines/codex/adapter.ts'
 export type { CodexAdapterConfig } from './engines/codex/adapter.ts'
 export { CODEX_CATALOG } from './engines/codex/catalog.ts'
 export { CodexRunner } from './engines/codex/runner.ts'

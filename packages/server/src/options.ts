@@ -45,6 +45,8 @@ export type WorkerServerOptions = {
     maxFileBytes?: number
     maxEntries?: number
     ignore?: string[]
+    // Content search: a ripgrep path, or false to turn it off. Default: codex's bundled rg, then rg on PATH.
+    ripgrep?: string | false
   }
   // `$` shell mode: the command runs on the host in a PTY in the session's cwd and its output lands in the transcript
   // and the model's context. It goes through NO permission flow - no permission card, no allowlist, no

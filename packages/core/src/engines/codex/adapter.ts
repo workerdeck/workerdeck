@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { ENGINE_CAPABILITIES, type ProfileInfo, type SdkSessionSummary } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '../adapter.ts'
 import { CodexRunner, type CodexRunnerConfig } from './runner.ts'
@@ -31,6 +32,15 @@ export function resolveBundledCodexExecutable(): string | undefined {
     }
   } catch {}
   return undefined
+}
+
+export function resolveBundledRipgrep(): string | undefined {
+  const codex = resolveBundledCodexExecutable()
+  if (!codex) {
+    return undefined
+  }
+  const path = join(dirname(dirname(codex)), 'codex-path', process.platform === 'win32' ? 'rg.exe' : 'rg')
+  return existsSync(path) ? path : undefined
 }
 
 function targetTriple(): string | undefined {

@@ -22,6 +22,8 @@ import type {
   CreateSessionRequest,
   JobInfo,
   FindHostFilesResponse,
+  HostSearchEvent,
+  HostSearchRequest,
   GatewayMeta,
   GetProfileResponse,
   ListHostDirResponse,
@@ -387,6 +389,47 @@ export class WorkerDeckClient {
 
   async findHostFiles(path: string, q = '', limit?: number): Promise<FindHostFilesResponse> {
     return await this.#call('GET', `/fs/find${query({ path, q, limit })}`)
+  }
+
+  async *searchHostFiles(request: HostSearchRequest, options: { signal?: AbortSignal } = {}): AsyncGenerator<HostSearchEvent> {
+    const res = await this.#callRaw(
+      `${this.#options.baseUrl}/fs/search`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...this.#options.headers },
+        body: JSON.stringify(request),
+        signal: options.signal,
+      },
+      'POST /fs/search failed',
+    )
+    if (!res.body) {
+      return
+    }
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+    let buffered = ''
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) {
+          break
+        }
+        buffered += value
+        let newline = buffered.indexOf('\n')
+        while (newline !== -1) {
+          const line = buffered.slice(0, newline)
+          buffered = buffered.slice(newline + 1)
+          if (line.trim() !== '') {
+            yield JSON.parse(line) as HostSearchEvent
+          }
+          newline = buffered.indexOf('\n')
+        }
+      }
+      if (buffered.trim() !== '') {
+        yield JSON.parse(buffered) as HostSearchEvent
+      }
+    } finally {
+      await reader.cancel().catch(() => {})
+    }
   }
 
   async readHostFile(path: string): Promise<ReadHostFileResponse> {

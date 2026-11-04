@@ -65,6 +65,7 @@ export type ServerContext = {
   hostFilesWritable: boolean
   maxHostFileBytes: number
   maxHostDirEntries: number
+  ripgrep: string | undefined
 
   shells: ShellRegistry | null
   // Minted per `createWorkerServer`; a shell record stamped with another one was started by a gateway that is gone.
