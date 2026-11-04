@@ -194,6 +194,7 @@ private struct ListPreview: View {
       .environment(unread)
       .environment(AppSettings())
       .environment(PushCoordinator())
+      .environment(CoreMediaFixture.bookmarks)
   }
 }
 
