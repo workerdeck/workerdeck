@@ -1733,6 +1733,10 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   values, Composer memo, a stable virtualizer key, scrubber marks rebuilt only on change. Native (not on npm):
   core/FFI `model_badge` + `card_status` with goldens, iOS and Android cards to match, long-press peek on both
   (live read-only transcript, marks read, tap opens). Question prompt digits in *Other* no longer pick an option.
+  **Verified**: `pnpm lint`, typecheck, `turbo run test --force --concurrency=1` 13/13, `cargo test` 24/24, gatekeeper,
+  Android `:app` unit tests, Publish `dry_run` green on master. **Published** 2026-11-04: tag `v4.2.0` at `79da6f80`,
+  Publish green first try (run 41769887067), npm 12/12 with `latest` 4.2.0, Marketplace 4.2.0. Decks upgraded the
+  same day (mini atomic + relay, PiBo, MAGWIN; nothing to migrate).
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
