@@ -676,7 +676,7 @@ function TeamBlock({
     <div
       data-slot="team"
       data-expanded={view.expanded || undefined}
-      className={cn('flex flex-col rounded-[8px]', nested && (selected ? 'bg-row-selected-weak' : 'bg-row-nest'))}
+      className={cn('flex flex-col rounded-[8px]', nested && 'bg-row-nest')}
     >
       {renderLead(tray)}
       {nested ? (

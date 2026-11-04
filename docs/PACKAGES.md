@@ -2072,8 +2072,8 @@ own font and size; it took the LEAD chip's place), line two the status. A member
 20 px face, name, badge, status, the status truncating first). Agent cards draw no activity time,
 and `SessionBrowser`'s default row actions take no width until hovered. Rows sit 4 px apart, and agent names sit on
 `--fg-name` until selected. A team showing members is one nested card (`--row-nest`; only the selected row
-takes the selection colour, and a selected member turns the nested card `--row-selected-weak`, VS Code's
-inactive selection; the lead's `^ N` chip returns it to Auto). Once
+takes the selection colour, and the nested card keeps `--row-nest` whichever row is selected; the lead's
+`^ N` chip returns it to Auto). Once
 any row has an agent, plain rows draw as tiles too, so the column holds. An agent card renames the
 agent (`onRenameAgent`), never the session title. `AvatarDialog` is the one face editor (eight
 rolls to start from, then kind, swatch and tone per slot, previews in every state, saved with
