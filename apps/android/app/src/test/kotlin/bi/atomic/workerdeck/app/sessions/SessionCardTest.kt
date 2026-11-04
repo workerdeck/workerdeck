@@ -24,6 +24,29 @@ class SessionCardTest {
         list.close()
     }
 
+    @Test
+    fun anAgentCardDrawsTheCoresBadgeAndStatusInTheVendorTones() {
+        val list = SessionList(null, null)
+        val sessions = listOf(
+            session("codex", "idle", ""","engine":"codex","model":"gpt-6.1-sol","modelName":"GPT-6.1 Sol","agent":{"id":"C","name":"Cody"},"statusLabel":{"text":"Porting","setAt":1}"""),
+            session("claude", "idle", ""","model":"claude-opus-5-5","title":"Fix the list","agent":{"id":"O","name":"Opal"}"""),
+        )
+        list.setHost("h1", "mac", true, """{"sessions":[${sessions.joinToString(",")}]}""")
+        val rows = list.groups(0.0).flatMap { it.rows }.associateBy { it.sessionId }
+        val tones = listTones(dark = false)
+        val codex = rows.getValue("codex")
+        assertEquals("S" to "6.1", codex.modelBadge?.let { it.letter to it.version })
+        assertEquals("Porting", codex.cardStatus)
+        assertEquals(tones.fg3, cardStatusColor(codex, tones))
+        assertEquals(tones.openai, badgeColor(codex, tones))
+        val claude = rows.getValue("claude")
+        assertEquals("O" to "5.5", claude.modelBadge?.let { it.letter to it.version })
+        assertEquals("Fix the list", claude.cardStatus)
+        assertEquals(tones.fg4, cardStatusColor(claude, tones))
+        assertEquals(tones.claude, badgeColor(claude, tones))
+        list.close()
+    }
+
     private val lead = TeamLead("lead", "L", "Lead", null)
 
     @Test

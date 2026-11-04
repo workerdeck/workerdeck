@@ -10,11 +10,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -51,9 +54,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -65,6 +70,7 @@ import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ListChip
 import bi.atomic.workerdeck.core.ffi.ListRow
 import bi.atomic.workerdeck.core.ffi.ListStep
+import bi.atomic.workerdeck.core.ffi.Mark
 import bi.atomic.workerdeck.core.ffi.RowState
 import bi.atomic.workerdeck.core.ffi.StepFold
 import bi.atomic.workerdeck.core.ffi.StepKind
@@ -92,6 +98,7 @@ data class ListTones(
     val badgeFg: Color,
     val accent: Color,
     val claude: Color,
+    val openai: Color,
 )
 
 fun listTones(dark: Boolean): ListTones = if (dark) {
@@ -100,7 +107,7 @@ fun listTones(dark: Boolean): ListTones = if (dark) {
         fg1 = Color(0xFFEDEDED), fg2 = Color(0xFFA1A1A1), fg3 = Color(0xFF8F8F8F), fg4 = Color(0xFF6E6E6E),
         shell = Color(0xFFC586C0), success = Color(0xFF3ECF8E), danger = Color(0xFFFF6166), warning = Color(0xFFF5A623),
         active = Color.White.copy(alpha = 0.1f), border = Color(0xFF3D3D3D), badge = Color(0xFF616161), badgeFg = Color(0xFFCCCCCC),
-        accent = Color(0xFF0078D4), claude = Color(0xFFCC7C5E),
+        accent = Color(0xFF0078D4), claude = Color(0xFFCC7C5E), openai = Color.White,
     )
 } else {
     ListTones(
@@ -108,7 +115,7 @@ fun listTones(dark: Boolean): ListTones = if (dark) {
         fg1 = Color(0xFF171717), fg2 = Color(0xFF454545), fg3 = Color(0xFF737373), fg4 = Color(0xFFA1A1A1),
         shell = Color(0xFF8B3A8B), success = Color(0xFF0F7B4F), danger = Color(0xFFD93036), warning = Color(0xFFA35200),
         active = Color.Black.copy(alpha = 0.08f), border = Color(0xFFC9C9C9), badge = Color(0xFFC4C4C4), badgeFg = Color(0xFF333333),
-        accent = Color(0xFF0078D4), claude = Color(0xFFB3573A),
+        accent = Color(0xFF0078D4), claude = Color(0xFFB3573A), openai = Color(0xFF373737),
     )
 }
 
@@ -167,11 +174,11 @@ fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<S
             Row(Modifier.height(40.dp), verticalAlignment = Alignment.CenterVertically) {
                 AgentAvatar(row, 40.dp, context = agent)
                 Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f).padding(end = 2.dp).alpha(if (row.asleep) 0.6f else 1f)) {
+                Column(Modifier.weight(1f).alpha(if (row.asleep) 0.6f else 1f)) {
                     Row(Modifier.height(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Name(row, tones, BODY, Modifier.weight(1f, fill = false))
-                            if (row.lead) LeadChip(tones)
+                            if (agent) ModelBadge(row, tones, 13.sp)
                             if (row.shared) Icon(painterResource(R.drawable.globe), contentDescription = "Shared with other owners", tint = tones.fg4, modifier = Modifier.size(12.dp))
                         }
                         Unread(row, tones)
@@ -180,7 +187,7 @@ fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<S
                     }
                     Row(Modifier.height(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (agent) {
-                            Text(agentLine(row, tones), style = BODY, color = tones.fg4, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            CardStatus(row, tones, BODY, Modifier.weight(1f))
                         } else {
                             DetailLine(row, tones, icons, Modifier.weight(1f))
                         }
@@ -209,7 +216,7 @@ fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<S
     }
 }
 
-// A Member inside its team card: a 32 face and 12 gap, two 16 lines.
+// A Member inside its team card: one 20 row, a 20 face, then name, badge and status (the status truncates first).
 @Composable
 fun MemberCard(row: ListRow, tones: ListTones, events: CardEvents) {
     Column(
@@ -220,16 +227,20 @@ fun MemberCard(row: ListRow, tones: ListTones, events: CardEvents) {
             .background(if (needsYou(row)) tones.attention else Color.Transparent)
             .padding(4.dp),
     ) {
-        Row(Modifier.height(32.dp), verticalAlignment = Alignment.CenterVertically) {
-            AgentAvatar(row, 32.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f).alpha(if (row.asleep) 0.6f else 1f)) {
-                Row(Modifier.height(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Name(row, tones, BODY.copy(lineHeight = 16.sp), Modifier.weight(1f))
+        Row(Modifier.height(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            AgentAvatar(row, 20.dp)
+            Spacer(Modifier.width(8.dp))
+            BoxWithConstraints(Modifier.weight(1f).alpha(if (row.asleep) 0.6f else 1f)) {
+                val nameMax = maxWidth * 0.6f
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Name(row, tones, BODY, Modifier.widthIn(max = nameMax))
+                        ModelBadge(row, tones, 12.sp)
+                        CardStatus(row, tones, LABEL, Modifier.weight(1f, fill = false))
+                    }
                     Unread(row, tones)
                     Chips(row, tones, events)
                 }
-                Text(agentLine(row, tones), style = LABEL, color = tones.fg4, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(16.dp))
             }
         }
         StepRows(row, tones, events)
@@ -268,11 +279,49 @@ private fun Name(row: ListRow, tones: ListTones, style: TextStyle, modifier: Mod
     )
 }
 
+// The web `ModelBadge`: the vendor mark at 1em, the letter, and the version as a superscript at 0.7em, all in the
+// mark's colour.
 @Composable
-fun LeadChip(tones: ListTones) {
-    Box(Modifier.border(1.dp, tones.accent.copy(alpha = 0.5f), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp)) {
-        Text("LEAD", fontSize = 10.sp, lineHeight = 14.sp, letterSpacing = 0.025.em, fontWeight = FontWeight.Medium, color = tones.accent)
+fun ModelBadge(row: ListRow, tones: ListTones, size: TextUnit) {
+    val badge = row.modelBadge ?: return
+    val color = badgeColor(row, tones)
+    val em = with(LocalDensity.current) { size.toDp() }
+    Row(
+        Modifier.testTag("model-badge").semantics(mergeDescendants = true) { contentDescription = row.modelLabel ?: badge.letter },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        EngineMark(row.mark, row.markTinted, size = em, color = color)
+        Row(verticalAlignment = Alignment.Top) {
+            Text(badge.letter, style = badgeStyle(size), color = color, maxLines = 1)
+            badge.version?.let { version ->
+                Text(version, style = badgeStyle(size * 0.7f), color = color, maxLines = 1, modifier = Modifier.padding(start = 1.dp).offset(y = -(em * 0.14f)))
+            }
+        }
     }
+}
+
+fun badgeColor(row: ListRow, tones: ListTones): Color = when {
+    !row.markTinted -> tones.fg3
+    row.mark == Mark.CLAUDE -> tones.claude
+    else -> tones.openai
+}
+
+private fun badgeStyle(size: TextUnit) = TextStyle(
+    fontSize = size,
+    lineHeight = size,
+    fontWeight = FontWeight.Medium,
+    letterSpacing = 0.sp,
+    fontFeatureSettings = "tnum",
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+)
+
+fun cardStatusColor(row: ListRow, tones: ListTones): Color = if (row.cardStatusIsLabel) tones.fg3 else tones.fg4
+
+@Composable
+private fun CardStatus(row: ListRow, tones: ListTones, style: TextStyle, modifier: Modifier) {
+    if (row.cardStatus.isEmpty()) return
+    Text(row.cardStatus, style = style, color = cardStatusColor(row, tones), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = modifier)
 }
 
 // Grey while the turn still produces, accent once it stopped: the colour answers "is this waiting for me".
@@ -306,14 +355,6 @@ private fun ContextRing(percent: Double?, tones: ListTones) {
 }
 
 private fun modelColor(row: ListRow, tones: ListTones): Color = if (row.nameTinted) tones.claude else tones.fg3
-
-// An agent's second line: its model in the vendor's colour, then its status.
-private fun agentLine(row: ListRow, tones: ListTones) = buildAnnotatedString {
-    row.modelLabel?.let { withStyle(SpanStyle(color = modelColor(row, tones))) { append(it) } }
-    row.status?.let { status ->
-        withStyle(SpanStyle(color = tones.fg3)) { append(if (row.modelLabel != null) " · $status" else status) }
-    }
-}
 
 private const val PROJECT_ICON = "project"
 

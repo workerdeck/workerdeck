@@ -30,10 +30,11 @@ import bi.atomic.workerdeck.core.ffi.StatusBadge
 // An unrecognised engine draws nothing, as on iOS. The marks are trademarks of their owners, used only to identify the
 // engine a session runs on.
 @Composable
-fun EngineMark(mark: Mark?, tinted: Boolean, modifier: Modifier = Modifier, size: Dp = 13.dp) {
+fun EngineMark(mark: Mark?, tinted: Boolean, modifier: Modifier = Modifier, size: Dp = 13.dp, color: Color? = null) {
     mark ?: return
     val colors = Wd.colors
     val tint = when {
+        color != null -> color
         !tinted -> colors.secondary
         mark == Mark.CLAUDE -> colors.coral
         else -> colors.openai
