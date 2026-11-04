@@ -230,6 +230,39 @@ remote exactly as before. The answer is cached per gateway *against the URL it w
 because the extension must not import the server; the two change together or local files quietly
 stop opening natively.
 
+**Agent Search** (`src/search-view.ts` + `webview/search/`, view `workerdeck.search` in its own
+activity-bar container `workerdeck-search`) is the Search view redrawn the same way, for the window
+that has no folder open: VS Code's own search only walks workspace folders, and a remote gateway's
+tree is not one. It follows the focused session like Agent Files and searches through `POST
+/v1/fs/search` for local and remote gateways alike; only opening and replacing touch the editor, on
+the same `file://` / `workerdeck://` URI Agent Files would use.
+
+- **The state is the shared headless model.** `useHostSearch` in `@workerdeck/react` owns the query,
+  search on type (`search.searchOnType`, `searchOnTypeDebouncePeriod`), the stream fold and
+  dismissals; the webview injects `runOverBridge` as its `run`, which posts `wd-search-run` and
+  yields the host's batched `wd-search-events` (40 ms batches) until `end`. Aborting posts
+  `wd-search-cancel` and the host aborts the client stream, which closes the request and kills rg.
+- **Include and exclude are VS Code's text, expanded by `searchGlobs`** (`src` means `**/src` and
+  `**/src/**`, `./x` anchors at the root, absolute paths inside the root are made relative). The
+  ignore toggle sends `files.exclude` and `search.exclude` globs whose value is `true` and leaves
+  `.gitignore` on; off, it sends neither and rg runs `--no-ignore`.
+- **Replace is a `WorkspaceEdit` from the host, never a gateway write**, so undo works and dirty
+  editors take the edit. Each match is re-read from the document first and skipped (with a count)
+  when its text changed since the search; files that were clean are saved afterwards. The
+  replacement text is `replacementFor` from `@workerdeck/protocol` (VS Code's `$n`, `\n`, `\u\U\l\L`
+  and preserve-case rules), which the row preview uses too. With replace open, selecting a match
+  opens the Replace Preview diff (a `workerdeck-replace:` content provider), as VS Code does.
+- **Rows reuse the Explorer's markup and `files.css` rules**, rescoped under `.wds` in
+  `webview/search/search.css` with the Search view's own rules after them. Codicon glyphs are
+  declared there by codepoint, because `codiconCss` only loads the font. File icons need language
+  ids (Seti keys `.ts` on `typescript`), so the theme message carries `languageIndex` and the webview
+  resolves names with `src/language-of.ts`, the pure half of `icon-theme.ts`.
+- **The command is `workerdeck.search.find`, never `workerdeck.search.focus`**: VS Code generates
+  `<viewId>.focus` for every view, and a command of that name that calls it calls itself. Cmd+Shift+F
+  and Cmd+Shift+H are bound only while `workbenchState == empty`, so a window with a folder keeps
+  VS Code's search; the toggles' Alt+Cmd chords use `workerdeck.searchFocus`, reported by the
+  webview like `workerdeck.filesFocus`.
+
 ### The navigation rule
 
 **No webview in this extension draws its own header, and no view has

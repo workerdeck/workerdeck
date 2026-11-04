@@ -966,7 +966,7 @@ with **no roots and no byte cap** because the allowlist is built solely from `fi
 events; a path the *agent* named is not a produced file and stays behind `/fs/*`)
 and `/sessions/:id/mcp`
 (status + reconnect/enable/disable, with each server's `env`/`headers` stripped),
-the host-filesystem routes (`/fs/*`, `routes/fs.ts` over `services/host-files.ts` + `host-file-search.ts` - operator
+the host-filesystem routes (`/fs/*`, `routes/fs.ts` over `services/host-files.ts` + `host-file-search.ts` + `host-text-search.ts`, the ripgrep runner behind the NDJSON `/fs/search` - operator
 privilege; reads follow `allowedCwdRoots` and `hostFiles.roots` only narrows, writes opt in
 separately; realpath-based containment and uniform-404 disclosure, so **do not** reuse
 `cwdAllowed` there - see `docs/GOTCHAS.md` §Host filesystem),
@@ -1337,7 +1337,10 @@ behind catch-up (`src/lib/recap.ts`: `summarizeSince` + `recapLine` - **counted,
 a prose recap would spend a turn on a summary nobody asked for, and would be worst in the
 case that matters most, a session that failed unattended), the composer's two
 companions (`useAttachments` - staging + upload, filtered by the capability record;
-`useHostFileSearch` - `@file` search rooted at the session cwd, self-disabling on a 404), the
+`useHostFileSearch` - `@file` search rooted at the session cwd, self-disabling on a 404), content
+search's headless half (`useHostSearch` over an injected `run`, plus the pure `hostSearchReducer`,
+`hostSearchTree`, `hostSearchRequest` and `matchPreview`; the VS Code Agent Search and any later web
+or native search draw on these, the wire rules `searchGlobs` / `replacementFor` live in `protocol`), the
 workspace's headless half (`useHostFileTree` + the pure `flattenHostTree`; `useOpenFiles` + the
 pure `openFilesReducer`, which keeps `content` (disk) and `draft` (edits) apart and carries each
 tab's `hash`, because `/fs/write` is conditional *always* - a 409 is a **choice** to offer
