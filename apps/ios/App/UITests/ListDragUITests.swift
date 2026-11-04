@@ -66,6 +66,18 @@ final class ListDragUITests: XCTestCase {
   }
 
   @MainActor
+  func testTapOnThePeekOpensTheSession() throws {
+    let app = launchPreview("list")
+    let docs = card(app, "WD-Docs")
+    XCTAssertTrue(docs.waitForExistence(timeout: 8))
+    docs.press(forDuration: 1.2)
+    let rename = app.buttons["Rename agent"]
+    XCTAssertTrue(rename.waitForExistence(timeout: 3))
+    app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: app.frame.midX, dy: rename.frame.minY - 120)).tap()
+    XCTAssertTrue(app.navigationBars["Sessions"].waitForNonExistence(timeout: 5), "a tap on the peek did not open the session")
+  }
+
+  @MainActor
   func testTapStillOpensTheSession() throws {
     let app = launchPreview("list")
     let docs = card(app, "WD-Docs")

@@ -148,7 +148,10 @@ struct ListLiftHook: UIViewRepresentable {
 
   func updateUIView(_ view: UIView, context: Context) {
     lifter.handlers = handlers
-    DispatchQueue.main.async { lifter.attach(near: view) }
+    DispatchQueue.main.async {
+      lifter.attach(near: view)
+      PeekCommit.install(near: view)
+    }
   }
 }
 

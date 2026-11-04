@@ -474,8 +474,10 @@ struct SessionListView: View {
             CoreSessionPeek(
               sessionId: item.sessionId, client: client, title: row.agent ?? row.title,
               hideThinking: !settings.showThinking)
+            .onAppear { PeekCommit.open = { openPeeked(item, model: model) } }
           } else {
             SessionCard(item: item, actions: CardActions(open: {})).frame(width: 360)
+              .onAppear { PeekCommit.open = { openPeeked(item, model: model) } }
           }
         }
         .background(ListLiftHook(lifter: lifter, handlers: liftHandlers(model, sections: sections)))
@@ -810,9 +812,6 @@ struct SessionListView: View {
   @ViewBuilder
   private func rowActions(for row: ListItem, model: SessionListModel) -> some View {
     let agent = row.row.agent
-    if let owner = row.row.owner {
-      Text("Owner: \(owner)")
-    }
     ControlGroup {
       Button {
         beginRename(row)
@@ -972,6 +971,13 @@ struct SessionListView: View {
         Text("Start one with the + button, or pick up an earlier one from Resume.")
       }
     }
+  }
+
+  private func openPeeked(_ item: ListItem, model: SessionListModel) {
+    PeekCommit.open = nil
+    guard let route = sessionRoute(for: item) else { return }
+    if item.row.depth > 0 { model.select(hostId: item.row.hostId, sessionId: item.row.sessionId) }
+    path.append(route)
   }
 
   private func sessionRoute(for row: ListItem) -> SessionRoute? {
