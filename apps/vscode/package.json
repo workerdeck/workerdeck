@@ -591,7 +591,7 @@
         "icon": "$(trash)"
       },
       {
-        "command": "workerdeck.search.focus",
+        "command": "workerdeck.search.find",
         "title": "Search in Agent Folder",
         "category": "WorkerDeck",
         "icon": "$(search)"
@@ -725,7 +725,7 @@
         "when": "workerdeck.filesFocus && workerdeck.filesHasRoot && !workerdeck.filesEditing && workerdeck.filesLocal"
       },
       {
-        "command": "workerdeck.search.focus",
+        "command": "workerdeck.search.find",
         "key": "ctrl+shift+f",
         "mac": "cmd+shift+f",
         "when": "workbenchState == empty"
@@ -1125,7 +1125,7 @@
           "when": "false"
         },
         {
-          "command": "workerdeck.search.focus",
+          "command": "workerdeck.search.find",
           "when": "workerdeck.searchHasRoot"
         },
         {

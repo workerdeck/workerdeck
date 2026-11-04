@@ -142,7 +142,7 @@ export class SearchViewProvider extends WebviewViewHost<SearchToHost, HostToSear
   commands(): Record<string, (...args: never[]) => unknown> {
     const command = (name: SearchCommand) => () => this.post({ kind: 'wd-search-command', command: name })
     return {
-      'workerdeck.search.focus': () => this.focus(),
+      'workerdeck.search.find': () => this.focus(),
       'workerdeck.search.refresh': command('refresh'),
       'workerdeck.search.clear': command('clear'),
       'workerdeck.search.viewAsTree': command('viewAsTree'),
