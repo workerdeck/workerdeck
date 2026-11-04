@@ -5,6 +5,7 @@ import { startDevReload } from './dev-reload.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import { AgentSettingsFileSystem } from './agent-settings.ts'
 import { FilesViewProvider } from './files-view.ts'
+import { SearchViewProvider } from './search-view.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
 import { AgentFaceIcons, peerRowsOf } from './agent-faces.ts'
 import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
@@ -49,6 +50,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const model = new SessionsModel(store)
   const fs = new WorkerdeckFileSystem(store)
   const files = new FilesViewProvider(context.extensionUri, store, fs)
+  const search = new SearchViewProvider(context.extensionUri, store)
 
   const statusBar = new SessionStatusBar()
   const unread = new UnreadStatusItem()
@@ -376,6 +378,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   const syncSurfaces = () => {
     void files.setSession(registry.focused.session)
+    void search.setSession(registry.focused.session)
     syncSelected()
     syncContextKeys()
     model.setOpen(registry.openMap())
@@ -517,6 +520,10 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.window.registerWebviewViewProvider(ProfilesViewProvider.viewId, profiles),
+    search,
+    vscode.window.registerWebviewViewProvider(SearchViewProvider.viewId, search, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
     ...Object.entries(sections).map(([kind, provider]) =>
       vscode.window.registerWebviewViewProvider(SECTION_VIEWS[kind as SectionKind], provider),
     ),
@@ -573,6 +580,8 @@ export function activate(context: vscode.ExtensionContext): void {
         'workerdeck.refreshSessions': () => model.refresh(),
       },
       files.commands(),
+      search.commands(),
+      { 'workerdeck.files.searchInFolder': (menu?: { webviewSection?: string; uri?: string }) => search.searchIn(files.folderFor(menu)) },
       sidebar.menuCommands(),
     ),
   )

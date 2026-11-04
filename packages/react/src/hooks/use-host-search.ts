@@ -32,6 +32,7 @@ export type UseHostSearchResult = {
   clear: () => void
   dismissFile: (path: string) => void
   dismissMatch: (path: string, key: string) => void
+  dismissMatches: (files: { path: string; keys: string[] }[]) => void
 }
 
 const SEARCH_KEYS = ['query', 'isRegex', 'matchCase', 'wholeWord', 'includes', 'excludes', 'useIgnoreFiles'] as const
@@ -117,7 +118,8 @@ export function useHostSearch(options: UseHostSearchOptions): UseHostSearchResul
 
   const dismissFile = useCallback((path: string) => dispatch({ type: 'dismiss-file', path }), [])
   const dismissMatch = useCallback((path: string, key: string) => dispatch({ type: 'dismiss-match', path, key }), [])
+  const dismissMatches = useCallback((files: { path: string; keys: string[] }[]) => dispatch({ type: 'dismiss-matches', files }), [])
   const counts = useMemo(() => hostSearchCounts(state), [state])
 
-  return { query, setQuery, state, counts, search, cancel, clear, dismissFile, dismissMatch }
+  return { query, setQuery, state, counts, search, cancel, clear, dismissFile, dismissMatch, dismissMatches }
 }

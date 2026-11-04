@@ -36,6 +36,7 @@ export type HostSearchAction =
   | { type: 'clear' }
   | { type: 'dismiss-file'; path: string }
   | { type: 'dismiss-match'; path: string; key: string }
+  | { type: 'dismiss-matches'; files: { path: string; keys: string[] }[] }
 
 export type HostSearchFolder = {
   kind: 'folder'
@@ -95,13 +96,18 @@ export function hostSearchReducer(state: HostSearchState, action: HostSearchActi
       return { ...state, files: state.files.filter((file) => file.path !== action.path) }
     }
     case 'dismiss-match': {
+      return hostSearchReducer(state, { type: 'dismiss-matches', files: [{ path: action.path, keys: [action.key] }] })
+    }
+    case 'dismiss-matches': {
+      const gone = new Map(action.files.map((file) => [file.path, new Set(file.keys)]))
       const files: HostSearchFile[] = []
       for (const file of state.files) {
-        if (file.path !== action.path) {
+        const keys = gone.get(file.path)
+        if (!keys) {
           files.push(file)
           continue
         }
-        const lines = withoutMatch(file.lines, action.key)
+        const lines = withoutMatches(file.lines, keys)
         if (lines.length > 0) {
           files.push({ ...file, lines })
         }
@@ -111,10 +117,10 @@ export function hostSearchReducer(state: HostSearchState, action: HostSearchActi
   }
 }
 
-function withoutMatch(lines: HostSearchLine[], key: string): HostSearchLine[] {
+function withoutMatches(lines: HostSearchLine[], keys: ReadonlySet<string>): HostSearchLine[] {
   const kept: HostSearchLine[] = []
   for (const line of lines) {
-    const matches = line.matches.filter((match) => matchKey(match) !== key)
+    const matches = line.matches.filter((match) => !keys.has(matchKey(match)))
     if (matches.length > 0) {
       kept.push(matches.length === line.matches.length ? line : { ...line, matches })
     }

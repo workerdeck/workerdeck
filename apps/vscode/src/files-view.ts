@@ -486,6 +486,10 @@ export class FilesViewProvider extends WebviewViewHost<FilesToHost, HostToFiles>
     return this.#selection.some((u) => u.toString() === clicked.toString()) ? this.#selection : [clicked]
   }
 
+  folderFor(context: MenuContext | undefined): vscode.Uri | undefined {
+    return this.#folderOf(context)
+  }
+
   #folderOf(context: MenuContext | undefined): vscode.Uri | undefined {
     const clicked = context?.uri ? vscode.Uri.parse(context.uri) : undefined
     if (!clicked) {
