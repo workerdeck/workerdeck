@@ -11,6 +11,15 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.ui.draw.blur
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
@@ -74,7 +83,6 @@ import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ListRow
 import bi.atomic.workerdeck.core.ffi.deleteAgentMessage
 import bi.atomic.workerdeck.core.ffi.deleteAgentTitle
-import bi.atomic.workerdeck.core.ffi.newConversationHint
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,6 +106,8 @@ fun SessionsScreen(
     var pastOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<ListRow?>(null) }
     var closing by remember { mutableStateOf<ListRow?>(null) }
+    var statusing by remember { mutableStateOf<ListRow?>(null) }
+    var peeking by remember { mutableStateOf<String?>(null) }
     var crossing by remember { mutableStateOf<Pair<ListRow, TeamLead>?>(null) }
     val drag = remember(model) { ListDrag(model::teamLeads) }
     val join: (ListRow, TeamLead) -> Unit = { row, lead -> if (model.crossedOwner(row, lead) != null) crossing = row to lead else model.join(row, lead) }
@@ -125,22 +135,7 @@ fun SessionsScreen(
             }
             RowChrome(leading, listOf(trailing))
         },
-        menu = { row, expanded, dismiss ->
-            RowMenu(
-                row,
-                expanded,
-                dismiss,
-                leads = if (expanded) model.teamLeads(row) else emptyList(),
-                onRename = { renaming = row },
-                onNewConversation = { model.newConversation(row) },
-                onConversations = { history = ConversationsTarget(row.hostId, row.sessionId, row.agent ?: row.title, row.title, retired = false) },
-                onSleep = { model.sleep(row.hostId, row.sessionId, row.conversation) },
-                onJoin = { join(row, it) },
-                onLeave = { model.leave(row) },
-                onClose = { if (row.sessionStatus == "closed") model.close(row) else closing = row },
-                onDelete = { deleting = row },
-            )
-        },
+        peek = { peeking = it.key },
         drop = { action ->
             when (action) {
                 is DropAction.MoveGroup -> model.moveGroup(action.key, action.onto)
@@ -158,43 +153,77 @@ fun SessionsScreen(
         }
     }
     BackHandler(enabled = ui.search.isNotEmpty()) { model.setSearch("") }
-    Scaffold(
-        containerColor = colors.background,
-        snackbarHost = { SnackbarHost(snackbar) },
-        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
-        bottomBar = {
-            SearchBar(ui.search, model::setSearch) { NewMenu(gateways, model::canCreateAgent) { id, agent -> onNew(id, agent, null) } }
-        },
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Sessions", style = MaterialTheme.typography.titleMedium) },
-                actions = {
-                    GatewayMenu(
-                        gateways,
-                        onAdd,
-                        onForget,
-                        onPastAgents = if (ui.pastAgents.isNotEmpty()) ({ pastOpen = true }) else null,
-                        onResetOrder = if (ui.orderCustomized) model::resetGroupOrder else null,
-                    )
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
-            )
-        },
-    ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = ui.refreshing,
-            onRefresh = model::pullRefresh,
-            modifier = Modifier.padding(padding).fillMaxSize(),
-        ) {
-            when {
-                !ui.loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), strokeWidth = 2.dp)
-                ui.groups.isEmpty() && ui.error == null -> LazyColumn(Modifier.fillMaxSize()) {
-                    item(key = "empty") { EmptyList(searching(ui.search)) }
+    val peeked = peeking?.let { key -> ui.groups.firstNotNullOfOrNull { group -> group.rows.firstOrNull { it.key == key } } }
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.blur(if (peeked != null) 16.dp else 0.dp),
+            containerColor = colors.background,
+            snackbarHost = { SnackbarHost(snackbar) },
+            contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
+            bottomBar = {
+                SearchBar(ui.search, model::setSearch) { NewMenu(gateways, model::canCreateAgent) { id, agent -> onNew(id, agent, null) } }
+            },
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = { Text("Sessions", style = MaterialTheme.typography.titleMedium) },
+                    actions = {
+                        GatewayMenu(
+                            gateways,
+                            onAdd,
+                            onForget,
+                            onPastAgents = if (ui.pastAgents.isNotEmpty()) ({ pastOpen = true }) else null,
+                            onResetOrder = if (ui.orderCustomized) model::resetGroupOrder else null,
+                        )
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
+                )
+            },
+        ) { padding ->
+            PullToRefreshBox(
+                isRefreshing = ui.refreshing,
+                onRefresh = model::pullRefresh,
+                modifier = Modifier.padding(padding).fillMaxSize(),
+            ) {
+                when {
+                    !ui.loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), strokeWidth = 2.dp)
+                    ui.groups.isEmpty() && ui.error == null -> LazyColumn(Modifier.fillMaxSize()) {
+                        item(key = "empty") { EmptyList(searching(ui.search)) }
+                    }
+                    else -> SessionsList(ui.groups, ui.error, ui.projectIcons, drag, events)
                 }
-                else -> SessionsList(ui.groups, ui.error, ui.projectIcons, drag, events)
             }
         }
+        peeked?.let { row ->
+            SessionPeekOverlay(
+                row,
+                model.client(row.hostId),
+                peekActions(
+                    row,
+                    leads = model.teamLeads(row),
+                    onRename = { renaming = row },
+                    onStatus = { statusing = row },
+                    onNewConversation = { model.newConversation(row) },
+                    onConversations = { history = ConversationsTarget(row.hostId, row.sessionId, row.agent ?: row.title, row.title, retired = false) },
+                    onChangeAvatar = { model.changeAvatar(row) },
+                    onMakeAgent = { model.makeAgent(row) },
+                    onSleep = { model.sleep(row.hostId, row.sessionId, row.conversation) },
+                    onJoin = { join(row, it) },
+                    onLeave = { model.leave(row) },
+                    onDissolve = { model.dissolve(row) },
+                    onClose = { if (row.sessionStatus == "closed") model.close(row) else closing = row },
+                    onDelete = { deleting = row },
+                ),
+                onSeen = { model.mark(row.hostId, row.sessionId, it) },
+                onLeave = { seen -> seen?.let { model.finalizeSeen(row.hostId, row.sessionId, it) } },
+                onOpen = {
+                    peeking = null
+                    open(row, null)
+                },
+                onDismiss = { peeking = null },
+            )
+        }
     }
+    statusing?.let { row -> StatusDialog(row, onDismiss = { statusing = null }) { text -> model.setStatus(row, text) } }
     deleting?.let { row ->
         val name = row.agent
         AlertDialog(
@@ -448,64 +477,61 @@ private fun RenameDialog(row: ListRow, onDismiss: () -> Unit, onRename: (String)
     )
 }
 
-// The long press: every non-navigating thing a card can do, the swipes' actions included.
 @Composable
-private fun RowMenu(
+private fun StatusDialog(row: ListRow, onDismiss: () -> Unit, onSet: (String) -> Unit) {
+    var text by remember(row.key) { mutableStateOf(row.statusText.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (row.statusText != null) "Change status" else "Set status") },
+        text = { OutlinedTextField(text, { text = it }, singleLine = true, placeholder = { Text("What is it doing?") }) },
+        confirmButton = {
+            TextButton(onClick = {
+                onDismiss()
+                onSet(text)
+            }) { Text(if (text.isBlank() && row.statusText != null) "Clear" else "Set") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+// Every non-navigating thing a card can do, the swipes' actions included, in the order iOS's long press lists them.
+private fun peekActions(
     row: ListRow,
-    expanded: Boolean,
-    dismiss: () -> Unit,
     leads: List<TeamLead>,
     onRename: () -> Unit,
+    onStatus: () -> Unit,
     onNewConversation: () -> Unit,
     onConversations: () -> Unit,
+    onChangeAvatar: () -> Unit,
+    onMakeAgent: () -> Unit,
     onSleep: () -> Unit,
     onJoin: (TeamLead) -> Unit,
     onLeave: () -> Unit,
+    onDissolve: () -> Unit,
     onClose: () -> Unit,
     onDelete: () -> Unit,
-) {
-    val colors = Wd.colors
+): PeekActions {
     val agent = row.agentId != null
-    DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
-        MenuItem(if (agent) "Rename agent" else "Rename session", dismiss = dismiss, run = onRename)
-        if (row.canNewConversation) {
-            DropdownMenuItem(
-                text = {
-                    Column {
-                        Text("New conversation")
-                        Text(row.newConversationBlocked ?: newConversationHint(), style = MaterialTheme.typography.bodySmall, color = colors.secondary)
-                    }
-                },
-                enabled = row.newConversationBlocked == null,
-                onClick = {
-                    dismiss()
-                    onNewConversation()
-                },
-            )
-        }
-        MenuItem("Conversations…", dismiss = dismiss, run = onConversations)
-        if (row.canSleep) MenuItem("Sleep", dismiss = dismiss, run = onSleep)
-        if (leads.isNotEmpty()) {
-            HorizontalDivider()
-            for (lead in leads) MenuItem("Add to ${lead.name}'s team", dismiss = dismiss) { onJoin(lead) }
-        }
-        if (row.member) MenuItem("Leave ${row.team ?: "team"}", dismiss = dismiss, run = onLeave)
-        HorizontalDivider()
-        when {
-            agent -> MenuItem("Delete agent…", colors.red, dismiss, onDelete)
-            row.sessionStatus == "closed" -> MenuItem("Remove", colors.red, dismiss, onClose)
-            else -> MenuItem("Close…", colors.red, dismiss, onClose)
-        }
-    }
-}
-
-@Composable
-private fun MenuItem(label: String, color: Color = Color.Unspecified, dismiss: () -> Unit, run: () -> Unit) {
-    DropdownMenuItem(
-        text = { Text(label, color = color) },
-        onClick = {
-            dismiss()
-            run()
-        },
+    val bar = listOf(
+        PeekAction("Rename", Icons.Filled.Edit, run = onRename),
+        PeekAction("Status", Icons.Filled.Info, run = onStatus),
+        PeekAction("New", Icons.Filled.Refresh, enabled = row.canNewConversation && row.newConversationBlocked == null, run = onNewConversation),
     )
+    val general = buildList {
+        add(PeekAction("Conversations…", Icons.AutoMirrored.Filled.List, run = onConversations))
+        if (agent) add(PeekAction("Change avatar", Icons.Filled.Face, run = onChangeAvatar))
+        if (!agent) add(PeekAction("Make agent", Icons.Filled.Person, run = onMakeAgent))
+        if (row.canSleep) add(PeekAction("Sleep", null, run = onSleep))
+    }
+    val team = buildList {
+        for (lead in leads) add(PeekAction("Add to ${lead.name}'s team", null) { onJoin(lead) })
+        if (row.member) add(PeekAction("Leave ${row.team ?: "team"}", Icons.AutoMirrored.Filled.ExitToApp, run = onLeave))
+        if (row.lead) add(PeekAction("Dissolve team", null, run = onDissolve))
+    }
+    val end = when {
+        agent -> PeekAction("Delete agent…", Icons.Filled.Delete, danger = true, run = onDelete)
+        row.sessionStatus == "closed" -> PeekAction("Remove", Icons.Filled.Delete, danger = true, run = onClose)
+        else -> PeekAction("Close…", Icons.Filled.Close, danger = true, run = onClose)
+    }
+    return PeekActions(bar, listOf(general, team, listOf(end)))
 }

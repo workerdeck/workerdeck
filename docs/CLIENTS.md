@@ -1592,7 +1592,10 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   kind (`ListRow.chips`, `SessionList.toggleSteps`), the unfolded kinds' rows under the card. A team that shows a
   Member is one nested card (`cardUnits`); a lingering Member fills a hairline from `linger_start`. Headings fold
   every group, keep a project's own case, badge its gateway and offer `+` (create in that cwd). The colours are
-  the web theme's tokens (`listTones`). Long press opens the row menu; long press and drag moves a heading onto
+  the web theme's tokens (`listTones`). A still long press peeks (`sessions/SessionPeek.kt`): the list blurs (API 31+,
+  a darker scrim below), the live transcript shows read-only and marks what it shows read, as on the session screen,
+  a tap on it opens the session, a tap outside or Back dismisses, and below it sit iOS's icon row (Rename, Status, New)
+  and its action list (`peekActions`). Long press and drag moves a heading onto
   another (`moveGroup`, Reset group order in the gateway menu) or a card onto a lead it may join (`teamLeads`),
   and a Member let go outside its team card leaves it (`ListGestures.kt`). Swipes mirror iOS `RowChrome`.
 - **A long-press on a transcript row opens its menu** (`session/RowMenuItems.kt`): the core's

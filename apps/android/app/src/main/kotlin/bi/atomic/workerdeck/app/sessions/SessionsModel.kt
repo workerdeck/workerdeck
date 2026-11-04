@@ -23,6 +23,8 @@ import bi.atomic.workerdeck.core.ffi.getSessionCall
 import bi.atomic.workerdeck.core.ffi.SessionList
 import bi.atomic.workerdeck.core.ffi.AgentPatch
 import bi.atomic.workerdeck.core.ffi.SessionPatch
+import bi.atomic.workerdeck.core.ffi.StatusEdit
+import bi.atomic.workerdeck.core.ffi.rerollAvatarCall
 import bi.atomic.workerdeck.core.ffi.StepFold
 import bi.atomic.workerdeck.core.ffi.TeamLead
 import bi.atomic.workerdeck.core.ffi.TextEdit
@@ -287,6 +289,28 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     fun leave(row: ListRow) {
         val agentId = row.agentId ?: return
         act(row, "Could not leave the team") { it.perform(updateAgentCall(agentId, AgentPatch(lead = TextEdit.Clear))) }
+    }
+
+    fun dissolve(row: ListRow) {
+        val members = list.teamMembers(row.hostId, row.sessionId)
+        act(row, "Could not dissolve the team") { client ->
+            for (id in members) client.perform(updateAgentCall(id, AgentPatch(lead = TextEdit.Clear)))
+        }
+    }
+
+    fun setStatus(row: ListRow, text: String) {
+        val trimmed = text.trim()
+        val label = if (trimmed.isEmpty()) StatusEdit.Clear else StatusEdit.Set(trimmed, null)
+        act(row, "Could not set the status") { it.perform(updateSessionCall(row.sessionId, SessionPatch(statusLabel = label), row.conversation)) }
+    }
+
+    fun changeAvatar(row: ListRow) {
+        val agentId = row.agentId ?: return
+        act(row, "Could not change the avatar") { it.perform(rerollAvatarCall(agentId, null)) }
+    }
+
+    fun makeAgent(row: ListRow) {
+        act(row, "Could not make an agent") { it.perform(nameSessionCall(row.sessionId, generation = row.conversation)) }
     }
 
     // An agent's name is the agent's; a session's title is `PATCH /sessions/:id`, and empty clears it.

@@ -47,14 +47,14 @@ import bi.atomic.workerdeck.core.ffi.ListRow
 import bi.atomic.workerdeck.core.ffi.ListStep
 import bi.atomic.workerdeck.core.ffi.StepKind
 
-// Everything a card offers besides opening: its swipe actions and its long-press menu.
+// Everything a card offers besides opening: its swipe actions and its long-press peek.
 class RowChrome(val leading: List<SwipeAction>, val trailing: List<SwipeAction>)
 
 class ListEvents(
     val card: CardEvents,
     val open: (ListRow) -> Unit,
     val chrome: (ListRow) -> RowChrome,
-    val menu: @Composable (row: ListRow, open: Boolean, dismiss: () -> Unit) -> Unit,
+    val peek: (ListRow) -> Unit,
     val drop: (DropAction) -> Unit,
     val toggleGroup: (String) -> Unit,
     val newIn: (hostId: String, cwd: String) -> Unit,
@@ -107,10 +107,9 @@ private fun CardUnitView(unit: CardUnit, tones: ListTones, icons: Map<String, Im
     ForgetBounds(lead.key) { drag.team(lead.key, null) }
 }
 
-// One card with the row chrome: swipes, the long-press menu, and long-press drag onto a lead.
+// One card with the row chrome: swipes, the long-press peek, and long-press drag onto a lead.
 @Composable
 private fun Chromed(row: ListRow, team: String?, shape: Shape, tones: ListTones, drag: ListDrag, events: ListEvents, content: @Composable () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
     val chrome = events.chrome(row)
     val lifted = drag.lifted && (drag.item as? DragItem.Card)?.row?.key == row.key
     val target = drag.target == row.key
@@ -128,10 +127,9 @@ private fun Chromed(row: ListRow, team: String?, shape: Shape, tones: ListTones,
                         }
                     }
                     .then(if (target) Modifier.border(1.5.dp, tones.accent, shape) else Modifier)
-                    .pressAndDrag(drag, { DragItem.Card(row, team) }, onTap = { events.open(row) }, onMenu = { menu = true }, onDrop = events.drop),
+                    .pressAndDrag(drag, { DragItem.Card(row, team) }, onTap = { events.open(row) }, onMenu = { events.peek(row) }, onDrop = events.drop),
             ) { content() }
         }
-        events.menu(row, menu) { menu = false }
     }
     ForgetBounds(row.key) { drag.card(row.key, row, null) }
 }
