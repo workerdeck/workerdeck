@@ -51,12 +51,12 @@ export interface ChoicesProps {
   label: string
 }
 
+function isEditable(element: EventTarget | null): element is HTMLElement {
+  return element instanceof HTMLElement && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable)
+}
+
 function isTyping(element: Element | null): boolean {
-  if (!(element instanceof HTMLElement)) {
-    return false
-  }
-  const editable = element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable
-  if (!editable) {
+  if (!isEditable(element)) {
     return false
   }
   const text = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : (element.textContent ?? '')
@@ -88,6 +88,9 @@ export function Choices({ options, focused, onFocus, onChoose, active = true, au
       role="group"
       aria-label={label}
       onKeyDown={(event) => {
+        if (isEditable(event.target)) {
+          return
+        }
         if (event.key === 'ArrowDown') {
           move(1)
           event.preventDefault()
