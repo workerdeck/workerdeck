@@ -76,3 +76,30 @@ pub fn model_menu(models: &[ModelOption], default_model: Option<&str>) -> ModelM
         .collect();
     ModelMenu { main, more: rows.iter().map(|m| (*m).clone()).collect(), default_row: default_index.map(|index| rows[index].clone()) }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelBadge {
+    pub letter: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+}
+
+fn leading_version(word: &str) -> Option<String> {
+    let chars: Vec<char> = word.chars().collect();
+    let start = chars.iter().position(char::is_ascii_digit)?;
+    let mut end = start + chars[start..].iter().take_while(|c| c.is_ascii_digit()).count();
+    while end + 1 < chars.len() && chars[end] == '.' && chars[end + 1].is_ascii_digit() {
+        end += 1 + chars[end + 1..].iter().take_while(|c| c.is_ascii_digit()).count();
+    }
+    Some(chars[start..end].iter().collect())
+}
+
+pub fn model_badge(name: &str) -> Option<ModelBadge> {
+    let words: Vec<&str> = name.split(crate::vm::text::is_js_space).filter(|word| !word.is_empty()).collect();
+    let first = words.first()?;
+    let at = words.iter().position(|word| word.chars().any(|c| c.is_ascii_digit()));
+    let version = at.and_then(|at| leading_version(words[at]));
+    let tier = at.and_then(|at| words.get(at + 1)).filter(|next| next.chars().next().is_some_and(|c| c.is_ascii_alphabetic()));
+    let letter = tier.unwrap_or(first).chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+    Some(ModelBadge { letter, version })
+}

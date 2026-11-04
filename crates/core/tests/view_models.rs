@@ -100,6 +100,11 @@ fn session_list(fn_name: &str, a: &Args) -> Value {
             out(sl::group_rows(&rows, &a.get(1), &a.opt(2).unwrap_or_default()))
         }
         "sessionState" => out(sl::session_state(&a.info(0))),
+        "cardStatus" => {
+            let info = a.info(0);
+            let state = a.opt(1).unwrap_or_else(|| sl::session_state(&info));
+            out(sl::card_status(&info, state))
+        }
         "visibleSubagents" => out(sl::visible_subagents(&a.info(0), a.get(1))),
         "runningSubagents" => out(sl::running_subagents(&a.info(0))),
         "subagentLabel" => out(sl::subagent_label(&a.get(0))),
@@ -331,6 +336,7 @@ fn tool_titles_fn(fn_name: &str, a: &Args) -> Value {
 fn model_menu_fn(fn_name: &str, a: &Args) -> Value {
     match fn_name {
         "modelLine" => out(model_menu::model_line(&a.get(0))),
+        "modelBadge" => out(model_menu::model_badge(&a.str(0).unwrap())),
         "modelMatches" => out(model_menu::model_matches(&a.get(0), &a.str(1).unwrap())),
         "modelMenu" => out(model_menu::model_menu(&a.get::<Vec<ModelOption>>(0), a.str(1).as_deref())),
         _ => panic!("model-menu.{fn_name} has no Rust binding"),

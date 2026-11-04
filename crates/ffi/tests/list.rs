@@ -53,6 +53,24 @@ fn a_row_names_its_model_by_the_gateways_name_then_the_id() {
 }
 
 #[test]
+fn a_row_carries_its_model_badge_and_card_status() {
+    let list = SessionList::new(None, None);
+    let labelled = idle("s1", r#","model":"gpt-6.1-sol","modelName":"GPT-6.1 Sol","statusLabel":{"text":"Porting","emoji":"🦀","setAt":1}"#);
+    let titled = idle("s2", r#","model":"claude-opus-5-5","title":"  Fix the list  ""#);
+    let starting = session("s3", "starting", r#","pendingPermissionCount":0"#);
+    list.set_host("h1".into(), "mac".into(), true, body(&[labelled, titled, starting])).unwrap();
+    let rows: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).collect();
+    let row = |id: &str| rows.iter().find(|r| r.session_id == id).unwrap();
+    let badge = row("s1").model_badge.clone().unwrap();
+    assert_eq!((badge.letter.as_str(), badge.version.as_deref()), ("S", Some("6.1")));
+    assert_eq!((row("s1").card_status.as_str(), row("s1").card_status_is_label), ("🦀 Porting", true));
+    assert_eq!(row("s2").model_badge.as_ref().map(|b| b.letter.as_str()), Some("O"));
+    assert_eq!((row("s2").card_status.as_str(), row("s2").card_status_is_label), ("Fix the list", false));
+    assert_eq!(row("s3").card_status, "Starting…");
+    assert!(row("s3").model_badge.is_none());
+}
+
+#[test]
 fn a_mark_counts_prose_after_it_as_unseen() {
     let list = SessionList::new(None, None);
     list.set_host("h1".into(), "mac".into(), true, body(&[idle("s1", r#","proseCount":2"#)])).unwrap();

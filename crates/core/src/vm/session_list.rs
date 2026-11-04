@@ -1,4 +1,4 @@
-use crate::rest::{Entries, GatewayRelayMeta, SessionInfo, SessionStatus, ShellInfo, ShellStatus, SubagentInfo, SubagentStatus};
+use crate::rest::{ChecklistStatus, Entries, GatewayRelayMeta, SessionInfo, SessionStatus, ShellInfo, ShellStatus, SubagentInfo, SubagentStatus};
 use crate::vm::agents::project_accent;
 use crate::vm::collate::{locale_compare, locale_compare_base};
 use crate::vm::text::{js_trim, utf16_len};
@@ -300,6 +300,51 @@ pub fn session_state(info: &SessionInfo) -> SessionState {
         return SessionState::Working;
     }
     SessionState::Idle
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CardStatusSource {
+    Label,
+    Task,
+    Title,
+    State,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CardStatus {
+    pub text: String,
+    pub source: CardStatusSource,
+}
+
+pub fn card_status(info: &SessionInfo, state: SessionState) -> CardStatus {
+    if let Some(label) = info.status_label.as_ref().filter(|label| !label.text.is_empty()) {
+        let text = match &label.emoji {
+            Some(emoji) if !emoji.is_empty() => format!("{emoji} {}", label.text),
+            _ => label.text.clone(),
+        };
+        return CardStatus { text, source: CardStatusSource::Label };
+    }
+    let task = info.checklist.iter().flatten().find(|item| item.status == ChecklistStatus::InProgress).map(|item| js_trim(&item.text));
+    if let Some(task) = task.filter(|task| !task.is_empty()) {
+        return CardStatus { text: task.to_owned(), source: CardStatusSource::Task };
+    }
+    if let Some(title) = info.title.as_deref().map(js_trim).filter(|title| !title.is_empty()) {
+        return CardStatus { text: title.to_owned(), source: CardStatusSource::Title };
+    }
+    CardStatus { text: state_phrase(info, state).to_owned(), source: CardStatusSource::State }
+}
+
+fn state_phrase(info: &SessionInfo, state: SessionState) -> &'static str {
+    match state {
+        SessionState::Attention => "Waiting for you",
+        SessionState::Working if info.status == SessionStatus::Starting => "Starting…",
+        SessionState::Working => "Working…",
+        SessionState::Idle if info.engine_asleep == Some(true) => "Asleep",
+        SessionState::Idle => "Idle",
+        SessionState::Ended if info.status == SessionStatus::Failed => "Failed",
+        SessionState::Ended => "Ended",
+    }
 }
 
 fn subagents_of(info: &SessionInfo) -> &[SubagentInfo] {

@@ -276,6 +276,35 @@ const SESSION_LIST: VmCase[] = [
   },
   {
     module: 'session-list',
+    name: 'card-status',
+    fn: 'cardStatus',
+    calls: [
+      ...ROWS.map((r) => [r.info]),
+      [info('l1', { statusLabel: { text: 'Porting', emoji: '🦀', setAt: T0 }, title: 'x' })],
+      [info('l2', { statusLabel: { text: '', emoji: '🦀', setAt: T0 }, title: '  Fix the list  ' })],
+      [info('l3', { statusLabel: { text: 'Plain', emoji: '', setAt: T0 } })],
+      [
+        info('t1', {
+          checklist: [
+            { text: 'done', status: 'completed' },
+            { text: '   ', status: 'in_progress' },
+            { text: ' port badge ', status: 'in_progress' },
+          ],
+          title: 'title',
+        }),
+      ],
+      [info('t2', { checklist: [{ text: 'next', status: 'pending' }], title: '   ' })],
+      [info('s1', { status: 'starting' })],
+      [info('s2', { status: 'running' })],
+      [info('s3', { status: 'idle', engineAsleep: true })],
+      [info('s4', { status: 'failed' })],
+      [info('s5', { status: 'closed' })],
+      [info('s6', { pendingPermissionCount: 1 })],
+      [info('s7', { status: 'idle' }), 'working'],
+    ],
+  },
+  {
+    module: 'session-list',
     name: 'subagents',
     fn: 'visibleSubagents',
     calls: ['all', 'active', 'none'].map((show) => [BY_ID.get('s-codex-0006')!.info, show]),
@@ -1090,6 +1119,26 @@ const MODELS: ModelOption[] = [
 
 const MODEL_MENU: VmCase[] = [
   { module: 'model-menu', name: 'lines', fn: 'modelLine', calls: [...MODELS.map((m) => [m]), [{ value: 'x', displayName: 'v2 Model-3 x.4 9' }], [{ value: 'y', displayName: '  Big   Model  ' }]] },
+  {
+    module: 'model-menu',
+    name: 'badges',
+    fn: 'modelBadge',
+    calls: [
+      ...MODELS.map((m) => [m.displayName]),
+      ['Opus 5.5 (1M context)'],
+      ['GPT-6.1 Sol'],
+      ['gpt-6.1-sol'],
+      ['Haiku 4-5 (2025-10-01)'],
+      ['  Big   Model  '],
+      ['claude-opus-5-5'],
+      ['v2 Model-3 x.4 9'],
+      ['Model 3 9b'],
+      ['Sonnet 5.5.1 lite'],
+      ['éclair 2 ß'],
+      ['   '],
+      [''],
+    ],
+  },
   {
     module: 'model-menu',
     name: 'matches',

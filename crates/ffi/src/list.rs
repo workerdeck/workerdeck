@@ -167,6 +167,12 @@ impl From<SessionState> for RowState {
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ModelBadge {
+    pub letter: String,
+    pub version: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct ListRow {
     pub key: String,
     pub host_id: String,
@@ -189,6 +195,12 @@ pub struct ListRow {
     pub status: Option<String>,
     pub model: Option<String>,
     pub model_label: Option<String>,
+    // The model after an agent's name: vendor mark (`mark`, tinted as `mark_tinted`), letter, superscript version.
+    pub model_badge: Option<ModelBadge>,
+    // An agent card's second line (a Member's status): the label, else the task in progress, the title, the state.
+    pub card_status: String,
+    // Only an agent's own status label draws a step brighter; the fallbacks sit one shade dimmer.
+    pub card_status_is_label: bool,
     pub agent: Option<String>,
     pub agent_id: Option<String>,
     pub face: Option<FaceSpec>,
@@ -583,6 +595,8 @@ fn list_row(
     });
     let state = row.state;
     let asleep = info.engine_asleep == Some(true);
+    let model_label = info.model_name.clone().or_else(|| wd_native::vm::model_name::friendly_model(info.model.as_deref()));
+    let card_status = vm::card_status(info, state);
     let tray = team.map_or(&[][..], |t| &t.tray[..]);
     let drawn = if tray.len() > TRAY_MAX { TRAY_MAX - 1 } else { tray.len() };
     ListRow {
@@ -606,7 +620,13 @@ fn list_row(
         unseen: row.unseen as u32,
         status,
         model: info.model.clone(),
-        model_label: info.model_name.clone().or_else(|| wd_native::vm::model_name::friendly_model(info.model.as_deref())),
+        model_badge: model_label
+            .as_deref()
+            .and_then(wd_native::vm::model_menu::model_badge)
+            .map(|badge| ModelBadge { letter: badge.letter, version: badge.version }),
+        model_label,
+        card_status_is_label: card_status.source == vm::CardStatusSource::Label,
+        card_status: card_status.text,
         agent: info.agent.as_ref().map(|a| a.name.clone()),
         agent_id: info.agent.as_ref().map(|a| a.id.clone()),
         face: face_spec(row),

@@ -1,0 +1,155 @@
+{
+  "input": {
+    "fn": "modelBadge",
+    "calls": [
+      [
+        "Default (recommended)"
+      ],
+      [
+        "Opus 5.5"
+      ],
+      [
+        "Opus 4.7"
+      ],
+      [
+        "Fable 5.1"
+      ],
+      [
+        "Sonnet 5.5"
+      ],
+      [
+        "Sonnet 4.6"
+      ],
+      [
+        "GPT-6 Astra"
+      ],
+      [
+        "GPT-5.6 Astra"
+      ],
+      [
+        "GPT-5.6 Sol"
+      ],
+      [
+        "Haiku 4-5 (2025-10-01)"
+      ],
+      [
+        "Opus 5.5 (1M context)"
+      ],
+      [
+        "GPT-6.1 Sol"
+      ],
+      [
+        "gpt-6.1-sol"
+      ],
+      [
+        "Haiku 4-5 (2025-10-01)"
+      ],
+      [
+        "  Big   Model  "
+      ],
+      [
+        "claude-opus-5-5"
+      ],
+      [
+        "v2 Model-3 x.4 9"
+      ],
+      [
+        "Model 3 9b"
+      ],
+      [
+        "Sonnet 5.5.1 lite"
+      ],
+      [
+        "éclair 2 ß"
+      ],
+      [
+        "   "
+      ],
+      [
+        ""
+      ]
+    ]
+  },
+  "output": [
+    {
+      "letter": "D"
+    },
+    {
+      "letter": "O",
+      "version": "5.5"
+    },
+    {
+      "letter": "O",
+      "version": "4.7"
+    },
+    {
+      "letter": "F",
+      "version": "5.1"
+    },
+    {
+      "letter": "S",
+      "version": "5.5"
+    },
+    {
+      "letter": "S",
+      "version": "4.6"
+    },
+    {
+      "letter": "A",
+      "version": "6"
+    },
+    {
+      "letter": "A",
+      "version": "5.6"
+    },
+    {
+      "letter": "S",
+      "version": "5.6"
+    },
+    {
+      "letter": "H",
+      "version": "4"
+    },
+    {
+      "letter": "O",
+      "version": "5.5"
+    },
+    {
+      "letter": "S",
+      "version": "6.1"
+    },
+    {
+      "letter": "G",
+      "version": "6.1"
+    },
+    {
+      "letter": "H",
+      "version": "4"
+    },
+    {
+      "letter": "B"
+    },
+    {
+      "letter": "C",
+      "version": "5"
+    },
+    {
+      "letter": "M",
+      "version": "2"
+    },
+    {
+      "letter": "M",
+      "version": "3"
+    },
+    {
+      "letter": "L",
+      "version": "5.5.1"
+    },
+    {
+      "letter": "É",
+      "version": "2"
+    },
+    null,
+    null
+  ]
+}
