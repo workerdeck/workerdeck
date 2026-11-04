@@ -61,15 +61,20 @@ const GATEWAY_ROWS = [
   makeRow({ id: '4', title: 'Launch preparation', status: 'idle', cwd: '/work/site', project: undefined } as never),
 ]
 
-function Browser({ initial, ...props }: Partial<React.ComponentProps<typeof SessionBrowser>> & { initial?: Partial<ViewConfig> }) {
+function Browser({
+  initial,
+  activeId: initialActive = '1',
+  ...props
+}: Partial<React.ComponentProps<typeof SessionBrowser>> & { initial?: Partial<ViewConfig> }) {
   const [config, setConfig] = useState<ViewConfig>({ ...DEFAULT_VIEW_CONFIG, scoped: false, ...initial })
+  const [activeId, setActiveId] = useState(initialActive)
   return (
     <SessionBrowser
       rows={ROWS}
       config={config}
       onConfigChange={setConfig}
-      activeId="1"
-      onSelect={() => {}}
+      activeId={activeId}
+      onSelect={(row) => setActiveId(row.info.id)}
       onSelectSubagent={() => {}}
       onRename={() => {}}
       onNewConversation={() => {}}

@@ -29,6 +29,32 @@ export function sessionState(info: SessionInfo): SessionState {
   return 'idle'
 }
 
+export type CardStatus = { text: string; source: 'label' | 'task' | 'title' | 'state' }
+
+// An agent card's second line: its own status label, else the checklist item in progress, else its title, else its state.
+export function cardStatus(info: SessionInfo, state: SessionState = sessionState(info)): CardStatus {
+  const label = info.statusLabel
+  if (label?.text) {
+    return { text: label.emoji ? `${label.emoji} ${label.text}` : label.text, source: 'label' }
+  }
+  const task = info.checklist?.find((item) => item.status === 'in_progress')?.text.trim()
+  if (task) {
+    return { text: task, source: 'task' }
+  }
+  const title = info.title?.trim()
+  if (title) {
+    return { text: title, source: 'title' }
+  }
+  return { text: STATE_PHRASES[state](info), source: 'state' }
+}
+
+const STATE_PHRASES: Record<SessionState, (info: SessionInfo) => string> = {
+  attention: () => 'Waiting for you',
+  working: (info) => (info.status === 'starting' ? 'Starting…' : 'Working…'),
+  idle: (info) => (info.engineAsleep ? 'Asleep' : 'Idle'),
+  ended: (info) => (info.status === 'failed' ? 'Failed' : 'Ended'),
+}
+
 export function runningSubagents(info: SessionInfo): SubagentInfo[] {
   return (info.subagents ?? []).filter((sub) => sub.status === 'running')
 }

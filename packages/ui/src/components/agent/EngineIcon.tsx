@@ -1,3 +1,4 @@
+import { modelBadge } from '@workerdeck/protocol'
 import { cn } from '../../lib/utils.ts'
 
 // Paths from `@lobehub/icons-static-svg` (MIT, © LobeHub), inlined. The marks are trademarks of their owners, used only to identify a session's engine.
@@ -90,5 +91,25 @@ export function EngineIcon({ engine, model, className }: { engine: string; model
       <title>{mark.title}</title>
       <path d={mark.d} />
     </svg>
+  )
+}
+
+export function ModelBadge({ engine, model, name, className }: { engine: string; model?: string; name: string; className?: string }) {
+  const badge = modelBadge(name)
+  if (!badge) {
+    return null
+  }
+  return (
+    <span
+      data-slot="model-badge"
+      title={name}
+      className={cn('inline-flex shrink-0 items-center gap-1 leading-none font-medium tracking-normal tabular-nums', vendorMarkClass(engine, model), className)}
+    >
+      <EngineIcon engine={engine} model={model} className="size-[1em] text-inherit" />
+      <span className="inline-flex items-start">
+        {badge.letter}
+        {badge.version ? <span className="-mt-[0.2em] ml-px text-[0.7em]">{badge.version}</span> : null}
+      </span>
+    </span>
   )
 }

@@ -50,3 +50,19 @@ export function exactModel(models: readonly ModelOption[], id: string): string {
   const variant = /\[.*\]$/.exec(id)?.[0] ?? ''
   return dropVariant(row.resolvedModel ?? row.value) + variant
 }
+
+export type ModelBadge = { letter: string; version?: string }
+
+// "Opus 5.5" -> O 5.5; a word right after the version is the tier and takes the letter: "GPT-6.1 Sol" -> S 6.1.
+export function modelBadge(name: string): ModelBadge | undefined {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  const first = words[0]
+  if (!first) {
+    return undefined
+  }
+  const at = words.findIndex((word) => /\d/.test(word))
+  const version = at < 0 ? undefined : /\d+(?:\.\d+)*/.exec(words[at]!)?.[0]
+  const next = at < 0 ? undefined : words[at + 1]
+  const tier = next !== undefined && /^[a-z]/i.test(next) ? next : undefined
+  return { letter: (tier ?? first).charAt(0).toUpperCase(), version }
+}

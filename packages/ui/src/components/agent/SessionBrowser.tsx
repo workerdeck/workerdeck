@@ -388,7 +388,6 @@ export function SessionBrowser({
                         key={sessionKey(row)}
                         lead={row}
                         view={view}
-                        leadActive={leadActive}
                         selected={row.members.find(isActive)}
                         peeked={peeked}
                         now={now}
@@ -397,11 +396,11 @@ export function SessionBrowser({
                         onConversations={onAgentConversations}
                         renderLead={(tray) =>
                           item(row, 'card', {
-                            className: cn(row.context && 'opacity-50', nested && 'hover:bg-transparent', nested && leadActive && 'bg-transparent'),
+                            className: cn(row.context && 'opacity-50', nested && !leadActive && 'hover:bg-transparent'),
                             teamTray: tray,
                           })
                         }
-                        renderMember={(member) => item(member, 'member', leadActive ? { className: 'hover:bg-fg-1/5' } : {})}
+                        renderMember={(member) => item(member, 'member')}
                       />
                     )
                   })}
@@ -594,7 +593,6 @@ const TRAY_MAX = 4
 function TeamBlock({
   lead,
   view,
-  leadActive,
   selected,
   peeked,
   now,
@@ -606,7 +604,6 @@ function TeamBlock({
 }: {
   lead: SessionRow
   view: TeamView
-  leadActive: boolean
   selected?: SessionRow
   peeked?: ReadonlySet<string>
   now?: number
@@ -679,7 +676,7 @@ function TeamBlock({
     <div
       data-slot="team"
       data-expanded={view.expanded || undefined}
-      className={cn('flex flex-col rounded-[8px]', nested && (leadActive ? 'bg-row-selected' : 'bg-row-nest'))}
+      className={cn('flex flex-col rounded-[8px]', nested && (selected ? 'bg-row-selected-weak' : 'bg-row-nest'))}
     >
       {renderLead(tray)}
       {nested ? (
@@ -730,7 +727,7 @@ function RowAction({ label, title, onClick, children }: { label: string; title?:
       size="icon-sm"
       aria-label={label}
       title={title ?? label}
-      className="size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+      className="hidden size-5 shrink-0 group-focus-within:inline-flex group-hover:inline-flex"
       onClick={(e) => {
         e.stopPropagation()
         onClick()

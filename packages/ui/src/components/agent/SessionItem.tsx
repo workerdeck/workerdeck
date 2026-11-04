@@ -1,11 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Globe, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
+import { cardStatus, projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
 import type { FoldableStepKind, SessionInfo, SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
-import { AgentAvatar, LeadChip } from './AgentAvatar.tsx'
+import { AgentAvatar } from './AgentAvatar.tsx'
 import { ContextRing } from './ContextRing.tsx'
-import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
+import { EngineIcon, ModelBadge, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionStatusIcon } from './SessionStatusIcon.tsx'
 import { StepChips, StepRow, sessionSteps } from './SessionSteps.tsx'
@@ -171,9 +171,11 @@ export function SessionItem({
   const shown = steps.filter((step) => expanded.includes(step.fold))
   const chips = <StepChips steps={steps} expanded={expanded} activeStepKey={activeStepKey} onToggle={toggleSteps} />
   const agent = info.agent
+  const line = agent ? cardStatus(info, row.state) : undefined
+  const lineTone = line?.source === 'label' ? 'text-fg-3' : 'text-fg-4'
   const label = agent ? agent.name : sessionLabel(info)
   const editable = agent ? agent.name : (info.title ?? '')
-  const time = showTime ? formatRelativeTime(info.lastActivityAt ?? info.createdAt) : undefined
+  const time = showTime && !agent ? formatRelativeTime(info.lastActivityAt ?? info.createdAt) : undefined
   const nameLabel =
     isEditing && onRename ? (
       <NameEditor
@@ -198,7 +200,11 @@ export function SessionItem({
             : undefined
         }
         title={agent ? agentTitle(info) : undefined}
-        className={cn('min-w-0 shrink truncate text-body-sm font-medium tracking-[-0.005em]', active || !agent ? 'text-fg-1' : 'text-fg-name')}
+        className={cn(
+          'min-w-0 shrink truncate text-body-sm font-medium tracking-[-0.005em]',
+          active || !agent ? 'text-fg-1' : 'text-fg-name',
+          variant === 'member' && 'max-w-[60%] shrink-0',
+        )}
       >
         {label}
       </span>
@@ -259,41 +265,34 @@ export function SessionItem({
       )}
     >
       {agent && variant === 'member' ? (
-        <div className="flex h-8 items-center gap-3">
-          <AgentAvatar row={row} size={32} />
-          <div className={cn('flex min-w-0 flex-1 flex-col', info.engineAsleep && 'opacity-60')}>
-            <div className="flex h-4 items-center gap-1.5 overflow-hidden">
-              {nameLabel}
-              <span className="flex-1" />
-              {unread}
-              {time ? <span className="shrink-0 text-label text-fg-4">{time}</span> : null}
-              {chips}
-              {actions}
-            </div>
-            <div className="flex h-4 items-center gap-1.5 overflow-hidden text-label tracking-[-0.005em]">
-              {model ? <span className={cn('shrink-0', vendorTextClass(engine, info.model))}>{model}</span> : null}
-              {status ? (
-                <span title={status} className="min-w-0 truncate text-fg-3">
-                  {model ? '· ' : ''}
-                  {status}
-                </span>
-              ) : null}
-            </div>
+        <div className="flex h-5 items-center gap-2">
+          <AgentAvatar row={row} size={20} />
+          <div className={cn('flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden', info.engineAsleep && 'opacity-60')}>
+            {nameLabel}
+            {model ? <ModelBadge engine={engine} model={info.model} name={model} className="text-label" /> : null}
+            {line ? (
+              <span title={line.text} className={cn('min-w-0 truncate text-label tracking-[-0.005em]', lineTone)}>
+                {line.text}
+              </span>
+            ) : null}
+            <span className="flex-1" />
+            {unread}
+            {chips}
+            {actions}
           </div>
         </div>
       ) : agent || tile ? (
         <div className="flex items-center gap-2">
           <AgentAvatar row={row} size={40} state={badgeState} context={agent !== undefined} />
-          <div className={cn('flex min-w-0 flex-1 flex-col pr-0.5', info.engineAsleep && 'opacity-60')}>
+          <div className={cn('flex min-w-0 flex-1 flex-col', info.engineAsleep && 'opacity-60')}>
             <div className="flex h-5 items-center gap-1.5 overflow-hidden">
               {nameLabel}
-              {agent?.leads ? <LeadChip /> : null}
+              {agent && model ? <ModelBadge engine={engine} model={info.model} name={model} /> : null}
               {agent?.shared ? (
                 <span title={SHARED_TITLE} aria-label={SHARED_TITLE} className="flex shrink-0 text-fg-4">
                   <Globe className="size-3" />
                 </span>
               ) : null}
-              {agent && time ? <span className="w-max max-w-max min-w-0 grow basis-0 truncate text-label text-fg-4/70">{time}</span> : null}
               <span className="flex-1" />
               {unread}
               {teamUnseen > 0 ? (
@@ -309,17 +308,11 @@ export function SessionItem({
               {agent ? null : <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />}
             </div>
             <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
-              {agent ? (
-                <>
-                  {model ? <span className={cn('shrink-0', vendorTextClass(engine, info.model))}>{model}</span> : null}
-                  {status ? (
-                    <span title={status} className="min-w-0 truncate text-fg-3">
-                      {model ? '· ' : ''}
-                      {status}
-                    </span>
-                  ) : null}
-                </>
-              ) : (
+              {line ? (
+                <span title={line.text} className={cn('min-w-0 truncate', lineTone)}>
+                  {line.text}
+                </span>
+              ) : agent ? null : (
                 <>
                   <span className="min-w-0 truncate text-fg-4">
                     {parts.map((part, i) => (

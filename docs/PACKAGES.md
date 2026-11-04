@@ -2066,10 +2066,14 @@ config (`CUSTOM_GROUP_ICON_MAX`). `AgentAvatar` draws the agent's face (`AgentRe
 HTML layers over inline SVG art through `faceHtml` (`lib/face-svg.ts`, pure; `faceSvg` draws the same
 face as one SVG, exported from `./format` for hosts that need a file), posed and animated by the row's state (`faceStateOf`); on the agent card it also fills the
 backdrop to context use, which replaces the context ring there. The agent card is 48 px (4 px
-padding, a 40 px face, radius 8 around a radius 4 face), a member row 40 px (a 32 px face and a
-12 px gap, so its text lines up with the lead's), rows 4 px apart, and agent names sit on
-`--fg-name` until selected. A team showing members is one nested card (`--row-nest`, the whole card
-in the selection colour when the lead is selected; the lead's `^ N` chip returns it to Auto). Once
+padding, a 40 px face, radius 8 around a radius 4 face): line one is the name and the `ModelBadge`
+(vendor mark, letter, superscript version from protocol's `modelBadge(modelName)`, in the model text's
+own font and size; it took the LEAD chip's place), line two the status. A member is one 28 px row (a
+20 px face, name, badge, status, the status truncating first). Agent cards draw no activity time,
+and `SessionBrowser`'s default row actions take no width until hovered. Rows sit 4 px apart, and agent names sit on
+`--fg-name` until selected. A team showing members is one nested card (`--row-nest`; only the selected row
+takes the selection colour, and a selected member turns the nested card `--row-selected-weak`, VS Code's
+inactive selection; the lead's `^ N` chip returns it to Auto). Once
 any row has an agent, plain rows draw as tiles too, so the column holds. An agent card renames the
 agent (`onRenameAgent`), never the session title. `AvatarDialog` is the one face editor (eight
 rolls to start from, then kind, swatch and tone per slot, previews in every state, saved with
