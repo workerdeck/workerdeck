@@ -22,7 +22,7 @@ struct CardActions {
 }
 
 // `SessionItem` from packages/ui: the agent card (48 = 4 padding + 40 face), the Member card inside a team's shared card
-// (40 = 4 padding + 32 face), a plain session in the agent card's shape (`tile`), or the gutter row when no agent is listed.
+// (one 28 row = 4 padding + 20 face), a plain session in the agent card's shape (`tile`), or the gutter row when no agent is listed.
 struct SessionCard: View {
   static let edge: CGFloat = 8
 
@@ -44,7 +44,7 @@ struct SessionCard: View {
       .buttonStyle(.plain)
       ForEach(row.steps) { step in
         SessionStepRow(
-          step: step, indent: member ? 44 : item.agentCard ? 48 : 22, onOpen: { actions.openStep(step) },
+          step: step, indent: member ? 28 : item.agentCard ? 48 : 22, onOpen: { actions.openStep(step) },
           onKill: actions.killStep(step))
       }
     }
@@ -73,7 +73,7 @@ struct SessionCard: View {
       VStack(alignment: .leading, spacing: 0) {
         HStack(spacing: 6) {
           name()
-          if row.lead { LeadChip().fixedSize() }
+          if row.agent != nil { badge(size: 13) }
           if row.shared {
             Image(systemName: "globe")
               .font(.system(size: 10))
@@ -89,7 +89,7 @@ struct SessionCard: View {
         }
         .frame(minHeight: 20)
         HStack(spacing: 6) {
-          (row.agent != nil ? modelStatus : SessionRowView.details(
+          (row.agent != nil ? status : SessionRowView.details(
             row: row, hostName: hostName, showsProject: showsProject, projectImage: projectImage))
             .font(ListType.body())
             .tracking(ListType.tracking * 13)
@@ -105,48 +105,122 @@ struct SessionCard: View {
     }
   }
 
+  // One 20 row: name (at most 60%, never the first to give way), badge, status (truncates), then unread and chips.
   private var memberHead: some View {
-    HStack(spacing: 12) {
-      AgentAvatarView(row: row, size: 32)
-      VStack(alignment: .leading, spacing: 0) {
-        HStack(spacing: 6) {
+    HStack(spacing: 8) {
+      AgentAvatarView(row: row, size: 20)
+      HStack(spacing: 6) {
+        MemberLine(spacing: 6) {
           name()
-          Spacer(minLength: 0)
-          UnreadBadge(count: item.unseen, live: row.state == .working)
-          chips
+          badge(size: 12)
+          status
+            .font(ListType.label())
+            .tracking(ListType.tracking * 12)
+            .lineLimit(1)
+            .truncationMode(.tail)
         }
-        .frame(minHeight: 16)
-        modelStatus
-          .font(ListType.label())
-          .tracking(ListType.tracking * 12)
-          .lineLimit(1)
-          .truncationMode(.tail)
-          .frame(minHeight: 16)
+        Spacer(minLength: 0)
+        UnreadBadge(count: item.unseen, live: row.state == .working)
+        chips
       }
+      .frame(height: 20)
       .opacity(row.asleep ? 0.6 : 1)
     }
   }
 
   private func name() -> some View {
-    Text(row.agent ?? row.title)
+    let title = row.agent ?? row.title
+    return Text(title)
       .font(ListType.body(.medium))
       .tracking(ListType.tracking * 13)
       .foregroundStyle(row.agent != nil ? ListPalette.name : ListPalette.fg1)
       .lineLimit(1)
       .layoutPriority(1)
+      .accessibilityLabel(row.lead ? "\(title), team lead" : title)
   }
 
-  private var modelStatus: Text {
-    var parts: [Text] = []
-    if let model = row.modelLabel { parts.append(Text(model).foregroundStyle(row.modelTint)) }
-    if let status = row.status { parts.append(Text(status).foregroundStyle(ListPalette.fg3)) }
-    return parts.enumerated().reduce(Text("")) { joined, part in
-      part.offset == 0 ? part.element : joined + Text(" · ").foregroundStyle(ListPalette.fg3) + part.element
+  @ViewBuilder
+  private func badge(size: CGFloat) -> some View {
+    if let badge = row.modelBadge, let name = row.modelLabel {
+      ModelBadgeView(badge: badge, name: name, mark: row.mark, tinted: row.markTinted, size: size)
     }
+  }
+
+  private var status: Text {
+    Text(row.cardStatus).foregroundStyle(row.cardStatusIsLabel ? ListPalette.fg3 : ListPalette.fg4)
   }
 
   private var chips: StepChipsView {
     StepChipsView(chips: row.chips, toggle: actions.toggleChip)
+  }
+}
+
+// `ModelBadge`: the vendor mark, the model's letter and its version raised as a superscript, in the vendor colour.
+struct ModelBadgeView: View {
+  let badge: ModelBadge
+  let name: String
+  let mark: Mark?
+  let tinted: Bool
+  let size: CGFloat
+
+  private var tone: Color {
+    guard tinted, let mark else { return ListPalette.fg3 }
+    return VendorPalette.color(mark)
+  }
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 4) {
+      EngineIconView(mark: mark, tinted: tinted, size: size)
+        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + size * 0.36 }
+      HStack(alignment: .firstTextBaseline, spacing: 1) {
+        Text(badge.letter).font(.system(size: size, weight: .medium))
+        if let version = badge.version {
+          Text(version)
+            .font(.system(size: size * 0.7, weight: .medium))
+            .offset(y: -size * 0.46)
+        }
+      }
+      .monospacedDigit()
+    }
+    .foregroundStyle(tone)
+    .fixedSize()
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(name)
+  }
+}
+
+// The Member line's first three: the name takes what it needs up to 60% of the line, the badge its own width, and the
+// status what is left.
+struct MemberLine: Layout {
+  var spacing: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let frames = place(width: proposal.width, subviews: subviews)
+    let height = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+    return CGSize(width: frames.map { $0.x + $0.width }.max() ?? 0, height: height)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    for (subview, frame) in zip(subviews, place(width: bounds.width, subviews: subviews)) {
+      subview.place(
+        at: CGPoint(x: bounds.minX + frame.x, y: bounds.midY), anchor: .leading,
+        proposal: ProposedViewSize(width: frame.width, height: bounds.height))
+    }
+  }
+
+  private func place(width: CGFloat?, subviews: Subviews) -> [(x: CGFloat, width: CGFloat)] {
+    let available = width ?? .infinity
+    var x: CGFloat = 0
+    var out: [(x: CGFloat, width: CGFloat)] = []
+    for (index, subview) in subviews.enumerated() {
+      let ideal = subview.sizeThatFits(.unspecified).width
+      let room = max(0, available - x)
+      let cap = index == 0 ? min(room, available * 0.6) : room
+      let used = min(ideal, cap)
+      out.append((x, used))
+      if used > 0 { x += used + spacing }
+    }
+    return out
   }
 }
 

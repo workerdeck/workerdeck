@@ -32,7 +32,7 @@ final class ListDragUITests: XCTestCase {
     XCTAssertTrue(card(app, "Fix the relay drop").waitForExistence(timeout: 8))
     drag(app, card(app, "Fix the relay drop"), onto: card(app, "BOX-Lead"), shots: "start-team")
     XCTAssertTrue(
-      card(app, "BOX-Lead, LEAD").waitForExistence(timeout: 5), "BOX-Lead did not become a lead")
+      card(app, "BOX-Lead, team lead").waitForExistence(timeout: 5), "BOX-Lead did not become a lead")
     XCTAssertFalse(card(app, "Fix the relay drop").exists, "the session is still drawn as an unnamed card")
   }
 
@@ -40,7 +40,7 @@ final class ListDragUITests: XCTestCase {
   func testMemberDraggedOutLeavesItsTeam() throws {
     let app = launchPreview("list")
     XCTAssertTrue(card(app, "WD-Review").waitForExistence(timeout: 8))
-    XCTAssertTrue(card(app, "WD-Lead, LEAD").exists)
+    XCTAssertTrue(card(app, "WD-Lead, team lead").exists)
     drag(app, card(app, "WD-Review"), onto: card(app, "BOX-Lead"), shots: "leave")
     XCTAssertTrue(card(app, "WD-Lead, Opus").waitForExistence(timeout: 5), "WD-Lead still leads a team")
     XCTAssertTrue(card(app, "WD-Review").exists)
