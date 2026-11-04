@@ -163,7 +163,8 @@ describe.skipIf(!rg)('POST /fs/search', () => {
 describe('search availability', () => {
   it('says so on /fs/roots and answers 501 when ripgrep is off', async () => {
     const base = await start(false)
-    expect((await (await fetch(`${base}/fs/roots`)).json()).canSearch).toBe(false)
+    const roots = (await (await fetch(`${base}/fs/roots`)).json()) as { canSearch?: boolean }
+    expect(roots.canSearch).toBe(false)
     const res = await fetch(`${base}/fs/search`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
