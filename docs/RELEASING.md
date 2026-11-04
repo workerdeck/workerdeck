@@ -1723,6 +1723,16 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   `pnpm lint`, typecheck, `turbo run test --force --concurrency=1` 13/13, gatekeeper; headed Chrome benches in
   `_docs/scratchpad/face-perf/` (14 cards GPU 32% to 10%), Publish `dry_run` green on master. **Published** 2026-11-03:
   tag `v4.1.1` at `6afe7012`, Publish green first try (run 41567595198), npm 12/12 with `latest` 4.1.1, Marketplace.
+
+  **4.2.0** - **Session list redesign and transcript render perf**, a **minor**: protocol stays **2**, relay wire
+  **2**, additive only. Protocol gains `modelBadge(displayName)` and `cardStatus(info, state)`; `ui` draws
+  `ModelBadge` after an agent's name (the LEAD chip and agent card times go), line 2 is `cardStatus`, team members
+  are one 28 px row, and a team card keeps `row-nest` when a member is selected. Core prepends
+  `SET_STATUS_GUIDANCE` to every agent's instructions (reaches a gateway's fleet on its next start). Transcript
+  render perf (`docs/GOTCHAS.md`): height cache for run and task blocks, memoized rows with stable context
+  values, Composer memo, a stable virtualizer key, scrubber marks rebuilt only on change. Native (not on npm):
+  core/FFI `model_badge` + `card_status` with goldens, iOS and Android cards to match, long-press peek on both
+  (live read-only transcript, marks read, tap opens). Question prompt digits in *Other* no longer pick an option.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

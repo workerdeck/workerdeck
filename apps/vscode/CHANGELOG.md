@@ -5,6 +5,25 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [4.2.0] - 2026-11-04
+
+### Changed
+
+- **Agent cards name their model with a small badge** after the agent's name: the vendor mark, a
+  letter and the version (Opus 5.5 reads O⁵·⁵). It replaces the LEAD chip.
+- **A card's second line is the agent's status**: its status label, else the checklist item in
+  progress, else the session title, else a state word (Working…, Waiting for you, Idle, Asleep).
+- **Team members are one compact row** (name, model badge, status) under their lead.
+- **Agents keep their status current.** Every agent is now told to set its status label with
+  `set_status` as its work changes, so the second line says what it is doing.
+- **Smoother transcripts while an agent streams**: unchanged rows, the composer and the scrubber no
+  longer re-render on every event.
+
+### Fixed
+
+- Selecting a team member no longer turns the team card's background to the selection colour.
+- Typing a digit into a question's *Other* field no longer picks the option with that number.
+
 ## [4.1.1] - 2026-11-03
 
 ### Fixed
