@@ -472,7 +472,7 @@ struct SessionListView: View {
         } preview: {
           if let hostId = item.hostUUID, let client = model.context(for: hostId)?.client {
             CoreSessionPeek(
-              sessionId: item.sessionId, client: client, title: row.agent ?? row.title,
+              sessionId: item.sessionId, hostId: hostId, client: client, unread: unread, title: row.agent ?? row.title,
               hideThinking: !settings.showThinking)
             .onAppear { PeekCommit.open = { openPeeked(item, model: model) } }
           } else {
