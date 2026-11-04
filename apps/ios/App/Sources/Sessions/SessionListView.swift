@@ -467,7 +467,17 @@ struct SessionListView: View {
         }
         .listFrame { frames.cards[item.id] = $0 }
         .modifier(rowChrome(item, model: model))
-        .contextMenu { rowActions(for: item, model: model) }
+        .contextMenu {
+          rowActions(for: item, model: model)
+        } preview: {
+          if let hostId = item.hostUUID, let client = model.context(for: hostId)?.client {
+            CoreSessionPeek(
+              sessionId: item.sessionId, client: client, title: row.agent ?? row.title,
+              hideThinking: !settings.showThinking)
+          } else {
+            SessionCard(item: item, actions: CardActions(open: {})).frame(width: 360)
+          }
+        }
         .background(ListLiftHook(lifter: lifter, handlers: liftHandlers(model, sections: sections)))
         .listRowInsets(CardBackground.insets(item))
         .listRowSeparator(.hidden)
@@ -803,16 +813,27 @@ struct SessionListView: View {
     if let owner = row.row.owner {
       Text("Owner: \(owner)")
     }
-    Button {
-      beginRename(row)
-    } label: {
-      Label(agent != nil ? "Rename agent" : "Rename session", systemImage: "pencil")
-    }
-    Button {
-      statusText = row.row.statusText ?? ""
-      pendingStatus = row
-    } label: {
-      Label(row.row.statusText != nil ? "Change status" : "Set status", systemImage: "text.bubble")
+    ControlGroup {
+      Button {
+        beginRename(row)
+      } label: {
+        Label("Rename", systemImage: "pencil")
+      }
+      .accessibilityLabel(agent != nil ? "Rename agent" : "Rename session")
+      Button {
+        statusText = row.row.statusText ?? ""
+        pendingStatus = row
+      } label: {
+        Label("Status", systemImage: "text.bubble")
+      }
+      .accessibilityLabel(row.row.statusText != nil ? "Change status" : "Set status")
+      Button {
+        newConversation(row, model: model)
+      } label: {
+        Label("New", systemImage: "arrow.counterclockwise")
+      }
+      .accessibilityLabel("New conversation")
+      .disabled(!row.row.canNewConversation || row.row.newConversationBlocked != nil)
     }
     if row.row.agentId != nil {
       Button {
@@ -873,15 +894,6 @@ struct SessionListView: View {
           Label("Share with other owners", systemImage: "globe")
         }
       }
-    }
-    if row.row.canNewConversation {
-      Button {
-        newConversation(row, model: model)
-      } label: {
-        Label("New conversation", systemImage: "arrow.counterclockwise")
-        Text(row.row.newConversationBlocked ?? newConversationHint())
-      }
-      .disabled(row.row.newConversationBlocked != nil)
     }
     if let target = ConversationsTarget(row) {
       Button {
