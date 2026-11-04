@@ -1347,6 +1347,12 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
   only a reset or an explicit clear removes it. `set_status` is offered on every engine, like
   `session_info`, and goes through the normal permission path. `Runner.setStatusLabel` is optional
   so test fakes need not grow it; the route answers 501 without it.
+- **Agents are told to use it.** The tool description alone left it mostly unused, so the session
+  factory prepends `SET_STATUS_GUIDANCE` (core) to every **agent's** instructions, before its brief:
+  never for a plain session, an engine without `systemInstructions`, or a host that passes its own
+  `extraOptions.systemPrompt` (the Claude runner refuses both at once).
+- **The card never shows an empty line.** Protocol's `cardStatus` falls back label, the checklist item
+  in progress, the title, then a state word; the UI draws the fallbacks a shade dimmer.
 
 ## Agent context reset (`context_reset`, `agentContextReset`)
 

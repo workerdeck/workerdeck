@@ -6,13 +6,18 @@ export type StatusLabelSink = (label: StatusLabelInput | null) => StatusLabel | 
 
 export const SET_STATUS_TOOL = 'set_status'
 
+export const SET_STATUS_GUIDANCE =
+  'Keep your session-list status current with the `set_status` tool: set it when you start a task, when you are blocked ' +
+  'or waiting on someone, and when you finish. The human reads it at a glance to know what you are doing.'
+
 const SET_STATUS_TOOL_SHAPES = {
   [SET_STATUS_TOOL]: {
     description:
-      'Set the one-line status shown under your name in the human\'s session list, like a chat status: what you are doing, ' +
-      'waiting on, or need from them ("waiting on CI", "blocked: needs an API key", "done, ready for review"). It stays ' +
-      'until you change it and clears when your conversation is reset. Pass an empty `text` to clear it. Keep it short and ' +
-      'current; it is a glance, not a log.',
+      'Set the one-line status shown under your name in the human\'s session list, like a chat status. Call it when you ' +
+      'start a task ("reviewing the auth diff"), when you are blocked or waiting ("waiting on CI", "blocked: needs an API ' +
+      'key"), and when you finish ("done, ready for review"); without it the human sees only your checklist or "Idle". It ' +
+      'stays until you change it and clears when your conversation is reset. Pass an empty `text` to clear it. Keep it ' +
+      'short and current; it is a glance, not a log.',
     shape: {
       text: z.string().max(STATUS_LABEL_TEXT_MAX).describe('The status line; empty clears it'),
       emoji: z.string().max(STATUS_LABEL_EMOJI_MAX).optional().describe('One emoji shown before the text'),

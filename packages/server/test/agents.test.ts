@@ -1,4 +1,4 @@
-import type { SessionRunnerConfig } from '@workerdeck/core'
+import { SET_STATUS_GUIDANCE, type SessionRunnerConfig } from '@workerdeck/core'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -156,7 +156,7 @@ describe('agents', () => {
     })
     const sessionId = body.session!.id
     first.harness.emit(initMessage)
-    await eventually(() => expect(appended(first.harness)).toBe('You own the iOS client.'))
+    await eventually(() => expect(appended(first.harness)).toBe(`${SET_STATUS_GUIDANCE}\n\nYou own the iOS client.`))
     await eventually(async () => expect(await fileRuntimeStore(join(dir, 'sessions')).get(sessionId)).not.toBeNull())
     // The brief rides the pending identity only until the first start is durable.
     await eventually(async () => expect((await first.server.records.get(sessionId))?.identity).toBeUndefined())
@@ -175,8 +175,16 @@ describe('agents', () => {
     ws.close()
     const woken = await second.server.parking.ensureLive(sessionId)
     woken?.sendMessage('wake')
-    await eventually(() => expect(appended(second.harness)).toBe('You own the iOS client.'))
+    await eventually(() => expect(appended(second.harness)).toBe(`${SET_STATUS_GUIDANCE}\n\nYou own the iOS client.`))
     expect((await call<{ sessions: SessionInfo[] }>(second.base, '/sessions')).body.sessions[0]?.agent?.name).toBe('Wren')
+  })
+
+  it('asks every agent to keep its status current, with or without a brief', async () => {
+    const dir = await stateDir()
+    const gateway = await startGateway(dir)
+    await call<AgentResponse>(gateway.base, '/agents', 'POST', { name: 'Wren', config: { cwd: '/tmp/project' } })
+    gateway.harness.emit(initMessage)
+    await eventually(() => expect(appended(gateway.harness)).toBe(SET_STATUS_GUIDANCE))
   })
 
   it('keeps an agent whose session never ran a turn across a restart, waking it fresh', async () => {

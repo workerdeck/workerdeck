@@ -9,7 +9,7 @@ import {
   type ProfileEngine,
   type ProfileInfo,
 } from '@workerdeck/protocol'
-import { composeInstructions } from '@workerdeck/core'
+import { SET_STATUS_GUIDANCE, composeInstructions } from '@workerdeck/core'
 import type {
   AvatarDirectory,
   ContextResetDirectory,
@@ -59,7 +59,8 @@ export type SessionFactoryDeps = {
   started?: (runner: Runner) => void
   agentBrief?: (sessionId: string | undefined) => string | undefined
   agentInstructionScope?: (sessionId: string | undefined) => InstructionScope | undefined
-  avatar?: { directory: AvatarDirectory; isAgent: (sessionId: string | undefined) => boolean }
+  isAgent?: (sessionId: string | undefined) => boolean
+  avatar?: { directory: AvatarDirectory }
 }
 
 // `agent` marks a named create whose index row is written in `beforeStart`: after the record, before the first event.
@@ -315,12 +316,16 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
         config.shellAgentWrite = write
       }
     }
-    if (deps.avatar && (options?.agent === true || deps.avatar.isAgent(id ?? restore?.id))) {
+    const agent = options?.agent === true || deps.isAgent?.(id ?? restore?.id) === true
+    if (deps.avatar && agent) {
       config.avatar = deps.avatar.directory
     }
     const brief = options?.brief ?? deps.agentBrief?.(id ?? restore?.id)
-    if (brief) {
-      config.instructions = composeInstructions(config.instructions, brief)
+    // Not over a host's own system prompt: the Claude runner refuses `instructions` beside `extraOptions.systemPrompt`.
+    const ownPrompt = (config.extraOptions as { systemPrompt?: unknown } | undefined)?.systemPrompt !== undefined
+    const guidance = agent && capabilities.systemInstructions !== false && !ownPrompt ? SET_STATUS_GUIDANCE : undefined
+    if (brief || guidance) {
+      config.instructions = composeInstructions(config.instructions, guidance, brief)
     }
     const instructionScope = options?.instructionScope ?? deps.agentInstructionScope?.(id ?? restore?.id)
     if (instructionScope === 'cwd') {

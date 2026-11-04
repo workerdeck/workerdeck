@@ -424,10 +424,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     started: (runner) => cuts.firstStarted(runner),
     agentBrief: (sessionId) => agents.briefFor(sessionId),
     agentInstructionScope: (sessionId) => agents.instructionScopeFor(sessionId),
-    avatar: {
-      directory: avatarDirectoryHandle(() => ownAvatarChanges),
-      isAgent: (sessionId) => sessionId !== undefined && agents.get(sessionId) !== undefined,
-    },
+    isAgent: (sessionId) => sessionId !== undefined && agents.get(sessionId) !== undefined,
+    avatar: { directory: avatarDirectoryHandle(() => ownAvatarChanges) },
   })
 
   const availability = new AvailabilityTracker({
