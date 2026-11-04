@@ -177,7 +177,7 @@ struct ModelBadgeView: View {
         if let version = badge.version {
           Text(version)
             .font(.system(size: size * 0.7, weight: .medium))
-            .offset(y: -size * 0.46)
+            .offset(y: -size * 0.4)
         }
       }
       .monospacedDigit()

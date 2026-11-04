@@ -1414,7 +1414,8 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 **Agents and teams** (Agent Teams phase 5). The kit mirrors `AgentRef`, `AgentInfo`,
 `StatusLabel`, `SessionInfo.agent`/`owner`/`statusLabel`, `GatewayMeta`, the `/agents` routes and
 `/meta` (`Agents.swift`), and the team half of the list view model (team units, `teamState`, the context lead, `teamView`, `teamLeads`/`teamMembers`) is the core's `SessionList`. The app draws agents with
-`SessionCard` (the web's geometry: 48pt card with a 40 face, 40pt Member cards inside the team's shared card, step
+`SessionCard` (the web's geometry: 48pt card with a 40 face, name + `ModelBadgeView` (core `model_badge`) over the core's `card_status`, single-row 28pt
+Member cards (20 face, name capped at 60% by `MemberLine`) inside the team's shared card, step
 chips that unfold a kind inside the card, a tray of the Members Auto hides; a tap on one opens it, and the member opened
 last stands in for the selected row; the list
 uses the web's fixed type scale (`ListType`: 13/12/11, not Dynamic Type) and grey ramp (`ListPalette.fg1..4`), and touch
