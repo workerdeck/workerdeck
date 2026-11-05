@@ -1708,7 +1708,9 @@ session, named or not, cuts the same way (§ Conversation cut).
 - **Runtime absent is not a status.** `GET /sessions` lists from the records: a runner or runtime
   says what a session is; a record with neither (it ran and left nothing to wake) is listed
   `failed` and refuses a wake, unless its first start is still owed (`starting`); closed records
-  only with `?closed=1`.
+  only with `?closed=1`. A `failed` record with a `running` config can still be cut: New
+  conversation is its way back. The lost conversation joins the history from the record alone,
+  with no engine id and `transcript: 'unavailable'` (`ConversationCuts.#cut`, `orphanEntry`).
 - **History comes from the engine's own store; the gateway keeps no transcript.** A history entry
   carries engine identity, recorded profile home, cwd and frozen auth; `services/history-reader.ts`
   reads it (claude `getSessionMessages`, codex an isolated `thread/read` app-server) without ever

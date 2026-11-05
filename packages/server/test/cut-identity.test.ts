@@ -540,7 +540,7 @@ describe('history under its frozen auth across an owner move', () => {
 })
 
 describe('the list from records: runtime absent is not a status', () => {
-  it('gives closed for closedAt, the runtime kind without a runner, the runner status without a runtime, and failed with neither', async () => {
+  it('gives closed for closedAt, the runtime kind without a runner, the runner status without a runtime, and failed with neither, which a cut brings back', async () => {
     const dir = await fixture.stateDir()
     const first = await gateway(dir)
     const closed = await createPlain(first.base)
@@ -588,8 +588,15 @@ describe('the list from records: runtime absent is not a status', () => {
     })
     expect(outcome).not.toBe(101)
     expect(second.built).toHaveLength(0)
-    expect((await cut(second.base, running, 1)).status).not.toBe(200)
-    expect(second.built).toHaveLength(0)
+
+    const recovered = await cut(second.base, running, 1)
+    expect(recovered.status).toBe(200)
+    expect(recovered.body.conversation).toBe(2)
+    expect(runnersOf(second.built, running)).toHaveLength(1)
+    const record = (await second.server.records.get(running))!
+    expect(record.conversations.at(-1)).toMatchObject({ n: 1, transcript: 'unavailable' })
+    expect(record.conversations.at(-1)?.engineSessionId).toBeUndefined()
+    expect(record.runtime?.info.conversation).toBe(2)
   })
 })
 

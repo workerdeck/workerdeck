@@ -17,6 +17,7 @@ import { engineOf } from '../lib/profile-env.ts'
 import { freshRecord, requestedConfig, type ConversationEntry, type SessionCut, type SessionRecord } from './session-records.ts'
 import { durableConfig, isDormant, type DormantSessionRecord, type StoredSessionRecord } from './session-store.ts'
 import { modelFor } from '../lib/models.ts'
+import { recordInfo } from './record-info.ts'
 
 export type CutReason = 'user' | 'clear' | 'context_reset'
 
@@ -326,7 +327,9 @@ export class ConversationCuts {
     refuseUncertainPrompt(record)
     const live = ctx.registry.get(id)
     const stored = live ? null : await ctx.parking.get(id)
-    const info = live?.info() ?? stored?.info
+    // A session that ran and left nothing to wake (`failed`) cuts from its record alone: New conversation is its way back.
+    const orphan = !live && !stored && record?.runtime === undefined && record?.running ? record : undefined
+    const info = live?.info() ?? stored?.info ?? (orphan ? { ...recordInfo(ctx, orphan, 'failed'), epoch: orphan.running?.epoch } : undefined)
     if (!info) {
       fail(404, 'session not found')
     }
@@ -358,7 +361,7 @@ export class ConversationCuts {
       if (ctx.registry.get(id) !== live) {
         fail(409, WOKE_DURING_CUT)
       }
-      const entry = await this.#capture(id, record, conversation)
+      const entry = orphan ? orphanEntry(orphan, info, ctx.parking.executionsOf(id)) : await this.#capture(id, record, conversation)
       for (const executionId of entry.executions) {
         this.#leaving.set(executionId, id)
       }
@@ -974,6 +977,25 @@ function unconfirmedDetails(runner: Runner, conversation: number): Omit<Unconfir
 // A runtime for n+1 that the engine has named (or a live snapshot): the successor exists and is resumed, not replaced.
 // The runner's counts already include the base it was built with; the max keeps a stored row that predates it from
 // walking the lifetime back.
+// The conversation's engine id went with its runtime: the entry names nothing to read back.
+function orphanEntry(record: SessionRecord, info: SessionInfo, executions: string[]): ConversationEntry {
+  const running = record.running!
+  return {
+    n: record.conversation,
+    engine: engineOf(info),
+    ...(info.profile ? { profile: info.profile } : {}),
+    ...(running.engineHome ? { engineHome: running.engineHome } : {}),
+    cwd: info.cwd,
+    running,
+    ...(info.title ? { title: info.title } : {}),
+    startedAt: record.conversations.at(-1)?.endedAt ?? record.createdAt,
+    endedAt: Date.now(),
+    executions,
+    auth: { ...(info.owner ? { owner: info.owner } : {}), ...(info.scope ? { scope: info.scope } : {}) },
+    transcript: 'unavailable',
+  }
+}
+
 export function lifetimeCounters(base: CounterBase | undefined, info: Pick<SessionInfo, 'activityCount' | 'proseCount'>): CounterBase {
   return {
     activity: Math.max(base?.activity ?? 0, info.activityCount ?? 0),
