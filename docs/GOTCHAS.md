@@ -957,6 +957,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     only thing separating "this session is over" from "this process is over" is that
     `parking.close()` sets its guard first. Drop it and a graceful restart discards the records it
     was meant to preserve.
+  - **The discard is also skipped from the start of a drain (`parking.beginShutdown()`).** A stop
+    signal sent to the whole process group (VS Code Host Mode signals `-pid` for npx, ctrl-c in a
+    terminal) kills every engine child at once, while the gateway is still draining. Each runner
+    then closes with `'error'`, before `close()` sets `#closed`, and the discard cleared the
+    runtime of every awake session (cards listed `failed`, nothing to resume; 2026-11-04). The
+    writers stay open during the drain, so drained turns still persist. Explicit closes (DELETE,
+    end) call `parking.discard` themselves and are unaffected.
   - **`close()` must close the session sockets, not just the queue ones.** `wss` is a `noServer`
     instance: `wss.close()` neither closes nor terminates its clients, and `server.
     closeAllConnections()` does not reach upgraded sockets. The close path sends a close frame to
