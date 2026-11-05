@@ -108,7 +108,17 @@ class ResumableRunner implements Runner {
   async setModel(): Promise<void> {}
   fail(): void {}
   close(): void {
+    if (this.#status === 'closed') {
+      return
+    }
     this.#emit({ type: 'session_closed', reason: 'server' })
+  }
+  die(): void {
+    this.#status = 'failed'
+    this.#emit({ type: 'status_changed', status: 'failed' })
+    this.#emit({ type: 'session_closed', reason: 'error' })
+    this.#status = 'closed'
+    this.#emit({ type: 'status_changed', status: 'closed' })
   }
 
   #emit(body: SessionEventBody): void {
@@ -242,6 +252,25 @@ describe('sessions that survive a restart', () => {
     const rows = await list(gateway.base)
     expect(rows.filter((row) => row.id === session.id)).toHaveLength(1)
     expect(rows[0]!.status).not.toBe('idle-duplicate')
+  })
+
+  // A stop signal sent to the whole process group (VS Code Host Mode's npx launch, ctrl-c in a terminal) kills the
+  // engine child while the gateway is still draining, before `close()` fences parking.
+  it('keeps the record when the engine dies during the shutdown drain', async () => {
+    const store = fileRuntimeStore(await stateDir())
+    const gateway = await startGateway(store)
+    const session = await create(gateway.base)
+    await eventually(async () => {
+      expect((await store.get(session.id))?.kind).toBe('dormant')
+    })
+
+    await gateway.server.drain({ timeoutMs: 50, pollMs: 10 })
+    gateway.built[0]!.die()
+    await gateway.server.close()
+    servers.splice(servers.indexOf(gateway.server), 1)
+    // The discard this guards against lands behind `close()`: parking's store queue is not part of its flush.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(await store.get(session.id)).toMatchObject({ kind: 'dormant', sdkSessionId: 'engine-session-1' })
   })
 
   it('lists the session after a restart and resumes it on attach, under the same id', async () => {

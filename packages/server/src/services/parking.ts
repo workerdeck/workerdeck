@@ -50,6 +50,7 @@ export class SessionParkManager {
   #storeOps = new Map<string, Promise<void>>()
   #watches = new Map<string, () => void>()
   #closed = false
+  #stopping = false
   #renaming: Promise<void> | undefined
   #fencedIds = new Set<string>()
 
@@ -131,7 +132,7 @@ export class SessionParkManager {
           return
         }
         case 'session_closed': {
-          if (this.#closed) {
+          if (this.#closed || this.#stopping) {
             return
           }
           if (this.#fencedIds.has(runner.id)) {
@@ -420,6 +421,12 @@ export class SessionParkManager {
       ...(home ? { home } : {}),
       ...(snapshot ? { snapshot } : {}),
     }
+  }
+
+  // From the start of a drain: a stop signal sent to the whole process group kills engine children mid-drain, and
+  // their `session_closed` must not erase the record. Writers stay open so drained turns still persist.
+  beginShutdown(): void {
+    this.#stopping = true
   }
 
   close(): void {

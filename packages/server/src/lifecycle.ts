@@ -43,6 +43,7 @@ export function createServerLifecycle(deps: ServerLifecycleDeps): ServerLifecycl
     draining: () => draining,
     drain: async (options = {}) => {
       draining = true
+      deps.parking.beginShutdown()
       deps.queue?.pause()
       return drainSessions(deps.registry, deps.shells, options)
     },
