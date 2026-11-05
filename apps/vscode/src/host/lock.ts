@@ -3,6 +3,8 @@ import { join } from 'node:path'
 
 export type HostLock = {
   pid: number
+  // The pid leads a process group whose server is a grandchild (npx). Absent on older locks: treated as true.
+  group?: boolean
   port: number
   bindAddress: string
   url: string

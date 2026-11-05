@@ -964,6 +964,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     runtime of every awake session (cards listed `failed`, nothing to resume; 2026-11-04). The
     writers stay open during the drain, so drained turns still persist. Explicit closes (DELETE,
     end) call `parking.discard` themselves and are unaffected.
+  - **An engine that dies with `'error'` after a completed turn is retired, not discarded**
+    (`#retireCrashed`): the dormant record stays, the dead runner is evicted, and the list shows
+    the session asleep; the next open resumes it. Gated on a `turn_result` seen by this manager,
+    because a death before any turn is a failed start (the cut's `startFailed` path reads it) or a
+    deliberate refusal (`requireApiKey` fails the runner at `system_init`), and both must still read
+    `failed`. Sockets on the dead runner are left alone, never forced to reattach: an automatic
+    wake of an engine that crashes on resume would loop. A clean stream end closes with
+    `'server'` and is still discarded.
   - **`close()` must close the session sockets, not just the queue ones.** `wss` is a `noServer`
     instance: `wss.close()` neither closes nor terminates its clients, and `server.
     closeAllConnections()` does not reach upgraded sockets. The close path sends a close frame to
@@ -3784,9 +3792,12 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   via `EADDRINUSE` → re-probe → adopt in under a second. The lock file exists so Stop refuses to
   kill a server VS Code did not start; a lock whose pid is gone is a crash leftover, cleared on
   read.
-- **Signal the process group, not the pid.** On the `npx` path the server is a grandchild, so
+- **Signal the process group only on the npx path.** There the server is a grandchild, so
   `process.kill(pid)` only stops the launcher and orphans the server; `process.kill(-pid)` works
-  because the spawn is `detached` (group leader). Windows needs `taskkill /T`.
+  because the spawn is `detached` (group leader). Any other launch (`binaryPath`, the installed
+  bin, `scripts/workerdeck-dev`, all `exec`) is the server itself, and a group `SIGTERM` kills its
+  engine children mid-drain (see § Parking, `beginShutdown`). The lock records `group`
+  (absent = true); `SIGKILL` always takes the group. Windows needs `taskkill /T`.
 - **`SIGTERM` to this CLI is a drain, not a kill.** Turns in flight finish; a second `SIGTERM` is
   the "stop now." A stop that waits and reports failure after 2s is misreading a working shutdown
   as a hang.

@@ -49,6 +49,7 @@ export class HostSupervisor implements vscode.Disposable {
   #state: HostState = { kind: 'disabled' }
   #restartOffered = false
   #child: ChildProcess | undefined
+  #childViaNpx = false
   #busy: Promise<void> = Promise.resolve()
 
   constructor(context: vscode.ExtensionContext, store: HostStore, deps: SupervisorDeps) {
@@ -264,6 +265,7 @@ export class HostSupervisor implements vscode.Disposable {
       try {
         // The log file, not a pipe: the server must outlive this window, and a child writing to the
         // closed pipe of a dead extension host dies with EPIPE.
+        this.#childViaNpx = launch.viaNpx
         this.#child = spawn(launch.command, args, {
           detached: true,
           stdio: ['ignore', log.fd, log.fd],
@@ -309,6 +311,7 @@ export class HostSupervisor implements vscode.Disposable {
         if (this.#child === child) {
           await writeLock(settings.stateDir, {
             pid: child.pid ?? 0,
+            group: launch.viaNpx,
             port: settings.port,
             bindAddress: settings.bindAddress,
             url,
@@ -343,6 +346,7 @@ export class HostSupervisor implements vscode.Disposable {
   async #stopNow(settings: HostSettings, confirm: boolean, verb: 'Stop' | 'Restart'): Promise<boolean> {
     const lock = await ownedLock(settings.stateDir)
     const pid = this.#child?.pid ?? (lock?.port === settings.port ? lock.pid : undefined)
+    const group = this.#child ? this.#childViaNpx : (lock?.group ?? true)
     if (pid === undefined) {
       if (this.#state.kind === 'running') {
         void vscode.window.showWarningMessage(
@@ -361,15 +365,15 @@ export class HostSupervisor implements vscode.Disposable {
     this.#set({ kind: 'stopping' })
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: 'WorkerDeck: stopping the server…' }, async () => {
       // SIGTERM drains: the CLI lets turns in flight finish, and a second SIGTERM is its "stop now".
-      this.#signal(pid, 'SIGTERM')
+      this.#signal(pid, 'SIGTERM', group)
       if (await this.#waitForExit(pid, DRAIN_GRACE_MS)) {
         return
       }
-      this.#signal(pid, 'SIGTERM')
+      this.#signal(pid, 'SIGTERM', group)
       if (await this.#waitForExit(pid, HARD_GRACE_MS)) {
         return
       }
-      this.#signal(pid, 'SIGKILL')
+      this.#signal(pid, 'SIGKILL', true)
       await this.#waitForExit(pid, HARD_GRACE_MS)
     })
 
@@ -381,10 +385,18 @@ export class HostSupervisor implements vscode.Disposable {
     return true
   }
 
-  // `npx` is a launcher: the server is its grandchild, so the whole detached process group is the target.
-  #signal(pid: number, signal: NodeJS.Signals): void {
+  // `npx` is a launcher: the server is its grandchild, so its whole detached process group is the target. Any other
+  // launch is the server itself, and a group signal would kill its engine children mid-drain, before the server
+  // closes them itself. SIGKILL always takes the group, so a hard stop orphans nothing.
+  #signal(pid: number, signal: NodeJS.Signals, group: boolean): void {
     if (process.platform === 'win32') {
       spawn('taskkill', ['/pid', String(pid), '/T', ...(signal === 'SIGKILL' ? ['/F'] : [])], { stdio: 'ignore' }).on('error', () => {})
+      return
+    }
+    if (!group) {
+      try {
+        process.kill(pid, signal)
+      } catch {}
       return
     }
     try {

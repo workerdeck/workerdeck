@@ -275,8 +275,8 @@ Stopping and restarting confirm against the same reading `workerdeck guard` uses
 `running`, `awaiting_approval`, plus any pending permission - in a modal that names the sessions
 and says which are blocked on a human. `SIGTERM` is a *drain* in the CLI (turns in flight
 finish), so Stop sends one, waits 30s, sends a second (the CLI's own "stop now"), then `SIGKILL`;
-the signal goes to the **process group** (`-pid`), because on the npx path the server is a
-grandchild. Parked sessions survive all of it, which is what makes the prompt tolerable at all.
+the `SIGTERM`s go to the **process group** (`-pid`) only on the npx path, where the server is a
+grandchild, and to the server pid otherwise; `SIGKILL` always takes the group. Parked sessions survive all of it, which is what makes the prompt tolerable at all.
 
 **A settings change that reaches the argv offers a restart, never performs one.** `needsRestart`
 (`host/settings.ts`) lists the keys; port and state dir are left out because `sync` already follows
