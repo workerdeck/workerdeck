@@ -113,6 +113,9 @@ class ResumableRunner implements Runner {
     }
     this.#emit({ type: 'session_closed', reason: 'server' })
   }
+  completeTurn(): void {
+    this.#emit({ type: 'turn_result', subtype: 'success', isError: false, numTurns: 1, durationMs: 1, totalCostUsd: 0 } as never)
+  }
   die(): void {
     this.#status = 'failed'
     this.#emit({ type: 'status_changed', status: 'failed' })
@@ -271,6 +274,26 @@ describe('sessions that survive a restart', () => {
     // The discard this guards against lands behind `close()`: parking's store queue is not part of its flush.
     await new Promise((resolve) => setTimeout(resolve, 100))
     expect(await store.get(session.id)).toMatchObject({ kind: 'dormant', sdkSessionId: 'engine-session-1' })
+  })
+
+  it('keeps a crashed session resumable once it completed a turn, and wakes it on the next open', async () => {
+    const store = fileRuntimeStore(await stateDir())
+    const gateway = await startGateway(store)
+    const session = await create(gateway.base)
+    await eventually(async () => {
+      expect((await store.get(session.id))?.kind).toBe('dormant')
+    })
+
+    gateway.built[0]!.completeTurn()
+    gateway.built[0]!.die()
+    await eventually(async () => {
+      expect((await list(gateway.base)).map((row) => [row.id, row.status])).toEqual([[session.id, 'idle']])
+    })
+    expect(await store.get(session.id)).toMatchObject({ kind: 'dormant', sdkSessionId: 'engine-session-1' })
+
+    await attachOnce(gateway, session.id)
+    expect(gateway.built).toHaveLength(2)
+    expect(gateway.built[1]!.config.resume).toBe('engine-session-1')
   })
 
   it('lists the session after a restart and resumes it on attach, under the same id', async () => {

@@ -1,5 +1,5 @@
 import type { ParkedExecution, Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, isJobRun, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import { engineOf } from '../lib/profile-env.ts'
 import type { SessionRegistry } from './registry.ts'
 import {
@@ -53,6 +53,7 @@ export class SessionParkManager {
   #stopping = false
   #renaming: Promise<void> | undefined
   #fencedIds = new Set<string>()
+  #turned = new Set<string>()
 
   constructor(options: SessionParkOptions) {
     this.#options = options
@@ -115,7 +116,11 @@ export class SessionParkManager {
           }
           return
         }
-        case 'turn_result':
+        case 'turn_result': {
+          this.#turned.add(runner.id)
+          void this.#persistLive(runner)
+          return
+        }
         case 'permission_mode_changed':
         case 'model_changed': {
           void this.#persistLive(runner)
@@ -137,6 +142,9 @@ export class SessionParkManager {
           }
           if (this.#fencedIds.has(runner.id)) {
             this.#forgetSession(runner.id)
+            return
+          }
+          if (event.reason === 'error' && this.#retireCrashed(runner)) {
             return
           }
           this.discard(runner.id).catch((error: unknown) => this.#options.onError?.(error, { sessionId: runner.id, phase: 'discard' }))
@@ -455,7 +463,26 @@ export class SessionParkManager {
     return { ...base, info: this.#stamped(base.info) }
   }
 
+  // An engine that died after a completed turn leaves its conversation resumable: the record stays dormant and the
+  // dead runner leaves the registry, so the next open wakes it. Never woken automatically (a crash on resume would
+  // loop). A death before any turn is a failed start or a policy refusal (`requireApiKey`) and is discarded as before.
+  #retireCrashed(runner: Runner): boolean {
+    const info = runner.info()
+    if (!this.#turned.has(runner.id) || info.sdkSessionId === undefined || isJobRun(info) || !(info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume) {
+      return false
+    }
+    if (!this.#ownedConfig(runner)) {
+      return false
+    }
+    void this.#rememberDormant(runner)
+    this.dropExecutions(runner.id)
+    this.#forgetSession(runner.id)
+    this.#options.registry.evict(runner.id)
+    return true
+  }
+
   #forgetSession(sessionId: string): void {
+    this.#turned.delete(sessionId)
     this.#watches.delete(sessionId)
     clearTimeout(this.#detachTimers.get(sessionId))
     this.#detachTimers.delete(sessionId)
