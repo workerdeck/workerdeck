@@ -73,6 +73,13 @@
           "title": "Agent",
           "icon": "media/sidebar.svg"
         }
+      ],
+      "activitybar": [
+        {
+          "id": "workerdeck-search",
+          "title": "Agent Search",
+          "icon": "media/search.svg"
+        }
       ]
     },
     "views": {
@@ -149,6 +156,15 @@
           "type": "webview",
           "name": "Agent",
           "icon": "media/sidebar.svg"
+        }
+      ],
+      "workerdeck-search": [
+        {
+          "id": "workerdeck.search",
+          "type": "webview",
+          "name": "Agent Search",
+          "contextualTitle": "Agent Search",
+          "icon": "media/search.svg"
         }
       ]
     },
@@ -573,6 +589,85 @@
         "title": "Delete Agent...",
         "category": "WorkerDeck",
         "icon": "$(trash)"
+      },
+      {
+        "command": "workerdeck.search.find",
+        "title": "Search in Agent Folder",
+        "category": "WorkerDeck",
+        "icon": "$(search)"
+      },
+      {
+        "command": "workerdeck.search.replace",
+        "title": "Replace in Agent Folder",
+        "category": "WorkerDeck",
+        "icon": "$(replace)"
+      },
+      {
+        "command": "workerdeck.search.refresh",
+        "title": "Refresh",
+        "category": "WorkerDeck",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "workerdeck.search.clear",
+        "title": "Clear Search Results",
+        "category": "WorkerDeck",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "workerdeck.search.viewAsTree",
+        "title": "View as Tree",
+        "category": "WorkerDeck",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workerdeck.search.viewAsList",
+        "title": "View as List",
+        "category": "WorkerDeck",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "workerdeck.search.collapseAll",
+        "title": "Collapse All",
+        "category": "WorkerDeck",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "workerdeck.search.expandAll",
+        "title": "Expand All",
+        "category": "WorkerDeck",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "workerdeck.search.replaceAll",
+        "title": "Replace All",
+        "category": "WorkerDeck",
+        "icon": "$(replace-all)"
+      },
+      {
+        "command": "workerdeck.search.toggleCase",
+        "title": "Toggle Match Case",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.search.toggleWord",
+        "title": "Toggle Match Whole Word",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.search.toggleRegex",
+        "title": "Toggle Use Regular Expression",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.search.togglePreserveCase",
+        "title": "Toggle Preserve Case",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.files.searchInFolder",
+        "title": "Find in Folder...",
+        "category": "WorkerDeck"
       }
     ],
     "keybindings": [
@@ -628,6 +723,48 @@
         "key": "ctrl+alt+r",
         "mac": "alt+cmd+r",
         "when": "workerdeck.filesFocus && workerdeck.filesHasRoot && !workerdeck.filesEditing && workerdeck.filesLocal"
+      },
+      {
+        "command": "workerdeck.search.find",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "workbenchState == empty"
+      },
+      {
+        "command": "workerdeck.search.replace",
+        "key": "ctrl+shift+h",
+        "mac": "cmd+shift+h",
+        "when": "workbenchState == empty"
+      },
+      {
+        "command": "workerdeck.search.toggleCase",
+        "key": "alt+c",
+        "mac": "alt+cmd+c",
+        "when": "workerdeck.searchFocus"
+      },
+      {
+        "command": "workerdeck.search.toggleWord",
+        "key": "alt+w",
+        "mac": "alt+cmd+w",
+        "when": "workerdeck.searchFocus"
+      },
+      {
+        "command": "workerdeck.search.toggleRegex",
+        "key": "alt+r",
+        "mac": "alt+cmd+r",
+        "when": "workerdeck.searchFocus"
+      },
+      {
+        "command": "workerdeck.search.togglePreserveCase",
+        "key": "alt+p",
+        "mac": "alt+cmd+p",
+        "when": "workerdeck.searchFocus"
+      },
+      {
+        "command": "workerdeck.search.replaceAll",
+        "key": "ctrl+alt+enter",
+        "mac": "alt+cmd+enter",
+        "when": "workerdeck.searchInputFocus"
       }
     ],
     "menus": {
@@ -738,6 +875,36 @@
           "command": "workerdeck.files.revealInOS",
           "when": "view == workerdeck.files && workerdeck.filesHasRoot && workerdeck.filesLocal",
           "group": "2_workspace@2"
+        },
+        {
+          "command": "workerdeck.search.refresh",
+          "when": "view == workerdeck.search && workerdeck.searchHasQuery",
+          "group": "navigation@1"
+        },
+        {
+          "command": "workerdeck.search.clear",
+          "when": "view == workerdeck.search && workerdeck.searchHasQuery",
+          "group": "navigation@2"
+        },
+        {
+          "command": "workerdeck.search.viewAsTree",
+          "when": "view == workerdeck.search && !workerdeck.searchTree",
+          "group": "navigation@3"
+        },
+        {
+          "command": "workerdeck.search.viewAsList",
+          "when": "view == workerdeck.search && workerdeck.searchTree",
+          "group": "navigation@3"
+        },
+        {
+          "command": "workerdeck.search.collapseAll",
+          "when": "view == workerdeck.search && workerdeck.searchHasResults && !workerdeck.searchCollapsed",
+          "group": "navigation@4"
+        },
+        {
+          "command": "workerdeck.search.expandAll",
+          "when": "view == workerdeck.search && workerdeck.searchHasResults && workerdeck.searchCollapsed",
+          "group": "navigation@4"
         }
       ],
       "commandPalette": [
@@ -908,6 +1075,62 @@
         {
           "command": "workerdeck.session.deleteAgent",
           "when": "false"
+        },
+        {
+          "command": "workerdeck.search.refresh",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.clear",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.viewAsTree",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.viewAsList",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.collapseAll",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.expandAll",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.replaceAll",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.toggleCase",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.toggleWord",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.toggleRegex",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.togglePreserveCase",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.files.searchInFolder",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.search.find",
+          "when": "workerdeck.searchHasRoot"
+        },
+        {
+          "command": "workerdeck.search.replace",
+          "when": "workerdeck.searchHasRoot"
         }
       ],
       "webview/context": [
@@ -1070,6 +1293,11 @@
           "command": "workerdeck.session.deleteAgent",
           "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_deleteAgent",
           "group": "9_delete@1"
+        },
+        {
+          "command": "workerdeck.files.searchInFolder",
+          "when": "webviewId == 'workerdeck.files' && webviewSection =~ /^(folder|root)$/",
+          "group": "4_search@0"
         }
       ]
     },

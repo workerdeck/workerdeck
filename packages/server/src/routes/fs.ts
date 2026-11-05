@@ -1,9 +1,16 @@
 import { lstatSync, mkdirSync, readdirSync, renameSync, rmdirSync, rmSync, unlinkSync, type Dirent } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { DeleteHostEntryRequest, MakeHostDirRequest, RenameHostEntryRequest, WriteHostFileRequest } from '@workerdeck/protocol'
+import type {
+  DeleteHostEntryRequest,
+  HostSearchRequest,
+  MakeHostDirRequest,
+  RenameHostEntryRequest,
+  WriteHostFileRequest,
+} from '@workerdeck/protocol'
 import { asUtf8, fail, hashBytes, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import { searchFiles } from '../services/host-file-search.ts'
+import { searchText, type TextSearchQuery } from '../services/host-text-search.ts'
 import {
   entryKind,
   readContained,
@@ -24,6 +31,7 @@ const KIND_REFUSAL: Record<ExistingKind, string> = { dir: 'not a directory', fil
 const FS_ROUTES = new Map<string, (call: FsCall) => Promise<void> | void>([
   ['roots', handleRoots],
   ['find', handleFind],
+  ['search', handleSearch],
   ['list', handleList],
   ['read', handleRead],
   ['write', handleWrite],
@@ -72,6 +80,7 @@ function handleRoots({ ctx, hostFiles, req, res }: FsCall): void {
       name: basename(canonical) || canonical,
     })),
     canWrite: ctx.hostFilesWritable,
+    canSearch: ctx.ripgrep !== undefined,
   })
 }
 
@@ -87,6 +96,69 @@ function handleFind({ ctx, hostFiles, req, res, url }: FsCall): void {
     ignore: ctx.options.hostFiles?.ignore,
   })
   json(res, 200, { base, ...result })
+}
+
+async function handleSearch({ ctx, hostFiles, req, res }: FsCall): Promise<void> {
+  requireMethod(req, 'POST')
+  const body = (await readJsonBody(req, ctx.maxBodyBytes)) as Partial<HostSearchRequest>
+  const base = containedDir(hostFiles, requiredPath(body.path, 'path'))
+  const query = searchQuery(body)
+  if (!ctx.ripgrep) {
+    fail(501, 'search is not available on this gateway: ripgrep was not found')
+  }
+  const aborted = new AbortController()
+  res.once('close', () => aborted.abort())
+  res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' })
+  for await (const event of searchText(ctx.ripgrep, base, query, aborted.signal)) {
+    if (!res.write(`${JSON.stringify(event)}\n`)) {
+      await new Promise<void>((resolve) => {
+        res.once('drain', resolve)
+        res.once('close', resolve)
+      })
+    }
+  }
+  res.end()
+}
+
+function containedDir(hostFiles: HostFileRoots, requested: string): string {
+  const resolved = resolveExisting(hostFiles, requested)
+  if (!resolved.ok) {
+    fail(resolved.status, resolved.error)
+  }
+  if (resolved.kind !== 'dir') {
+    fail(400, KIND_REFUSAL.dir)
+  }
+  return resolved.path
+}
+
+function searchQuery(body: Partial<HostSearchRequest>): TextSearchQuery {
+  if (typeof body.query !== 'string' || body.query === '') {
+    fail(400, 'query is required')
+  }
+  for (const flag of ['isRegex', 'matchCase', 'wholeWord', 'useIgnoreFiles'] as const) {
+    if (body[flag] !== undefined && typeof body[flag] !== 'boolean') {
+      fail(400, `${flag} must be a boolean`)
+    }
+  }
+  for (const list of ['includes', 'excludes'] as const) {
+    const value = body[list]
+    if (value !== undefined && (!Array.isArray(value) || value.some((glob) => typeof glob !== 'string'))) {
+      fail(400, `${list} must be an array of strings`)
+    }
+  }
+  if (body.maxResults !== undefined && (typeof body.maxResults !== 'number' || !Number.isFinite(body.maxResults))) {
+    fail(400, 'maxResults must be a number')
+  }
+  return {
+    query: body.query,
+    isRegex: body.isRegex,
+    matchCase: body.matchCase,
+    wholeWord: body.wholeWord,
+    useIgnoreFiles: body.useIgnoreFiles,
+    includes: body.includes,
+    excludes: body.excludes,
+    maxResults: body.maxResults,
+  }
 }
 
 function handleList({ ctx, hostFiles, req, res, url }: FsCall): void {

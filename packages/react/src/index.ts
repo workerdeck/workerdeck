@@ -7,6 +7,31 @@ export { attachmentKind, useAttachments } from './hooks/use-attachments.ts'
 export type { AttachmentKind, StagedAttachment, UseAttachmentsOptions, UseAttachmentsResult } from './hooks/use-attachments.ts'
 export { scanPromptTokens } from './lib/prompt-tokens.ts'
 export type { PromptToken, PromptTokenOptions } from './lib/prompt-tokens.ts'
+export { useHostSearch } from './hooks/use-host-search.ts'
+export type { HostSearchRun, UseHostSearchOptions, UseHostSearchResult } from './hooks/use-host-search.ts'
+export {
+  compareSearchPaths,
+  EMPTY_HOST_SEARCH_QUERY,
+  fileMatchCount,
+  hostSearchCounts,
+  hostSearchReducer,
+  hostSearchRequest,
+  hostSearchTree,
+  initialHostSearchState,
+  matchKey,
+  matchPreview,
+  sortedSearchFiles,
+} from './lib/host-search.ts'
+export type {
+  HostSearchAction,
+  HostSearchFileNode,
+  HostSearchFolder,
+  HostSearchNode,
+  HostSearchQuery,
+  HostSearchState,
+  HostSearchStatus,
+  MatchPreview,
+} from './lib/host-search.ts'
 export { useHostFileRoots, useHostFileSearch, useHostFileTree } from './hooks/use-host-files.ts'
 export type { UseHostFileRootsResult, UseHostFileSearchResult, UseHostFileTreeResult } from './hooks/use-host-files.ts'
 export { usePeerSessions } from './hooks/use-peer-sessions.ts'

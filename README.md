@@ -307,6 +307,9 @@ pooling or rate-limit circumvention. The OAuth itself stays 100% provider-owned 
 - **The VS Code extension has an Agent Files view.** It shows the open session's folder in the
   Explorer, drawn like the Explorer (icons, git colours, inline rename, drag and drop), whether the
   folder is local or behind a remote gateway's `/v1/fs` routes.
+- **It has an Agent Search view too.** A copy of VS Code's Search (case, word, regex, include and
+  exclude, replace with preview) over the session's folder, through the gateway's ripgrep-backed
+  `POST /v1/fs/search`, so it works when no folder is open and when the folder is remote.
 - **VS Code is on the Marketplace; iOS is not in a store.** Install the extension from the
   [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode) or with
   `code --install-extension silkweave.workerdeck-vscode`. The iOS app is still built and

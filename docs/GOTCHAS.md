@@ -2425,6 +2425,21 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   directories: as directories that keeps the walk bounded instead of cyclic, as files it guarantees
   every offered path will pass `/fs/read`. It never resolves a path of its own; it is handed an
   already-contained directory.
+- **`/fs/search` is ripgrep, and ripgrep is found, never installed.** `resolveRipgrep` takes
+  `hostFiles.ripgrep`, else the `rg` that `@openai/codex` ships beside its binary (a pinned version
+  with PCRE2, so `--engine auto` handles lookaround), else `rg` on `PATH`; without one the route is
+  501 and `/fs/roots` says `canSearch: false`. There is deliberately no JS fallback (Tobias,
+  2026-11-04).
+- **Search containment is rg's own walk.** The route resolves the start directory like every other
+  `/fs` route, then rg runs with that as its cwd and never gets `--follow`, so a link inside the root
+  is neither descended nor read. `--no-config` keeps an operator's `RIPGREP_CONFIG_PATH` out,
+  `--no-messages` keeps unreadable files from turning a search into an error, and the query always
+  goes in as `--regexp` after the flags so a query starting with `-` is a pattern.
+- **Search output is VS Code's shape, so columns are UTF-16.** rg reports byte offsets into the
+  line; the service converts to UTF-16 columns per match before anything leaves the server, and each
+  line's `text` is a clipped preview (`start` says where it begins), never the whole line. A literal
+  query containing a newline is escaped into a `--multiline` regex: `--fixed-strings` would split it
+  into one pattern per line.
 - These routes are **operator-privileged**: authorized by the auth key alone, outside the agent
   permission flow, which is why writing is its own separate flag.
 

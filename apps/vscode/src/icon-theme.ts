@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import { languageOf, type LanguageIndex } from './language-of.ts'
 
 type IconDefinition = { iconPath?: string; fontCharacter?: string; fontColor?: string; fontSize?: string; fontId?: string }
 
@@ -30,7 +31,8 @@ type ThemeContribution = { id: string; path: string }
 
 export type IconThemeCss = { css: string; fileIcons: boolean; folderIcons: boolean; hideArrows: boolean; roots: vscode.Uri[] }
 
-export type LanguageIndex = { names: Map<string, string>; extensions: Map<string, string> }
+export type { LanguageIndex }
+export { languageOf }
 
 const EXPANDED = '.monaco-tl-twistie.collapsible:not(.collapsed) + .monaco-tl-contents'
 
@@ -245,23 +247,6 @@ export function languageIndex(): LanguageIndex {
     }
   }
   return { names, extensions }
-}
-
-// Longest extension wins, the way the language service resolves `.d.ts` before `.ts`.
-export function languageOf(index: LanguageIndex, name: string): string | undefined {
-  const lower = name.toLowerCase()
-  const byName = index.names.get(lower)
-  if (byName) {
-    return byName
-  }
-  const segments = lower.split('.')
-  for (let i = 1; i < segments.length; i++) {
-    const match = index.extensions.get(segments.slice(i).join('.'))
-    if (match) {
-      return match
-    }
-  }
-  return undefined
 }
 
 function parseJsonc(text: string): unknown {

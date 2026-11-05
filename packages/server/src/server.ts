@@ -47,6 +47,7 @@ import { EngineSleepTimers } from './services/engine-sleep.ts'
 import { ContextResetService } from './services/context-resets.ts'
 import { BridgeHub } from './services/bridge.ts'
 import { PromptAcks } from './services/prompt-acks.ts'
+import { resolveRipgrep } from './services/host-text-search.ts'
 import { createHostFileRoots } from './services/host-files.ts'
 import { SessionNotifier } from './services/notifications.ts'
 import { SessionParkManager } from './services/parking.ts'
@@ -186,7 +187,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const withModelName = (info: SessionInfo): SessionInfo => {
     const adapter = adapterFor(info.engine)
     const id = modelFor(adapter, info.profile === undefined ? undefined : profiles.get(info.profile), info.model)
-    const name = id === undefined ? undefined : adapter.catalog.models.find((m) => m.value !== 'default' && modelMatches(m, id))?.displayName
+    const name =
+      id === undefined ? undefined : adapter.catalog.models.find((m) => m.value !== 'default' && modelMatches(m, id))?.displayName
     return name === undefined || name === info.modelName ? info : { ...info, modelName: name }
   }
   const projects = new ProjectInfoService({
@@ -505,6 +507,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     hostFilesWritable: options.hostFiles?.write === true,
     maxHostFileBytes: options.hostFiles?.maxFileBytes ?? 1024 * 1024,
     maxHostDirEntries: options.hostFiles?.maxEntries ?? 5000,
+    ripgrep: hostFiles ? resolveRipgrep(options.hostFiles?.ripgrep) : undefined,
     shells,
     generation,
     pricingOverrides: Object.keys(pricing.overrides).length > 0 ? pricing.overrides : undefined,

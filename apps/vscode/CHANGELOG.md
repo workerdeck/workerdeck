@@ -5,6 +5,16 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [Unreleased]
+
+### Added
+
+- **Agent Search.** A Search view of its own in the activity bar for the open session's folder,
+  local or on a remote gateway: match case, whole word, regex, files to include and exclude, the
+  ignore-files toggle, list or tree results, dismiss, and replace (one, per file, all) with Preserve
+  Case and the Replace Preview diff. Cmd+Shift+F and Cmd+Shift+H open it in a window with no folder.
+- **Find in Folder...** in Agent Files' context menu searches that folder in Agent Search.
+
 ## [4.2.0] - 2026-11-04
 
 ### Changed

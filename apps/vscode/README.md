@@ -113,6 +113,15 @@ too), delete (to the Trash when the folder is local). Its shortcuts are the Expl
 `"when": "workerdeck.filesFocus && !workerdeck.filesEditing"`: VS Code never sets `focusedView`
 inside a webview view.
 
+**Agent Search** has its own icon in the activity bar and searches the folder of the session you
+have open, local or on another machine, the way VS Code's Search does: match case, whole word and
+regular expressions, files to include and exclude (your `files.exclude` and `search.exclude`, and
+`.gitignore`, unless you turn them off), results as a list or a tree, and replace (one match, a file,
+or everything, with Preserve Case and the Replace Preview diff). In a window with no folder open,
+Cmd+Shift+F and Cmd+Shift+H open it instead of VS Code's search. Right-click a folder in Agent Files
+and pick **Find in Folder...** to search just that folder. The gateway needs ripgrep: the one bundled
+with Codex, or `rg` on its `PATH`.
+
 Five more views live in the secondary sidebar and describe the session you have open: **Usage**,
 **Context**, **MCP Servers**, **Tasks** and **Session Info**. They appear only when a session is
 open. Drag any of them to whichever sidebar or panel you prefer.

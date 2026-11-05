@@ -1,0 +1,923 @@
+/* The workbench's list, input and search-view rules, scoped under .wds because every webview shares main.css. */
+
+body:has(.wds) {
+  background: var(--vscode-sideBar-background);
+  padding: 0;
+}
+
+.wds *,
+.wds *::before,
+.wds *::after {
+  box-sizing: content-box;
+}
+
+.wds {
+  height: 100%;
+  font-family: var(--vscode-font-family);
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+  line-height: 1.4;
+}
+
+.wds .wds-message {
+  margin: 0;
+  padding: 4px 20px 4px 20px;
+  color: var(--vscode-descriptionForeground);
+  white-space: normal;
+}
+
+.wds .explorer-folders-view {
+  height: 100%;
+}
+
+.wds .monaco-list {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  outline: none;
+}
+
+.wds .monaco-list.mouse-support {
+  user-select: none;
+}
+
+.wds .monaco-list:focus::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.wds .monaco-list:focus:has(.monaco-list-row.focused)::before,
+.wds .monaco-list:focus:has(.monaco-list-row.selected)::before {
+  outline: none;
+}
+
+.wds .monaco-scrollable-element {
+  position: relative;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.wds .monaco-list-rows {
+  position: relative;
+  width: 100%;
+  background: var(--vscode-sideBar-background);
+}
+
+.wds .monaco-list-row {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  width: 100%;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.wds .monaco-list:focus .monaco-list-row.focused {
+  background-color: var(--vscode-list-focusBackground);
+  color: var(--vscode-list-focusForeground);
+  outline: 1px solid var(--vscode-list-focusOutline);
+  outline-offset: -1px;
+}
+
+.wds .monaco-list:focus .monaco-list-row.selected {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.wds .monaco-list:focus .monaco-list-row.selected .codicon {
+  color: var(--vscode-list-activeSelectionIconForeground);
+}
+
+.wds .monaco-list:focus .monaco-list-row.focused.selected {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+  outline: 1px solid var(--vscode-list-focusAndSelectionOutline, var(--vscode-contrastActiveBorder, var(--vscode-list-focusOutline)));
+  outline-offset: -1px;
+}
+
+.wds .monaco-list:not(:focus) .monaco-list-row.focused {
+  background-color: var(--vscode-list-inactiveFocusBackground);
+  outline: 1px dotted var(--vscode-list-inactiveFocusOutline);
+  outline-offset: -1px;
+}
+
+.wds .monaco-list:not(:focus) .monaco-list-row.focused .codicon {
+  color: var(--vscode-list-inactiveSelectionIconForeground);
+}
+
+.wds .monaco-list:not(:focus) .monaco-list-row.selected {
+  background-color: var(--vscode-list-inactiveSelectionBackground);
+  color: var(--vscode-list-inactiveSelectionForeground);
+}
+
+.wds .monaco-list:not(:focus) .monaco-list-row.focused.selected {
+  outline: 1px dotted var(--vscode-contrastActiveBorder, var(--vscode-list-inactiveFocusOutline));
+  outline-offset: -1px;
+}
+
+.wds .monaco-list:not(.drop-target) .monaco-list-row:hover:not(.selected):not(.focused) {
+  background-color: var(--vscode-list-hoverBackground);
+  color: var(--vscode-list-hoverForeground);
+}
+
+.wds .monaco-list.drop-target .monaco-list-rows,
+.wds .monaco-list .monaco-list-row.drop-target {
+  background-color: var(--vscode-list-dropBackground) !important;
+  color: inherit !important;
+}
+
+.wds .monaco-tl-row {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  position: relative;
+}
+
+.wds .monaco-tl-indent {
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 16px;
+  pointer-events: none;
+}
+
+.wds .hide-arrows .monaco-tl-indent {
+  left: 12px;
+}
+
+.wds .monaco-tl-indent > .indent-guide {
+  display: inline-block;
+  box-sizing: border-box;
+  height: 100%;
+  border-left: 1px solid transparent;
+  opacity: 0;
+  transition: opacity 0.1s linear;
+}
+
+.wds .monaco-list:hover .monaco-tl-indent > .indent-guide {
+  opacity: 1;
+  border-color: var(--vscode-tree-inactiveIndentGuidesStroke);
+}
+
+.wds .monaco-tl-indent > .indent-guide.active {
+  opacity: 1;
+  border-color: var(--vscode-tree-indentGuidesStroke);
+}
+
+.wds .monaco-tl-twistie,
+.wds .monaco-tl-contents {
+  height: 100%;
+}
+
+.wds .monaco-tl-twistie {
+  font-size: 10px;
+  text-align: right;
+  padding-right: 6px;
+  flex-shrink: 0;
+  width: 16px;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(3px);
+  display: flex !important;
+  color: var(--vscode-icon-foreground);
+}
+
+.wds .monaco-tl-twistie::before {
+  border-radius: 20px;
+}
+
+.wds .monaco-tl-twistie.collapsed::before {
+  transform: rotate(-90deg);
+}
+
+.wds .codicon[class*='codicon-'] {
+  font: normal normal normal 16px/1 codicon;
+  display: inline-block;
+  text-decoration: none;
+  text-rendering: auto;
+  text-align: center;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.wds .codicon-tree-item-expanded::before {
+  content: '\eab4';
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.wds .file-icon-themable-tree.align-icons-and-twisties .monaco-tl-twistie:not(.collapsible),
+.wds .file-icon-themable-tree.hide-arrows .monaco-tl-twistie {
+  visibility: hidden;
+  width: 0 !important;
+  padding-right: 0 !important;
+}
+
+.wds .monaco-tl-contents {
+  flex: 1;
+  overflow: hidden;
+}
+
+.wds .monaco-icon-label {
+  display: flex;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 22px;
+  line-height: 22px;
+}
+
+.wds .monaco-icon-label::before {
+  background-size: 16px;
+  background-position: left center;
+  background-repeat: no-repeat;
+  padding-right: 6px;
+  width: 16px;
+  height: 22px;
+  line-height: inherit !important;
+  display: inline-block;
+  -webkit-font-smoothing: antialiased;
+  vertical-align: top;
+  flex-shrink: 0;
+}
+
+.wds .monaco-icon-label > .monaco-icon-label-container {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.wds .monaco-icon-label > .monaco-icon-label-container > .monaco-icon-name-container > .label-name {
+  color: inherit;
+  white-space: pre;
+  text-decoration: none;
+}
+
+.wds .monaco-icon-label > .monaco-icon-label-container > .monaco-icon-name-container > .label-name > .label-separator {
+  margin: 0 2px;
+  opacity: 0.5;
+}
+
+.wds .explorer-item .monaco-icon-name-container.multiple > .label-name > .monaco-highlighted-label {
+  border-radius: 3px;
+}
+
+.wds .explorer-item .monaco-icon-name-container.multiple > .label-name:hover > .monaco-highlighted-label,
+.wds
+  .monaco-list
+  .monaco-list-row.focused
+  .explorer-item
+  .monaco-icon-name-container.multiple
+  > .label-name.active
+  > .monaco-highlighted-label {
+  text-decoration: underline;
+}
+
+.wds .explorer-item .monaco-icon-name-container.multiple > .label-name.drop-target > .monaco-highlighted-label {
+  background-color: var(--vscode-list-dropBackground);
+}
+
+.wds .monaco-icon-label[data-badge]::after {
+  content: attr(data-badge);
+  opacity: 0.75;
+  font-size: 90%;
+  font-weight: 600;
+  margin: auto 12px 0 5px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.wds .monaco-list:focus .selected .monaco-icon-label,
+.wds .monaco-list:focus .selected .monaco-icon-label::after {
+  color: inherit !important;
+}
+
+.wds .explorer-item {
+  flex: 1;
+  flex-wrap: nowrap;
+}
+
+.wds .explorer-item.cut,
+.wds .explorer-item.wds-faded {
+  opacity: 0.5;
+}
+
+.wds .explorer-item.explorer-item-edited .label-name {
+  flex: 0;
+}
+
+.wds .explorer-item .monaco-inputbox {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  height: 22px;
+  line-height: normal;
+  border-radius: 4px;
+  font-size: inherit;
+}
+
+.wds .monaco-inputbox > .ibwrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.wds .explorer-item .monaco-inputbox > .ibwrapper > .input {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 20px;
+  padding: 0 1px;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  resize: none;
+  outline-width: 1px;
+  outline-style: solid;
+  outline-offset: -1px;
+  outline-color: var(--vscode-focusBorder);
+  opacity: 1;
+}
+
+.wds .monaco-inputbox-container {
+  text-align: right;
+}
+
+.wds .monaco-inputbox-container .monaco-inputbox-message {
+  display: inline-block;
+  overflow: hidden;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4em;
+  font-size: 12px;
+  line-height: 17px;
+  margin-top: -1px;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.wds a:hover {
+  text-decoration: none;
+}
+
+.wds.wds-modern .monaco-list-row {
+  left: 4px;
+  right: 4px;
+  width: auto;
+  border-radius: 4px;
+}
+
+.wds.wds-modern .monaco-list:focus:not(:focus-visible) .monaco-list-row.focused {
+  outline: 0 !important;
+}
+
+.wds.wds-modern .monaco-icon-label[data-badge]::after {
+  margin-right: 8px;
+  font-size: 11px;
+}
+
+.wds .wds-sticky-anchor {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 13;
+}
+
+.wds .monaco-tree-sticky-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background-color: var(--vscode-sideBarStickyScroll-background, var(--vscode-sideBar-background));
+  border-bottom: 1px solid var(--vscode-sideBarStickyScroll-border);
+}
+
+.wds .monaco-tree-sticky-container .monaco-tree-sticky-row.monaco-list-row {
+  position: absolute;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--vscode-sideBarStickyScroll-background, var(--vscode-sideBar-background));
+  opacity: 1 !important;
+}
+
+.wds.wds-modern .monaco-tree-sticky-container .monaco-tree-sticky-row.monaco-list-row {
+  width: auto;
+}
+
+.wds .monaco-tree-sticky-container .monaco-tree-sticky-row:hover {
+  background-color: var(--vscode-list-hoverBackground) !important;
+  cursor: pointer;
+}
+
+.wds .monaco-tree-sticky-container .monaco-tree-sticky-container-shadow {
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  box-shadow: var(--vscode-sideBarStickyScroll-shadow) 0 6px 6px -6px inset;
+}
+
+.wds.search-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  outline: none;
+}
+
+.wds .monaco-progress-container {
+  width: 100%;
+  height: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.wds .monaco-progress-container .progress-bit {
+  width: 2%;
+  height: 2px;
+  position: absolute;
+  left: 0;
+  display: none;
+  background-color: var(--vscode-progressBar-background);
+}
+
+.wds .monaco-progress-container.active .progress-bit {
+  display: inherit;
+}
+
+.wds .monaco-progress-container.infinite .progress-bit {
+  animation: wds-progress 4s linear infinite;
+  transform: translate3d(0, 0, 0);
+}
+
+@keyframes wds-progress {
+  from {
+    transform: translateX(0%) scaleX(1);
+  }
+  to {
+    transform: translateX(2500%) scaleX(3);
+  }
+}
+
+.wds .search-widgets-container {
+  margin: 0 12px 0 2px;
+  padding-top: 4px;
+  padding-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.wds .search-widget {
+  position: relative;
+}
+
+.wds .search-widget .toggle-replace-button {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--vscode-icon-foreground);
+  border-radius: 3px;
+  outline-offset: -1px;
+}
+
+.wds .search-widget .toggle-replace-button:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.wds .search-widget .toggle-replace-button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.wds .search-widget .search-container,
+.wds .search-widget .replace-container {
+  margin-left: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.wds .search-widget .replace-container {
+  margin-top: 6px;
+  position: relative;
+}
+
+.wds .search-widget .replace-container .monaco-findInput {
+  flex: 1;
+}
+
+.wds .search-widget .replace-container > .monaco-action-bar {
+  margin-left: 0;
+  height: 25px;
+  display: flex;
+  align-items: center;
+}
+
+.wds .monaco-findInput {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.wds .monaco-inputbox {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  border-radius: 2px;
+  font-size: inherit;
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+}
+
+.wds .monaco-findInput.synthetic-focus .monaco-inputbox {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+
+.wds .monaco-findInput.error .monaco-inputbox {
+  border-color: var(--vscode-inputValidation-errorBorder);
+}
+
+.wds .monaco-inputbox > .ibwrapper {
+  position: relative;
+  width: 100%;
+}
+
+.wds .monaco-inputbox > .ibwrapper > .input {
+  display: block;
+  box-sizing: content-box;
+  width: calc(100% - 12px);
+  min-height: 18px;
+  margin: 0;
+  padding: 3px 6px;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 18px;
+  color: inherit;
+  background-color: inherit;
+  scrollbar-width: none;
+}
+
+.wds .monaco-inputbox > .ibwrapper > .input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.wds .monaco-findInput > .controls {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  display: flex;
+}
+
+.wds .monaco-custom-toggle {
+  margin-left: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  padding: 1px;
+  box-sizing: border-box;
+  user-select: none;
+  color: inherit;
+}
+
+.wds .monaco-custom-toggle.codicon[class*='codicon-'] {
+  font-size: 16px;
+  line-height: 16px;
+}
+
+.wds .monaco-custom-toggle:hover {
+  background-color: var(--vscode-inputOption-hoverBackground);
+}
+
+.wds .monaco-custom-toggle.checked {
+  border-color: var(--vscode-inputOption-activeBorder);
+  color: var(--vscode-inputOption-activeForeground);
+  background-color: var(--vscode-inputOption-activeBackground);
+}
+
+.wds .monaco-custom-toggle:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.wds .monaco-inputbox-message {
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  top: 100%;
+  box-sizing: border-box;
+  padding: 0.4em;
+  font-size: 12px;
+  line-height: 17px;
+  white-space: normal;
+  word-wrap: break-word;
+  background-color: var(--vscode-inputValidation-errorBackground);
+  color: var(--vscode-inputValidation-errorForeground);
+  border: 1px solid var(--vscode-inputValidation-errorBorder);
+}
+
+.wds .query-details {
+  min-height: 1em;
+  position: relative;
+  margin: 0 0 0 18px;
+}
+
+.wds .query-details .more {
+  position: absolute;
+  right: 0;
+  margin-right: 0.3em;
+  cursor: pointer;
+  width: 16px;
+  height: 13px;
+  z-index: 2;
+  font-size: 16px;
+  line-height: 13px;
+  color: var(--vscode-icon-foreground);
+  border-radius: 3px;
+}
+
+.wds .query-details .more:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.wds .query-details .file-types > .monaco-findInput {
+  width: 100%;
+}
+
+.wds .query-details.more .file-types:last-child {
+  padding-bottom: 4px;
+}
+
+.wds .query-details.more h4 {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 4px 0 0;
+  margin: 0;
+  font-size: 11px;
+  font-weight: normal;
+}
+
+.wds .messages {
+  margin-top: -5px;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.wds .message {
+  padding-left: 22px;
+  padding-right: 22px;
+}
+
+.wds .message p {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-bottom: 4px;
+  user-select: text;
+}
+
+.wds .message a {
+  color: var(--vscode-textLink-foreground);
+  cursor: pointer;
+}
+
+.wds .message a:hover {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+.wds .message .wds-error {
+  color: var(--vscode-errorForeground);
+}
+
+.wds .results {
+  flex: 1;
+  min-height: 0;
+}
+
+.wds .results > .monaco-list {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.wds .foldermatch,
+.wds .filematch {
+  display: flex;
+  position: relative;
+  line-height: 22px;
+  padding: 0;
+  align-items: center;
+}
+
+.wds .foldermatch .monaco-icon-label,
+.wds .filematch .monaco-icon-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.wds .monaco-icon-label > .monaco-icon-label-container > .monaco-icon-description-container > .label-description {
+  opacity: 0.7;
+  margin-left: 0.5em;
+  font-size: 0.9em;
+  white-space: pre;
+}
+
+.wds .linematch {
+  position: relative;
+  line-height: 22px;
+  display: flex;
+  overflow: hidden;
+  align-items: center;
+}
+
+.wds .linematch > .match {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.wds .linematch .matchLineNum {
+  margin-left: 7px;
+  margin-right: 4px;
+  opacity: 0.7;
+  font-size: 0.9em;
+  display: none;
+}
+
+.wds .linematch .matchLineNum.show {
+  display: block;
+}
+
+.wds .findInFileMatch,
+.wds .replaceMatch {
+  white-space: pre;
+}
+
+.wds .findInFileMatch {
+  background-color: var(--vscode-editor-findMatchHighlightBackground);
+  border: 1px solid var(--vscode-editor-findMatchHighlightBorder, transparent);
+}
+
+.wds .replace.findInFileMatch {
+  background-color: var(--vscode-diffEditor-removedTextBackground);
+  border: 1px solid var(--vscode-diffEditor-removedTextBorder, transparent);
+  text-decoration: line-through;
+}
+
+.wds .replaceMatch {
+  background-color: var(--vscode-diffEditor-insertedTextBackground);
+  border: 1px solid var(--vscode-diffEditor-insertedTextBorder, transparent);
+}
+
+.wds .replaceMatch:not(:empty) {
+  margin-left: 2px;
+}
+
+.wds .monaco-list .monaco-list-row .monaco-action-bar {
+  display: none;
+  padding: 0 0.8em 0 0.4em;
+  flex-shrink: 0;
+}
+
+.wds .monaco-action-bar .actions-container {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  align-items: center;
+}
+
+.wds .monaco-action-bar .action-item {
+  margin: 0;
+  display: block;
+}
+
+.wds .monaco-action-bar .action-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--vscode-icon-foreground);
+}
+
+.wds .monaco-action-bar .action-label:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.wds .monaco-action-bar .action-label.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.wds .monaco-action-bar .action-label.disabled:hover {
+  background-color: transparent;
+}
+
+.wds .monaco-list .monaco-list-row:hover .monaco-action-bar,
+.wds .monaco-list .monaco-list-row.focused .monaco-action-bar {
+  display: inline-block;
+}
+
+.wds .monaco-list .monaco-list-row:hover .badge,
+.wds .monaco-list .monaco-list-row.focused .badge {
+  display: none;
+}
+
+.wds .badge {
+  flex-shrink: 0;
+}
+
+.wds .monaco-count-badge {
+  padding: 3px 6px;
+  margin-right: 12px;
+  border-radius: 11px;
+  font-size: 11px;
+  min-width: 18px;
+  min-height: 18px;
+  line-height: 11px;
+  font-weight: normal;
+  text-align: center;
+  display: inline-block;
+  box-sizing: border-box;
+  background-color: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+}
+
+.wds .codicon-chevron-right::before {
+  content: '\eab6';
+}
+
+.wds .codicon-chevron-down::before {
+  content: '\eab4';
+}
+
+.wds .codicon-case-sensitive::before {
+  content: '\eab1';
+}
+
+.wds .codicon-whole-word::before {
+  content: '\eb7e';
+}
+
+.wds .codicon-regex::before {
+  content: '\eb38';
+}
+
+.wds .codicon-preserve-case::before {
+  content: '\eb2e';
+}
+
+.wds .codicon-replace-all::before {
+  content: '\eb3c';
+}
+
+.wds .codicon-replace::before {
+  content: '\eb3d';
+}
+
+.wds .codicon-ellipsis::before {
+  content: '\ea7c';
+}
+
+.wds .codicon-exclude::before {
+  content: '\eae5';
+}
+
+.wds .codicon-close::before {
+  content: '\ea76';
+}

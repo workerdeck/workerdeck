@@ -87,11 +87,11 @@ describe('host file routes', () => {
     expect((await get(base, '/fs/roots'))[1].canWrite).toBe(true)
   })
 
-  it('advertises its roots and whether it takes writes', async () => {
+  it('advertises its roots and whether it takes writes and searches', async () => {
     const base = await start({ roots: [root] })
     const [status, body] = await get(base, '/fs/roots')
     expect(status).toBe(200)
-    expect(body).toEqual({ roots: [{ path: root, name: 'project' }], canWrite: false })
+    expect(body).toEqual({ roots: [{ path: root, name: 'project' }], canWrite: false, canSearch: expect.any(Boolean) })
 
     const writable = await start({ roots: [root], write: true })
     expect((await get(writable, '/fs/roots'))[1].canWrite).toBe(true)

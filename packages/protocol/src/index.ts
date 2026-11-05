@@ -1204,6 +1204,7 @@ export type HostFileRoot = {
 export type ListHostRootsResponse = {
   roots: HostFileRoot[]
   canWrite: boolean
+  canSearch?: boolean
 }
 
 // A gateway's answer to "which machine am I?". `machineId` is an opaque fingerprint of the host
@@ -1422,6 +1423,7 @@ export * from './paths.ts'
 export * from './model-menu.ts'
 export * from './pricing.ts'
 export * from './peer-mentions.ts'
+export * from './search.ts'
 export * from './session-list.ts'
 export * from './status-label.ts'
 export * from './tool-titles.ts'

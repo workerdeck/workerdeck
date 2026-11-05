@@ -1,4 +1,17 @@
-import type { CatchUpFrom, GatewayRelayMeta, PermissionMode, ScopeRoot, SessionInfo, SessionRow, WorkspaceScope } from '@workerdeck/protocol'
+import type {
+  CatchUpFrom,
+  GatewayRelayMeta,
+  HostSearchEvent,
+  HostSearchMatch,
+  HostSearchRange,
+  HostSearchRequest,
+  PermissionMode,
+  ReplaceOptions,
+  ScopeRoot,
+  SessionInfo,
+  SessionRow,
+  WorkspaceScope,
+} from '@workerdeck/protocol'
 import type { SubagentDisplay, ViewConfig } from './view-config.ts'
 import type { SessionSurfacePanel, SessionVitals } from '@workerdeck/ui'
 
@@ -216,7 +229,6 @@ export type SidebarToHost =
       cwd?: string
     }
 
-
 export type HostToSidebar =
   | TransportToWebview
   | { kind: 'wd-sidebar-state'; state: SidebarState }
@@ -319,5 +331,56 @@ export type HostToFiles =
   | { kind: 'wd-files-cut'; uris: string[] }
   | { kind: 'wd-files-moved'; moves: { from: string; to: string }[] }
 
-export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost | ProfilesToHost | FilesToHost
-export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways | HostToProfiles | HostToFiles
+export type WireLanguages = { names: Record<string, string>; extensions: Record<string, string> }
+
+export type WireSearchRoot = { path: string; label: string; local: boolean; canSearch: boolean }
+
+export type WireSearchSettings = {
+  excludes: string[]
+  searchOnType: boolean
+  debounceMs: number
+  maxResults: number
+  viewMode: 'tree' | 'list'
+  collapseResults: 'auto' | 'alwaysCollapse' | 'alwaysExpand'
+  lineNumbers: boolean
+}
+
+export type SearchCommand =
+  | 'refresh'
+  | 'clear'
+  | 'viewAsTree'
+  | 'viewAsList'
+  | 'collapseAll'
+  | 'expandAll'
+  | 'focus'
+  | 'replace'
+  | 'replaceAll'
+  | 'toggleCase'
+  | 'toggleWord'
+  | 'toggleRegex'
+  | 'togglePreserveCase'
+
+export type WireReplaceFile = { path: string; matches: HostSearchMatch[] }
+
+export type SearchToHost =
+  | { kind: 'wd-ready' }
+  | { kind: 'wd-search-run'; id: number; request: HostSearchRequest }
+  | { kind: 'wd-search-cancel'; id: number }
+  | { kind: 'wd-search-open'; path: string; range?: HostSearchRange; mode: FileOpenMode }
+  | { kind: 'wd-search-replace'; options: ReplaceOptions; files: WireReplaceFile[]; confirm: boolean }
+  | { kind: 'wd-search-preview'; options: ReplaceOptions; file: WireReplaceFile; range?: HostSearchRange }
+  | { kind: 'wd-search-focus'; focused: boolean; input?: boolean }
+  | { kind: 'wd-search-view'; tree: boolean; collapsed: boolean; hasResults: boolean; hasQuery: boolean }
+  | { kind: 'wd-search-copy'; text: string }
+  | { kind: 'wd-search-open-settings' }
+
+export type HostToSearch =
+  | { kind: 'wd-search-root'; root?: WireSearchRoot; message?: string }
+  | { kind: 'wd-search-settings'; settings: WireSearchSettings }
+  | { kind: 'wd-search-theme'; css: string; fileIcons: boolean; languages: WireLanguages }
+  | { kind: 'wd-search-events'; id: number; events: HostSearchEvent[]; failure?: string; end?: boolean }
+  | { kind: 'wd-search-command'; command: SearchCommand; seed?: { query?: string; includes?: string } }
+  | { kind: 'wd-search-replaced'; files: WireReplaceFile[] }
+
+export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost | ProfilesToHost | FilesToHost | SearchToHost
+export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways | HostToProfiles | HostToFiles | HostToSearch
