@@ -564,6 +564,70 @@ describe('CodexRunner goals: scripted', () => {
       await expect(runner.pauseGoal(true)).resolves.toMatchObject({ state: 'met' })
     })
 
+    it('a same-second replacement is not mistaken for the old goal: the set resolves with the new text, budget and setter', async () => {
+      const peer = scriptedPeer()
+      const { runner } = await liveIdleRunner(peer)
+      const old = threadGoal({ objective: 'old', tokenBudget: 100 })
+      peer.emit('thread/goal/updated', updated(old))
+      const replaced = { ...old, objective: 'new human goal', tokenBudget: 200, updatedAt: old.updatedAt }
+      peer.respond('thread/goal/set', () => {
+        peer.emit('thread/goal/updated', updated({ ...old, tokensUsed: 5 }, 'goal-turn'))
+        setTimeout(() => peer.emit('thread/goal/updated', updated(replaced)), 5)
+        return { goal: replaced }
+      })
+
+      const started = Date.now()
+      const goal = await runner.setGoal({ text: 'new human goal', tokenBudget: 200 }, HUMAN)
+      expect(Date.now() - started).toBeLessThan(1000)
+      expect(goal).toMatchObject({ text: 'new human goal', tokenBudget: 200, setBy: HUMAN })
+      expect(runner.info().goal).toMatchObject({ text: 'new human goal', tokenBudget: 200, setBy: HUMAN })
+    })
+
+    it('a budget-only change waits for the notification with the new budget, not an old-budget tick', async () => {
+      const peer = scriptedPeer()
+      const { runner } = await liveIdleRunner(peer)
+      const goal = threadGoal({ tokenBudget: 100 })
+      peer.emit('thread/goal/updated', updated(goal))
+      peer.respond('thread/goal/set', () => {
+        peer.emit('thread/goal/updated', updated({ ...goal, tokensUsed: 7 }, 'goal-turn'))
+        setTimeout(() => peer.emit('thread/goal/updated', updated({ ...goal, tokensUsed: 7, tokenBudget: 200 })), 5)
+        return { goal: { ...goal, tokenBudget: 200 } }
+      })
+      await expect(runner.setGoal({ text: 'ship it', tokenBudget: 200 }, HUMAN)).resolves.toMatchObject({ tokenBudget: 200 })
+      expect(runner.info().goal?.tokenBudget).toBe(200)
+    })
+
+    it('a clear answered after a clear and a same-second recreation keeps the recreated goal, without waiting', async () => {
+      const peer = scriptedPeer()
+      const { runner } = await liveIdleRunner(peer)
+      const goal = threadGoal()
+      peer.emit('thread/goal/updated', updated(goal))
+      peer.respond('thread/goal/clear', () => {
+        peer.emit('thread/goal/cleared', { threadId: 'thread-1' })
+        peer.emit('thread/goal/updated', updated({ ...goal, objective: 'recreated' }))
+        return { cleared: true }
+      })
+      const started = Date.now()
+      await runner.clearGoal(HUMAN)
+      expect(Date.now() - started).toBeLessThan(1000)
+      expect(runner.info().goal).toMatchObject({ text: 'recreated', state: 'active' })
+    })
+
+    it('a transition that returns to the start (paused then active again) still counts as the engine moving on', async () => {
+      const peer = scriptedPeer()
+      const { runner } = await liveIdleRunner(peer)
+      const goal = threadGoal()
+      peer.emit('thread/goal/updated', updated(goal))
+      peer.respond('thread/goal/set', () => {
+        peer.emit('thread/goal/updated', updated({ ...goal, status: 'paused' }))
+        peer.emit('thread/goal/updated', updated(goal))
+        return { goal: { ...goal, status: 'paused' } }
+      })
+      const started = Date.now()
+      await expect(runner.pauseGoal(true)).resolves.toMatchObject({ state: 'active' })
+      expect(Date.now() - started).toBeLessThan(1000)
+    })
+
     it("a clear's answer never wipes a goal notified after it", async () => {
       const peer = scriptedPeer()
       const { runner } = await liveIdleRunner(peer)

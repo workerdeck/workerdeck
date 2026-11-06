@@ -126,12 +126,33 @@ type QueuedTurn = { input: AppServerUserInput[] }
 
 type GoalTarget = { connection: AppServerConnection; threadId: string; close?: () => void }
 
-type GoalMark = { createdAt: number; status: AppServerThreadGoal['status'] } | null
-
 const GOAL_CONFIRM_MS = 2000
 
-function sameMark(a: GoalMark, b: GoalMark): boolean {
-  return a === null || b === null ? a === b : a.createdAt === b.createdAt && a.status === b.status
+// Anything but a usage tick: a new goal, a clear, or a change of objective, budget or status.
+function goalTransition(seen: AppServerThreadGoal | undefined, next: AppServerThreadGoal | null): boolean {
+  if (!next || !seen) {
+    return true
+  }
+  return (
+    seen.createdAt !== next.createdAt ||
+    seen.objective !== next.objective ||
+    (seen.tokenBudget ?? null) !== (next.tokenBudget ?? null) ||
+    seen.status !== next.status
+  )
+}
+
+// The confirmed outcome of a mutation as the notifications must show it: a clear is no goal, a set its objective,
+// budget and status, a pause or resume its goal's identity and status.
+function goalOutcomeShown(seen: AppServerThreadGoal | undefined, outcome: AppServerThreadGoal | null, budget: boolean): boolean {
+  if (!outcome || !seen) {
+    return !outcome && !seen
+  }
+  return (
+    seen.createdAt === outcome.createdAt &&
+    seen.objective === outcome.objective &&
+    seen.status === outcome.status &&
+    (!budget || (seen.tokenBudget ?? null) === (outcome.tokenBudget ?? null))
+  )
 }
 
 type OwnGoalSet = { text: string; setBy: GoalSetter; createdAt?: number }
@@ -266,6 +287,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   #goalBusy = 0
   #goalNotes = 0
   #goalSeen: AppServerThreadGoal | undefined
+  #goalTransitions = 0
   #goalWaiters = new Set<() => void>()
   #ownGoalSet: OwnGoalSet | undefined
   #goalsOff = false
@@ -808,12 +830,12 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   }
 
   // Notifications can overtake the response they belong to, and stamps cannot order a status change against a tick
-  // of the same second. So: a response nothing overtook is applied; one a notification already confirmed is done; a
-  // status change notified during the call (the engine moved on) wins; after mere ticks the mutation waits, bounded,
-  // for the notification that carries its outcome, and applies the response itself if none comes.
+  // of the same second. So: a response nothing overtook is applied; one a notification already confirmed is done; any
+  // other transition notified during the call (the engine moved on) wins; after mere usage ticks the mutation waits,
+  // bounded, for the notification that carries its outcome, and applies the response itself if none comes.
   async #goalMutation(target: GoalTarget, method: string, params: Record<string, unknown>): Promise<AppServerThreadGoal | null> {
     const notes = this.#goalNotes
-    const before = this.#goalMark()
+    const transitions = this.#goalTransitions
     let result: unknown
     try {
       result = await target.connection.request(method, params)
@@ -832,42 +854,35 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     if (target.threadId !== this.#sdkSessionId) {
       return goal
     }
-    const wanted: GoalMark = goal ? { createdAt: goal.createdAt, status: goal.status } : null
     if (notes === this.#goalNotes) {
       this.#applyGoal(goal, false)
       return goal
     }
-    if (sameMark(this.#goalMark(), wanted)) {
-      return goal
+    const budget = 'objective' in params
+    const outcome = await this.#awaitGoalOutcome(transitions, goal, budget)
+    if (outcome === 'moved' && goal && this.#goalSeen && newerThan(goal, this.#goalSeen)) {
+      this.#applyGoal(goal, false)
     }
-    if (!sameMark(this.#goalMark(), before)) {
-      if (goal && this.#goalSeen && newerThan(goal, this.#goalSeen)) {
-        this.#applyGoal(goal, false)
-      }
-      return goal
-    }
-    if ((await this.#awaitGoalMark(before, wanted)) === 'timeout' && !this.core.closed && target.threadId === this.#sdkSessionId) {
+    if (outcome === 'timeout' && !this.core.closed && target.threadId === this.#sdkSessionId) {
       this.#applyGoal(goal, false)
     }
     return goal
   }
 
-  #goalMark(): GoalMark {
-    const seen = this.#goalSeen
-    return seen ? { createdAt: seen.createdAt, status: seen.status } : null
-  }
-
-  async #awaitGoalMark(before: GoalMark, wanted: GoalMark): Promise<'confirmed' | 'moved' | 'timeout'> {
+  async #awaitGoalOutcome(
+    transitions: number,
+    goal: AppServerThreadGoal | null,
+    budget: boolean,
+  ): Promise<'confirmed' | 'moved' | 'timeout'> {
     const deadline = Date.now() + GOAL_CONFIRM_MS
     for (;;) {
       if (this.core.closed) {
         return 'moved'
       }
-      const mark = this.#goalMark()
-      if (sameMark(mark, wanted)) {
+      if (goalOutcomeShown(this.#goalSeen, goal, budget)) {
         return 'confirmed'
       }
-      if (!sameMark(mark, before)) {
+      if (this.#goalTransitions !== transitions) {
         return 'moved'
       }
       const remaining = deadline - Date.now()
@@ -886,8 +901,11 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     }
   }
 
-  #goalNoted(): void {
+  #goalNoted(transition: boolean): void {
     this.#goalNotes++
+    if (transition) {
+      this.#goalTransitions++
+    }
     for (const wake of this.#goalWaiters) {
       wake()
     }
@@ -1667,12 +1685,13 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       if (!goal || goal.threadId !== this.#sdkSessionId) {
         return
       }
+      const transition = goalTransition(this.#goalSeen, goal)
       this.#applyGoal(goal, false)
-      this.#goalNoted()
+      this.#goalNoted(transition)
     },
     'thread/goal/cleared': () => {
       this.#applyGoal(null, false)
-      this.#goalNoted()
+      this.#goalNoted(true)
     },
     'turn/plan/updated': (params) => {
       if (!this.#activeTurn) {
