@@ -5,6 +5,10 @@ export const SESSION_ACTIONS = [
   'moveToPanel',
   'openInEditor',
   'setStatus',
+  'setGoal',
+  'pauseGoal',
+  'resumeGoal',
+  'clearGoal',
   'newConversation',
   'sleep',
   'makeAgent',
@@ -41,6 +45,18 @@ export function sessionActions(info: SessionInfo, at: { surface?: 'editor' | 'pa
     actions.push('stop')
   }
   actions.push(at.surface === 'editor' ? 'moveToPanel' : 'openInEditor', 'setStatus')
+  const goals = info.capabilities?.goals
+  if (goals) {
+    actions.push('setGoal')
+    if (goals.pause && info.goal?.state === 'active') {
+      actions.push('pauseGoal')
+    } else if (goals.pause && info.goal?.state === 'paused') {
+      actions.push('resumeGoal')
+    }
+    if (info.goal) {
+      actions.push('clearGoal')
+    }
+  }
   if (clearContextOffered(info)) {
     actions.push('newConversation')
   }

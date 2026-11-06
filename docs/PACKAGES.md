@@ -522,7 +522,8 @@ as a future additive field), are in `docs/GOTCHAS.md` §Server, profiles & auth.
 
 **Goals** (`goal.ts`): `SessionGoal`, `GoalSetter` (provenance), `GoalInput` and `readGoalInput(input, capabilities)` (the
 one validation every caller runs: text trimmed, non-empty, at most 4000, not a Claude clear alias; a budget only where
-`EngineCapabilities.goals.budget`), `goalActive`. Commands `set_goal { text, tokenBudget? }`, `clear_goal`, `pause_goal
+`EngineCapabilities.goals.budget`), `goalActive`; the drawing rules `goalStateText`, `goalCardText` (the `cardStatus`
+`goal` source), `goalNoticeRow` (the transcript row per `notice`), `goalHoldsEngine`. Commands `set_goal { text, tokenBudget? }`, `clear_goal`, `pause_goal
 { paused }`; REST bodies `SetGoalRequest` / `PauseGoalRequest`, answered with `GoalResponse { session, goal, pending? }`.
 A notice-less `goal_changed` is a state tick and coalesces (`replayCoalesceKey`, `logCoalesceKey`). There is no stop
 command: Stop stays `interrupt`. Rules in `docs/GOTCHAS.md` § Session goals.

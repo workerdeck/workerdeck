@@ -32,6 +32,7 @@ import {
   DialogHeader,
   Empty,
   EngineIcon,
+  GoalDialog,
   Input,
   Menu,
   MenuContent,
@@ -88,6 +89,7 @@ export function SessionsSidebar() {
   const [creatingAgent, setCreatingAgent] = useState(false)
   const [renaming, setRenaming] = useState<SessionRow>()
   const [labeling, setLabeling] = useState<SessionRow>()
+  const [goalFor, setGoalFor] = useState<SessionRow>()
   const [avatarFor, setAvatarFor] = useState<SessionRow>()
   const [deleting, setDeleting] = useState<DeleteAgentTarget>()
   const [conversationsOf, setConversationsOf] = useState<ConversationsTarget>()
@@ -313,6 +315,20 @@ export function SessionsSidebar() {
       }
       case 'avatar': {
         setAvatarFor(row)
+        break
+      }
+      case 'set-goal': {
+        setGoalFor(row)
+        break
+      }
+      case 'clear-goal': {
+        agentCall(row, 'Could not clear the goal', (client) => client.clearGoal(row.info.id))
+        break
+      }
+      case 'pause-goal': {
+        agentCall(row, action.paused ? 'Could not pause the goal' : 'Could not resume the goal', (client) =>
+          client.pauseGoal(row.info.id, action.paused),
+        )
         break
       }
       case 'sleep': {
@@ -564,6 +580,25 @@ export function SessionsSidebar() {
         onSave={(row, statusLabel) =>
           agentCall(row, 'Could not set the status', (client) => client.updateSession(row.info.id, { statusLabel }))
         }
+      />
+
+      <GoalDialog
+        open={goalFor !== undefined}
+        capabilities={goalFor?.info.capabilities?.goals}
+        goal={goalFor?.info.goal}
+        name={goalFor ? (goalFor.info.agent?.name ?? goalFor.info.title) : undefined}
+        onClose={() => setGoalFor(undefined)}
+        onSave={(goal) => {
+          const row = goalFor
+          if (row) {
+            agentCall(row, 'Could not set the goal', async (client) => {
+              const response = await client.setGoal(row.info.id, goal)
+              if (response.pending) {
+                toast('Goal sent. It starts when the engine confirms it.')
+              }
+            })
+          }
+        }}
       />
 
       <RenameDialog

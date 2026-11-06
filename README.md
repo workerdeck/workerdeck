@@ -158,6 +158,11 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   needs an API key". It stays until the agent changes it, clears when the conversation resets, and
   you can set or clear it yourself from the card menu. An `AGENTS.md` line telling agents when to
   use it is all the setup there is.
+- **Goals that outlast a turn.** Give a Claude or Codex session a condition ("all tests in
+  `packages/core` pass") from the card menu, REST or the agent's own `goal_set`, and it keeps
+  working turn after turn until the goal is met, fails, or (Codex) hits its token budget. The
+  transcript shows every check, the card shows the goal, and a goal you set is locked against
+  agents until it is done.
 - **MCP servers that come back.** A Claude session reconnects any MCP server that was down when
   its engine started (say you launched it later) the next time you message it, and the agent can
   do it itself with `mcp_reconnect` when a tool it expected is missing. After installing a new

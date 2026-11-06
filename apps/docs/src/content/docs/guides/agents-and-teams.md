@@ -100,6 +100,22 @@ It stays until changed and clears when the conversation resets. Every agent is t
 current (set it when starting a task, when blocked or waiting, and when done); add your own rules
 in `AGENTS.md` if you want more.
 
+## Goals
+
+A goal is a condition the agent keeps working toward, turn after turn, until it holds: "all tests in
+`packages/core` pass". Set one from the card menu (*Set goal…*; Codex sessions also take a token
+budget), with `POST /v1/sessions/:id/goal` `{ "text": "..." }`, or let the agent set its own with the
+`goal_set` tool (a lead can set one on its members). Claude checks the goal at the end of every turn
+and keeps going while it is not met; Codex runs goal turns by itself until the goal is met, the budget
+runs out, or you pause it (*Pause goal* / *Resume goal*, Codex only). *Clear goal* drops it; Stop
+interrupts the turn and pauses a Codex goal.
+
+The transcript shows a line for each step (set, not met yet with the reason, met, failed, paused,
+cleared), the card shows the goal under the name when no status is set, and Session info lists its
+state, checks, last reason and token use. A goal you set is yours: an agent can change it only once it
+is met or failed. An active Codex goal keeps the engine awake, so the session does not sleep while
+idle until the goal is paused or cleared.
+
 ## MCP servers that were down
 
 An engine dials its MCP servers once, when it starts; one that was not running then stays failed.

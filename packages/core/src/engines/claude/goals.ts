@@ -242,3 +242,23 @@ function goalStatusOf(line: string): GoalStatus | undefined {
     ...(Number.isFinite(at) ? { at } : {}),
   }
 }
+
+const COMMAND = /^\s*<command-name>\/goal<\/command-name>[\s\S]*?(?:<command-args>([\s\S]*?)<\/command-args>)?\s*$/
+
+// A resumed transcript keeps every `/goal`, host ones too, as the raw command row; it replays as the CLI's own reply.
+// `null` is a status query, which says nothing.
+export function replayedGoalCommand(message: ApiMessage): ApiMessage | null | undefined {
+  const content = message.content
+  const text =
+    typeof content === 'string' ? content : content.length === 1 && content[0]?.type === 'text' ? (content[0] as TextBlock).text : undefined
+  const match = text === undefined ? null : COMMAND.exec(text)
+  if (!match) {
+    return undefined
+  }
+  const args = (match[1] ?? '').trim()
+  if (!args) {
+    return null
+  }
+  const reply = GOAL_CLEAR_ALIASES.has(args.toLowerCase()) ? 'Goal cleared' : `${SET}${args}`
+  return { ...message, content: `<local-command-stdout>${reply}</local-command-stdout>` }
+}

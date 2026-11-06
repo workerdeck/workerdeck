@@ -507,6 +507,30 @@
         "icon": "$(comment)"
       },
       {
+        "command": "workerdeck.session.setGoal",
+        "title": "Set Goal...",
+        "category": "WorkerDeck",
+        "icon": "$(target)"
+      },
+      {
+        "command": "workerdeck.session.pauseGoal",
+        "title": "Pause Goal",
+        "category": "WorkerDeck",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "workerdeck.session.resumeGoal",
+        "title": "Resume Goal",
+        "category": "WorkerDeck",
+        "icon": "$(play)"
+      },
+      {
+        "command": "workerdeck.session.clearGoal",
+        "title": "Clear Goal",
+        "category": "WorkerDeck",
+        "icon": "$(circle-slash)"
+      },
+      {
         "command": "workerdeck.session.newConversation",
         "title": "New Conversation",
         "category": "WorkerDeck",
@@ -1025,6 +1049,22 @@
           "when": "false"
         },
         {
+          "command": "workerdeck.session.setGoal",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.pauseGoal",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.resumeGoal",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.session.clearGoal",
+          "when": "false"
+        },
+        {
           "command": "workerdeck.session.sleep",
           "when": "false"
         },
@@ -1233,6 +1273,26 @@
           "command": "workerdeck.session.sleep",
           "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_sleep",
           "group": "3_session@3"
+        },
+        {
+          "command": "workerdeck.session.setGoal",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_setGoal",
+          "group": "3_session@4"
+        },
+        {
+          "command": "workerdeck.session.pauseGoal",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_pauseGoal",
+          "group": "3_session@5"
+        },
+        {
+          "command": "workerdeck.session.resumeGoal",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_resumeGoal",
+          "group": "3_session@6"
+        },
+        {
+          "command": "workerdeck.session.clearGoal",
+          "when": "webviewId == 'workerdeck.sessions' && webviewSection == 'session' && wd_clearGoal",
+          "group": "3_session@7"
         },
         {
           "command": "workerdeck.session.makeAgent",

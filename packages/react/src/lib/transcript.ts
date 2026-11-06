@@ -1,4 +1,4 @@
-import { ENGINE_CAPABILITIES, mergeUsage, orderUsageWindows } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, goalNoticeRow, mergeUsage, orderUsageWindows } from '@workerdeck/protocol'
 import type {
   ApiMessage,
   ByModel,
@@ -15,6 +15,7 @@ import type {
   ProfileEngine,
   RateLimitInfo,
   SessionEvent,
+  SessionGoal,
   SessionInfo,
   SessionStatus,
   ShellInfo,
@@ -123,6 +124,7 @@ export type TranscriptState = {
   commands?: SlashCommandInfo[]
   skills?: SkillInfo[]
   checklist?: ChecklistItem[]
+  goal?: SessionGoal | null
   // Only what the client cannot derive: host- and MCP-declared titles. `toolTitle()` folds the
   // built-in table in on top of this.
   toolTitles?: Record<string, string>
@@ -315,6 +317,7 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
     // With held state (reconnect, warm cache seed) the held status stands: any change since is a `status_changed` in the replay span - events stay the one authority.
     status: state.lastSeq === 0 ? info.status : state.status,
     engineAsleep: state.lastSeq === 0 ? info.engineAsleep : state.engineAsleep,
+    goal: state.lastSeq === 0 || state.goal === undefined ? info.goal : state.goal,
     model: state.model ?? info.model,
     effort: state.effort !== undefined ? state.effort : info.effort,
     permissionMode: state.permissionMode ?? info.permissionMode,
@@ -413,6 +416,14 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
 
     case 'checklist': {
       return { ...base, checklist: event.items.length > 0 ? event.items : undefined }
+    }
+
+    case 'goal_changed': {
+      if (!event.notice) {
+        return { ...base, goal: event.goal }
+      }
+      const row = goalNoticeRow(event.notice, event.goal)
+      return { ...base, goal: event.goal, items: [...base.items, { kind: 'notice', id: `goal-${event.seq}`, ...row }] }
     }
 
     case 'tool_titles': {

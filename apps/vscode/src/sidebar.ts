@@ -2,6 +2,9 @@ import {
   NEW_CONVERSATION_HINT,
   STATUS_LABEL_EMOJI_MAX,
   STATUS_LABEL_TEXT_MAX,
+  GOAL_TEXT_MAX,
+  goalStateText,
+  readGoalInput,
   canSleep as canSleepRule,
   errorMessage,
   newConversationGate,
@@ -357,6 +360,33 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           run: () => this.#setStatus(hostId, info),
         }
       }
+      case 'setGoal': {
+        return {
+          label: info.goal ? '$(target) Replace goal…' : '$(target) Set goal…',
+          description: info.goal ? `${goalStateText(info.goal)}: ${info.goal.text}` : undefined,
+          detail: 'The agent keeps working, turn after turn, until the goal is met',
+          run: () => this.#setGoal(hostId, info),
+        }
+      }
+      case 'pauseGoal':
+      case 'resumeGoal': {
+        const paused = action === 'pauseGoal'
+        return {
+          label: paused ? '$(debug-pause) Pause goal' : '$(play) Resume goal',
+          detail: paused ? 'The turn in flight finishes; no new goal turn starts' : 'The engine picks the goal up again',
+          run: () =>
+            this.#agentCall(hostId, paused ? 'could not pause the goal' : 'could not resume the goal', (client) =>
+              client.pauseGoal(sessionId, paused),
+            ),
+        }
+      }
+      case 'clearGoal': {
+        return {
+          label: '$(circle-slash) Clear goal',
+          detail: 'Drop the goal; the agent stops working toward it',
+          run: () => this.#agentCall(hostId, 'could not clear the goal', (client) => client.clearGoal(sessionId)),
+        }
+      }
       case 'newConversation': {
         const gate = newConversationGate(info)
         return {
@@ -622,6 +652,47 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     await this.#agentCall(hostId, 'could not set the status', (client) =>
       client.updateSession(info.id, { statusLabel: statusLabelFrom(text) }),
     )
+  }
+
+  async #setGoal(hostId: string, info: SessionInfo): Promise<void> {
+    const capabilities = info.capabilities?.goals
+    const text = await vscode.window.showInputBox({
+      title: info.goal ? 'Replace goal' : 'Set goal',
+      prompt: 'When is the work done? The agent keeps working until this holds.',
+      value: info.goal?.text ?? '',
+      validateInput: (value) => {
+        const input = readGoalInput({ text: value }, capabilities)
+        return typeof input === 'string' ? input : value.length > GOAL_TEXT_MAX ? 'Too long' : undefined
+      },
+    })
+    if (text === undefined) {
+      return
+    }
+    let tokenBudget: number | null | undefined
+    if (capabilities?.budget) {
+      const current = info.goal?.tokenBudget
+      const budget = await vscode.window.showInputBox({
+        title: 'Token budget',
+        prompt: 'The engine stops working toward the goal at this many tokens. Leave empty for no budget.',
+        value: current === undefined ? '' : String(current),
+        validateInput: (value) => (value.trim() && !/^[1-9]\d*$/.test(value.trim()) ? 'A positive whole number, or empty' : undefined),
+      })
+      if (budget === undefined) {
+        return
+      }
+      tokenBudget = budget.trim() ? Number(budget.trim()) : current === undefined ? undefined : null
+    }
+    const input = readGoalInput({ text, ...(tokenBudget === undefined ? {} : { tokenBudget }) }, capabilities)
+    if (typeof input === 'string') {
+      void vscode.window.showErrorMessage(`WorkerDeck: ${input}`)
+      return
+    }
+    await this.#agentCall(hostId, 'could not set the goal', async (client) => {
+      const response = await client.setGoal(info.id, input)
+      if (response.pending) {
+        void vscode.window.showInformationMessage('WorkerDeck: goal sent. It starts when the engine confirms it.')
+      }
+    })
   }
 
   #sharingItem(hostId: string, agentId: string, shared: boolean): vscode.QuickPickItem & { run: () => Promise<void> } {

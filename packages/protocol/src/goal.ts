@@ -72,3 +72,83 @@ export function readGoalInput(input: unknown, capabilities: GoalCapabilities | u
   }
   return { text: line, tokenBudget }
 }
+
+export const GOAL_EMOJI = '🎯'
+
+// The state as a phrase a person reads: "Paused", "Token budget reached".
+export function goalStateText(goal: Pick<SessionGoal, 'state' | 'limit'>): string {
+  switch (goal.state) {
+    case 'active': {
+      return 'Active'
+    }
+    case 'paused': {
+      return 'Paused'
+    }
+    case 'blocked': {
+      return 'Blocked'
+    }
+    case 'met': {
+      return 'Met'
+    }
+    case 'failed': {
+      return 'Failed'
+    }
+    case 'limited': {
+      return goal.limit === 'budget' ? 'Token budget reached' : 'Usage limit reached'
+    }
+  }
+}
+
+// A card's goal line: the text while active, else the state; a met goal is done and leaves the card.
+export function goalCardText(goal: SessionGoal | null | undefined): string | undefined {
+  if (!goal || goal.state === 'met') {
+    return undefined
+  }
+  if (goal.state === 'active') {
+    return `${GOAL_EMOJI} ${goal.text}`
+  }
+  return `${GOAL_EMOJI} Goal ${goal.state === 'limited' ? 'stopped' : goal.state}`
+}
+
+export type GoalNoticeRow = { level: 'info' | 'error'; text: string }
+
+export function goalNoticeRow(notice: GoalNotice, goal: SessionGoal | null): GoalNoticeRow {
+  const reason = goal?.lastReason?.trim()
+  const by = goal?.setBy.kind === 'agent' ? ` (set by ${goal.setBy.name ?? 'an agent'})` : ''
+  switch (notice) {
+    case 'set': {
+      return { level: 'info', text: `${GOAL_EMOJI} Goal set${by}: ${goal?.text ?? ''}` }
+    }
+    case 'check_failed': {
+      return { level: 'info', text: `${GOAL_EMOJI} Goal not met yet${reason ? `: ${reason}` : ''}` }
+    }
+    case 'met': {
+      return { level: 'info', text: `${GOAL_EMOJI} Goal met${reason ? `: ${reason}` : ''}` }
+    }
+    case 'failed': {
+      return { level: 'error', text: `${GOAL_EMOJI} Goal failed${reason ? `: ${reason}` : ''}` }
+    }
+    case 'limited': {
+      return { level: 'error', text: `${GOAL_EMOJI} Goal stopped: ${goal ? goalStateText(goal).toLowerCase() : 'limit reached'}` }
+    }
+    case 'blocked': {
+      return { level: 'error', text: `${GOAL_EMOJI} Goal blocked${reason ? `: ${reason}` : ''}` }
+    }
+    case 'paused': {
+      return { level: 'info', text: `${GOAL_EMOJI} Goal paused` }
+    }
+    case 'resumed': {
+      return { level: 'info', text: `${GOAL_EMOJI} Goal resumed` }
+    }
+    case 'cleared': {
+      return { level: 'info', text: `${GOAL_EMOJI} Goal cleared` }
+    }
+  }
+}
+
+// A codex goal left active keeps the engine awake: idle sleep is refused until it is paused or cleared.
+export function goalHoldsEngine(info: { goal?: SessionGoal; capabilities?: { goals?: GoalCapabilities } }): boolean {
+  return goalActive(info.goal) && info.capabilities?.goals?.pause === true
+}
+
+export const GOAL_HOLDS_ENGINE_HINT = 'The goal keeps the engine working and awake; pause or clear it to let the session sleep'

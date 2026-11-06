@@ -1,10 +1,11 @@
 import type { WorkerDeckClient } from '@workerdeck/client'
+import { goalStateText, type SessionGoal } from '@workerdeck/protocol'
 import { useAsync, type TranscriptState } from '@workerdeck/react'
 import { Download } from 'lucide-react'
 import { CopyButton } from '../ui/CopyButton.tsx'
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogRow } from '../ui/Dialog.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
-import { formatBytes, formatCost, formatRelativeTime } from '../../lib/format.ts'
+import { formatBytes, formatCost, formatDuration, formatRelativeTime, formatTokens } from '../../lib/format.ts'
 import { permissionModeMeta } from './PermissionModeSelect.tsx'
 
 export interface SessionInfoDialogProps {
@@ -68,7 +69,41 @@ export function SessionInfoPanel({ state, client, sessionId, active = true }: Se
           {formatCost(state.costUsd ?? (state.totalCostUsd || undefined))}
         </DialogRow>
       </div>
+      {state.goal ? <GoalRows goal={state.goal} /> : null}
       {state.capabilities.vfs ? <SessionFiles client={client} sessionId={sessionId} active={active} /> : null}
+    </div>
+  )
+}
+
+function GoalRows({ goal }: { goal: SessionGoal }) {
+  const by = goal.setBy.kind === 'human' ? 'You' : (goal.setBy.name ?? goal.setBy.sessionId.slice(0, 8))
+  const tokens =
+    goal.tokensUsed === undefined && goal.tokenBudget === undefined
+      ? undefined
+      : `${formatTokens(goal.tokensUsed ?? 0)}${goal.tokenBudget === undefined ? '' : ` of ${formatTokens(goal.tokenBudget)}`}`
+  return (
+    <div className="py-2">
+      <div className="py-1.5">
+        <div className="text-label text-fg-3">Goal</div>
+        <div className="mt-0.5 text-body-sm break-words whitespace-pre-wrap text-fg-1">{goal.text}</div>
+      </div>
+      <DialogRow label="Goal state">{goalStateText(goal)}</DialogRow>
+      <DialogRow label="Set by">
+        {by}, {formatRelativeTime(goal.setAt)}
+      </DialogRow>
+      {goal.checks ? <DialogRow label="Checks not met">{goal.checks}</DialogRow> : null}
+      {goal.lastReason ? (
+        <div className="py-1.5">
+          <div className="text-label text-fg-3">Last reason</div>
+          <div className="mt-0.5 text-body-sm break-words whitespace-pre-wrap text-fg-2">{goal.lastReason}</div>
+        </div>
+      ) : null}
+      {tokens ? (
+        <DialogRow label="Goal tokens" mono>
+          {tokens}
+        </DialogRow>
+      ) : null}
+      {goal.timeUsedSeconds ? <DialogRow label="Goal time">{formatDuration(goal.timeUsedSeconds * 1000)}</DialogRow> : null}
     </div>
   )
 }
