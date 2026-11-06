@@ -49,9 +49,6 @@ struct SessionCard: View {
       }
     }
     .padding(4)
-    .overlay(alignment: .bottom) {
-      if let start = row.lingerStart { LingerBar(start: start) }
-    }
   }
 
   @ViewBuilder
@@ -81,6 +78,7 @@ struct SessionCard: View {
               .accessibilityLabel("Shared with other owners")
           }
           Spacer(minLength: 0)
+          ReasonChipsView(reasons: row.reasons)
           UnreadBadge(count: item.unseen, live: row.state == .working)
           if let tray { TrayView(tray: tray) }
           if row.agent == nil, let percentage = row.contextPercent {
@@ -120,6 +118,7 @@ struct SessionCard: View {
             .truncationMode(.tail)
         }
         Spacer(minLength: 0)
+        ReasonChipsView(reasons: row.reasons)
         UnreadBadge(count: item.unseen, live: row.state == .working)
         chips
       }
@@ -270,13 +269,44 @@ struct StepChipsView: View {
   }
 }
 
-// Auto's tray on a lead: idle Members as 16 pt faces, then `+n` or a chevron that expands the team; expanded, `^ n`
-// returns it to Auto.
+// One chip per reason the session needs a person: "Approval", "Failed", "Blocked".
+struct ReasonChipsView: View {
+  let reasons: [ReasonChip]
+
+  var body: some View {
+    ForEach(reasons, id: \.label) { reason in
+      Text(reason.label)
+        .font(ListType.micro())
+        .foregroundStyle(reason.danger ? ListPalette.danger : ListPalette.warning)
+        .padding(.horizontal, 4)
+        .frame(height: 16)
+        .background(
+          RoundedRectangle(cornerRadius: 3)
+            .fill(reason.danger ? ListPalette.dangerBackground : ListPalette.warningBackground)
+        )
+        .fixedSize()
+        .accessibilityLabel(reason.title)
+    }
+  }
+}
+
+// Auto's tray on a lead: how many Members need a person, the rest as 16 pt faces, then `+n` or a chevron that expands
+// the team; expanded, `^ n` returns it to Auto.
 struct TrayView: View {
   let tray: TeamTray
 
   var body: some View {
     HStack(spacing: 4) {
+      if tray.row.teamAttention > 0 {
+        Text("\(tray.row.teamAttention)")
+          .font(.system(size: 12))
+          .monospacedDigit()
+          .foregroundStyle(ListPalette.warning)
+          .padding(.horizontal, 6)
+          .frame(height: 16)
+          .background(Capsule().fill(ListPalette.warningBackground))
+          .accessibilityLabel(tray.row.teamSummary ?? "")
+      }
       if !tray.expanded {
         ForEach(tray.members, id: \.key) { member in
           Button { tray.select(member) } label: {
@@ -307,26 +337,6 @@ struct TrayView: View {
       .buttonStyle(.borderless)
       .accessibilityLabel(tray.expanded ? "Show only active Members" : "Show all Team Members")
     }
-  }
-}
-
-// A Member Auto keeps only for its linger window: a hairline fills left to right and the row leaves when it is full.
-struct LingerBar: View {
-  static let window: Double = 5_000
-  let start: Double
-
-  var body: some View {
-    TimelineView(.periodic(from: .now, by: 0.1)) { context in
-      let elapsed = context.date.timeIntervalSince1970 * 1000 - start
-      GeometryReader { box in
-        Capsule()
-          .fill(Color.secondary.opacity(0.5))
-          .frame(width: box.size.width * min(1, max(0, elapsed / Self.window)), height: 2)
-      }
-      .frame(height: 2)
-    }
-    .padding(.horizontal, 8)
-    .accessibilityHidden(true)
   }
 }
 

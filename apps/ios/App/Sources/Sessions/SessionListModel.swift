@@ -248,9 +248,6 @@ final class SessionListModel {
     return sections
   }
 
-  // When the soonest lingering Member leaves Auto, as of the last `sections` call.
-  var lingerEnds: Double? { core.lingerEnds() }
-
   // The Member opened last: a phone's stand-in for the dashboard's selected row.
   func select(hostId: String, sessionId: String) {
     core.select(hostId: hostId, sessionId: sessionId)

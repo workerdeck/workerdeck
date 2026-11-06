@@ -119,6 +119,8 @@ enum ListPalette {
   static var success: Color { dyn(dark: 0x3E_CF_8E, light: 0x0F_7B_4F) }
   static var danger: Color { dyn(dark: 0xFF_61_66, light: 0xD9_30_36) }
   static var warning: Color { dyn(dark: 0xF5_A6_23, light: 0xA3_52_00) }
+  static var warningBackground: Color { dyn(dark: 0x2A_1F_04, light: 0xFF_F6_ED) }
+  static var dangerBackground: Color { dyn(dark: 0x2A_11_14, light: 0xFE_F1_F1) }
   static var shell: Color { dyn(dark: 0xC5_86_C0, light: 0x8B_3A_8B) }
 
   private static func dyn(dark: UInt32, light: UInt32) -> Color {

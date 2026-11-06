@@ -23,6 +23,7 @@ struct SessionRowView: View {
           .foregroundStyle(ListPalette.fg1)
           .lineLimit(1)
         Spacer(minLength: 0)
+        ReasonChipsView(reasons: row.reasons)
         UnreadBadge(count: unseen, live: row.state == .working)
         if let percentage = row.contextPercent {
           ContextRing(percentage: percentage, diameter: 14, lineWidth: 2, showsLabel: false)

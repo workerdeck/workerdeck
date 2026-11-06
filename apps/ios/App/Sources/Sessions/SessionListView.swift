@@ -53,7 +53,6 @@ struct SessionListView: View {
   /// The search bar is shown on request, like the dashboard's; closing it
   /// clears the query, so a hidden search can never be what empties the list.
   @State private var searchOpen = false
-  @State private var clock = Date()
 
   /// Restarting identity for the poll loop: any of these changing means the
   /// current loop is polling for the wrong world (or should not run at all).
@@ -441,11 +440,6 @@ struct SessionListView: View {
     .sensoryFeedback(.impact(weight: .medium), trigger: dragging?.subject) { _, now in now != nil }
     .sensoryFeedback(.selection, trigger: liveOrder) { old, now in old != nil && now != nil }
     .sensoryFeedback(.selection, trigger: drop)
-    .task(id: model.lingerEnds) {
-      guard let end = model.lingerEnds else { return }
-      try? await Task.sleep(for: .milliseconds(max(0, end - Date().timeIntervalSince1970 * 1000) + 50))
-      clock = Date()
-    }
     .environment(\.defaultMinListRowHeight, 0)
     .modifier(SessionSearch(open: $searchOpen, text: $model.search))
     .refreshable { await model.refresh() }
@@ -520,7 +514,7 @@ struct SessionListView: View {
 
   private var settled: Bool { dragging == nil && Date().timeIntervalSince(droppedAt) > 0.4 }
 
-  private var clockMs: Double { clock.timeIntervalSince1970 * 1000 }
+  private var clockMs: Double { Date().timeIntervalSince1970 * 1000 }
 
   // A tray avatar opens its Member, which then counts as selected and so stays drawn under the lead.
   private func open(_ member: TrayMember, model: SessionListModel) {

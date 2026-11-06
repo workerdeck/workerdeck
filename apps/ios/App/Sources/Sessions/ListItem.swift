@@ -19,7 +19,7 @@ struct ListItem: Identifiable {
   var hostUUID: UUID? { UUID(uuidString: row.hostId) }
   var unseen: Int { Int(row.unseen) }
   var live: Bool { row.state == .working || row.state == .attention }
-  var needsYou: Bool { row.state == .attention || row.teamState == .attention }
+  var needsYou: Bool { row.needsYou }
   var agentCard: Bool { row.agent != nil || row.tile }
 }
 
