@@ -8,7 +8,7 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Live model loop | `<KEY>=... pnpm smoke:live [provider] [model]` | **Yes, real tokens** |
 | Full SDK-client stack | `<KEY>=... pnpm smoke:sdk [provider] [model]` | **Yes, real tokens** |
 | Live MCP | `pnpm smoke:mcp --probe` / `<KEY>=... pnpm smoke:mcp [provider] [model]` | Probe: no. Full: **yes** |
-| MCP reconnect + reload (claude) | `pnpm smoke:mcp-reconnect [reload]` (local fake MCP server down at engine start: heal on send, `mcp_reconnect` mid-turn, same-turn tool use; a server added to `.mcp.json` mid-session via `mcp_reload`) | **Yes, two or more short haiku turns** |
+| MCP reconnect + reload (claude) | `pnpm smoke:mcp-reconnect [reload\|codex]` (local fake MCP server down at engine start: heal on send, `mcp_reconnect` mid-turn, same-turn tool use; a server added to `.mcp.json` mid-session via `mcp_reload`; `codex`: live `mcp_reload` heals a declared server mid-turn and keeps the declared set) | **Yes, a few short haiku turns; codex: two gpt-5.6-luna turns** |
 | Message attachments | `pnpm smoke:media [image\|pdf\|text]` | **Yes, real tokens** |
 | Codex engine | `pnpm smoke:codex --canary` / `--clear` / `--steer` / `pnpm smoke:codex [model]` | Canary: no. Clear: **two tiny turns**. Steer: **one short turn**. Full: **yes, plan/API usage** |
 | Attach bytes | `pnpm smoke:attach <host> <sessionId> [truncate] [refs]` | No |

@@ -113,6 +113,10 @@ A server that was added or changed after the engine started (`claude mcp add`, a
 its turn ends the engine restarts on the same conversation (the card never shows it asleep), and
 the new server's tools are there from the next message.
 
+Codex sessions have `mcp_reload` only, and it works in place: the engine re-reads its MCP
+configuration mid-turn, which both adopts a new server and brings back one that was down, so the
+agent can use it on its very next step.
+
 ## Sleep
 
 An idle agent's engine sleeps after 15 minutes by default, freeing its memory; the next message

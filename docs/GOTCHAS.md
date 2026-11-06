@@ -2957,8 +2957,10 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   available" copy is conditional, not universal.
 - **Listing and acting are separate capabilities.** `mcpStatus` says the engine can list;
   `mcpServerActions` says it can reconnect/enable/disable one server. Codex has the first and not
-  the second: its reload RPC is server-wide, and enable/disable would mean writing the operator's
-  `config.toml`, a different act from Claude's session-scoped switch.
+  the second: its only lever is `config/mcpServer/reload`, which refreshes every thread of the child
+  (one session per child, so in practice that session; it backs codex's `mcp_reload`), and
+  enable/disable would mean writing the operator's `config.toml`, a different act from Claude's
+  session-scoped switch.
 - **The route 501s a POST the runner cannot serve, and that check is load-bearing.** `handleMcp`
   dispatches through `runner.reconnectMcpServer?.(...)`, optional chaining, so a missing method
   would otherwise no-op and answer 200 with the unchanged list, a button reporting success having
@@ -2983,8 +2985,8 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   awake engine reads the status and reconnects every `failed` server, fire-and-forget and at most
   once per `MCP_HEAL_INTERVAL_MS`, so the reconnected tools may arrive one step into the turn.
   `needs-auth` waits on the human and `disabled` was a choice: neither is healed unasked. A woken
-  engine dials everything afresh, so a wake skips the heal. Codex is not offered the tool (no
-  per-server reconnect).
+  engine dials everything afresh, so a wake skips the heal. Codex is not offered `mcp_reconnect`
+  (no per-server reconnect); its `mcp_reload` heals instead (below).
 - **A newly configured server needs an engine restart, and `mcp_reload` is one that is never a sleep.**
   The CLI reads its MCP settings once per process; `setMcpServers` only manages servers passed by
   the SDK, so `claude mcp add` mid-session reaches nothing live. `mcp_reload` marks the runner and,
@@ -2995,6 +2997,13 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   a CLI that already dialed the new servers. A refused attempt waits for the next settled event;
   a real sleep clears the mark (the wake reads the settings anyway). The new tools never reach the
   turn that asked, which is why the tool tells the agent to end it.
+- **Codex's `mcp_reload` is live and awaited, mid-turn.** `CodexRunner` sends
+  `config/mcpServer/reload` (no params) on the session's connection from inside the dynamic tool
+  call and answers with the servers' states. Paid smoke on 0.166.0: no deadlock with the call still
+  open, a server that was down at start comes back, the `thread/start` `config.mcp_servers`
+  override survives the reload, and the model calls the healed tool on its next step in the same
+  turn. A server with no `approval_mode` then asks a `CodexMcpElicitation` per call, as any codex
+  MCP tool does: a smoke that never answers it hangs at `awaiting_approval`, not in the reload.
 - **The three actions are session-scoped where they exist.** `reconnect`/`enable`/`disable` go to
   the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this.
 

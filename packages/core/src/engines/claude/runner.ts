@@ -366,8 +366,12 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       mcp: {
         list: () => this.mcpServers(),
         reconnect: (name) => this.reconnectMcpServer(name),
-        reload: () => {
+        reload: async () => {
           this.#mcpReloadPending = true
+          return (
+            'MCP reload scheduled: your engine restarts on this conversation when this turn ends, and the reloaded ' +
+            'servers are available from the next message. End your turn now.'
+          )
         },
       },
     }

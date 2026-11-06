@@ -1,4 +1,5 @@
-// pnpm smoke:mcp-reconnect - costs a few haiku turns on the local Claude login.
+// pnpm smoke:mcp-reconnect [reload|codex] - costs a few haiku turns on the local Claude login (codex: a few
+// gpt-5.6-luna turns on the local codex login).
 //
 // The unit suite fakes the CLI, so it cannot show that the real CLI honours `reconnectMcpServer` while it waits on one
 // of our own tools, nor when the reconnected server's tools reach the model. A green run proves: a server down at
@@ -11,7 +12,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SessionEvent } from '@workerdeck/protocol'
-import { SessionRunner } from '@workerdeck/core'
+import { CodexRunner, SessionRunner, connectAppServer, resolveBundledCodexExecutable, type Runner } from '@workerdeck/core'
 import { fail, finish, note, ok, step } from './lib/report.ts'
 
 type Beacon = { port: number; word: string; armed: boolean; initializes: number; server: Server }
@@ -88,11 +89,11 @@ function lastText(events: SessionEvent[]): string {
   return texts.at(-1) ?? ''
 }
 
-async function statusOf(runner: SessionRunner, name: string): Promise<string | undefined> {
-  return (await runner.mcpServers())?.find((server) => server.name === name)?.status
+async function statusOf(runner: Pick<Runner, 'mcpServers'>, name: string): Promise<string | undefined> {
+  return (await runner.mcpServers?.())?.find((server) => server.name === name)?.status
 }
 
-async function turn(runner: SessionRunner, events: SessionEvent[], text: string): Promise<SessionEvent[]> {
+async function turn(runner: Runner, events: SessionEvent[], text: string): Promise<SessionEvent[]> {
   const from = events.length
   const results = () => events.slice(from).filter((event) => event.type === 'turn_result').length
   runner.sendMessage(text)
@@ -213,7 +214,97 @@ async function reloadScenario(): Promise<void> {
   }
 }
 
+// Codex has no per-server reconnect; its reload must heal a declared server and keep the declared set.
+async function codexScenario(): Promise<void> {
+  step('codex: mcp_reload heals a declared server that was down at start, mid-turn')
+  const codexBin = resolveBundledCodexExecutable()
+  if (!codexBin) {
+    fail('codex binary resolvable')
+    return
+  }
+  const port = await freePort()
+  const b = await beacon('beacon_codex', 'SAFFRON', port, false)
+  const steady = await beacon('beacon_steady', 'COBALT', await freePort(), true)
+  beacons.push(b, steady)
+  const runner = new CodexRunner({
+    cwd,
+    env,
+    model: 'gpt-5.6-luna',
+    permissionMode: 'bypassPermissions',
+    connectFn: (options) => connectAppServer({ executable: codexBin, ...options }),
+    mcpServers: {
+      beacon_codex: { type: 'http', url: `http://127.0.0.1:${port}/mcp` },
+      beacon_steady: { type: 'http', url: `http://127.0.0.1:${steady.port}/mcp` },
+    },
+  })
+  const events: SessionEvent[] = []
+  const t0 = Date.now()
+  runner.subscribe((event) => {
+    events.push(event)
+    if (event.type === 'permission_requested') {
+      runner.resolvePermission(event.request.id, { behavior: 'allow' })
+    }
+    if (process.env.WD_SMOKE_DEBUG) {
+      const detail = JSON.stringify(event).slice(0, 220)
+      console.log(`    [${((Date.now() - t0) / 1000).toFixed(1)}s] ${detail}`)
+    }
+  })
+  void runner.start()
+  try {
+    const warm = await turn(runner, events, 'Reply with the single word READY.')
+    note(`warm-up: ${lastText(warm).slice(0, 40)}; beacon_codex ${await statusOf(runner, 'beacon_codex')}, beacon_steady ${await statusOf(runner, 'beacon_steady')}`)
+    b.armed = true
+    const done = await turn(
+      runner,
+      events,
+      'The beacon_codex MCP server was down when you started but is up now. Call the mcp_reload tool, then call the ' +
+        'beacon_codex secret_word tool and reply with only the word it returns.',
+    )
+    const calls = toolCalls(done)
+    note(`tool calls: ${calls.join(', ') || '(none)'}`)
+    const reloaded = done.some(
+      (event) =>
+        event.type === 'assistant_message' &&
+        Array.isArray(event.message.content) &&
+        event.message.content.some((block) => block.type === 'tool_use' && String((block as { name: string }).name).includes('mcp_reload')),
+    )
+    if (reloaded) {
+      ok('the model called mcp_reload')
+    } else {
+      fail('the model called mcp_reload')
+    }
+    const healed = await statusOf(runner, 'beacon_codex')
+    const kept = await statusOf(runner, 'beacon_steady')
+    if (healed === 'connected' || lastText(done).includes('SAFFRON')) {
+      ok('beacon_codex reachable after the reload', `status ${healed}`)
+    } else {
+      fail('beacon_codex reachable after the reload', `status ${healed}; ${b.initializes} initialize attempts`)
+    }
+    if (kept !== undefined) {
+      ok('the declared beacon_steady survived the reload', `status ${kept}`)
+    } else {
+      fail('the declared beacon_steady survived the reload', 'gone from mcpServerStatus/list')
+    }
+    if (lastText(done).includes('SAFFRON')) {
+      ok('the model used the healed tool in the same turn', 'SAFFRON')
+    } else {
+      const next = await turn(runner, events, 'Call the beacon_codex secret_word tool and reply with only the word it returns.')
+      if (lastText(next).includes('SAFFRON')) {
+        ok('the healed tool reached the model on the next turn (not the same one)', 'SAFFRON')
+      } else {
+        fail('the healed tool reached the model', lastText(next).slice(0, 200))
+      }
+    }
+  } finally {
+    runner.close()
+  }
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes('codex')) {
+    await codexScenario()
+    return
+  }
   if (process.argv.includes('reload')) {
     await reloadScenario()
     return

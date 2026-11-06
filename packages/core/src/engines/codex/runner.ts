@@ -23,7 +23,8 @@ import { resolveInstructions } from '../../lib/instructions.ts'
 import { assertEffort, effortDefaultFor, modelEfforts } from '../../lib/effort.ts'
 import { withPeerContext } from '../../lib/peers.ts'
 import { liveContextFromReading, type LiveContext } from '../../lib/session-report.ts'
-import { runSessionTool, sessionToolSpecs } from '../../lib/session-tools.ts'
+import { runSessionTool, sessionToolSpecs, type SessionToolSources } from '../../lib/session-tools.ts'
+import { statusLines } from '../../lib/mcp-tool.ts'
 import { isShellToolName, shellToolNeedsCard, shellWriteDeniedText } from '../../lib/shells.ts'
 import { ToolOutputTails } from '../../lib/tool-output.ts'
 import {
@@ -836,6 +837,21 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     })()
     this.#skillsRefresh = run
     return run
+  }
+
+  protected override get toolSources(): SessionToolSources {
+    return { ...super.toolSources, mcp: { list: () => this.mcpServers(), reload: () => this.#reloadMcpServers() } }
+  }
+
+  // Codex has no per-server reconnect; its reload re-reads the config layers and refreshes the loaded thread in place.
+  async #reloadMcpServers(): Promise<string> {
+    const connection = this.#connection
+    if (!connection || !this.#threadLoaded) {
+      return 'Your engine is not running; it reads its MCP configuration afresh with the next message.'
+    }
+    await connection.request('config/mcpServer/reload')
+    const servers = await this.mcpServers()
+    return `MCP configuration reloaded; the servers' tools are available from your next step.\n${statusLines(servers ?? [])}`
   }
 
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {

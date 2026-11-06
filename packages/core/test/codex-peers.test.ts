@@ -29,7 +29,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     const plain = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: bare.connectFn })
     void plain.start()
     await eventually(() => expect(threadStart(bare)).toBeDefined())
-    expect(threadStart(bare).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status'])
+    expect(threadStart(bare).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status', 'mcp_reload'])
 
     const peer = scriptedPeer()
     scriptTurn(peer, () => {})
@@ -43,6 +43,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
       ['function', 'peers_list'],
       ['function', 'peers_peek'],
       ['function', 'peers_send'],
+      ['function', 'mcp_reload'],
     ])
     expect(tools.find((t) => t.name === 'peers_send')!.inputSchema).toMatchObject({ type: 'object', required: ['sessionId', 'text'] })
   })
@@ -136,5 +137,25 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     expect(start.input[0]!.text).toContain('commit what #Astra did\n\n<peer-mentions>')
     const user = ofType(events, 'user_message').find((e) => !e.synthetic)!
     expect(user).toMatchObject({ message: { content: 'commit what #Astra did' } })
+  })
+})
+
+describe('CodexRunner: mcp_reload', () => {
+  it('reloads the MCP config on the live connection and reports the servers after', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, () => {})
+    peer.respond('mcpServerStatus/list', () => ({ data: [{ name: 'beacon', tools: { secret_word: {} } }] }))
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn })
+    void runner.start()
+    await eventually(() => expect(threadStart(peer)).toBeDefined())
+    await eventually(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
+    const call = { callId: 'c1', threadId: 'thread-1', turnId: 'turn-1', tool: 'mcp_reload', arguments: {} }
+    const answer = (await peer.serverRequest('item/tool/call', call)) as { success: boolean; contentItems: Array<{ text: string }> }
+    expect(answer.success).toBe(true)
+    expect(answer.contentItems[0]!.text).toMatch(/^MCP configuration reloaded.*\n- beacon: /)
+    const reload = peer.requests.findIndex((r) => r.method === 'config/mcpServer/reload')
+    expect(reload).toBeGreaterThan(-1)
+    expect(peer.requests[reload]!.params).toBeUndefined()
+    expect(peer.requests.slice(reload).some((r) => r.method === 'mcpServerStatus/list')).toBe(true)
   })
 })

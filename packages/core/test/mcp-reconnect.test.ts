@@ -31,7 +31,7 @@ describe('mcp_reconnect', () => {
   it('is offered only with an MCP control, and mcp_reload only where the engine can reload', () => {
     expect(sessionToolSpecs(control([]).sources).map((spec) => spec.name)).toEqual(['mcp_reconnect'])
     const reloadable = control([])
-    expect(sessionToolSpecs({ ...reloadable.sources, mcp: { ...reloadable.sources.mcp, reload: () => {} } }).map((spec) => spec.name)).toEqual([
+    expect(sessionToolSpecs({ ...reloadable.sources, mcp: { ...reloadable.sources.mcp, reload: async () => 'reloaded' } }).map((spec) => spec.name)).toEqual([
       'mcp_reconnect',
       'mcp_reload',
     ])

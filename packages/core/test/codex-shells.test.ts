@@ -104,13 +104,14 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
       'peers_send',
       'shell_list',
       'shell_read',
+      'mcp_reload',
     ])
 
     const alone = scriptedPeer()
     scriptTurn(alone, () => {})
     void new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: alone.connectFn, shells: shellDirectory() }).start()
     await eventually(() => expect(threadStart(alone)).toBeDefined())
-    expect(threadStart(alone).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status', 'shell_list', 'shell_read'])
+    expect(threadStart(alone).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status', 'shell_list', 'shell_read', 'mcp_reload'])
 
     const writing = await started({ shellAgentWrite: 'gated' })
     expect(threadStart(writing.peer).dynamicTools!.map((t) => t.name)).toEqual([
@@ -122,6 +123,7 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
       'shell_write',
       'shell_kill',
       'shell_request_write',
+      'mcp_reload',
     ])
   })
 
@@ -160,7 +162,7 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
     scriptTurn(bare, () => {})
     void new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: bare.connectFn }).start()
     await eventually(() => expect(threadStart(bare)).toBeDefined())
-    expect(threadStart(bare).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status'])
+    expect(threadStart(bare).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status', 'mcp_reload'])
     await expect(
       bare.serverRequest('item/tool/call', { callId: 'c', threadId: 't', turnId: 'u', tool: 'shell_read', arguments: { shellId: 'x' } }),
     ).rejects.toThrow('item/tool/call')
