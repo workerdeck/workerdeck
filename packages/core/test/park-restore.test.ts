@@ -40,7 +40,7 @@ function toolCallInputs(messages: ReadonlyArray<{ role: string; content: unknown
   )
 }
 
-function harness(config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'languageModel'>) {
+function harness(config: AiSdkRunnerConfig) {
   const runner = new AiSdkRunner({ tools: TOOLS, executableTools: ['remote_task'], ...config })
   const events: SessionEvent[] = []
   runner.subscribe((e) => events.push(e))

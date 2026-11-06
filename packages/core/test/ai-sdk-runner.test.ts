@@ -7,7 +7,7 @@ import { AiSdkRunner, type AiSdkRunnerConfig, type ToolExecutor } from '../src/i
 import { streamCall, streamText } from './helpers/ai-sdk-mocks.ts'
 import { waitFor } from './helpers/wait.ts'
 
-function makeRunner(config: Partial<AiSdkRunnerConfig> & { languageModel: AiSdkRunnerConfig['languageModel'] }) {
+function makeRunner(config: AiSdkRunnerConfig) {
   const runner = new AiSdkRunner({ ...config })
   const events: SessionEvent[] = []
   runner.subscribe((e) => events.push(e))

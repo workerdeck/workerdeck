@@ -24,8 +24,8 @@
     "test": "echo \"@workerdeck/protocol has no tests of its own - its rules (transcriptActivity, replayCoalesceKey/logCoalesceKey, snapshotRetains/replayRetains, result truncation, image refs, errorMessage, resolvePosix) are proven against real consumers in packages/react/test and packages/core/test.\""
   },
   "devDependencies": {
-    "@types/node": "^26.6.1",
-    "rimraf": "^6.1.3",
+    "@types/node": "^26.6.6",
+    "rimraf": "^6.1.4",
     "tsdown": "^0.22.14"
   },
   "author": "Tobias Strebitzer",
