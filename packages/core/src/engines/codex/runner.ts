@@ -38,7 +38,15 @@ import {
 } from './approvals.ts'
 import { CODEX_CATALOG } from './catalog.ts'
 import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
-import { asReplay, incompleteHistoryNotice, loadHistory, replayTurns, type HistorySink, type ResumedHistory } from './history.ts'
+import {
+  asReplay,
+  incompleteHistoryNotice,
+  loadHistory,
+  readThreadTurns,
+  replayTurns,
+  type HistorySink,
+  type ResumedHistory,
+} from './history.ts'
 import {
   emitDelta,
   producedFileEvent,
@@ -81,7 +89,14 @@ import type {
   AppServerUserInput,
 } from './types.ts'
 
-const THREAD_SCOPED_NOTIFICATIONS = new Set(['turn/started', 'turn/completed', 'thread/tokenUsage/updated', 'turn/plan/updated'])
+const THREAD_SCOPED_NOTIFICATIONS = new Set([
+  'turn/started',
+  'turn/completed',
+  'thread/tokenUsage/updated',
+  'turn/plan/updated',
+  'thread/goal/updated',
+  'thread/goal/cleared',
+])
 
 const TOKEN_FIELDS = ['inputTokens', 'cachedInputTokens', 'cacheWriteInputTokens', 'outputTokens', 'reasoningOutputTokens'] as const
 
@@ -111,6 +126,11 @@ function steerUnsupported(error: unknown): boolean {
 
 function rolloutMissing(error: unknown): boolean {
   return error instanceof JsonRpcError && error.code === -32600 && error.message.startsWith('no rollout found for thread id')
+}
+
+// `thread/read` answers this for a thread with no rollout on disk; an existing thread reads without being loaded.
+function threadNotLoaded(error: unknown): boolean {
+  return error instanceof JsonRpcError && error.code === -32600 && error.message.startsWith('thread not loaded')
 }
 
 function codexVersion(result: unknown): string | undefined {
@@ -166,6 +186,8 @@ type ActiveTurn = ItemScope & {
   contextTokens?: number
   contextWindow?: number
   settled: boolean
+  finished: Promise<void>
+  finish: () => void
   steerGate: Promise<void>
   openSteerGate: () => void
   steerChain: Promise<void>
@@ -542,7 +564,9 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
 
   async interrupt(): Promise<void> {
     this.core.settleAllApprovals({ behavior: 'deny', message: 'interrupted', interrupt: true }, 'policy')
+    const active = this.#activeTurn
     await this.#interruptTurn()
+    await active?.finished
     await this.#turnChain
   }
 
@@ -564,6 +588,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   }
 
   async #clearNow(options?: ClearContextOptions): Promise<void> {
+    await this.#engineTurnsFinished()
     if (this.core.closed) {
       throw new Error('session is closed')
     }
@@ -893,19 +918,25 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     this.core.emit(producedFileEvent(path, toolUseId))
   }
 
+  // Never `thread/resume` here: a resume restarts an active goal by itself, and showing history must not start paid work.
   async #backfillHistory(): Promise<void> {
     try {
       if (this.core.closed) {
         return
       }
-      const connection = await this.#ensureThread()
-      const resumed = this.#resumedHistory
-      this.#resumedHistory = undefined
-      const history = await loadHistory(connection, this.#sdkSessionId, resumed)
-      if (history.incomplete) {
-        this.core.emit({ type: 'session_error', message: incompleteHistoryNotice(history.incomplete) })
+      const connection = this.#connection ?? (await this.#connect())
+      void this.#refreshSkills(connection)
+      let turns: AppServerHistoryTurn[]
+      try {
+        turns = await readThreadTurns(connection, this.#sdkSessionId)
+      } catch (error) {
+        if (!threadNotLoaded(error)) {
+          this.core.emit({ type: 'session_error', message: incompleteHistoryNotice(errorMessage(error)) })
+          return
+        }
+        turns = await this.#resumeLostThread()
       }
-      replayTurns(this.#sink, history.turns)
+      replayTurns(this.#sink, turns)
     } catch {
     } finally {
       this.#backfillPending = false
@@ -913,8 +944,21 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     }
   }
 
+  // No rollout behind the id, so no goal to restart: the resume path starts the fresh thread and says so.
+  async #resumeLostThread(): Promise<AppServerHistoryTurn[]> {
+    const connection = await this.#ensureThread()
+    const resumed = this.#resumedHistory
+    this.#resumedHistory = undefined
+    const history = await loadHistory(connection, this.#sdkSessionId, resumed)
+    if (history.incomplete) {
+      this.core.emit({ type: 'session_error', message: incompleteHistoryNotice(history.incomplete) })
+    }
+    return history.turns
+  }
+
   #newTurnState(): { active: ActiveTurn; outcome: Promise<AppServerTurn> } {
     const steerGate = deferred<void>()
+    const finished = deferred<void>()
     const outcome = deferred<AppServerTurn>()
     const settle = (finish: () => void): void => {
       if (active.settled) {
@@ -939,6 +983,8 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       toolUseEmitted: new Set(),
       sectionIndex: new Map(),
       settled: false,
+      finished: finished.promise,
+      finish: () => finished.resolve(),
       steerGate: steerGate.promise,
       openSteerGate: () => steerGate.resolve(),
       steerChain: Promise.resolve(),
@@ -948,7 +994,15 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     return { active, outcome: outcome.promise }
   }
 
+  // An engine-started turn finalizes off the chain; whatever the chain runs next waits for it.
+  async #engineTurnsFinished(): Promise<void> {
+    while (this.#activeTurn) {
+      await this.#activeTurn.finished
+    }
+  }
+
   async #runTurn(): Promise<void> {
+    await this.#engineTurnsFinished()
     if (this.core.closed) {
       return
     }
@@ -994,12 +1048,30 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
             return
           }
           this.#adoptTurnId(active, started.id)
-          if (started.status && started.status !== 'inProgress') {
+          if (started.status && started.status !== 'inProgress' && started.id === active.turnId) {
             active.resolve(started)
           }
         },
         (error: unknown) => active.reject(error instanceof Error ? error : new Error(String(error))),
       )
+    } catch (error) {
+      active.reject(error instanceof Error ? error : new Error(String(error)))
+    }
+    await this.#settleTurn(active, outcome, startedAt)
+  }
+
+  // A goal continuation, or the turn a resume restarts: owned like a sent turn, with no prompt and no echo.
+  #adoptEngineTurn(turnId: string): void {
+    const { active, outcome } = this.#newTurnState()
+    this.#adoptTurnId(active, turnId)
+    this.#activeTurn = active
+    this.#idleScope = { nonce: active.nonce, toolUseEmitted: new Set(), sectionIndex: new Map() }
+    this.core.setStatus('running')
+    void this.#settleTurn(active, outcome, Date.now())
+  }
+
+  async #settleTurn(active: ActiveTurn, outcome: Promise<AppServerTurn>, startedAt: number): Promise<void> {
+    try {
       const result = await outcome
       if (this.core.closed) {
         return
@@ -1022,6 +1094,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       if (this.#activeTurn === active) {
         this.#activeTurn = undefined
       }
+      active.finish()
     }
   }
 
@@ -1088,9 +1161,14 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     'turn/started': (params) => {
       this.#threadMaterialized = true
       const active = this.#activeTurn
-      const turn = (params as { turn?: AppServerTurn })?.turn
-      if (active && turn) {
-        this.#adoptTurnId(active, turn.id)
+      const turnId = (params as { turn?: AppServerTurn })?.turn?.id
+      if (typeof turnId !== 'string' || !turnId) {
+        return
+      }
+      if (active && !active.settled) {
+        this.#adoptTurnId(active, turnId)
+      } else if (active?.turnId !== turnId) {
+        this.#adoptEngineTurn(turnId)
       }
     },
     'turn/completed': (params) => {
@@ -1288,7 +1366,10 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   }
 
   #finishTurn(kind: 'success' | 'failure', startedAt: number, active: ActiveTurn, errors?: string[]): void {
-    this.core.settleAllApprovals({ behavior: 'deny', message: 'Turn ended' }, 'policy')
+    const superseded = this.#activeTurn !== undefined && this.#activeTurn !== active
+    if (!superseded) {
+      this.core.settleAllApprovals({ behavior: 'deny', message: 'Turn ended' }, 'policy')
+    }
     this.#numTurns += 1
     const usage = active.sawUsage ? active.usage : undefined
     const wire = usage
@@ -1309,7 +1390,9 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       costs: true,
     })
     this.#emitContextUsage(active)
-    this.core.setStatus('idle')
+    if (!superseded) {
+      this.core.setStatus('idle')
+    }
   }
 
   #emitRateLimits(limits: AppServerRateLimits | undefined | null): void {

@@ -431,16 +431,26 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **Model/effort overrides persist "for this turn and subsequent turns."** The runner names the
   model and effort explicitly on every `turn/start`, remembering the resolved defaults from the
   `thread/start` response, so `setModel(undefined)` can mean "back to the profile default" again.
-- **Resume backfill reads `thread/resume`'s own response; `turns` is populated only there** (plus
-  `thread/rollback`, `thread/fork`, and `thread/read` with `includeTurns: true` - every other
-  Thread-bearing response/notification carries an empty `turns`). Item ids restart per turn on
-  replay (`item-1`, ...), so each historical turn gets its own nonce, same as live turns. A non-null
-  `turnsBackwardsCursor` means the resume page is partial; the runner then fetches the whole rollout
-  via `thread/read {includeTurns: true}` (no cursor surface), and if that fails too it replays the
-  partial page under a `session_error` notice. Replay events are stamped `replay: true`; a resume's
-  new-turn `user_message` echo is deferred behind the replay; a reconnect after a dead child goes
-  through `thread/resume` again without stashing anything, so history is never replayed twice.
-  Backfill costs no tokens, but does make a promptless resume spawn its child eagerly.
+- **Resume backfill never `thread/resume`s: it reads `thread/read {includeTurns: true}`** on an
+  unloaded thread (works from the rollout on disk, starts nothing). A `thread/resume` restarts an
+  active goal by itself (measured 0.166.0), so showing history would start paid work. `turns` is
+  populated only by `thread/read` with `includeTurns`, `thread/resume`, `thread/rollback` and
+  `thread/fork`; every other Thread-bearing payload carries an empty `turns`. A missing rollout
+  answers `-32600 thread not loaded: <id>`: only then does backfill take the resume path, which
+  heals it (fresh `thread/start` + notice; no rollout, no goal). Any other read failure is a
+  `session_error` notice and no replay, never a resume. Item ids restart per turn on replay
+  (`item-1`, ...), so each historical turn gets its own nonce, same as live turns. Replay events are
+  stamped `replay: true`; a resume's new-turn `user_message` echo is deferred behind the replay; the
+  first send (a deliberate wake) is what `thread/resume`s. Backfill costs no tokens, but does make a
+  promptless resume spawn its child eagerly.
+- **Codex starts turns by itself** (goal continuations, the turn a resume restarts). A root
+  `turn/started` with no unsettled owner gets its own `ActiveTurn` (`#adoptEngineTurn`): status
+  `running`, usage, approvals, steer and interrupt like a sent turn, no prompt, no echo, one
+  `turn_result`. It finalizes off the turn chain; chain links (`#runTurn`, `#clearNow`) wait for it,
+  and a send meanwhile steers into it. An older turn finalizing after a newer one started never
+  settles approvals or sets `idle` (`#finishTurn`'s `superseded`). An unsettled owner without an id
+  adopts the first root `turn/started` (the wake race: the resume's restarted turn; a `turn/start`
+  during a goal turn joins that turn and returns its id).
 - **`thread/list` answers `GET /sdk-sessions` for codex**: one short-lived child per request, closed
   before responding (`adapter.ts`). Page-size param is `limit` (not `pageSize`), `cursor` continues,
   `sortKey: 'updated_at'` matches `lastModified` ordering, timestamps are epoch seconds (protocol

@@ -247,7 +247,14 @@ describe('CodexRunner: skills and MCP servers', () => {
   it('re-declares them on thread/resume, so a reconnect keeps the toolset', async () => {
     const peer = scriptedPeer()
     peer.respond('thread/resume', () => ({ thread: { id: 'prior', turns: [] } }))
-    const runner = new CodexRunner({ cwd: '/tmp/p', resume: 'prior', mcpServers: { a: { command: 'node' } }, connectFn: peer.connectFn })
+    scriptTurn(peer, (emit, turnId) => emit('turn/completed', { threadId: 'prior', turn: { id: turnId, status: 'completed' } }))
+    const runner = new CodexRunner({
+      cwd: '/tmp/p',
+      resume: 'prior',
+      prompt: 'go',
+      mcpServers: { a: { command: 'node' } },
+      connectFn: peer.connectFn,
+    })
     await runner.start()
 
     expect(peer.requests.find((r) => r.method === 'thread/resume')?.params).toMatchObject({

@@ -44,7 +44,7 @@ const HISTORY_TURNS = [
 describe('CodexRunner resume backfill', () => {
   it('replays a promptless resume: same item mapping, replay-flagged, one nonce per historical turn', async () => {
     const peer = scriptedPeer()
-    peer.respond('thread/resume', () => ({
+    peer.respond('thread/read', () => ({
       ...THREAD_RESULT,
       thread: { id: 'thread-1', turns: HISTORY_TURNS },
       turnsBackwardsCursor: null,
@@ -80,7 +80,8 @@ describe('CodexRunner resume backfill', () => {
     const toolResult = messages[3]!.message.content as Array<{ type: string; tool_use_id: string }>
     expect(toolResult[0]!.tool_use_id).toBe(toolUse[0]!.id)
 
-    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/resume', 'skills/list'])
+    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'skills/list', 'thread/read'])
+    expect(peer.requests[3]!.params).toEqual({ threadId: 'prior', includeTurns: true })
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
     expect(events.some((e) => e.type === 'turn_result')).toBe(false)
     expect(runner.status).toBe('idle')
@@ -88,7 +89,7 @@ describe('CodexRunner resume backfill', () => {
 
   it('backfilled() settles once the history is in the log, before any turn', async () => {
     const peer = scriptedPeer()
-    peer.respond('thread/resume', () => ({
+    peer.respond('thread/read', () => ({
       ...THREAD_RESULT,
       thread: { id: 'thread-1', turns: HISTORY_TURNS },
       turnsBackwardsCursor: null,
@@ -104,7 +105,7 @@ describe('CodexRunner resume backfill', () => {
 
   it('replays an image-only prompt as a named picture, not as a missing turn', async () => {
     const peer = scriptedPeer()
-    peer.respond('thread/resume', () => ({
+    peer.respond('thread/read', () => ({
       ...THREAD_RESULT,
       thread: {
         id: 'thread-1',
@@ -140,7 +141,7 @@ describe('CodexRunner resume backfill', () => {
     const mention = { typed: 'Astra', id: 'peer-1', status: 'idle' as const, cwd: '/work' }
     const userItem = (id: string, text: string) => ({ id, type: 'userMessage', content: [{ type: 'text', text, text_elements: [] }] })
     const peer = scriptedPeer()
-    peer.respond('thread/resume', () => ({
+    peer.respond('thread/read', () => ({
       ...THREAD_RESULT,
       thread: {
         id: 'thread-1',
@@ -164,7 +165,7 @@ describe('CodexRunner resume backfill', () => {
 
   it('resume with a prompt: history lands before the new turn, once, with disjoint live ids', async () => {
     const peer = scriptedPeer()
-    peer.respond('thread/resume', () => ({
+    peer.respond('thread/read', () => ({
       ...THREAD_RESULT,
       thread: { id: 'thread-1', turns: [HISTORY_TURNS[1]] },
       turnsBackwardsCursor: null,
@@ -203,34 +204,22 @@ describe('CodexRunner resume backfill', () => {
     expect(ofType(events, 'turn_result')[0]).toMatchObject({ subtype: 'success', result: 'Live answer.' })
   })
 
-  it('pages a partial resume through thread/read, so the replay is the whole rollout', async () => {
+  it('backfills through thread/read alone: a resume would restart an active goal by itself', async () => {
     const peer = scriptedPeer()
-    peer.respond('thread/resume', () => ({
-      ...THREAD_RESULT,
-      thread: { id: 'thread-1', turns: [HISTORY_TURNS[1]] },
-      turnsBackwardsCursor: 'older-turns-exist',
-    }))
-    peer.respond('thread/read', () => ({ thread: { id: 'thread-1', turns: HISTORY_TURNS } }))
+    peer.respond('thread/read', () => ({ thread: { id: 'prior', turns: HISTORY_TURNS } }))
     const runner = new CodexRunner({ cwd: '/tmp', resume: 'prior', connectFn: peer.connectFn })
     const events = collect(runner)
     await runner.start()
 
-    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/resume', 'skills/list', 'thread/read'])
-    expect(peer.requests[4]).toMatchObject({
-      params: { threadId: 'thread-1', includeTurns: true },
-    })
+    expect(peer.requests.some((r) => r.method === 'thread/resume' || r.method === 'turn/start')).toBe(false)
     const users = ofType(events, 'user_message').filter((e) => !e.synthetic)
     expect(users.map((e) => e.message.content)).toEqual(['make a file', 'now delete it'])
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
+    expect(runner.info().sdkSessionId).toBe('prior')
   })
 
-  it('says so - visibly - when only a partial page could be loaded', async () => {
+  it('says so - visibly - when thread/read fails, and never falls back to a resume', async () => {
     const peer = scriptedPeer()
-    peer.respond('thread/resume', () => ({
-      ...THREAD_RESULT,
-      thread: { id: 'thread-1', turns: [HISTORY_TURNS[1]] },
-      turnsBackwardsCursor: 'older-turns-exist',
-    }))
     peer.respond('thread/read', () => {
       throw new JsonRpcError(-32601, 'no thread/read here')
     })
@@ -238,15 +227,10 @@ describe('CodexRunner resume backfill', () => {
     const events = collect(runner)
     await runner.start()
 
-    const errorIndex = events.findIndex((e) => e.type === 'session_error')
-    const firstReplay = events.findIndex((e) => (e.type === 'user_message' || e.type === 'assistant_message') && e.replay)
-    expect(errorIndex).toBeGreaterThanOrEqual(0)
-    expect(events[errorIndex]).toMatchObject({
-      message: expect.stringContaining('incomplete'),
-    })
-    expect(firstReplay).toBeGreaterThan(errorIndex)
-    const users = ofType(events, 'user_message').filter((e) => !e.synthetic)
-    expect(users.map((e) => e.message.content)).toEqual(['now delete it'])
+    expect(ofType(events, 'session_error')).toHaveLength(1)
+    expect(ofType(events, 'session_error')[0]!.message).toContain('incomplete')
+    expect(events.some((e) => e.type === 'user_message' || e.type === 'assistant_message')).toBe(false)
+    expect(peer.requests.some((r) => r.method === 'thread/resume')).toBe(false)
     expect(runner.status).toBe('idle')
   })
 
@@ -271,7 +255,7 @@ describe('CodexRunner resume backfill', () => {
 
   it('a reconnect after a dead child resumes the thread but never replays twice', async () => {
     const peer = scriptedPeer()
-    peer.respond('thread/resume', () => ({
+    peer.respond('thread/read', () => ({
       ...THREAD_RESULT,
       thread: { id: 'thread-1', turns: [HISTORY_TURNS[1]] },
       turnsBackwardsCursor: null,
@@ -293,7 +277,7 @@ describe('CodexRunner resume backfill', () => {
     peer.die('codex app-server exited (code 1): gone')
     runner.sendMessage('again')
     await eventually(() => expect(ofType(events, 'turn_result')).toHaveLength(1))
-    expect(peer.requests.filter((r) => r.method === 'thread/resume')).toHaveLength(2)
+    expect(peer.requests.filter((r) => r.method === 'thread/resume')).toHaveLength(1)
     expect(replayCount()).toBe(2)
   })
 })
@@ -382,6 +366,9 @@ describe('CodexRunner thread materialization', () => {
 
   it('a wake whose rollout is gone starts a fresh thread with the same options, says so once, and keeps working', async () => {
     const peer = scriptedPeer()
+    peer.respond('thread/read', () => {
+      throw new JsonRpcError(-32600, 'thread not loaded: prior')
+    })
     peer.respond('thread/resume', () => {
       throw new JsonRpcError(-32600, 'no rollout found for thread id prior')
     })
@@ -391,10 +378,11 @@ describe('CodexRunner thread materialization', () => {
     const events = collect(runner)
     await runner.start()
 
-    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/resume', 'thread/start', 'skills/list'])
-    const { threadId, ...resumeOptions } = peer.requests[2]!.params as Record<string, unknown>
+    const methods = peer.requests.map((r) => r.method).filter((m) => m !== 'skills/list')
+    expect(methods).toEqual(['initialize', 'config/read', 'thread/read', 'thread/resume', 'thread/start'])
+    const { threadId, ...resumeOptions } = peer.requests.find((r) => r.method === 'thread/resume')!.params as Record<string, unknown>
     expect(threadId).toBe('prior')
-    expect(peer.requests[3]!.params).toEqual(resumeOptions)
+    expect(peer.requests.find((r) => r.method === 'thread/start')!.params).toEqual(resumeOptions)
     const notices = ofType(events, 'session_error')
     expect(notices).toHaveLength(1)
     expect(notices[0]!.message).toContain('prior')
@@ -417,6 +405,9 @@ describe('CodexRunner thread materialization', () => {
 
   it('a wake with a prompt heals the same way, with the notice ahead of the new turn', async () => {
     const peer = scriptedPeer()
+    peer.respond('thread/read', () => {
+      throw new JsonRpcError(-32600, 'thread not loaded: prior')
+    })
     peer.respond('thread/resume', () => {
       throw new JsonRpcError(-32600, 'no rollout found for thread id prior')
     })

@@ -38,6 +38,13 @@ export async function loadHistory(
   }
 }
 
+export async function readThreadTurns(connection: AppServerConnection, threadId: string | undefined): Promise<AppServerHistoryTurn[]> {
+  const read = (await connection.request('thread/read', { threadId, includeTurns: true })) as {
+    thread?: { turns?: AppServerHistoryTurn[] }
+  }
+  return Array.isArray(read?.thread?.turns) ? read.thread.turns : []
+}
+
 export function incompleteHistoryNotice(reason: string): string {
   return `Resumed thread history is incomplete: older turns could not be loaded (${reason})`
 }

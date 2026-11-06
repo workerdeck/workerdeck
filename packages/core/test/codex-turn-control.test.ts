@@ -49,7 +49,7 @@ describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
     })
     const events = collect(runner)
     await runner.start()
-    expect(peer.requests[2]).toMatchObject({
+    expect(peer.requests.find((r) => r.method === 'thread/resume')).toMatchObject({
       method: 'thread/resume',
       params: { threadId: 'prior-thread' },
       connection: 1,

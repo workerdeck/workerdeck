@@ -275,7 +275,7 @@ describe('CodexRunner sub-agents', () => {
 
   it('replays a historical spawn as a closed row and lists nothing: history holds no verdicts', async () => {
     const peer = scriptedPeer()
-    peer.respond('thread/resume', () => ({
+    peer.respond('thread/read', () => ({
       ...THREAD_RESULT,
       thread: {
         id: 'thread-1',
