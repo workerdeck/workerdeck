@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { MoreHorizontal } from 'lucide-react'
+import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import { SessionItem } from '../src/components/agent/SessionItem.tsx'
 import { AGENTS, MIXED, SHELLS, makeRow } from './session-fixtures.ts'
 
@@ -215,4 +216,39 @@ export const TheList: Story = {
       <SessionItem {...args} row={makeRow({ id: 'e', title: 'Session 5 Title', subagents: AGENTS }, 5)} subagents="all" />
     </div>
   ),
+}
+
+const GOAL = { text: 'All tests in packages/core pass', state: 'active', setAt: 0, setBy: { kind: 'human' } } as const
+
+export const GoalActive: Story = {
+  name: 'Goal · active (codex: holds the engine awake)',
+  args: {
+    row: makeRow({
+      id: 'goal-1',
+      title: 'Goal session',
+      agent: { id: 'g1', name: 'WD-Codex' },
+      capabilities: { ...ENGINE_CAPABILITIES.codex },
+      goal: GOAL,
+    }),
+  },
+}
+
+export const GoalPaused: Story = {
+  name: 'Goal · paused',
+  args: {
+    row: makeRow({ id: 'goal-2', title: 'Goal session', agent: { id: 'g2', name: 'WD-Codex' }, goal: { ...GOAL, state: 'paused' } }),
+  },
+}
+
+export const GoalUnderLabel: Story = {
+  name: 'Goal · hidden by a status label',
+  args: {
+    row: makeRow({
+      id: 'goal-3',
+      title: 'Goal session',
+      agent: { id: 'g3', name: 'WD-Lead' },
+      statusLabel: { text: 'waiting on CI', emoji: '⏳', setAt: 0 },
+      goal: GOAL,
+    }),
+  },
 }

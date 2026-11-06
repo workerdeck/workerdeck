@@ -1,4 +1,5 @@
 import { projectAccent } from './agents.ts'
+import { goalCardText } from './goal.ts'
 import { SHELL_LINGER_MS, SHELL_PROMOTE_MS } from './index.ts'
 import type { GatewayRelayMeta, SessionInfo, ShellInfo, SubagentInfo } from './index.ts'
 
@@ -29,13 +30,18 @@ export function sessionState(info: SessionInfo): SessionState {
   return 'idle'
 }
 
-export type CardStatus = { text: string; source: 'label' | 'task' | 'title' | 'state' }
+export type CardStatus = { text: string; source: 'label' | 'goal' | 'task' | 'title' | 'state' }
 
-// An agent card's second line: its own status label, else the checklist item in progress, else its title, else its state.
+// An agent card's second line: its own status label, else its goal, else the checklist item in progress, else its title,
+// else its state.
 export function cardStatus(info: SessionInfo, state: SessionState = sessionState(info)): CardStatus {
   const label = info.statusLabel
   if (label?.text) {
     return { text: label.emoji ? `${label.emoji} ${label.text}` : label.text, source: 'label' }
+  }
+  const goal = goalCardText(info.goal)
+  if (goal) {
+    return { text: goal, source: 'goal' }
   }
   const task = info.checklist?.find((item) => item.status === 'in_progress')?.text.trim()
   if (task) {
@@ -518,7 +524,13 @@ export type TeamView = { expanded: boolean; shown: SessionRow[]; tray: SessionRo
 // Auto draws a member that is busy, selected, unread, or idle for under `TEAM_LINGER_MS` by `lastActivityAt`; the rest
 // sit in the lead's tray. An expanded team, or one under a search or facet filter, draws every member. `peeked` holds
 // members opened while idle and not busy since: a peek folds back the moment the selection moves on, with no linger.
-export function teamView(lead: SessionRow, config: ViewConfig, selected: string | undefined, now: number, peeked?: ReadonlySet<string>): TeamView {
+export function teamView(
+  lead: SessionRow,
+  config: ViewConfig,
+  selected: string | undefined,
+  now: number,
+  peeked?: ReadonlySet<string>,
+): TeamView {
   const members = lead.members ?? []
   const expanded = isTeamExpanded(config, lead)
   if (expanded || hasFacetFilter(config)) {
@@ -540,7 +552,12 @@ export function teamView(lead: SessionRow, config: ViewConfig, selected: string 
 }
 
 // When a member Auto draws only for its linger window started, so a host can show the countdown; undefined otherwise.
-export function teamLingerStart(member: SessionRow, selected: string | undefined, now: number, peeked?: ReadonlySet<string>): number | undefined {
+export function teamLingerStart(
+  member: SessionRow,
+  selected: string | undefined,
+  now: number,
+  peeked?: ReadonlySet<string>,
+): number | undefined {
   const key = sessionKey(member)
   if (member.state === 'working' || member.state === 'attention' || member.unseen > 0 || key === selected || peeked?.has(key)) {
     return undefined

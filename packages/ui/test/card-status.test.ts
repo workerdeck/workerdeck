@@ -21,6 +21,17 @@ describe('cardStatus', () => {
     expect(cardStatus(base)).toEqual({ text: 'Idle', source: 'state' })
   })
 
+  it('puts an unmet goal between the label and the task', () => {
+    const goal = { text: 'tests green', state: 'active', setAt: 0, setBy: { kind: 'human' } } as const
+    expect(cardStatus({ ...full, goal })).toEqual({ text: '⏳ waiting on CI', source: 'label' })
+    expect(cardStatus({ ...full, statusLabel: undefined, goal })).toEqual({ text: '🎯 tests green', source: 'goal' })
+    expect(cardStatus({ ...full, statusLabel: undefined, goal: { ...goal, state: 'paused' } }).text).toBe('🎯 Goal paused')
+    expect(cardStatus({ ...full, statusLabel: undefined, goal: { ...goal, state: 'limited', limit: 'budget' } }).text).toBe(
+      '🎯 Goal stopped',
+    )
+    expect(cardStatus({ ...full, statusLabel: undefined, goal: { ...goal, state: 'met' } }).source).toBe('task')
+  })
+
   it('words the state', () => {
     expect(cardStatus({ ...base, engineAsleep: true }).text).toBe('Asleep')
     expect(cardStatus({ ...base, status: 'starting' }).text).toBe('Starting…')

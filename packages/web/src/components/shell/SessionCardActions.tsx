@@ -10,16 +10,20 @@ import {
 import { Button, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, cn, type ConversationRecovery } from '@workerdeck/ui'
 import {
   BedDouble,
+  CircleOff,
   Globe,
   History,
   Lock,
   LogOut,
   MessageSquareText,
   MoreHorizontal,
+  Pause,
+  Play,
   Smile,
   Pencil,
   RotateCcw,
   Send,
+  Target,
   Trash2,
   Ungroup,
   X,
@@ -30,6 +34,9 @@ import {
 export type CardAction =
   | { kind: 'rename' }
   | { kind: 'status' }
+  | { kind: 'set-goal' }
+  | { kind: 'clear-goal' }
+  | { kind: 'pause-goal'; paused: boolean }
   | { kind: 'avatar' }
   | { kind: 'sleep' }
   | { kind: 'close' }
@@ -87,6 +94,8 @@ export function SessionCardActions({
   const [recovery, setRecovery] = useState<ConversationRecovery>()
   const failed = recovery?.startFailed
   const uncertain = recovery?.uncertainPrompt
+  const goals = info.capabilities?.goals
+  const goal = info.goal
 
   return (
     // The card is one big select target and React events bubble out of portals, so the menu's clicks stop here.
@@ -148,6 +157,27 @@ export function SessionCardActions({
             <Item icon={<Smile />} onClick={() => onAction({ kind: 'avatar' })}>
               Change avatar
             </Item>
+          ) : null}
+          {goals ? (
+            <>
+              <MenuSeparator />
+              <Item icon={<Target />} onClick={() => onAction({ kind: 'set-goal' })}>
+                {goal ? 'Replace goal…' : 'Set goal…'}
+              </Item>
+              {goals.pause && (goal?.state === 'active' || goal?.state === 'paused') ? (
+                <Item
+                  icon={goal.state === 'active' ? <Pause /> : <Play />}
+                  onClick={() => onAction({ kind: 'pause-goal', paused: goal.state === 'active' })}
+                >
+                  {goal.state === 'active' ? 'Pause goal' : 'Resume goal'}
+                </Item>
+              ) : null}
+              {goal ? (
+                <Item icon={<CircleOff />} onClick={() => onAction({ kind: 'clear-goal' })}>
+                  Clear goal
+                </Item>
+              ) : null}
+            </>
           ) : null}
           <MenuSeparator />
           {agent ? null : (

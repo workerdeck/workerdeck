@@ -556,6 +556,16 @@ describe('stable session address', () => {
     ])
   })
 
+  it('pins a goal change to the conversation the caller names, not the one cached since', async () => {
+    const calls: { method?: string; url: string; body?: unknown; generation?: string }[] = []
+    const client = recording(calls, { goal: null })
+    client.noteConversation('s1', 2)
+    await client.setGoal('s1', { text: 'old task' }, 1)
+    await client.pauseGoal('s1', true, 1)
+    await client.clearGoal('s1', 1)
+    expect(calls.map((call) => call.generation)).toEqual(['1', '1', '1'])
+  })
+
   it('cuts with the conversation in the body, never the header, and reads the history by n', async () => {
     const calls: { method?: string; url: string; body?: unknown; generation?: string }[] = []
     const client = recording(calls, { session: { id: 's1', conversation: 3 }, conversation: 3 })

@@ -9,6 +9,12 @@ gateway and protocol it talks to.
 
 ### Added
 
+- **Session goals.** Give a Claude or Codex session a condition to work toward across turns: *Set
+  goal…*, *Clear goal* and (Codex) *Pause goal* / *Resume goal* in the card menu, a token budget for
+  Codex goals, a transcript line per step (set, not met yet, met, failed, paused, cleared), the goal on
+  the agent card and its details in Session info. Agents get `goal_get`, `goal_set`, `goal_clear` and
+  `goal_pause` for their own goal or their members'; a goal a person set is locked against agents
+  until it is met or failed. REST `GET/POST/DELETE /v1/sessions/:id/goal`, `POST .../goal/pause`.
 - **Engine version in Session info.** The info dialog (and the iOS and Android info sheets) shows
   the version of the engine running the session: Claude Code's for a Claude session, codex's for a
   Codex one.

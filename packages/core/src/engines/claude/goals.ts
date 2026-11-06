@@ -242,3 +242,14 @@ function goalStatusOf(line: string): GoalStatus | undefined {
     ...(Number.isFinite(at) ? { at } : {}),
   }
 }
+
+const COMMAND = /^\s*<command-name>\/goal<\/command-name>/
+
+// A resumed transcript keeps every `/goal`, host ones too, as the raw command row. It holds no outcome (the CLI may have
+// refused it), so it replays hidden; the goal's state comes from the record and the transcript's `goal_status`.
+export function isReplayedGoalCommand(message: ApiMessage): boolean {
+  const content = message.content
+  const text =
+    typeof content === 'string' ? content : content.length === 1 && content[0]?.type === 'text' ? (content[0] as TextBlock).text : undefined
+  return text !== undefined && COMMAND.test(text)
+}

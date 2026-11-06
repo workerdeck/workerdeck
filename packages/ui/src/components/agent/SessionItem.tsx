@@ -1,8 +1,24 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Globe, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { cardStatus, projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
-import type { FoldableStepKind, SessionInfo, SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
+import {
+  GOAL_HOLDS_ENGINE_HINT,
+  cardStatus,
+  goalHoldsEngine,
+  projectLabel,
+  projectName,
+  projectSubpath,
+  sessionLabel,
+} from '@workerdeck/protocol'
+import type {
+  FoldableStepKind,
+  SessionInfo,
+  SessionRow,
+  SessionState,
+  SessionTask,
+  StepDisplay,
+  SubagentDisplay,
+} from '@workerdeck/protocol'
 import { AgentAvatar } from './AgentAvatar.tsx'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, ModelBadge, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
@@ -100,7 +116,8 @@ export function SessionItem({
   const [ownExpanded, setOwnExpanded] = useState<FoldableStepKind[]>([])
   const expanded = onToggleSteps ? (expandedSteps ?? []) : ownExpanded
   const toggleSteps =
-    onToggleSteps ?? ((kind: FoldableStepKind) => setOwnExpanded((held) => (held.includes(kind) ? held.filter((k) => k !== kind) : [...held, kind])))
+    onToggleSteps ??
+    ((kind: FoldableStepKind) => setOwnExpanded((held) => (held.includes(kind) ? held.filter((k) => k !== kind) : [...held, kind])))
   const isEditing = editing ?? ownEditing
   const setEditing = (next: boolean) => {
     setOwnEditing(next)
@@ -172,7 +189,8 @@ export function SessionItem({
   const chips = <StepChips steps={steps} expanded={expanded} activeStepKey={activeStepKey} onToggle={toggleSteps} />
   const agent = info.agent
   const line = agent ? cardStatus(info, row.state) : undefined
-  const lineTone = line?.source === 'label' ? 'text-fg-3' : 'text-fg-4'
+  const lineTone = line?.source === 'label' || line?.source === 'goal' ? 'text-fg-3' : 'text-fg-4'
+  const lineTitle = line?.source === 'goal' && goalHoldsEngine(info) ? `${line.text}\n${GOAL_HOLDS_ENGINE_HINT}` : line?.text
   const label = agent ? agent.name : sessionLabel(info)
   const editable = agent ? agent.name : (info.title ?? '')
   const time = showTime && !agent ? formatRelativeTime(info.lastActivityAt ?? info.createdAt) : undefined
@@ -271,7 +289,7 @@ export function SessionItem({
             {nameLabel}
             {model ? <ModelBadge engine={engine} model={info.model} name={model} className="text-label" /> : null}
             {line ? (
-              <span title={line.text} className={cn('min-w-0 truncate text-label tracking-[-0.005em]', lineTone)}>
+              <span title={lineTitle} className={cn('min-w-0 truncate text-label tracking-[-0.005em]', lineTone)}>
                 {line.text}
               </span>
             ) : null}
@@ -309,7 +327,7 @@ export function SessionItem({
             </div>
             <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
               {line ? (
-                <span title={line.text} className={cn('min-w-0 truncate', lineTone)}>
+                <span title={lineTitle} className={cn('min-w-0 truncate', lineTone)}>
                   {line.text}
                 </span>
               ) : agent ? null : (

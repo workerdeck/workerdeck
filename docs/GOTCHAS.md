@@ -1456,6 +1456,19 @@ A goal is engine state (Claude `/goal`, codex thread goals) the runner normalize
   first. Claude never starts a goal turn by itself, so its goals do not hold sleep off.
 - **A peer's `/goal` is text.** Peer sends go through `sendMessage` with an `origin` (the envelope), never through the
   goal path; `goals.test.ts` and `peer-relay.test.ts` pin it on the gateway and relay paths.
+- **Clients draw a goal from `protocol`, never their own words.** `goalNoticeRow(notice, goal)` is the transcript
+  row (an ordinary `notice` item, so the TS renderers need nothing new); `cardStatus` puts `goalCardText` between the
+  status label and the checklist (a met goal leaves the card); `goalHoldsEngine` is the codex "keeps the engine awake"
+  hint; `goalBudgetChange` turns a budget field into untouched (omitted), removed (`null`) or a number. The reducer
+  holds `TranscriptState.goal`, seeded from `SessionInfo.goal` until an event names one, and `conversation_reset`
+  sets it to `null`. The Rust core (P4) has none of this yet: no `goal_changed` reduction, no `SessionInfo.goal`
+  decode, no `card_status` goal branch, and no golden has a goal input, so parity needs its own shared fixtures.
+- **A human goal change names the conversation the person saw.** Web and VS Code pass `info.conversation` to
+  `setGoal`/`clearGoal`/`pauseGoal`, which sends it as the generation header instead of the client's cached one: an
+  editor left open across a cut is refused (stale generation) rather than setting the old task on n+1.
+- **A resumed Claude transcript replays every `/goal`, host ones included, as a raw `<command-name>/goal` user row.**
+  `claudeHistoryEvent` marks it synthetic (`isReplayedGoalCommand`): the row carries no outcome (the CLI may have
+  refused it), so it is hidden rather than drawn as a success.
 
 ## Agent context reset (`context_reset`, `agentContextReset`)
 

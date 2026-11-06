@@ -477,6 +477,28 @@ describe('claude goals: what is not a goal', () => {
   })
 })
 
+describe('claude goals: replayed commands', () => {
+  const replay = (content: string) =>
+    claudeHistoryEvent(
+      { type: 'user', uuid: 'u', session_id: 's', message: { role: 'user', content }, parent_tool_use_id: null } as never,
+      new AddressedThinking(),
+    )
+  const command = (args?: string) =>
+    `<command-name>/goal</command-name>\n            <command-message>goal</command-message>${args === undefined ? '' : `\n            <command-args>${args}</command-args>`}`
+
+  it('hides a replayed /goal command, which carries no outcome', () => {
+    for (const args of ['tests green', 'clear', undefined, '']) {
+      expect(replay(command(args))).toMatchObject({ synthetic: true, message: { content: command(args) } })
+    }
+  })
+
+  it('leaves other commands and prose alone', () => {
+    const other = '<command-name>/model</command-name>\n<command-args>opus</command-args>'
+    expect(replay(other)).toMatchObject({ message: { content: other }, synthetic: undefined })
+    expect(replay('please /goal later')).toMatchObject({ message: { content: 'please /goal later' } })
+  })
+})
+
 describe('claude goals: resume', () => {
   it('reconciles to the goal the CLI restores and never resends it', async () => {
     const f = fixture('resume-restore')

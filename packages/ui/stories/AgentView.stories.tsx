@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, goalNoticeRow } from '@workerdeck/protocol'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { Transcript } from '../src/components/agent/Transcript.tsx'
 import { ToolTitleProvider } from '../src/components/agent/tool-titles.tsx'
@@ -225,6 +225,17 @@ The key constraint: **\`claimNext\` must be atomic.** Two workers calling it sim
 
 *These are all documented in \`docs/GOTCHAS.md\` - the canonical list of invariants that bite.*`,
   })
+
+  const goal = { text: 'docs/GOTCHAS.md lists every event log gotcha', state: 'active', setAt: 0, setBy: { kind: 'human' } } as const
+  items.push(
+    { kind: 'notice', id: 'goal-set', ...goalNoticeRow('set', goal) },
+    {
+      kind: 'notice',
+      id: 'goal-check',
+      ...goalNoticeRow('check_failed', { ...goal, lastReason: 'The replay dedupe gotcha is not listed yet' }),
+    },
+    { kind: 'notice', id: 'goal-met', ...goalNoticeRow('met', { ...goal, state: 'met', lastReason: 'All four gotchas are listed' }) },
+  )
 
   return items
 }

@@ -139,6 +139,7 @@ export {
 export { StatusBar, type StatusBarProps } from './components/agent/StatusBar.tsx'
 export { ContextDialog, ContextPanel, type ContextDialogProps, type ContextPanelProps } from './components/agent/ContextDialog.tsx'
 export { UsageDialog, type UsageDialogProps } from './components/agent/UsageDialog.tsx'
+export { GoalDialog, type GoalDialogProps } from './components/agent/GoalDialog.tsx'
 export { TaskList, type TaskListProps } from './components/agent/TaskList.tsx'
 export { TasksDialog, type TasksDialogProps } from './components/agent/TasksDialog.tsx'
 export { UsageMeters, useMinuteClock } from './components/agent/UsageMeters.tsx'

@@ -4,6 +4,7 @@ import type { SessionEventBody } from '@workerdeck/protocol'
 import { isSyntheticUserText, toApiMessage } from '../../lib/normalize.ts'
 import { withoutPeerContextMessage } from '../../lib/peers.ts'
 import { AddressedThinking, apiMessageId } from './addressed-thinking.ts'
+import { isReplayedGoalCommand } from './goals.ts'
 
 export function claudeHistoryEvent(m: SessionMessage, addressed: AddressedThinking): SessionEventBody | undefined {
   if (m.type === 'user') {
@@ -14,7 +15,7 @@ export function claudeHistoryEvent(m: SessionMessage, addressed: AddressedThinki
       message,
       parentToolUseId: m.parent_tool_use_id,
       replay: true,
-      synthetic: isSyntheticUserText(message) ? true : undefined,
+      synthetic: isSyntheticUserText(message) || isReplayedGoalCommand(message) ? true : undefined,
       ...(origin ? { origin } : {}),
       uuid: m.uuid,
     }
