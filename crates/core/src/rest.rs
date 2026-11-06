@@ -94,6 +94,14 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
+// A goal a newer gateway shapes differently reads as no goal: the session itself must still decode.
+fn lenient_goal<'de, D>(deserializer: D) -> Result<Option<SessionGoal>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Value::deserialize(deserializer).ok().and_then(|value| serde_json::from_value(value).ok()))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
@@ -642,7 +650,7 @@ pub struct SessionInfo {
     pub owner: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_label: Option<StatusLabel>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "lenient_goal", skip_serializing_if = "Option::is_none")]
     pub goal: Option<SessionGoal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript: Option<String>,

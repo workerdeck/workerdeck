@@ -286,6 +286,63 @@ mod tests {
     }
 
     #[test]
+    fn a_goal_a_newer_gateway_shapes_differently_never_drops_the_session() {
+        use crate::protocol::{Frame, decode_frame};
+        let session = |goal: &str| {
+            format!(r#"{{"id":"s1","status":"idle","cwd":"/w","createdAt":1,"lastSeq":0,"pendingPermissionCount":0,"goal":{goal}}}"#)
+        };
+        for goal in [
+            r#"{"text":"x","state":"snoozed","setAt":1,"setBy":{"kind":"human"}}"#,
+            r#"{"text":"x","state":"limited","limit":"time","setAt":1,"setBy":{"kind":"human"}}"#,
+            r#"{"text":"x","state":"active","setAt":1,"setBy":{"kind":"schedule"}}"#,
+            r#"{"text":7}"#,
+            r#""active""#,
+        ] {
+            let info: SessionInfo = serde_json::from_str(&session(goal)).unwrap_or_else(|e| panic!("{goal}: {e}"));
+            assert_eq!(info.goal, None, "{goal}");
+            let attached = format!(r#"{{"type":"attached","protocolVersion":2,"replayingFrom":0,"session":{}}}"#, session(goal));
+            assert!(matches!(decode_frame(attached.as_bytes()), Some(Frame::Attached(_))), "{goal}");
+        }
+        let info: SessionInfo =
+            serde_json::from_str(&session(r#"{"text":"x","state":"paused","setAt":1,"setBy":{"kind":"agent","sessionId":"s2"}}"#)).unwrap();
+        assert_eq!(info.goal.map(|goal| goal.state), Some(GoalState::Paused));
+    }
+
+    #[test]
+    fn a_malformed_goal_event_keeps_the_held_goal_and_an_unknown_notice_draws_no_row() {
+        use crate::protocol::{Frame, decode_frame};
+        use crate::transcript::{TranscriptState, apply_event};
+        let mut state = TranscriptState::default();
+        let mut apply = |seq: i64, body: &str| {
+            let line = format!(r#"{{"type":"event","event":{{"seq":{seq},"ts":1,"type":"goal_changed",{body}}}}}"#);
+            let Some(Frame::Event(event)) = decode_frame(line.as_bytes()) else { panic!("{line}") };
+            apply_event(&mut state, event);
+            (state.goal.clone().flatten().map(|goal| goal.state), state.items.len())
+        };
+        let goal = r#""goal":{"text":"x","state":"active","setAt":1,"setBy":{"kind":"human"}}"#;
+        assert_eq!(apply(1, &format!(r#"{goal},"notice":"set""#)), (Some(GoalState::Active), 1));
+        assert_eq!(
+            apply(2, r#""goal":{"text":"x","state":"snoozed","setAt":1,"setBy":{"kind":"human"}},"notice":"paused""#),
+            (Some(GoalState::Active), 1)
+        );
+        assert_eq!(apply(3, &format!(r#"{goal},"notice":"rewound""#)), (Some(GoalState::Active), 1));
+        assert_eq!(apply(4, r#""goal":null,"notice":"cleared""#), (None, 2));
+    }
+
+    #[test]
+    fn dialog_refuses_a_zero_or_unsafe_budget() {
+        let codex = Some(GoalCapabilities { pause: true, budget: true });
+        let refused = Err("The token budget must be a positive integer or null".to_owned());
+        assert_eq!(goal_dialog_input("x", "0", None, codex), refused);
+        assert_eq!(goal_dialog_input("x", "9007199254740992", None, codex), refused);
+        assert_eq!(goal_dialog_input("x", &"9".repeat(400), None, codex), refused);
+        assert_eq!(
+            goal_dialog_input("x", "9007199254740991", None, codex),
+            Ok(GoalInput { text: "x".into(), token_budget: Some(Some(9_007_199_254_740_991)) })
+        );
+    }
+
+    #[test]
     fn budget_change_leaves_an_untouched_field_alone() {
         assert_eq!(goal_budget_change("20000", Some(20000)), None);
         assert_eq!(goal_budget_change("", Some(20000)), Some(None));
