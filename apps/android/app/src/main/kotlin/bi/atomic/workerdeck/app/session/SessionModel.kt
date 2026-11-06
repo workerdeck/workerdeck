@@ -13,6 +13,7 @@ import bi.atomic.workerdeck.core.TranscriptLine
 import bi.atomic.workerdeck.core.ffi.ConversationNotice
 import bi.atomic.workerdeck.core.ffi.DiscardConfirmation
 import bi.atomic.workerdeck.core.ffi.ArchivedView
+import bi.atomic.workerdeck.core.ffi.HttpCall
 import bi.atomic.workerdeck.core.ffi.CatchUp
 import bi.atomic.workerdeck.core.ffi.Changed
 import bi.atomic.workerdeck.core.ffi.ConnectionState
@@ -288,6 +289,8 @@ class SessionModel(
             }
         }
     }
+
+    fun goal(failure: String, call: HttpCall) = act(failure) { calls.send(call) }
 
     fun actionErrorShown() {
         actionErrorState.value = null

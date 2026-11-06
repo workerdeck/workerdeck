@@ -80,6 +80,8 @@ class ConversationCalls(private val transport: Transport) {
         return pastAgents(answer.body, now.toDouble(), offsetMinutes(now))
     }
 
+    suspend fun send(call: HttpCall): Result<Unit> = perform(call).map {}
+
     private suspend fun perform(call: HttpCall): Result<String> {
         val answer = transport.answer(call)
         if (answer.status.toInt() == 0) return Result.failure(GatewayException("The gateway did not answer"))

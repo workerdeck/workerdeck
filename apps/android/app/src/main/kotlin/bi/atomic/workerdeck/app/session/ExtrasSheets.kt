@@ -215,6 +215,7 @@ private fun InfoBody(model: SessionModel, chrome: SessionChrome?) {
             }
         }
     }
+    chrome?.goal?.let { GoalInfo(it) }
 }
 
 @Composable
