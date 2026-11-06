@@ -2985,6 +2985,16 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   `needs-auth` waits on the human and `disabled` was a choice: neither is healed unasked. A woken
   engine dials everything afresh, so a wake skips the heal. Codex is not offered the tool (no
   per-server reconnect).
+- **A newly configured server needs an engine restart, and `mcp_reload` is one that is never a sleep.**
+  The CLI reads its MCP settings once per process; `setMcpServers` only manages servers passed by
+  the SDK, so `claude mcp add` mid-session reaches nothing live. `mcp_reload` marks the runner and,
+  on the first settled event that finds it idle and passing `#sleepRefusal` (no queued input, no
+  running subagent or background task, no pending approval, no compaction), `#reloadEngine` runs the
+  same teardown as `sleep()` (`#stopEngine`) and resumes at once through `#runAwake`, without
+  `engine_sleep` or a `starting` status: the card never shows asleep, and the next message lands in
+  a CLI that already dialed the new servers. A refused attempt waits for the next settled event;
+  a real sleep clears the mark (the wake reads the settings anyway). The new tools never reach the
+  turn that asked, which is why the tool tells the agent to end it.
 - **The three actions are session-scoped where they exist.** `reconnect`/`enable`/`disable` go to
   the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this.
 

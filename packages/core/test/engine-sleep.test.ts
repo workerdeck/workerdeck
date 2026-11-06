@@ -287,3 +287,41 @@ describe('codex engine sleep', () => {
     runner.close()
   })
 })
+
+describe('claude MCP reload', () => {
+  type Handler = (args: unknown, extra: unknown) => Promise<unknown>
+  const reloadTool = (options: Options | undefined): Handler => {
+    const server = (options!.mcpServers as Record<string, { instance: unknown }>).workerdeck
+    return (server.instance as Record<string, Record<string, { handler: Handler }>>)['_registeredTools']!.mcp_reload!.handler
+  }
+
+  it('restarts the engine on the same conversation once the turn ends, without a sleep edge', async () => {
+    const engine = processes()
+    const runner = new SessionRunner({ cwd: '/tmp/project', queryFn: engine.queryFn })
+    const events: SessionEvent[] = []
+    runner.subscribe((event) => events.push(event))
+    void runner.start()
+    await tick()
+    runner.sendMessage('add the server')
+    engine.harnesses[0]!.emit(init())
+    await tick()
+    expect(await reloadTool(engine.options[0])({}, {})).toMatchObject({ isError: false })
+    await tick()
+    expect(engine.harnesses).toHaveLength(1)
+
+    engine.harnesses[0]!.emit(result(0.5))
+    await tick()
+    expect(engine.harnesses).toHaveLength(2)
+    expect(engine.options[1]).toMatchObject({ resume: 'sdk-session-1', forkSession: false })
+    expect(runner.status).toBe('idle')
+    expect(runner.info().engineAsleep).toBeUndefined()
+    expect(ofType(events, 'engine_sleep')).toEqual([])
+
+    runner.sendMessage('use it')
+    await tick()
+    expect(engine.harnesses[1]!.captured.inputs.map(textOf)).toEqual([expect.stringContaining('use it')])
+    engine.harnesses[1]!.emit(result(0.6))
+    await tick()
+    expect(engine.harnesses).toHaveLength(2)
+  })
+})

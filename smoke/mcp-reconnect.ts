@@ -2,11 +2,12 @@
 //
 // The unit suite fakes the CLI, so it cannot show that the real CLI honours `reconnectMcpServer` while it waits on one
 // of our own tools, nor when the reconnected server's tools reach the model. A green run proves: a server down at
-// engine start reports `failed`; a plain send heals it; `mcp_reconnect` heals it from inside a turn; and the model
-// calls the healed server's tool, with whether that happened in the same turn reported.
+// engine start reports `failed`; a plain send heals it; `mcp_reconnect` heals it from inside a turn; the model calls
+// the healed server's tool, with whether that happened in the same turn reported; and a server added to `.mcp.json`
+// after engine start reaches the next turn through `mcp_reload`, without the engine ever reporting asleep.
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SessionEvent } from '@workerdeck/protocol'
@@ -150,7 +151,73 @@ async function scenario(label: string, name: string, word: string, prompt: strin
   }
 }
 
+async function reloadScenario(): Promise<void> {
+  step('mcp_reload adopts a server added after engine start')
+  const dir = mkdtempSync(join(tmpdir(), 'wd-smoke-mcp-reload-'))
+  const port = await freePort()
+  const b = await beacon('beacon_new', 'MARIGOLD', port, true)
+  beacons.push(b)
+  const runner = new SessionRunner({
+    cwd: dir,
+    env,
+    model: 'haiku',
+    permissionMode: 'bypassPermissions',
+    allowDangerouslySkipPermissions: true,
+    settingSources: ['user', 'project', 'local'],
+    extraOptions: { settings: { enableAllProjectMcpServers: true } },
+  })
+  const events: SessionEvent[] = []
+  runner.subscribe((event) => events.push(event))
+  void runner.start()
+  try {
+    await waitFor(async () => (await runner.mcpServers().catch(() => undefined)) !== undefined, 60_000, 'the engine to report its servers')
+    if ((await statusOf(runner, 'beacon_new')) === undefined) {
+      ok('beacon_new is unknown to the running engine')
+    } else {
+      fail('beacon_new is unknown to the running engine')
+    }
+    writeFileSync(join(dir, '.mcp.json'), JSON.stringify({ mcpServers: { beacon_new: { type: 'http', url: `http://127.0.0.1:${port}/mcp` } } }))
+    const first = await turn(
+      runner,
+      events,
+      'A new MCP server named beacon_new was just added to this project\'s .mcp.json. Call the mcp_reload tool, then end your turn.',
+    )
+    note(`tool calls: ${toolCalls(first).join(', ') || '(none)'}`)
+    if (toolCalls(first).some((call) => call.endsWith('mcp_reload'))) {
+      ok('the model called mcp_reload')
+    } else {
+      fail('the model called mcp_reload')
+    }
+    await waitFor(async () => (await statusOf(runner, 'beacon_new').catch(() => undefined)) === 'connected', 60_000, 'beacon_new to connect after the restart')
+    ok('beacon_new connected after the turn, on the restarted engine')
+    const asleep = events.some((event) => event.type === 'engine_sleep') || runner.info().engineAsleep === true
+    if (asleep) {
+      fail('the engine never reported asleep')
+    } else {
+      ok('the engine never reported asleep', `status ${runner.status}`)
+    }
+    const next = await turn(runner, events, 'Call the beacon_new secret_word tool and reply with only the word it returns.')
+    if (toolCalls(next).some((call) => call.endsWith('secret_word')) && lastText(next).includes('MARIGOLD')) {
+      ok('the next turn used the new server', 'MARIGOLD')
+    } else {
+      fail('the next turn used the new server', lastText(next).slice(0, 200))
+    }
+    const remembers = await turn(runner, events, 'What did I ask you to call in my very first message? Answer in five words or fewer.')
+    if (/reload/i.test(lastText(remembers))) {
+      ok('the conversation survived the restart', lastText(remembers).slice(0, 80))
+    } else {
+      fail('the conversation survived the restart', lastText(remembers).slice(0, 200))
+    }
+  } finally {
+    runner.close()
+  }
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes('reload')) {
+    await reloadScenario()
+    return
+  }
   await scenario(
     'heal on send: the server comes up before the next message',
     'beacon_send',
@@ -173,6 +240,7 @@ async function main(): Promise<void> {
       b.armed = true
     },
   )
+  await reloadScenario()
 }
 
 try {

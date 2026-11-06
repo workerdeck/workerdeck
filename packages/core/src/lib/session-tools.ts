@@ -15,7 +15,7 @@ import {
 } from './session-report.ts'
 import { CHANGE_AVATAR_TOOL, CHANGE_AVATAR_TOOL_SHAPE, isChangeAvatarToolName, runChangeAvatarTool, type AvatarDirectory } from './avatar-tool.ts'
 import { SET_STATUS_TOOL, SET_STATUS_TOOL_SHAPE, isSetStatusToolName, runSetStatusTool, type StatusLabelSink } from './status-label.ts'
-import { MCP_RECONNECT_TOOL, MCP_RECONNECT_TOOL_SHAPE, isMcpToolName, runMcpTool, type McpControl } from './mcp-tool.ts'
+import { MCP_TOOL_SHAPE, isMcpToolName, mcpToolNames, runMcpTool, type McpControl } from './mcp-tool.ts'
 import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, isPeerToolName, runPeerTool, type PeerDirectory } from './peers.ts'
 import { SHELL_TOOL_SHAPES, isShellToolName, runShellTool, shellToolNames, type ShellDirectory } from './shells.ts'
 
@@ -32,7 +32,7 @@ export type SessionToolSources = {
 
 export type SessionTool = GatewayToolShape & { name: string; run(args: unknown): Promise<GatewayToolOutput> }
 
-// The gateway's own tools a session is offered, session_info, set_status, change_avatar, context_reset, peers, shells, mcp_reconnect: the order every engine
+// The gateway's own tools a session is offered, session_info, set_status, change_avatar, context_reset, peers, shells, mcp_reconnect, mcp_reload: the order every engine
 // registers them in.
 export function sessionTools(sources: SessionToolSources, from: () => string): SessionTool[] {
   const { report, status, avatar, reset, peers, shells, mcp, write } = sources
@@ -55,7 +55,9 @@ export function sessionTools(sources: SessionToolSources, from: () => string): S
           run: (args: unknown) => runShellTool(shells, from(), name, args, { write }),
         }))
       : []),
-    ...(mcp ? [{ name: MCP_RECONNECT_TOOL, ...MCP_RECONNECT_TOOL_SHAPE, run: (args: unknown) => runMcpTool(mcp, from(), args) }] : []),
+    ...(mcp
+      ? mcpToolNames(mcp).map((name) => ({ name, ...MCP_TOOL_SHAPE[name], run: (args: unknown) => runMcpTool(mcp, from(), name, args) }))
+      : []),
   ]
 }
 
@@ -89,7 +91,7 @@ export function runSessionTool(
     return runShellTool(sources.shells, from, name, args, { write: sources.write })
   }
   if (sources.mcp && isMcpToolName(name)) {
-    return runMcpTool(sources.mcp, from, args)
+    return runMcpTool(sources.mcp, from, name, args)
   }
   return undefined
 }

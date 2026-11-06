@@ -131,6 +131,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #engineTitle: string | undefined
   #lastRateLimitPoll = 0
   #lastMcpHeal = 0
+  #mcpReloadPending = false
   #started = false
   #runPromise: Promise<void> | undefined
   #backfill: Promise<void> | undefined
@@ -158,7 +159,12 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
         this.#subagents.observe(body, event.ts)
         this.#outputTails.observe(body)
       },
-      settled: (body) => this.#followChecklist(body),
+      settled: (body) => {
+        this.#followChecklist(body)
+        if (this.#mcpReloadPending) {
+          queueMicrotask(() => this.#reloadEngine())
+        }
+      },
       holdStatus: (status) => this.#holdIdleWhileCompacting(status),
     }
   }
@@ -246,17 +252,32 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (this.#asleep) {
       return { ok: true }
     }
+    this.#asleep = true
+    this.#stopEngine()
+    this.core.emit({ type: 'engine_sleep', asleep: true })
+    return { ok: true }
+  }
+
+  #stopEngine(): void {
     const query = this.#query
     const input = this.#input
-    this.#asleep = true
     this.#query = undefined
     this.#input = new InputQueue()
+    this.#mcpReloadPending = false
+    this.#lastMcpHeal = 0
     input.end()
     query?.close()
     this.#outputTails.clear()
     this.core.cost.restartProcess()
-    this.core.emit({ type: 'engine_sleep', asleep: true })
-    return { ok: true }
+  }
+
+  // The CLI reads MCP settings once per process, so a reload is a restart on the same conversation, never seen as a sleep.
+  #reloadEngine(): void {
+    if (!this.#mcpReloadPending || this.#asleep || this.core.status !== 'idle' || this.#sleepRefusal() !== undefined) {
+      return
+    }
+    this.#stopEngine()
+    void this.#runAwake()
   }
 
   #sleepRefusal(): string | undefined {
@@ -342,7 +363,13 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   protected override get toolSources(): SessionToolSources {
     return {
       ...super.toolSources,
-      mcp: { list: () => this.mcpServers(), reconnect: (name) => this.reconnectMcpServer(name) },
+      mcp: {
+        list: () => this.mcpServers(),
+        reconnect: (name) => this.reconnectMcpServer(name),
+        reload: () => {
+          this.#mcpReloadPending = true
+        },
+      },
     }
   }
 

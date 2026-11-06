@@ -28,8 +28,13 @@ function control(servers: McpServerStatusInfo[], refuse: string[] = []) {
 }
 
 describe('mcp_reconnect', () => {
-  it('is offered only with an MCP control', () => {
+  it('is offered only with an MCP control, and mcp_reload only where the engine can reload', () => {
     expect(sessionToolSpecs(control([]).sources).map((spec) => spec.name)).toEqual(['mcp_reconnect'])
+    const reloadable = control([])
+    expect(sessionToolSpecs({ ...reloadable.sources, mcp: { ...reloadable.sources.mcp, reload: () => {} } }).map((spec) => spec.name)).toEqual([
+      'mcp_reconnect',
+      'mcp_reload',
+    ])
     expect(sessionToolSpecs({ write: false }).map((spec) => spec.name)).toEqual([])
   })
 

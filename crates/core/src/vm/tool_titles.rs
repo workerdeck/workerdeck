@@ -5,7 +5,7 @@ pub const TOOL_TITLE_MAX_CHARS: usize = 64;
 
 pub const PEER_SEND_TOOLS: [&str; 2] = ["peers_send", "mcp__workerdeck__peers_send"];
 
-pub const BUILTIN_TOOL_TITLES: [(&str, &str); 27] = [
+pub const BUILTIN_TOOL_TITLES: [(&str, &str); 29] = [
     ("fs_read", "Reading a file"),
     ("fs_write", "Writing a file"),
     ("fs_list", "Listing files"),
@@ -33,6 +33,8 @@ pub const BUILTIN_TOOL_TITLES: [(&str, &str); 27] = [
     ("mcp__workerdeck__change_avatar", "Changing avatar"),
     ("mcp_reconnect", "Reconnecting MCP servers"),
     ("mcp__workerdeck__mcp_reconnect", "Reconnecting MCP servers"),
+    ("mcp_reload", "Reloading MCP servers"),
+    ("mcp__workerdeck__mcp_reload", "Reloading MCP servers"),
 ];
 
 pub fn builtin_tool_title(name: &str) -> Option<&'static str> {

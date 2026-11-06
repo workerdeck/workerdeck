@@ -160,7 +160,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   use it is all the setup there is.
 - **MCP servers that come back.** A Claude session reconnects any MCP server that was down when
   its engine started (say you launched it later) the next time you message it, and the agent can
-  do it itself with `mcp_reconnect` when a tool it expected is missing.
+  do it itself with `mcp_reconnect` when a tool it expected is missing. After installing a new
+  server (`claude mcp add`), it calls `mcp_reload` and its engine restarts on the same conversation
+  when the turn ends, so the server is there from your next message, no new session needed.
 - **Sessions that know their own budget.** Every session, on any engine, gets `session_info`:
   engine, vendor and model, context usage (tokens used, window, percent left), turns, cost and
   the account rate-limit windows. An agent can check it before a big step and wrap up, summarise

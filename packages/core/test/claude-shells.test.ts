@@ -74,13 +74,14 @@ describe('SessionRunner: shell tools', () => {
     const alone = fakeHarness()
     void new SessionRunner({ cwd: '/tmp/p', queryFn: alone.queryFn, shells: shellDirectory() }).start()
     await eventually(() => expect(alone.captured.options).toBeDefined())
-    expect(Object.keys(registered(alone)).sort()).toEqual(['mcp_reconnect', 'session_info', 'set_status', 'shell_list', 'shell_read'])
+    expect(Object.keys(registered(alone)).sort()).toEqual(['mcp_reconnect', 'mcp_reload', 'session_info', 'set_status', 'shell_list', 'shell_read'])
 
     const both = fakeHarness()
     void new SessionRunner({ cwd: '/tmp/p', queryFn: both.queryFn, peers: peerDirectory(), shells: shellDirectory() }).start()
     await eventually(() => expect(both.captured.options).toBeDefined())
     expect(Object.keys(registered(both)).sort()).toEqual([
       'mcp_reconnect',
+      'mcp_reload',
       'peers_list',
       'peers_peek',
       'peers_send',
@@ -95,7 +96,7 @@ describe('SessionRunner: shell tools', () => {
     const harness = fakeHarness()
     void new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn }).start()
     await eventually(() => expect(harness.captured.options).toBeDefined())
-    expect(Object.keys(registered(harness))).toEqual(['session_info', 'set_status', 'mcp_reconnect'])
+    expect(Object.keys(registered(harness))).toEqual(['session_info', 'set_status', 'mcp_reconnect', 'mcp_reload'])
   })
 
   it('calls the directory with this runner as the reader', async () => {
@@ -117,6 +118,7 @@ describe('SessionRunner: shell tools', () => {
     await eventually(() => expect(harness.captured.options).toBeDefined())
     expect(Object.keys(registered(harness)).sort()).toEqual([
       'mcp_reconnect',
+      'mcp_reload',
       'session_info',
       'set_status',
       'shell_kill',

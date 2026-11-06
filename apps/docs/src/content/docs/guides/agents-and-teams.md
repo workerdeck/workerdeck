@@ -108,6 +108,11 @@ engine (at most once a minute), and the agent has an `mcp_reconnect` tool for do
 argument reconnects every failed server, `server` reconnects that one. Servers waiting for sign-in
 or switched off are left alone. A sleeping engine needs neither: it dials everything again on wake.
 
+A server that was added or changed after the engine started (`claude mcp add`, an edited
+`.mcp.json`) needs the engine to read its configuration again. The agent calls `mcp_reload`; when
+its turn ends the engine restarts on the same conversation (the card never shows it asleep), and
+the new server's tools are there from the next message.
+
 ## Sleep
 
 An idle agent's engine sleeps after 15 minutes by default, freeing its memory; the next message
