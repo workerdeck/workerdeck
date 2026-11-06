@@ -928,7 +928,7 @@ static SPA.
 `CoreSessionView` over the Rust core (`WorkerDeckSession`, linked unconditionally); there is no
 toggle and no Swift fallback. The Swift session screen (`SessionView`, `TranscriptViewModel`, the cards renderer,
 the composer, the status bar, the sheets and the host file browser) is deleted, so paragraphs
-below that describe them are history until slice 7 rewrites this section. Deep links still land:
+below that describe them (and the Swift files they name) are history until this section is rewritten. Deep links still land:
 a push's `seq` (epoch-checked), a task step's tool call, a sub-agent step's takeover and a shell
 step's screen are held as a `CoreEntry` until the replay settles. What the core screen lacks is
 listed in `_docs/plans/IOS-ONTO-CORE.md` (newest entry). Slice 7 deleted the Swift reducer,

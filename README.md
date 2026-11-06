@@ -248,11 +248,12 @@ Each package has its own README, with the code for using it.
 | [`@workerdeck/client`](packages/client) | Typed client for browsers and Node: REST + WS attach with auto-reconnect and replay-from-last-seq. Zero runtime deps. |
 | [`@workerdeck/react`](packages/react) | Headless React: the session hook, attachment and host-file hooks, and pure reducers for the transcript and the sessions list. No styling opinion. |
 | [`@workerdeck/ui`](packages/ui) | Styled agent-control components: the session panel (transcript, tool-call cards, permission prompts, composer with attachments and `@file` / `/command` / `#session` completion), the sessions browser, and the workspace around them. Tailwind v4 + Base UI. |
+| [`@workerdeck/relay-client`](packages/relay-client) | The gateway side of the cross-gateway relay: wire frames, the connection, the registry publisher. Server-to-server. |
+| [`@workerdeck/relay`](packages/relay) | The relay itself (`workerdeck-relay`, also `workerdeck relay`): enrollment, rules, registry, routing. |
 | [`@workerdeck/web`](packages/web) | The dashboard as prebuilt static files, for serving from your own host. Zero runtime deps. |
 
-The apps - [`apps/ios`](apps/ios), [`apps/vscode`](apps/vscode), the
-[docs site](apps/docs) and [`apps/embedded`](apps/embedded) - are not published to npm; each has
-its own README. The extension ships on the
+The apps - [`apps/ios`](apps/ios), [`apps/android`](apps/android), [`apps/vscode`](apps/vscode), the
+[docs site](apps/docs), [`apps/embedded`](apps/embedded) and [`apps/demo`](apps/demo) (the interactive tour) - are not published to npm. The extension ships on the
 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode)
 instead, in lockstep with the packages above.
 
@@ -343,12 +344,13 @@ Dev never builds: apps and tests resolve packages straight to TS source via the
 
 ## Status
 
-**4.1.0**. Three engines, the protocol, server, client, headless React layer, styled UI,
+**4.3.0**. Three engines, the protocol, server, client, headless React layer, styled UI,
 dashboard, VS Code extension, relay, job queue, sandbox and deferred execution are all in and
 tested, with [`apps/embedded`](apps/embedded) as the reference embedding. 4.0.0 made an agent a
 session with a name: one record per session id, conversations under it, past conversations read
 from the engine's own store, and a generation token on every mutation. 4.1.0 drew agents as
-animated robot faces on every client and gave every session an exact model id. The iOS app's APNs push is
+animated robot faces on every client and gave every session an exact model id; 4.2.0 redesigned the
+sessions list, and 4.3.0 added MCP self-heal (`mcp_reconnect`, `mcp_reload`) and Agent Search. The iOS app's APNs push is
 confirmed end to end from a live gateway (registration, delivery, a tapped notification opening
 its session); the lock-screen Approve/Deny action is not yet. `PROTOCOL_VERSION` guards breaking
 changes and is at **2**, so every breaking wire change costs a bump and a mismatch banner.

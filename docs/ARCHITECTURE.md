@@ -1,8 +1,8 @@
 # Architecture
 
-How WorkerDeck is put together: ten packages, five apps (iOS, VS Code, the docs site,
-`apps/embedded` - the reference embedding - and `apps/demo`, the interactive tour), one
-dependency rule. Scope guards behind this shape:
+How WorkerDeck is put together: twelve packages, six apps (iOS, Android, VS Code, the docs site,
+`apps/embedded` - the reference embedding - and `apps/demo`, the interactive tour), a Rust core
+for the native apps in `crates/`, one dependency rule. Scope guards behind this shape:
 no serverless hosting, no multi-tenant SaaS, no claude.ai auth - see
 [CONTRIBUTING.md](../CONTRIBUTING.md) §Out of scope for why those are settled.
 
@@ -22,6 +22,9 @@ no serverless hosting, no multi-tenant SaaS, no claude.ai auth - see
               (depends on it for the
                prebuilt dashboard)
 ```
+
+The cross-gateway relay sits beside the server side: `protocol ← relay-client ← {server, relay ← cli}`
+(§ Across gateways: the relay). `crates/` depends on nothing in the TS tree.
 
 `@workerdeck/protocol` depends on nothing and everything depends on it. The browser side
 (client / react / ui / apps) must never import core, server, or the Agent SDK - the wire
@@ -290,8 +293,9 @@ boundary: anything a client needs must be expressible as protocol events and com
   share a port, and why `--auth-key` can protect both with one shared secret - a login page trades
   it for an `HttpOnly` cookie for browsers, while services keep sending it as a header. Also hosts
   `workerdeck guard`, the restart guard.
-- (A minimal second consumer, `apps/demo`, proved `client` + `ui` portability for the V1
-  acceptance scope; it was removed once that was established - see git history.)
+- **`packages/relay-client`** and **`packages/relay`** - the gateway side of the cross-gateway
+  relay (wire frames, `connectRelay`, the registry publisher) and the relay itself
+  (`workerdeck-relay`, also `workerdeck relay`); see § Across gateways: the relay below.
 
 ## Session lifecycle
 

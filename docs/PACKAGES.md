@@ -1560,7 +1560,7 @@ documents as the primary text, then `displayName`; the terminal's question line 
 generic `Do you want to proceed?` rather than a second copy of the title. A **single-select answer
 cannot be un-picked**: it is a radio, choosing again keeps it, and choosing `Other…` replaces the
 option rather than joining it (the terminal advances on choice, so an un-pick there would have sent
-an empty answer). iOS mirrors both rules by hand in `PermissionPromptView` and `QuestionPromptView`.
+an empty answer). The native apps take both rules from the Rust core (`vm::prompt`).
 `reveal={{ toolUseId, nonce }}` is the seam a *list* needs: sub-agent work is nested inside the
 `Task` row that spawned it, so "open that sub-agent" can only mean "take me to its row". A prop
 rather than a ref (the shape `jumpToRecapRef` uses) because the asker is outside the webview and
@@ -1633,8 +1633,7 @@ something *you* did. It needs none of the mark rules - no fractional `RowPositio
 loudness - because none of them is about a region, and an opened `Task` therefore keeps its green.
 **A region never answers the finger**: it spans hundreds of points, so letting it compete in the
 nearest-cluster arithmetic jumps the reader to the top of a band instead of the prompt they
-pressed. A region is context for what surrounds it, never a destination. (iOS: `ScrubberRegion` and
-`ScrubberRail`, built by `buildScrubberRail` beside `buildScrubberClusters`.) Yellow because the
+pressed. A region is context for what surrounds it, never a destination. Yellow because the
 opened rows themselves now carry a yellow wash (`--term-open-wash`, `uiOpenWash`), which is the
 theme's **one deliberate reuse of that tone for something other than "waiting on you"**: an open
 block is a state the reader put the transcript into, and the rail and the region should say that
@@ -2571,7 +2570,7 @@ the forwarder does not exist. Environment is per device token, never a flag, and
 that device (`DEFAULT_NOTIFY` = everything but `session_closed`) - `docs/GOTCHAS.md` §APNs.
 ## `crates/` (Rust, native clients only)
 
-One Rust core for the native apps: Android over UniFFI now, iOS over the same bindings later, so Kotlin never
+One Rust core for the native apps: iOS and Android over the same UniFFI bindings, so Kotlin never
 becomes a third hand mirror of the protocol and the reducer. **TypeScript stays the source of
 truth** for the wire and the shared rules; the web, VS Code, the gateway and the relay never load
 Rust (V8 replays the spike fixture in 72 ms, so there is nothing to win there). Why Rust and not
@@ -2674,8 +2673,9 @@ still the one in the field. A session form's optional name (`agent_name`) create
 and `crossOwner` when its lead belongs to another owner. With no record of its own, a profile reads
 the static `ENGINE_CAPABILITIES` table (`ProfileEngine::capabilities`).
 
-**Still missing**: the scrubber and the app-side view models (prompt completion, unread). The plan, with its
-phases and decisions, is gitignored (`_docs/plans/RUST-NATIVE-CORE.md`).
+The scrubber (`scrubber.rs`, goldens below), prompt completion (`vm::composer_tokens`) and unread
+(`vm::watermarks`) have moved into the core too. The plan, with its phases and decisions, is gitignored
+(`_docs/plans/RUST-NATIVE-CORE.md`).
 
 **Conformance goldens** replace "mirror by convention" for the reducer. `conformance/corpus.ts`
 authors event sequences with the demo's tape helpers (`apps/demo/src/stage/tape.ts`), and

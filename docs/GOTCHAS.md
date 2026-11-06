@@ -1808,7 +1808,7 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   `teamReaches` over the origin and the qualified target, so a remote member cannot reach an
   outsider here either), to every remote row, and to peek answers. A peek answer travels through
   the relay unqualified, so both ends qualify it with the answering gateway (`qualifyEntry`,
-  `qualifyPeek`). Refusals read as "no such session", the scope rule's posture.
+  `relayPeek` in `services/peers.ts`). Refusals read as "no such session", the scope rule's posture.
 - **A peer message is captioned with the sender's agent name**, not its session title, both locally
   and across the relay (the relay's `originOf` uses `agent.name ?? title`). Remote rows carry
   `agent`, `role`, `team` and `owner`; a remote member's `team` is resolved from the visible lead row
@@ -2207,7 +2207,7 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   each dir to one side. Never copy tokens out of either store (auth red lines).
 - Profile management is doubly opt-in (`profileStore` AND `canManageProfiles`), and the two profile
   sets never mix: `profiles` from server options are code (immutable over HTTP, and win a name
-  collision), while the store holds UI-created ones. `validateProfile` is shared by startup and the
+  collision), while the store holds UI-created ones. `ProfileService.validate` is shared by startup and the
   routes, so a POSTed profile can never be one startup would have refused, and `managed` is
   recomputed on every response, never persisted or trusted from a client. A managed Claude or Codex
   profile needs `allowedConfigDirRoots`: naming a credential directory is choosing a credential
@@ -2698,7 +2698,7 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   line, `SHELL_INLINE_CHARS` for the row, and a line past the line budget is clipped (` [...]`) and
   ends the row, because finding its end would mean scanning the rest. The omission marker is
   `[... more output ...]` with no count, since a line count is a pass over the whole output; both
-  reducers (`SHELL_MORE_OUTPUT` in react, `shellMoreOutput` in the kit) strip that exact line. The
+  reducers (`SHELL_MORE_OUTPUT` in react, `transcript.rs` in the Rust core) strip that exact line. The
   artifact's text view is incremental for the same reason: `#textAppend` searches only the new chunk
   for a newline, since re-scanning the pending line per chunk made one long line quadratic.
 - **A running shell flushes once with its tail, then as a status line, then once more on exit.**
@@ -2727,8 +2727,8 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   the second: a manual `/compact` ends its own turn immediately while the summary keeps running).
   `replayCoalesceKey` keys on `context_compacted:<uuid>` so a replayed pair delivers only the
   settled one. The row's sentence lives in one place per client (`compactionText` in
-  `packages/ui/src/lib/format.ts`, `TermFmt.compaction` in the kit, pinned against each other by
-  `TerminalTextTests`), since the terminal renderer measures the string it draws. An open
+  `packages/ui/src/lib/format.ts`, `fmt_compaction` in the Rust core's `planner.rs`, pinned by the
+  conformance goldens), since the terminal renderer measures the string it draws. An open
   compaction also holds the session **busy**: the claude runner's `holdStatus` hook on `RunnerCore`
   (`#holdIdleWhileCompacting`) swallows an `idle` while `#compactionId` is set and replays it on settle.
 - **The claude engine holds the flush across a slash command.** The CLI matches `/compact` and
@@ -3302,7 +3302,7 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   two or more still draws `ToolRunRow`'s `runSummary(...)` row. This is a rendering rule only, the
   block model (`RunBlock`, its key, indices, expansion state) is untouched, and `blockHeight`
   (`height.ts`) prices the run-of-one case as `itemHeight(block.run[0], m)` to match. Shared with
-  iOS: `planRun` in `TerminalPlanner.swift` falls through to `planToolCall` for the same case,
+  the native apps: `plan_run` in the Rust core's `planner.rs` falls through to `plan_tool_call` for the same case,
   because the summary would occupy the same one row while throwing away the tool's name, input and
   result preview.
 - **`--term-font-size` and `--term-line` must be whole pixels.** A line height of `1.5 x 13px` is
@@ -3451,7 +3451,7 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   no client offers to. Catch-up mode is the reading aid: the boundary row, faded rows above it, and
   the "N new rows since you were last here" bar.
 - **The panel has no preference of its own: it reads `unseen`.** Off is `unseen={undefined}`, and
-  the client decides. `SessionPanel` freezes the mark it was mounted with (`catchUpMark`), so
+  the client decides. `SessionPanel` freezes the mark it was mounted with (`useCatchUp`), so
   toggling the setting only takes effect for sessions opened after.
 - Each client owns its own storage: web `workerdeck.catch-up` in localStorage, VS Code
   `workerdeck.catchUpMode`, iOS `AppSettings.catchUpMode`. **The watermark keeps advancing either
@@ -3731,7 +3731,7 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
 - **A dormant wake renumbers a session's seqs**, so a bare `seq` in a push payload can deep-link
   into a log that no longer exists. `SessionInfo.epoch` dates it: the gateway bumps it on every
   dormant wake, runners echo `config.epoch` from `info()`, the forwarder puts it beside `seq`, and
-  `deepLinkSeqSurvives` refuses a mismatch, landing at the tail instead. Absent epoch on either
+  `deep_link_seq_survives` (Rust core, `controller/seq_index.rs`) refuses a mismatch, landing at the tail instead. Absent epoch on either
   side means "same log" (stays additive, no `PROTOCOL_VERSION` bump needed). The epoch travels
   through the runner's *config*, so `parking.ts` must persist the config the runner was actually
   built with or a later park resurrects the stale one; the epoch dates the seq only, nothing else.
@@ -3768,8 +3768,8 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   1.5s stall or 20s ceiling, so `!replaying` on a phone over a tailnet often means "shown early,"
   not "complete." A jump landed mid-replay near the bottom of what had arrived used to pin the
   reader there, then follow every later replay event to the tail. Fixed by two pure, tested
-  pieces: `deepLinkPlacement` decides completeness by `lastSeq >= session.lastSeq`, never by hold
-  state, and `TranscriptScrollGeometry.pinsAfterJump` never pins an incomplete jump. A user jump or
+  pieces in the Rust core: `deep_link_placement` decides completeness by `lastSeq >= session.lastSeq`, never by hold
+  state, and `pins_after_jump` (`controller/scroll.rs`) never pins an incomplete jump. A user jump or
   scrub (`complete: true`) keeps the old rule. Reproduce via the simulator loop in
   `apps/ios/README.md` § Push deep links on the simulator.
 - **Closing a container must close what it contains.** iOS holds expansion beside the rows

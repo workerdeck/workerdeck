@@ -72,7 +72,7 @@ before touching versioning or the publish workflow.
 
 A Cargo workspace at the repo root, outside pnpm and turbo: `pnpm test` never runs it, CI runs it
 as its own `rust` job. The toolchain is pinned in `rust-toolchain.toml` (1.98, with `rustfmt`,
-`clippy` and the two Android targets), so `rustup` installs it on the first `cargo` call.
+`clippy`, the two Android targets and the iOS device and simulator targets), so `rustup` installs it on the first `cargo` call.
 
 ```sh
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
@@ -86,7 +86,7 @@ cargo build -p wd-native-ffi && cargo run -p wd-native-ffi --features cli --bin 
   generate --library target/debug/libwdffi.dylib --language kotlin --out-dir <dir>   # or --language swift
 ```
 
-`apps/android` is a Gradle build (JDK 17 or later; Android Studio's bundled JBR works):
+`apps/android` is a Gradle build (JDK 17 or 21, Android Studio's bundled JBR preferred; see the JDK note under Testing):
 `./gradlew :core:testDebugUnitTest` builds the host `libwdffi` (Cargo profile `host`: release
 unstripped, since `strip` drops the metadata uniffi-bindgen reads on Linux), generates the Kotlin bindings and
 runs the JVM tests against the real core; `./gradlew :core:assembleRelease` adds the `cargo ndk`
@@ -234,7 +234,7 @@ each test file's module graph (the `core` barrel alone is ~0.4 s per file); vite
 `viteModuleRunner: false` cannot load `.tsx` or the server's parameter properties, and
 `fsModuleCache` only helps a warm local run. **Waiting in a test:** never a fixed sleep to
 establish readiness; await the event, or use `until`/`eventually` (`server/test/helpers.ts`,
-`eventually.ts` in core, react and client), whose deadline is a hang watchdog only. A PTY suite
+`eventually` in core's `test/helpers/wait.ts`, `eventually.ts` in react and client), whose deadline is a hang watchdog only. A PTY suite
 uses `ptySuite` (`server/test/shell-helpers.ts`), which fails at load on CI when
 `@lydell/node-pty` is missing instead of skipping. A refused connection dials port 1, never a
 port a closed server just freed (a parallel suite's `listen(0)` takes it); a test that must free

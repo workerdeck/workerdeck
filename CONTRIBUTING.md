@@ -33,10 +33,13 @@ Several things listen at once, and two of them used to collide silently. The reg
 | Port | What | Started by |
 |---|---|---|
 | 8787 | dev gateway (+ dashboard) | `pnpm dev:server`, `pnpm example:server` |
-| 8788 | the embedded reference app (gateway **and** wiki, one origin) | `apps/embedded`'s `pnpm dev` |
+| 8788 | the embedded reference app (gateway **and** wiki, one origin); also the production build (`WD_PROD_PORT` moves it) | `apps/embedded`'s `pnpm dev`, `pnpm start:prod` |
 | 5191 | dashboard Vite (HMR, proxies `/v1` to 8787) | `pnpm dev:web` |
 | 5192 | docs site (Astro) | `apps/docs`'s `pnpm dev` |
-| 5193 | embedded app Vite | `apps/embedded`'s `pnpm dev` |
+| 5193 | `packages/ui` measurement harness | `packages/ui`'s `pnpm dev` |
+| 5194 | embedded app Vite | `apps/embedded`'s `pnpm dev` |
+| 5195 | the interactive tour | `apps/demo`'s `pnpm dev` |
+| 6006 | Storybook | `packages/ui`'s `pnpm storybook` |
 
 Take a new one rather than reusing these: shadowing a running dev server is silent, and the
 symptom is a page that looks stale rather than an error.
@@ -73,8 +76,8 @@ looks like it works.
 
 Two rules the review will hold you to:
 
-- **The dependency direction.** `protocol ← core ← queue ← server ← cli` and
-  `protocol ← client ← react ← ui ← web`, with `sandbox` a leaf either side may use. The browser
+- **The dependency direction.** `protocol ← core ← queue ← server ← cli`,
+  `protocol ← relay-client ← {server, relay ← cli}` and `protocol ← client ← react ← ui ← web`, with `sandbox` a leaf either side may use. The browser
   side must never import core, server, the Agent SDK, or any model SDK; the wire protocol is the
   only bridge. Anything a client needs must be expressible as protocol events and commands.
 - **Breaking the wire means bumping the wire.** A breaking change to
@@ -94,6 +97,11 @@ be rejected regardless of quality:
 - no extraction, storage, or forwarding of subscription tokens,
 - no spoofing of Claude Code's client identity,
 - no multi-account pooling or rate-limit circumvention of any kind.
+
+The one sanctioned broker runs the official CLI on an explicit user action: `claude setup-token`
+(its printed token kept for that profile only, a 0600 file, never in a response or a log) and
+`codex login --device-auth` under a profile's own `codexHome`. Rules in `AGENTS.md` § Auth red
+lines and `docs/GOTCHAS.md` § Profile accounts.
 
 Policy enforcement lives in configuration (`requireApiKey`, the one-time subscription notice,
 `apiKeySource` on `SessionInfo`), never in tampering with the credential chain. Background:
