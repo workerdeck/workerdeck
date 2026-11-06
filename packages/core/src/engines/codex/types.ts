@@ -124,6 +124,20 @@ export type AppServerTurn = {
   items?: AppServerItem[]
 }
 
+export type AppServerThreadGoalStatus = 'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete'
+
+// Timestamps are epoch seconds.
+export type AppServerThreadGoal = {
+  threadId: string
+  objective: string
+  status: AppServerThreadGoalStatus
+  tokenBudget?: number | null
+  tokensUsed: number
+  timeUsedSeconds: number
+  createdAt: number
+  updatedAt: number
+}
+
 export type AppServerHistoryTurn = {
   id: string
   items?: AppServerItem[]

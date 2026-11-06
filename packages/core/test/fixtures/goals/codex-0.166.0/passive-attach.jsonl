@@ -1,0 +1,4 @@
+{"t":0,"dir":"->","kind":"req","method":"thread/read","body":{"threadId":"thread-1"}}
+{"t":2,"dir":"<-","kind":"res","method":"thread/read","body":{"thread":{"id":"thread-1","turns":[]}}}
+{"t":2,"dir":"->","kind":"req","method":"thread/goal/get","body":{"threadId":"thread-1"}}
+{"t":3,"dir":"<-","kind":"res","method":"thread/goal/get","body":{"goal":{"threadId":"thread-1","objective":"Create files c1.txt through c30.txt, one shell command per file.","status":"active","tokenBudget":40000,"tokensUsed":1686,"timeUsedSeconds":19,"createdAt":1793934954,"updatedAt":1793934985}}}

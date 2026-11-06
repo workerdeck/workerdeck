@@ -451,6 +451,20 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   settles approvals or sets `idle` (`#finishTurn`'s `superseded`). An unsettled owner without an id
   adopts the first root `turn/started` (the wake race: the resume's restarted turn; a `turn/start`
   during a goal turn joins that turn and returns its id).
+- **Goals (`thread/goal/*`, fixtures in `core/test/fixtures/goals/codex-0.166.0/`).** Setting a goal on
+  an idle thread starts a turn by itself (owned as above). The notification is the truth: it can
+  arrive before or after the RPC response, and a response that a newer notification overtook is not
+  applied (`#goalMutation`), so one change is one `goal_changed`. Notifications carry no origin:
+  provenance is ours (a set in flight stamps its `setBy`, the same goal keeps its setter, anything
+  else is the codex model's own `create_goal` = the agent). Only the root thread's goal counts.
+  Every path that must not start work avoids `thread/resume`: a pause or clear on an unloaded
+  thread goes to the RPC as is (scratch connection when asleep), hydration is `thread/goal/get`;
+  set and resume-goal wake the engine like a send. Stop (`interrupt`), explicit `sleep()` and a cut
+  pause an active goal first (an interrupted goal stays active and the next resume restarts it; a
+  cut's old thread stays loaded and its continuation would look like a sub-agent). A passive
+  attach (`startAsleep`) never pauses. A `null` config tombstone hides an engine goal unless it is
+  active (real work the engine would run). Codex goal usage ticks ~1/s during a turn: they emit
+  `goal_changed` without a notice.
 - **`thread/list` answers `GET /sdk-sessions` for codex**: one short-lived child per request, closed
   before responding (`adapter.ts`). Page-size param is `limit` (not `pageSize`), `cursor` continues,
   `sortKey: 'updated_at'` matches `lastModified` ordering, timestamps are epoch seconds (protocol

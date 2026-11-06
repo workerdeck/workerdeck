@@ -1,0 +1,8 @@
+{"t":0,"dir":"->","kind":"req","method":"thread/goal/set","body":{"threadId":"thread-1","objective":"Create files c1.txt through c30.txt, one shell command per file.","tokenBudget":40000,"origin":"user"}}
+{"t":319,"dir":"<-","kind":"res","method":"thread/goal/set","body":{"goal":{"threadId":"thread-1","objective":"Create files c1.txt through c30.txt, one shell command per file.","status":"active","tokenBudget":40000,"tokensUsed":0,"timeUsedSeconds":0,"createdAt":1793934954,"updatedAt":1793934954}}}
+{"t":320,"dir":"<-","kind":"note","method":"thread/goal/updated","body":{"threadId":"thread-1","turnId":null,"goal":{"threadId":"thread-1","objective":"Create files c1.txt through c30.txt, one shell command per file.","status":"active","tokenBudget":40000,"tokensUsed":0,"timeUsedSeconds":0,"createdAt":1793934954,"updatedAt":1793934954}}}
+{"t":324,"dir":"<-","kind":"note","method":"turn/started","body":{"threadId":"thread-1","turn":{"id":"turn-1","status":"inProgress","items":[]}}}
+{"t":4520,"dir":"->","kind":"req","method":"turn/interrupt","body":{"threadId":"thread-1","turnId":"turn-1"}}
+{"t":4524,"dir":"<-","kind":"note","method":"thread/goal/updated","body":{"threadId":"thread-1","turnId":"turn-1","goal":{"threadId":"thread-1","objective":"Create files c1.txt through c30.txt, one shell command per file.","status":"active","tokenBudget":40000,"tokensUsed":0,"timeUsedSeconds":4,"createdAt":1793934954,"updatedAt":1793934958}}}
+{"t":4524,"dir":"<-","kind":"res","method":"turn/interrupt","body":{}}
+{"t":4524,"dir":"<-","kind":"note","method":"turn/completed","body":{"threadId":"thread-1","turn":{"id":"turn-1","status":"interrupted","items":[]}}}

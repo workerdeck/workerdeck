@@ -80,7 +80,7 @@ describe('CodexRunner resume backfill', () => {
     const toolResult = messages[3]!.message.content as Array<{ type: string; tool_use_id: string }>
     expect(toolResult[0]!.tool_use_id).toBe(toolUse[0]!.id)
 
-    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'skills/list', 'thread/read'])
+    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'skills/list', 'thread/read', 'thread/goal/get'])
     expect(peer.requests[3]!.params).toEqual({ threadId: 'prior', includeTurns: true })
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
     expect(events.some((e) => e.type === 'turn_result')).toBe(false)

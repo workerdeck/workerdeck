@@ -4,11 +4,15 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   ENGINE_CAPABILITIES,
+  goalActive,
   supportsPermissionMode,
+  type GoalInput,
+  type GoalSetter,
   type McpServerStatusInfo,
   type PermissionMode,
   type PermissionRequest,
   type SessionEventBody,
+  type SessionGoal,
   type SessionInfo,
   tokenUsageFromWire,
   errorMessage,
@@ -37,6 +41,18 @@ import {
   type ShellWriteVerdict,
 } from './approvals.ts'
 import { CODEX_CATALOG } from './catalog.ts'
+import {
+  GoalsUnsupportedError,
+  goalNotice,
+  goalRefusal,
+  goalStamp,
+  olderThan,
+  sameGoal,
+  sameGoalIdentity,
+  sessionGoal,
+  threadGoalOf,
+  type GoalStamp,
+} from './goals.ts'
 import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import {
   asReplay,
@@ -83,6 +99,7 @@ import type {
   AppServerPlanUpdate,
   AppServerRateLimits,
   AppServerSkillsListResponse,
+  AppServerThreadGoal,
   AppServerTokenUsage,
   AppServerTokenUsageUpdate,
   AppServerTurn,
@@ -108,6 +125,10 @@ export type CodexRunnerConfig = EngineRunnerConfig & {
 }
 
 type QueuedTurn = { input: AppServerUserInput[] }
+
+type GoalTarget = { connection: AppServerConnection; threadId: string; close?: () => void }
+
+type OwnGoalSet = { text: string; setBy: GoalSetter; createdAt?: number }
 
 type AppServerThreadResult = {
   thread?: { id?: string; turns?: AppServerHistoryTurn[] }
@@ -235,6 +256,12 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   #clearedThreads = new Set<string>()
   #cannotSteer = new WeakSet<AppServerConnection>()
   #clearsPending = 0
+  #goalChain: Promise<unknown> = Promise.resolve()
+  #goalBusy = 0
+  #goalNotes = 0
+  #goalSeen: GoalStamp | undefined
+  #ownGoalSet: OwnGoalSet | undefined
+  #goalsOff = false
   readonly #sink: HistorySink = {
     agents: this.#agents,
     model: () => this.#model ?? this.#resolvedModel,
@@ -299,7 +326,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       sdkSessionId: this.#resumableThreadId(),
       cwd: this.#cwd,
       engine: 'codex',
-      capabilities: ENGINE_CAPABILITIES.codex,
+      capabilities: this.#goalsOff ? { ...ENGINE_CAPABILITIES.codex, goals: undefined } : ENGINE_CAPABILITIES.codex,
       model: this.#model ?? this.#resolvedModel,
       ...(this.#currentEffort() !== undefined ? { effort: this.#currentEffort() } : {}),
       permissionMode: this.#permissionMode,
@@ -316,7 +343,8 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     return this.#asleep
   }
 
-  // The next turn reconnects and `thread/resume`s through `#ensureThread`, the same path a crashed child takes.
+  // The next turn reconnects and `thread/resume`s through `#ensureThread`, the same path a crashed child takes. An
+  // active goal is paused first: a resume would restart it.
   async sleep(): Promise<SleepResult> {
     const refused = this.#sleepRefusal()
     if (refused) {
@@ -325,13 +353,31 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     if (this.#asleep) {
       return { ok: true }
     }
+    if (goalActive(this.goal)) {
+      try {
+        await this.#pauseActiveGoal()
+      } catch (error) {
+        return { ok: false, reason: `could not pause the goal: ${errorMessage(error)}` }
+      }
+      const again = this.#sleepRefusal()
+      if (again) {
+        return { ok: false, reason: again }
+      }
+    }
+    this.#sleepNow()
+    return { ok: true }
+  }
+
+  #sleepNow(): void {
+    if (this.#asleep) {
+      return
+    }
     const connection = this.#connection
     this.#asleep = true
     this.#connection = undefined
     this.#threadLoaded = false
     connection?.close()
     this.core.emit({ type: 'engine_sleep', asleep: true })
-    return { ok: true }
   }
 
   #sleepRefusal(): string | undefined {
@@ -349,6 +395,9 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     }
     if (this.#activeTurn || this.#queue.length > 0 || this.#clearsPending > 0 || this.#backfillPending) {
       return 'a turn is on its way'
+    }
+    if (this.#goalBusy > 0) {
+      return 'a goal change is on its way'
     }
     if (this.#agents.list()?.some((agent) => agent.status === 'running')) {
       return 'a subagent is still running'
@@ -381,9 +430,12 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     } else {
       this.core.setStatus('idle')
     }
+    // A passive attach: never the goal pause an explicit sleep makes.
     if (this.config.startAsleep && !this.config.prompt) {
-      this.#turnChain = this.#turnChain.then(async () => {
-        await this.sleep()
+      this.#turnChain = this.#turnChain.then(() => {
+        if (!this.#sleepRefusal()) {
+          this.#sleepNow()
+        }
       })
     }
     if (this.config.prompt) {
@@ -562,12 +614,242 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     return withSkillItems(parts, this.#skillPaths)
   }
 
+  // Stop pauses an active goal too: an interrupted goal stays active, and the next resume would restart it.
   async interrupt(): Promise<void> {
     this.core.settleAllApprovals({ behavior: 'deny', message: 'interrupted', interrupt: true }, 'policy')
     const active = this.#activeTurn
+    const pausing = goalActive(this.goal)
+      ? this.#pauseActiveGoal().catch((error: unknown) => {
+          this.core.emit({ type: 'session_error', message: `could not pause the goal: ${errorMessage(error)}` })
+        })
+      : undefined
     await this.#interruptTurn()
+    await pausing
     await active?.finished
     await this.#turnChain
+  }
+
+  async setGoal(input: GoalInput, setBy: GoalSetter): Promise<SessionGoal> {
+    await this.#loadGoalThread()
+    return this.#goalOp(async () => {
+      const target = this.#loadedGoalTarget()
+      const own: OwnGoalSet = { text: input.text, setBy }
+      this.#ownGoalSet = own
+      const goal = await this.#goalMutation(target, 'thread/goal/set', {
+        threadId: target.threadId,
+        objective: input.text,
+        status: 'active',
+        ...(input.tokenBudget !== undefined ? { tokenBudget: input.tokenBudget } : {}),
+        origin: 'user',
+      })
+      if (!goal) {
+        throw new Error('codex answered the goal change without a goal')
+      }
+      own.createdAt ??= goal.createdAt
+      return this.goal ?? sessionGoal(goal, setBy)
+    })
+  }
+
+  async clearGoal(): Promise<void> {
+    await this.#goalOp(async () => {
+      const target = await this.#idleGoalTarget()
+      if (!target) {
+        this.#applyGoal(null, false)
+        return
+      }
+      await this.#goalMutation(target, 'thread/goal/clear', { threadId: target.threadId, origin: 'user' })
+    })
+  }
+
+  // Resuming is deliberate work and wakes the engine like a send; pausing never does.
+  async pauseGoal(paused: boolean): Promise<SessionGoal> {
+    if (!paused) {
+      await this.#loadGoalThread()
+    }
+    return this.#goalOp(async () => {
+      const target = paused ? await this.#idleGoalTarget() : this.#loadedGoalTarget()
+      if (!target) {
+        throw new Error('there is no goal to pause')
+      }
+      const goal = await this.#goalMutation(target, 'thread/goal/set', {
+        threadId: target.threadId,
+        status: paused ? 'paused' : 'active',
+        origin: 'user',
+      })
+      if (!goal) {
+        throw new Error('codex answered the goal change without a goal')
+      }
+      return this.goal ?? sessionGoal(goal, this.#selfSetter())
+    })
+  }
+
+  #pauseActiveGoal(): Promise<void> {
+    return this.#goalOp(async () => {
+      if (!goalActive(this.goal)) {
+        return
+      }
+      const target = await this.#idleGoalTarget()
+      if (target) {
+        await this.#goalMutation(target, 'thread/goal/set', { threadId: target.threadId, status: 'paused', origin: 'user' })
+      }
+    })
+  }
+
+  async #goalOp<T>(run: () => Promise<T>): Promise<T> {
+    if (this.core.closed) {
+      throw new Error('session is closed')
+    }
+    this.#goalBusy++
+    const op = this.#goalChain.then(run)
+    this.#goalChain = op.then(
+      () => undefined,
+      () => undefined,
+    )
+    try {
+      return await op
+    } finally {
+      this.#goalBusy--
+    }
+  }
+
+  // Rides the turn chain like a send: it serialises with clears and backfill, and a resume is the deliberate wake.
+  async #loadGoalThread(): Promise<void> {
+    if (this.core.closed) {
+      throw new Error('session is closed')
+    }
+    if (this.#connection && this.#threadLoaded && this.#sdkSessionId && this.#clearsPending === 0) {
+      return
+    }
+    this.#wake()
+    const link = this.#turnChain.then(() => this.#ensureThread())
+    this.#turnChain = link.then(
+      () => undefined,
+      () => undefined,
+    )
+    await link
+  }
+
+  #loadedGoalTarget(): GoalTarget {
+    const connection = this.#connection
+    const threadId = this.#sdkSessionId
+    if (!connection || !this.#threadLoaded || !threadId) {
+      throw new Error('the engine stopped before the goal change reached it')
+    }
+    return { connection, threadId }
+  }
+
+  // Never resumes: a pause or a clear must not restart the goal it stops. An unloaded thread takes the RPC as is.
+  async #idleGoalTarget(): Promise<GoalTarget | undefined> {
+    if (this.#connection && this.#threadLoaded && this.#sdkSessionId) {
+      return { connection: this.#connection, threadId: this.#sdkSessionId }
+    }
+    const threadId = this.#resumableThreadId()
+    if (!threadId) {
+      return undefined
+    }
+    if (this.#connection && !this.#asleep) {
+      return { connection: this.#connection, threadId }
+    }
+    const scratch = await this.#openScratchConnection()
+    return { connection: scratch, threadId, close: () => scratch.close() }
+  }
+
+  // A notification can overtake the response it belongs to: an older response is not applied over it.
+  async #goalMutation(target: GoalTarget, method: string, params: Record<string, unknown>): Promise<AppServerThreadGoal | null> {
+    const notes = this.#goalNotes
+    let result: unknown
+    try {
+      result = await target.connection.request(method, params)
+    } catch (error) {
+      throw this.#goalRefused(error)
+    } finally {
+      target.close?.()
+    }
+    if (this.core.closed) {
+      throw new Error('session is closed')
+    }
+    const current = target.threadId === this.#sdkSessionId
+    if (method === 'thread/goal/clear') {
+      if (current) {
+        this.#applyGoal(null, false)
+      }
+      return null
+    }
+    const goal = threadGoalOf((result as { goal?: unknown } | null)?.goal) ?? null
+    const overtaken = notes !== this.#goalNotes && (!this.#goalSeen || (goal !== null && olderThan(goal, this.#goalSeen)))
+    if (goal && current && !overtaken) {
+      this.#applyGoal(goal, false)
+    }
+    return goal
+  }
+
+  #goalRefused(error: unknown): Error {
+    const refusal = goalRefusal(error)
+    if (refusal instanceof GoalsUnsupportedError) {
+      this.#goalsOff = true
+    }
+    return refusal
+  }
+
+  // Read-only: `thread/goal/get` never starts work. A notification seen meanwhile is newer than this answer.
+  async #hydrateGoal(connection: AppServerConnection): Promise<void> {
+    const threadId = this.#sdkSessionId
+    if (!threadId || this.#goalsOff) {
+      return
+    }
+    const notes = this.#goalNotes
+    let result: unknown
+    try {
+      result = await connection.request('thread/goal/get', { threadId })
+    } catch (error) {
+      this.#goalRefused(error)
+      return
+    }
+    if (this.core.closed || threadId !== this.#sdkSessionId || notes !== this.#goalNotes) {
+      return
+    }
+    this.#applyGoal(threadGoalOf((result as { goal?: unknown } | null)?.goal) ?? null, true)
+  }
+
+  // A `null` tombstone (cleared before this runner existed) lets only an active engine goal through: that one is
+  // real work the engine would run, a finished or paused one is the goal that was cleared.
+  #applyGoal(next: AppServerThreadGoal | null, quiet: boolean): void {
+    if (this.core.closed) {
+      return
+    }
+    const previous = this.goal
+    if (next === null) {
+      this.#goalSeen = undefined
+      if (previous) {
+        this.emitGoal(null, quiet ? undefined : 'cleared')
+      }
+      return
+    }
+    const own = this.#ownSetFor(next)
+    if (!own && next.status !== 'active' && this.core.log.goal === undefined && this.config.goal === null) {
+      return
+    }
+    this.#goalSeen = goalStamp(next)
+    const setBy = own?.setBy ?? (previous && sameGoalIdentity(previous, next) ? previous.setBy : this.#selfSetter())
+    const goal = sessionGoal(next, setBy)
+    if (previous && sameGoal(previous, goal)) {
+      return
+    }
+    this.emitGoal(goal, quiet ? undefined : goalNotice(previous, goal))
+  }
+
+  #ownSetFor(goal: AppServerThreadGoal): OwnGoalSet | undefined {
+    const own = this.#ownGoalSet
+    if (!own || own.text !== goal.objective || (own.createdAt !== undefined && own.createdAt !== goal.createdAt)) {
+      return undefined
+    }
+    return own
+  }
+
+  // The codex model's own `create_goal`/`update_goal`: codex has no model origin, so anything we did not ask for.
+  #selfSetter(): GoalSetter {
+    const name = this.config.agent?.name
+    return { kind: 'agent', sessionId: this.id, ...(name ? { name } : {}) }
   }
 
   async clearContext(options?: ClearContextOptions): Promise<void> {
@@ -587,7 +869,15 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     await run
   }
 
+  // An active goal is paused first: the old thread stays loaded, and its continuation would arrive as a non-root thread.
   async #clearNow(options?: ClearContextOptions): Promise<void> {
+    if (goalActive(this.goal)) {
+      try {
+        await this.#pauseActiveGoal()
+      } catch (error) {
+        throw new Error(`could not pause the goal before the cut: ${errorMessage(error)}`, { cause: error })
+      }
+    }
     await this.#engineTurnsFinished()
     if (this.core.closed) {
       throw new Error('session is closed')
@@ -613,6 +903,8 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     this.#agents.forget()
     this.core.settleAllApprovals({ behavior: 'deny', message: 'the conversation was cleared' }, 'policy')
     this.#resumedHistory = undefined
+    this.#ownGoalSet = undefined
+    this.#goalSeen = undefined
     this.localCommands.clear()
     this.core.emit({ type: 'conversation_reset', sdkSessionId: this.#resumableThreadId(), ...agentResetFields(options) })
   }
@@ -795,6 +1087,9 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     if (lostThread !== undefined) {
       this.#threadMaterialized = false
       this.core.emit({ type: 'session_error', message: threadLostNotice(lostThread) })
+      this.#applyGoal(null, true)
+    } else if (resuming !== undefined) {
+      await this.#hydrateGoal(connection)
     }
     if (typeof result?.model === 'string') {
       this.#resolvedModel = result.model
@@ -927,6 +1222,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       const connection = this.#connection ?? (await this.#connect())
       void this.#refreshSkills(connection)
       let turns: AppServerHistoryTurn[]
+      let read = true
       try {
         turns = await readThreadTurns(connection, this.#sdkSessionId)
       } catch (error) {
@@ -934,9 +1230,13 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
           this.core.emit({ type: 'session_error', message: incompleteHistoryNotice(errorMessage(error)) })
           return
         }
+        read = false
         turns = await this.#resumeLostThread()
       }
       replayTurns(this.#sink, turns)
+      if (read) {
+        await this.#hydrateGoal(connection)
+      }
     } catch {
     } finally {
       this.#backfillPending = false
@@ -1248,6 +1548,18 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     },
     'account/rateLimits/updated': (params) => {
       this.#emitRateLimits((params as { rateLimits?: AppServerRateLimits })?.rateLimits)
+    },
+    'thread/goal/updated': (params) => {
+      const goal = threadGoalOf((params as { goal?: unknown } | null)?.goal)
+      if (!goal || goal.threadId !== this.#sdkSessionId) {
+        return
+      }
+      this.#goalNotes++
+      this.#applyGoal(goal, false)
+    },
+    'thread/goal/cleared': () => {
+      this.#goalNotes++
+      this.#applyGoal(null, false)
     },
     'turn/plan/updated': (params) => {
       if (!this.#activeTurn) {
