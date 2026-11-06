@@ -509,6 +509,7 @@ export class ConversationCuts {
           cut: _cut,
           pendingPrompt: _prompt,
           startFailed: _failed,
+          failure: _failure,
           identity: _identity,
           ...rest
         } = current ?? freshRecord(id)
@@ -652,7 +653,7 @@ export class ConversationCuts {
       this.#attempts.delete(id)
       // A replacement attempt begins: an earlier one's failure is no longer the record's to report.
       await ctx.records.transactDurable(id, (current) => {
-        const { startFailed: _failed, ...rest } = current!
+        const { startFailed: _failed, failure: _failure, ...rest } = current!
         return prompt === undefined ? rest : { ...rest, pendingPrompt: { ...intent!, state: 'sending' } }
       })
       this.#refuseClosed()
@@ -766,7 +767,7 @@ export class ConversationCuts {
   async #confirm(id: string, to: number, uncertain: boolean): Promise<void> {
     this.#failedStarts.delete(id)
     await this.#owned(id, to, (current) => {
-      const { cut: _done, startFailed: _failed, identity: _identity, pendingPrompt, ...rest } = current!
+      const { cut: _done, startFailed: _failed, failure: _failure, identity: _identity, pendingPrompt, ...rest } = current!
       const lost = uncertain && pendingPrompt?.n === to
       return lost ? { ...rest, pendingPrompt: { ...pendingPrompt, state: 'uncertain' } } : rest
     })
@@ -785,6 +786,7 @@ export class ConversationCuts {
       return {
         ...current!,
         startFailed: { n: to, error },
+        failure: { message: error, at: Date.now(), conversation: to },
         ...(unsent && prompt?.n === to ? { pendingPrompt: { ...prompt, state: 'pending' as const } } : {}),
       }
     })

@@ -8,7 +8,9 @@ export const SET_STATUS_TOOL = 'set_status'
 
 export const SET_STATUS_GUIDANCE =
   'Keep your session-list status current with the `set_status` tool: set it when you start a task, when you are blocked ' +
-  'or waiting on someone, and when you finish. The human reads it at a glance to know what you are doing.'
+  'or waiting on someone, and when you finish. The human reads it at a glance to know what you are doing. Pass ' +
+  "`waitingOn: 'human'` only when you cannot continue without a person (a decision, access, a credential); it flags " +
+  'you as needing attention. Set a new status without it as soon as you continue.'
 
 const SET_STATUS_TOOL_SHAPES = {
   [SET_STATUS_TOOL]: {
@@ -21,6 +23,10 @@ const SET_STATUS_TOOL_SHAPES = {
     shape: {
       text: z.string().max(STATUS_LABEL_TEXT_MAX).describe('The status line; empty clears it'),
       emoji: z.string().max(STATUS_LABEL_EMOJI_MAX).optional().describe('One emoji shown before the text'),
+      waitingOn: z
+        .enum(['human'])
+        .optional()
+        .describe("'human' only when you cannot continue without a person; a status set without it clears the flag"),
     },
   },
 } as const
@@ -29,8 +35,9 @@ const SET_STATUS_TOOLS = defineToolFamily<typeof SET_STATUS_TOOL_SHAPES, StatusL
   [SET_STATUS_TOOL]: async (sink, _from, input) => {
     const text = input.text.replace(/\s+/g, ' ').trim()
     const emoji = input.emoji?.trim()
-    const label = sink(text ? (emoji ? { text, emoji } : { text }) : null)
-    return { text: label ? `Status set: ${label.emoji ? `${label.emoji} ` : ''}${label.text}` : 'Status cleared', isError: false }
+    const label = sink(text ? { text, ...(emoji ? { emoji } : {}), ...(input.waitingOn ? { waitingOn: input.waitingOn } : {}) } : null)
+    const waiting = label?.waitingOn ? ' (waiting on the human)' : ''
+    return { text: label ? `Status set: ${label.emoji ? `${label.emoji} ` : ''}${label.text}${waiting}` : 'Status cleared', isError: false }
   },
 })
 

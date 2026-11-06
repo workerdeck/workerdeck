@@ -66,6 +66,37 @@
           "text": "Shipping",
           "emoji": "🦀🦀🦀🦀🦀🦀🦀🦀"
         }
+      ],
+      [
+        {
+          "text": " Need a key ",
+          "waitingOn": "human"
+        }
+      ],
+      [
+        {
+          "text": "Need a key",
+          "emoji": "🔑",
+          "waitingOn": "human"
+        }
+      ],
+      [
+        {
+          "text": "Need a key",
+          "waitingOn": "lead"
+        }
+      ],
+      [
+        {
+          "text": "",
+          "waitingOn": "lead"
+        }
+      ],
+      [
+        {
+          "text": "  ",
+          "waitingOn": "human"
+        }
       ]
     ]
   },
@@ -95,6 +126,18 @@
     {
       "text": "Shipping",
       "emoji": "🦀🦀🦀🦀🦀🦀🦀🦀"
-    }
+    },
+    {
+      "text": "Need a key",
+      "waitingOn": "human"
+    },
+    {
+      "text": "Need a key",
+      "emoji": "🔑",
+      "waitingOn": "human"
+    },
+    "statusLabel.waitingOn must be 'human'",
+    "statusLabel.waitingOn must be 'human'",
+    null
   ]
 }

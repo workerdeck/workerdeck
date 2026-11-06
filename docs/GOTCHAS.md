@@ -1418,6 +1418,25 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
   factory prepends `SET_STATUS_GUIDANCE` (core) to every **agent's** instructions, before its brief:
   never for a plain session, an engine without `systemInstructions`, or a host that passes its own
   `extraOptions.systemPrompt` (the Claude runner refuses both at once).
+- **`waitingOn: 'human'` rides on the label.** The only accepted value (`'lead'` waits for lead triage);
+  anything else is refused by `readStatusLabelInput` and the tool schema. A label replaces the whole label, so a new
+  status without the flag clears it; reset, cut (`requestedConfig` strips the label) and an empty text clear it; park and
+  wake keep it; the session going `running` does not. `attentionOf` reads it as `blocked`.
+
+## Session failure (`SessionInfo.failure`, `attentionOf`)
+
+`attentionOf(info)` (protocol, ported to Rust with goldens) lists what a person must act on: `approval`, `failed`
+(`info.failure` set), `blocked` (`statusLabel.waitingOn === 'human'`). Unread is never attention.
+
+- **Set**: `RunnerCore.fail()` keeps `{ message, at }` and `baseInfo` shows it, so a live failed runner carries it. Only
+  Claude (engine death, `requireApiKey`) calls `fail()`; codex respawns and provider fails per turn. Parking's
+  `session_closed` arm with `'error'` passes it (stamped with the conversation) to `store.delete(..., failure)`, which
+  writes `SessionRecord.failure` instead of dropping the record: a failed first conversation is no longer
+  `disposable()`. `#failStart` writes it beside `startFailed`.
+- **Not set**: a crash `#retireCrashed` keeps dormant (asleep, the next open resumes it), a clean `'server'` end, an
+  interrupt or a park. `absentStatus`'s `failed` for a record without runtime is a status, not attention.
+- **Cleared**: any `saveRuntime` (a runner for the session runs again: wake, Retry start, new conversation), the
+  start transaction in `#startCommitted`, `#confirm`, `closeLocked`. `recordInfo` never shows it on a closed record.
 - **The card never shows an empty line.** Protocol's `cardStatus` falls back label, the checklist item
   in progress, the title, then a state word; the UI draws the fallbacks a shade dimmer.
 

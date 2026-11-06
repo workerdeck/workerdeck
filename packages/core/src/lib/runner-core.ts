@@ -6,6 +6,7 @@ import type {
   SessionEventBody,
   SessionStatus,
   PricingTable,
+  SessionFailure,
 } from '@workerdeck/protocol'
 import type { PermissionDecision, SessionEventListener } from '../runner-interface.ts'
 import { CostLedger, type CostLedgerState } from './cost-ledger.ts'
@@ -81,6 +82,7 @@ export class RunnerCore {
   #status: SessionStatus = 'starting'
   #statusDetail: string | undefined
   #closed = false
+  #failure: SessionFailure | undefined
 
   constructor(options: RunnerCoreOptions = {}) {
     this.cost = new CostLedger(options.pricing)
@@ -94,6 +96,10 @@ export class RunnerCore {
 
   get closed(): boolean {
     return this.#closed
+  }
+
+  get failure(): SessionFailure | undefined {
+    return this.#failure
   }
 
   get terminal(): boolean {
@@ -165,6 +171,7 @@ export class RunnerCore {
     if (this.#closed) {
       return
     }
+    this.#failure = { message, at: Date.now() }
     this.emit({ type: 'session_error', message })
     this.setStatus('failed')
     close('error')

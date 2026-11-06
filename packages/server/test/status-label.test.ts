@@ -61,17 +61,18 @@ describe('status label', () => {
     await until(async () => (await call<{ session: SessionInfo }>(first.base, `/sessions/${id}`)).body.session.sdkSessionId === 'sdk-1', 'the engine to name its session')
 
     const set = await call<{ session: SessionInfo }>(first.base, `/sessions/${id}`, 'PATCH', {
-      statusLabel: { text: ' waiting on CI ', emoji: '⏳' },
+      statusLabel: { text: ' waiting on CI ', emoji: '⏳', waitingOn: 'human' },
     })
     expect(set.status).toBe(200)
-    expect(set.body.session.statusLabel).toMatchObject({ text: 'waiting on CI', emoji: '⏳' })
+    expect(set.body.session.statusLabel).toMatchObject({ text: 'waiting on CI', emoji: '⏳', waitingOn: 'human' })
     expect((await call(first.base, `/sessions/${id}`, 'PATCH', { statusLabel: { text: 'x'.repeat(81) } })).status).toBe(400)
+    expect((await call(first.base, `/sessions/${id}`, 'PATCH', { statusLabel: { text: 'x', waitingOn: 'lead' } })).status).toBe(400)
 
     await until(async () => (await readFile(join(dir, `${id}.json`), 'utf8').catch(() => '')).includes('waiting on CI'), 'the label to reach the record file')
     await first.server.close()
     const second = await startGateway(dir)
     const listed = await call<{ sessions: SessionInfo[] }>(second.base, '/sessions')
-    expect(listed.body.sessions.find((s) => s.id === id)?.statusLabel).toMatchObject({ text: 'waiting on CI' })
+    expect(listed.body.sessions.find((s) => s.id === id)?.statusLabel).toMatchObject({ text: 'waiting on CI', waitingOn: 'human' })
 
     const cleared = await call<{ session: SessionInfo }>(second.base, `/sessions/${id}`, 'PATCH', { statusLabel: null })
     expect(cleared.status).toBe(200)

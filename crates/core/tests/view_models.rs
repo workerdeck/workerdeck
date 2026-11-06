@@ -103,6 +103,7 @@ fn session_list(fn_name: &str, a: &Args) -> Value {
             out(sl::group_rows(&rows, &a.get(1), &a.opt(2).unwrap_or_default()))
         }
         "sessionState" => out(sl::session_state(&a.info(0))),
+        "attentionOf" => out(sl::attention_of(&a.info(0))),
         "cardStatus" => {
             let info = a.info(0);
             let state = a.opt(1).unwrap_or_else(|| sl::session_state(&info));

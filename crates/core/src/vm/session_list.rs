@@ -288,6 +288,33 @@ fn present<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<O
     Option::<String>::deserialize(deserializer).map(Some)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AttentionReason {
+    Approval,
+    Failed,
+    Blocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Attention {
+    pub reasons: Vec<AttentionReason>,
+}
+
+pub fn attention_of(info: &SessionInfo) -> Attention {
+    let mut reasons = Vec::new();
+    if info.pending_permission_count > 0 || info.status == SessionStatus::AwaitingApproval {
+        reasons.push(AttentionReason::Approval);
+    }
+    if info.failure.is_some() {
+        reasons.push(AttentionReason::Failed);
+    }
+    if info.status_label.as_ref().and_then(|label| label.waiting_on.as_deref()) == Some("human") {
+        reasons.push(AttentionReason::Blocked);
+    }
+    Attention { reasons }
+}
+
 pub fn session_state(info: &SessionInfo) -> SessionState {
     if info.pending_permission_count > 0 || info.status == SessionStatus::AwaitingApproval {
         return SessionState::Attention;

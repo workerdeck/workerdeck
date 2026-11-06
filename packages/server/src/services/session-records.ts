@@ -1,7 +1,7 @@
 import { readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CounterBase, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
-import type { PendingPromptInfo, ProfileEngine } from '@workerdeck/protocol'
+import type { PendingPromptInfo, ProfileEngine, SessionFailure } from '@workerdeck/protocol'
 import { isMissing, writeFileAtomic } from '../lib/atomic-file.ts'
 import type { StoredAgent } from './agent-store.ts'
 import {
@@ -63,6 +63,7 @@ export type SessionRecord = {
   cut?: SessionCut
   pendingPrompt?: PendingPrompt
   startFailed?: StartFailure
+  failure?: SessionFailure
   identity?: PendingIdentity
   // The lifetime counts when the current conversation began. Kept here, not in a runtime, so no park, sleep, wake or
   // restart drops it: every runtime read hands it to the config a runner is rebuilt from.
@@ -242,14 +243,14 @@ export class SessionRecords {
       if (current?.closedAt !== undefined) {
         return undefined
       }
-      const base = current ?? freshRecord(runtime.id)
+      const { failure: _failure, ...base } = current ?? freshRecord(runtime.id)
       return { ...base, runtime, running: durableConfig(runtime.config) }
     })
   }
 
   // `resumed`: the runtime moved into a live runner and the session goes on. `ended`: the session is over, and a
   // record with nothing beyond its first conversation goes with it.
-  async clearRuntime(id: string, conversation: number | undefined, reason: RuntimeClear = 'ended'): Promise<boolean> {
+  async clearRuntime(id: string, conversation: number | undefined, reason: RuntimeClear = 'ended', failure?: SessionFailure): Promise<boolean> {
     let cleared = false
     await this.transact(id, (current) => {
       if (!current) {
@@ -257,6 +258,10 @@ export class SessionRecords {
       }
       checkConversation(id, current, conversation)
       cleared = current.runtime !== undefined
+      if (failure && current.closedAt === undefined) {
+        const { runtime: _runtime, ...rest } = current
+        return { ...rest, failure }
+      }
       if (reason === 'ended' && disposable(current)) {
         return null
       }
@@ -289,7 +294,7 @@ export class SessionRecords {
       save: (record) => this.saveRuntime(record, conversationOf(record)),
       get: async (id) => runtimeOf(await this.get(id)),
       list: async () => (await this.list()).flatMap((record) => runtimeOf(record) ?? []),
-      delete: (id, conversation, reason) => this.clearRuntime(id, conversation, reason),
+      delete: (id, conversation, reason, failure) => this.clearRuntime(id, conversation, reason, failure),
     }
   }
 
@@ -403,6 +408,7 @@ export function disposable(record: SessionRecord): boolean {
     record.cut === undefined &&
     record.pendingPrompt === undefined &&
     record.startFailed === undefined &&
+    record.failure === undefined &&
     record.closedAt === undefined
   )
 }
@@ -416,13 +422,14 @@ function runtimeOf(record: SessionRecord | null): StoredSessionRecord | null {
 }
 
 function durableView(record: SessionRecord): string {
-  const { conversation, cut, pendingPrompt, startFailed, closedAt, conversations, owner, scope, counters } = toDurableSessionRecord(record)
+  const { conversation, cut, pendingPrompt, startFailed, failure, closedAt, conversations, owner, scope, counters } = toDurableSessionRecord(record)
   return JSON.stringify({
     conversation,
     counters,
     cut,
     pendingPrompt,
     startFailed,
+    failure,
     closedAt,
     entries: conversations.map((entry) => entry.n),
     owner,

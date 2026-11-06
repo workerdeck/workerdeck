@@ -192,6 +192,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
       title: sessionTitle(this.config, engineTitle),
       statusLabel: (log.statusLabel === undefined ? this.config.statusLabel : log.statusLabel) ?? undefined,
       goal: this.goal ?? undefined,
+      failure: this.core.failure,
       costUsd: this.core.cost.costUsd,
       usageByModel: this.core.cost.byModel,
       lastActivityAt: log.lastActivityAt,

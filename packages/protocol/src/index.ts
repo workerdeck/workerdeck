@@ -954,8 +954,12 @@ export type SessionInfo = {
   owner?: string
   statusLabel?: StatusLabel
   goal?: SessionGoal
+  // Why the session stopped working: kept on the record until a runner for it runs again, a cut or a close.
+  failure?: SessionFailure
   transcript?: 'unavailable'
 }
+
+export type SessionFailure = { message: string; at: number; conversation?: number }
 
 export function contextReading(body: SessionEventBody): ContextReading | undefined {
   if (body.type !== 'context_usage') {

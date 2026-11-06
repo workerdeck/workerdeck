@@ -21,6 +21,7 @@ class ResumableRunner implements Runner {
   #seq = 0
   #sdkSessionId: string | undefined
   #meta: Record<string, unknown> | undefined
+  #failure: SessionInfo['failure']
 
   constructor(id: string, config: SessionRunnerConfig) {
     this.id = id
@@ -69,6 +70,7 @@ class ResumableRunner implements Runner {
       pendingPermissionCount: 0,
       meta: this.#meta,
       title: typeof this.#meta?.title === 'string' ? this.#meta.title : this.config.prompt || this.config.fallbackTitle || undefined,
+      ...(this.#failure ? { failure: this.#failure } : {}),
     }
   }
 
@@ -116,7 +118,10 @@ class ResumableRunner implements Runner {
   completeTurn(): void {
     this.#emit({ type: 'turn_result', subtype: 'success', isError: false, numTurns: 1, durationMs: 1, totalCostUsd: 0 } as never)
   }
-  die(): void {
+  die(message?: string): void {
+    if (message) {
+      this.#failure = { message, at: 7 }
+    }
     this.#status = 'failed'
     this.#emit({ type: 'status_changed', status: 'failed' })
     this.#emit({ type: 'session_closed', reason: 'error' })
@@ -294,6 +299,56 @@ describe('sessions that survive a restart', () => {
     await attachOnce(gateway, session.id)
     expect(gateway.built).toHaveLength(2)
     expect(gateway.built[1]!.config.resume).toBe('engine-session-1')
+  })
+
+  it('keeps why a session failed before any turn, across a restart, until a new conversation runs it', async () => {
+    const dir = await stateDir()
+    const gateway = await startGateway(fileRuntimeStore(dir))
+    const session = await create(gateway.base)
+    await eventually(async () => {
+      const record = await gateway.server.records.get(session.id)
+      expect(record?.runtime?.kind).toBe('dormant')
+      expect(record?.cut).toBeUndefined()
+    })
+
+    gateway.built[0]!.die('the engine exploded')
+    await eventually(async () => {
+      expect((await gateway.server.records.get(session.id))?.failure).toEqual({ message: 'the engine exploded', at: 7, conversation: 1 })
+    })
+    expect((await list(gateway.base)).find((row) => row.id === session.id)?.failure).toMatchObject({ message: 'the engine exploded' })
+    await gateway.server.close()
+    servers.splice(servers.indexOf(gateway.server), 1)
+
+    const restarted = await startGateway(fileRuntimeStore(dir))
+    expect((await list(restarted.base)).find((row) => row.id === session.id)).toMatchObject({
+      status: 'failed',
+      failure: { message: 'the engine exploded', conversation: 1 },
+    })
+
+    const res = await fetch(`${restarted.base}/sessions/${session.id}/conversations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedGeneration: 1 }),
+    })
+    expect(res.status).toBe(200)
+    await eventually(async () => {
+      expect((await restarted.server.records.get(session.id))?.failure).toBeUndefined()
+    })
+    expect((await list(restarted.base)).find((row) => row.id === session.id)?.failure).toBeUndefined()
+  })
+
+  it('records no failure for a crash it keeps resumable, nor for a clean end', async () => {
+    const gateway = await startGateway(fileRuntimeStore(await stateDir()))
+    const crashed = await create(gateway.base)
+    await eventually(async () => {
+      expect((await gateway.server.records.get(crashed.id))?.runtime?.kind).toBe('dormant')
+    })
+    gateway.built[0]!.completeTurn()
+    gateway.built[0]!.die('the engine exploded')
+    await eventually(async () => {
+      expect((await list(gateway.base)).find((row) => row.id === crashed.id)?.status).toBe('idle')
+    })
+    expect((await gateway.server.records.get(crashed.id))?.failure).toBeUndefined()
   })
 
   it('lists the session after a restart and resumes it on attach, under the same id', async () => {

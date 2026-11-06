@@ -1,5 +1,5 @@
 import type { CostLedgerState, ParkedExecution, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, pickCreateSessionRequest, type SessionInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, pickCreateSessionRequest, type SessionFailure, type SessionInfo } from '@workerdeck/protocol'
 import { DURABLE_HOST_KEYS } from '../lib/host-only-keys.ts'
 import { engineOf } from '../lib/profile-env.ts'
 
@@ -56,7 +56,7 @@ export interface SessionStore {
   save(record: StoredSessionRecord): Promise<void>
   get(id: string): Promise<StoredSessionRecord | null>
   list(): Promise<StoredSessionRecord[]>
-  delete(id: string, conversation?: number, reason?: RuntimeClear): Promise<boolean>
+  delete(id: string, conversation?: number, reason?: RuntimeClear, failure?: SessionFailure): Promise<boolean>
 }
 
 export type RuntimeClear = 'ended' | 'resumed'

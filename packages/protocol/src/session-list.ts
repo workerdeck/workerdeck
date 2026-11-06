@@ -30,6 +30,26 @@ export function sessionState(info: SessionInfo): SessionState {
   return 'idle'
 }
 
+export type AttentionReason = 'approval' | 'failed' | 'blocked'
+
+export type Attention = { reasons: AttentionReason[] }
+
+// What a person must act on, from gateway truth only: an approval, a failure the record keeps, or an agent that said it
+// waits on the human. Unread prose is not attention.
+export function attentionOf(info: SessionInfo): Attention {
+  const reasons: AttentionReason[] = []
+  if (info.pendingPermissionCount > 0 || info.status === 'awaiting_approval') {
+    reasons.push('approval')
+  }
+  if (info.failure) {
+    reasons.push('failed')
+  }
+  if (info.statusLabel?.waitingOn === 'human') {
+    reasons.push('blocked')
+  }
+  return { reasons }
+}
+
 export type CardStatus = { text: string; source: 'label' | 'goal' | 'task' | 'title' | 'state' }
 
 // An agent card's second line: its own status label, else its goal, else the checklist item in progress, else its title,

@@ -267,6 +267,29 @@ const SESSION_LIST: VmCase[] = [
   { module: 'session-list', name: 'session-state', fn: 'sessionState', calls: ROWS.map((r) => [r.info]) },
   {
     module: 'session-list',
+    name: 'attention-of',
+    fn: 'attentionOf',
+    calls: [
+      ...ROWS.map((r) => [r.info]),
+      [info('a1', { status: 'idle', pendingPermissionCount: 2 })],
+      [info('a2', { status: 'awaiting_approval', pendingPermissionCount: 0 })],
+      [info('a3', { status: 'failed', failure: { message: 'engine exited', at: T0, conversation: 3 } })],
+      [info('a4', { status: 'failed' })],
+      [info('a5', { status: 'closed' })],
+      [info('a6', { status: 'running', statusLabel: { text: 'Need the key', waitingOn: 'human', setAt: T0 } })],
+      [info('a7', { status: 'idle', statusLabel: { text: 'Waiting on CI', setAt: T0 } })],
+      [
+        info('a8', {
+          status: 'awaiting_approval',
+          pendingPermissionCount: 1,
+          failure: { message: 'x', at: T0 },
+          statusLabel: { text: 'stuck', waitingOn: 'human', setAt: T0 },
+        }),
+      ],
+    ],
+  },
+  {
+    module: 'session-list',
     name: 'session-state-edges',
     fn: 'sessionState',
     calls: [
@@ -1189,6 +1212,11 @@ const STATUS_LABEL: VmCase[] = [
       [{ text: 'Shipping', emoji: '   ' }],
       [{ text: 'Shipping', emoji: '🦀'.repeat(9) }],
       [{ text: 'Shipping', emoji: '🦀'.repeat(8) }],
+      [{ text: ' Need a key ', waitingOn: 'human' }],
+      [{ text: 'Need a key', emoji: '🔑', waitingOn: 'human' }],
+      [{ text: 'Need a key', waitingOn: 'lead' }],
+      [{ text: '', waitingOn: 'lead' }],
+      [{ text: '  ', waitingOn: 'human' }],
     ],
   },
 ]

@@ -10,6 +10,8 @@ pub struct StatusLabelInput {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub emoji: Option<String>,
+    #[serde(default, rename = "waitingOn", skip_serializing_if = "Option::is_none")]
+    pub waiting_on: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -33,6 +35,11 @@ pub fn read_status_label_input(input: Option<&Value>) -> StatusLabelRead {
         Some(Value::String(emoji)) => Some(emoji.as_str()),
         Some(_) => return StatusLabelRead::Refused("statusLabel.emoji must be a string".into()),
     };
+    let waiting_on = match input.get("waitingOn") {
+        None => None,
+        Some(Value::String(on)) if on == "human" => Some(on.clone()),
+        Some(_) => return StatusLabelRead::Refused("statusLabel.waitingOn must be 'human'".into()),
+    };
     let line = js_trim(&collapse_whitespace(text)).to_owned();
     if line.is_empty() {
         return StatusLabelRead::Clear;
@@ -46,5 +53,5 @@ pub fn read_status_label_input(input: Option<&Value>) -> StatusLabelRead {
     {
         return StatusLabelRead::Refused(format!("statusLabel.emoji is longer than {STATUS_LABEL_EMOJI_MAX} characters"));
     }
-    StatusLabelRead::Set(StatusLabelInput { text: line, emoji: mark.map(str::to_owned) })
+    StatusLabelRead::Set(StatusLabelInput { text: line, emoji: mark.map(str::to_owned), waiting_on })
 }

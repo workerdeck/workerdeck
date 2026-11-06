@@ -95,6 +95,13 @@ where
 }
 
 // A goal a newer gateway shapes differently reads as no goal: the session itself must still decode.
+fn lenient_failure<'de, D>(deserializer: D) -> Result<Option<SessionFailure>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Value::deserialize(deserializer).ok().and_then(|value| serde_json::from_value(value).ok()))
+}
+
 fn lenient_goal<'de, D>(deserializer: D) -> Result<Option<SessionGoal>, D::Error>
 where
     D: Deserializer<'de>,
@@ -570,6 +577,8 @@ pub struct StatusLabel {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub emoji: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiting_on: Option<String>,
     pub set_at: f64,
 }
 
@@ -652,8 +661,18 @@ pub struct SessionInfo {
     pub status_label: Option<StatusLabel>,
     #[serde(default, deserialize_with = "lenient_goal", skip_serializing_if = "Option::is_none")]
     pub goal: Option<SessionGoal>,
+    #[serde(default, deserialize_with = "lenient_failure", skip_serializing_if = "Option::is_none")]
+    pub failure: Option<SessionFailure>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionFailure {
+    pub message: String,
+    pub at: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

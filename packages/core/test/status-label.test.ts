@@ -56,6 +56,16 @@ describe('set_status', () => {
     expect(calls).toEqual([{ text: 'waiting on CI', emoji: '⏳' }, null])
   })
 
+  it('forwards waitingOn, and refuses any value other than human', async () => {
+    const { calls, sources } = rig()
+    expect(await runSessionTool(sources, 's', 'set_status', { text: 'need the API key', waitingOn: 'human' })).toEqual({
+      text: 'Status set: need the API key (waiting on the human)',
+      isError: false,
+    })
+    expect((await runSessionTool(sources, 's', 'set_status', { text: 'x', waitingOn: 'lead' }))?.isError).toBe(true)
+    expect(calls).toEqual([{ text: 'need the API key', waitingOn: 'human' }])
+  })
+
   it('refuses a line over the cap without calling the sink', async () => {
     const { calls, sources } = rig()
     const out = await runSessionTool(sources, 's', 'set_status', { text: 'x'.repeat(81) })
@@ -71,5 +81,8 @@ describe('readStatusLabelInput', () => {
     expect(readStatusLabelInput(null)).toBeNull()
     expect(readStatusLabelInput({ text: 3 })).toBe('statusLabel.text must be a string')
     expect(readStatusLabelInput({ text: 'x'.repeat(81) })).toMatch(/longer than 80/)
+    expect(readStatusLabelInput({ text: ' blocked ', waitingOn: 'human' })).toEqual({ text: 'blocked', waitingOn: 'human' })
+    expect(readStatusLabelInput({ text: '', waitingOn: 'human' })).toBeNull()
+    expect(readStatusLabelInput({ text: 'x', waitingOn: 'lead' })).toBe("statusLabel.waitingOn must be 'human'")
   })
 })

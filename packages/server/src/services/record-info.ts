@@ -6,7 +6,7 @@ import type { SessionRecord } from './session-records.ts'
 // Runtime absent is not a status: a record with neither runner nor runtime is `starting` while its first start is
 // still owed (recovery starts it), else `failed` (it ran and left nothing to wake).
 export function absentStatus(record: SessionRecord): SessionStatus {
-  return record.cut?.from === 0 && record.startFailed === undefined ? 'starting' : 'failed'
+  return record.cut?.from === 0 && record.startFailed === undefined && record.failure === undefined ? 'starting' : 'failed'
 }
 
 export function recordInfo(ctx: ServerContext, record: SessionRecord, status: SessionStatus): SessionInfo {
@@ -28,5 +28,6 @@ export function recordInfo(ctx: ServerContext, record: SessionRecord, status: Se
     ...(record.owner ? { owner: record.owner } : {}),
     ...(record.scope ? { scope: record.scope } : {}),
     ...(last?.title ? { title: last.title } : {}),
+    ...(record.failure && record.closedAt === undefined ? { failure: record.failure } : {}),
   }
 }

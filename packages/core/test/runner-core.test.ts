@@ -106,6 +106,12 @@ describe('RunnerCore', () => {
     expect(log).toEqual([])
   })
 
+  it('keeps no failure for a plain close', () => {
+    const core = new RunnerCore()
+    core.close('error')
+    expect(core.failure).toBeUndefined()
+  })
+
   it('fail reports the error, marks the session failed, and hands over to close', () => {
     const core = new RunnerCore()
     const events = recorded(core)
@@ -119,6 +125,7 @@ describe('RunnerCore', () => {
     expect(reasons).toEqual(['error'])
     expect(events.map((e) => e.type)).toEqual(['session_error', 'status_changed', 'session_closed'])
     expect(core.status).toBe('failed')
+    expect(core.failure).toEqual({ message: 'boom', at: expect.any(Number) })
   })
 
   it('resolves an approval once, from the client by default', () => {

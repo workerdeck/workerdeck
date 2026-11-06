@@ -1,5 +1,5 @@
 import type { ParkedExecution, Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, isJobRun, type SessionGoal, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, isJobRun, type SessionFailure, type SessionGoal, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import { engineOf } from '../lib/profile-env.ts'
 import type { SessionRegistry } from './registry.ts'
 import {
@@ -155,7 +155,7 @@ export class SessionParkManager {
           if (event.reason === 'error' && this.#retireCrashed(runner)) {
             return
           }
-          this.discard(runner.id).catch((error: unknown) => this.#options.onError?.(error, { sessionId: runner.id, phase: 'discard' }))
+          this.discard(runner.id, event.reason === 'error' ? this.#failureOf(runner) : undefined).catch((error: unknown) => this.#options.onError?.(error, { sessionId: runner.id, phase: 'discard' }))
           return
         }
         default: {
@@ -356,7 +356,8 @@ export class SessionParkManager {
     return { applied, sessionId }
   }
 
-  async discard(sessionId: string): Promise<void> {
+  // `failure`: the session ended on an error, and the record keeps why until a runner for it runs again.
+  async discard(sessionId: string, failure?: SessionFailure): Promise<void> {
     // Dropped rather than run: `discard` is reached from the `session_closed` arm of the very subscription this
     // handle unsubscribes, and the runner drops its subscribers on close anyway.
     this.#forgetSession(sessionId)
@@ -371,7 +372,8 @@ export class SessionParkManager {
       }
     }
     const conversation = this.#conversation(sessionId)
-    await this.#queue(sessionId, () => this.#options.store.delete(sessionId, conversation, 'ended'))
+    const failed = failure && conversation !== undefined ? { ...failure, conversation } : failure
+    await this.#queue(sessionId, () => this.#options.store.delete(sessionId, conversation, 'ended', failed))
   }
 
   executionsOf(sessionId: string): string[] {
@@ -487,6 +489,10 @@ export class SessionParkManager {
     this.#forgetSession(runner.id)
     this.#options.registry.evict(runner.id)
     return true
+  }
+
+  #failureOf(runner: Runner): SessionFailure {
+    return runner.info().failure ?? { message: 'the engine stopped with an error', at: Date.now() }
   }
 
   // The remembered config follows the goal, so a record keeps a cleared goal's `null` tombstone. True when the change is
