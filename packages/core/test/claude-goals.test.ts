@@ -76,6 +76,24 @@ function localResult(text: string): SDKMessage {
 
 const LEAD = { kind: 'agent', sessionId: 'lead-1', name: 'Lead' } as const
 
+function init(): SDKMessage {
+  return {
+    type: 'system',
+    subtype: 'init',
+    session_id: 'sdk-1',
+    model: 'claude-test-1',
+    cwd: '/tmp/project',
+    tools: [],
+    skills: [],
+    slash_commands: [],
+    permissionMode: 'default',
+    claude_code_version: '2.1.318',
+    mcp_servers: [],
+    apiKeySource: 'user',
+    uuid: 'uuid-init',
+  } as unknown as SDKMessage
+}
+
 function rig(f: Fixture, config: Partial<ConstructorParameters<typeof SessionRunner>[0]> = {}) {
   const harness = fakeHarness()
   const disk: GoalStatus[] = f.transcript.map(status)
@@ -339,6 +357,51 @@ describe('claude goals: replies bind to their own command', () => {
     const agent = r.runner.setGoal({ text: 'agent' }, LEAD)
     r.harness.emit(reply('agent', 'Goal set: agent'))
     expect(await agent).toMatchObject({ setBy: LEAD })
+  })
+
+  it('cancels an agent clear whose interrupt let a human set land first', async () => {
+    const owned: SessionGoal = { text: 'agent old', state: 'active', setAt: 1, setBy: LEAD }
+    const r = rig({ transcript: [], steps: [] }, { goal: owned })
+    await started(r)
+    r.runner.sendMessage('work')
+    await tick()
+    r.harness.emit(init())
+    await tick()
+    let stop: () => void = () => {}
+    r.harness.interrupt.mockImplementationOnce(() => new Promise<void>((resolve) => (stop = resolve)))
+    const clear = r.runner.clearGoal(LEAD)
+    await tick()
+    const human = r.runner.setGoal({ text: 'human new' }, { kind: 'human' })
+    await tick()
+    r.harness.emit(reply('human new', 'Goal set: human new'))
+    await human
+    stop()
+    await expect(clear).rejects.toThrow('the goal changed')
+    await tick()
+    expect(r.texts().filter((text) => text === '/goal clear')).toEqual([])
+    expect(r.runner.info().goal).toMatchObject({ text: 'human new', setBy: { kind: 'human' } })
+  })
+
+  it('refuses an agent change while a human clear waits for its interrupt', async () => {
+    const owned: SessionGoal = { text: 'g', state: 'active', setAt: 1, setBy: LEAD }
+    const r = rig({ transcript: [], steps: [] }, { goal: owned })
+    await started(r)
+    r.runner.sendMessage('work')
+    await tick()
+    r.harness.emit(init())
+    await tick()
+    let stop: () => void = () => {}
+    r.harness.interrupt.mockImplementationOnce(() => new Promise<void>((resolve) => (stop = resolve)))
+    const clear = r.runner.clearGoal({ kind: 'human' })
+    await tick()
+    await expect(r.runner.setGoal({ text: 'agent' }, LEAD)).rejects.toThrow('a human goal change is pending')
+    await expect(r.runner.clearGoal(LEAD)).rejects.toThrow('a human goal change is pending')
+    stop()
+    await tick()
+    expect(r.texts().at(-1)).toBe('/goal clear')
+    r.harness.emit(reply('clear', 'Goal cleared: g'))
+    await clear
+    expect(r.runner.info().goal).toBeUndefined()
   })
 
   it('counts a host command the SDK took but the CLI has not run as pending input, and moves the revision', async () => {

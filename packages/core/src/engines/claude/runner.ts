@@ -174,6 +174,8 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   // Host `/goal` commands sent and not answered yet, oldest first.
   #goalCommands: GoalCommand[] = []
   #hideGoalResult = false
+  // Clears accepted and still waiting for their interrupt: not yet in `#goalCommands`, but already a pending change.
+  #clearsInterrupting: GoalSetter[] = []
   #clearRestoredGoal = false
 
   constructor(config: SessionRunnerConfig, id: string = randomUUID()) {
@@ -510,14 +512,32 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       return
     }
     if (this.core.status === 'running' || this.core.status === 'awaiting_approval') {
-      await this.interrupt()
+      const setBy = by ?? { kind: 'human' as const }
+      this.#clearsInterrupting.push(setBy)
+      try {
+        await this.interrupt()
+      } finally {
+        this.#clearsInterrupting.splice(this.#clearsInterrupting.indexOf(setBy), 1)
+      }
+      // Other changes may have landed while the turn stopped: an agent's clear still targets only the goal it saw.
+      if (by?.kind === 'agent') {
+        this.#refuseAgentOverHuman(by)
+        const now = this.goal
+        const pendingSet = this.#goalCommands.some((command) => command.kind === 'set')
+        if (pendingSet || now?.text !== goal?.text || now?.setAt !== goal?.setAt) {
+          throw new Error('the goal changed while the clear waited for the turn to stop')
+        }
+      }
     }
     await this.#goalCommand({ kind: 'clear', args: 'clear', setBy: by ?? { kind: 'human' } }, GOAL_CLEAR_COMMAND)
   }
 
   // An agent's change must never land after a human one the engine has not confirmed yet.
   #refuseAgentOverHuman(setBy: GoalSetter): void {
-    if (setBy.kind === 'agent' && this.#goalCommands.some((command) => command.kind !== 'status' && command.setBy.kind === 'human')) {
+    const human =
+      this.#clearsInterrupting.some((waiting) => waiting.kind === 'human') ||
+      this.#goalCommands.some((command) => command.kind !== 'status' && command.setBy.kind === 'human')
+    if (setBy.kind === 'agent' && human) {
       throw new Error('a human goal change is pending')
     }
   }
