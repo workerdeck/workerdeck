@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { GOAL_TEXT_MAX } from '@workerdeck/protocol'
-import { defineToolFamily, type GatewayToolOutput } from './gateway-tools.ts'
+import { defineToolFamily, globalSlot, lateBoundDirectory, type GatewayToolOutput } from './gateway-tools.ts'
 
 export type GoalToolTarget = { target?: string }
 
@@ -15,6 +15,8 @@ export interface GoalDirectory {
 }
 
 export const GOAL_TOOL_NAMES = ['goal_get', 'goal_set', 'goal_clear', 'goal_pause'] as const
+
+const GOAL_SLOT = globalSlot<GoalDirectory>('workerdeck.goals.directory')
 
 export type GoalToolName = (typeof GOAL_TOOL_NAMES)[number]
 
@@ -68,4 +70,12 @@ export function isGoalToolName(name: string): name is GoalToolName {
 
 export function runGoalTool(directory: GoalDirectory, from: string, name: GoalToolName, args: unknown): Promise<GatewayToolOutput> {
   return GOAL_TOOLS.run(directory, from, name, args)
+}
+
+export function installGoalDirectory(directory: GoalDirectory | undefined): void {
+  GOAL_SLOT.install(directory)
+}
+
+export function goalDirectoryHandle(own?: () => GoalDirectory | undefined): GoalDirectory {
+  return lateBoundDirectory<GoalDirectory>(['get', 'set', 'clear', 'pause'], GOAL_SLOT, own, 'goals are not available on this gateway')
 }

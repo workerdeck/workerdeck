@@ -1,6 +1,6 @@
 import type { AgentConfig, AgentRef, SessionAgentRequest, Sharing } from './agents.ts'
 import type { StatusLabel, StatusLabelInput } from './status-label.ts'
-import type { GoalCapabilities, GoalNotice, SessionGoal } from './goal.ts'
+import type { GoalCapabilities, GoalInput, GoalNotice, SessionGoal } from './goal.ts'
 import type { ByModel, PricingOverrides, ProfileSpend } from './pricing.ts'
 
 export const PROTOCOL_VERSION = 2
@@ -398,6 +398,9 @@ export type SessionCommand =
   | { type: 'set_permission_mode'; mode: PermissionMode }
   | { type: 'set_model'; model?: string }
   | { type: 'set_effort'; effort?: string }
+  | { type: 'set_goal'; text: string; tokenBudget?: number | null }
+  | { type: 'clear_goal' }
+  | { type: 'pause_goal'; paused: boolean }
   | {
       type: 'tool_call_result'
       executionId: string
@@ -1185,6 +1188,11 @@ export type UpdateSessionRequest = {
   config?: SessionSettingsPatch
 }
 export type UpdateSessionResponse = { session: SessionInfo; settings?: SessionSettings }
+export type SetGoalRequest = GoalInput
+export type PauseGoalRequest = { paused: boolean }
+// `pending`: the engine has the change but has not confirmed it yet (a Claude session mid-turn applies it after the
+// turn); `goal_changed` on the session's socket reports the outcome.
+export type GoalResponse = { session: SessionInfo; goal: SessionGoal | null; pending?: true }
 
 export type ResolvePermissionRequest =
   | { behavior: 'allow'; updatedInput?: Record<string, unknown> }

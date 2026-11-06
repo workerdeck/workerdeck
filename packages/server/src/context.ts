@@ -12,6 +12,7 @@ import type { AuthService } from './services/auth.ts'
 import type { AvailabilityTracker } from './services/availability.ts'
 import type { BridgeHub } from './services/bridge.ts'
 import type { EngineSleepTimers } from './services/engine-sleep.ts'
+import type { GoalService } from './services/goals.ts'
 import type { LifecycleLocks } from './services/lifecycle-locks.ts'
 import type { ConversationCuts } from './services/conversation-cuts.ts'
 import type { HistoryReader } from './services/history-reader.ts'
@@ -51,6 +52,7 @@ export type ServerContext = {
   records: SessionRecords
   cuts: ConversationCuts
   engineSleep: EngineSleepTimers
+  goals: GoalService
   // Undefined when peer messaging is off; the send path then resolves no `#` mentions.
   // The composed directory, relay included: what a session's `peers_list` answers.
   peers: PeerDirectory | undefined

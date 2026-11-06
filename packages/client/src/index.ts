@@ -22,6 +22,9 @@ import type {
   CreateSessionRequest,
   JobInfo,
   FindHostFilesResponse,
+  GoalResponse,
+  PauseGoalRequest,
+  SetGoalRequest,
   HostSearchEvent,
   HostSearchRequest,
   GatewayMeta,
@@ -197,6 +200,19 @@ export class WorkerDeckClient {
 
   async sleepSession(id: string): Promise<SessionInfo> {
     return await this.#pick('POST', this.#sess(id, '/sleep'), 'session')
+  }
+
+  // A human's goal (`setBy: human`); `pending` while the engine has not confirmed it yet.
+  async setGoal(id: string, goal: SetGoalRequest): Promise<GoalResponse> {
+    return await this.#call('POST', this.#sess(id, '/goal'), goal)
+  }
+
+  async clearGoal(id: string): Promise<GoalResponse> {
+    return await this.#call('DELETE', this.#sess(id, '/goal'))
+  }
+
+  async pauseGoal(id: string, paused: boolean): Promise<GoalResponse> {
+    return await this.#call('POST', this.#sess(id, '/goal/pause'), { paused } satisfies PauseGoalRequest)
   }
 
   async deleteSession(id: string): Promise<SessionInfo> {

@@ -3,6 +3,8 @@ import {
   GENERATION_HEADER,
   isJobRun,
   readStatusLabelInput,
+  type GoalResponse,
+  type PauseGoalRequest,
   type PeerSessionsResponse,
   type ResolvePermissionRequest,
   type SessionAgentRequest,
@@ -25,7 +27,8 @@ import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
 import { handleProjectIcon } from './project-icon.ts'
 import { createNamedSession, editSettings, endSession, identityOf, nameSession, retireAgent, unnameSession } from './named-sessions.ts'
-import { listSessions, requireLive, resolveSession, type ResolvedSession } from './session-lookup.ts'
+import { listSessions, requireLive, resolveSession, sessionInfoOf, type ResolvedSession } from './session-lookup.ts'
+import { HUMAN_SETTER, type GoalChange } from '../services/goals.ts'
 import { handleShells } from './shells.ts'
 import { handleToolResult } from './tool-results.ts'
 import { sleepRunner } from './sleep.ts'
@@ -67,6 +70,10 @@ const ITEM_HANDLERS: ItemHandlers = {
   permission: handlePermission,
   peers: handlePeers,
   sleep: handleSleep,
+  goal: ({ ctx, req, res, route, info }) => {
+    requireMethod(req, ...(route.pause ? ['POST'] : ['GET', 'POST', 'DELETE']))
+    json(res, 200, { session: ctx.projects.withProject(info), goal: info.goal ?? null } satisfies GoalResponse)
+  },
 }
 
 export async function handleSessions(
@@ -104,6 +111,10 @@ export async function handleSessions(
       fail(409, `the session moved on to conversation ${current}`)
     }
     return resolved
+  }
+  if (route.kind === 'goal') {
+    await handleGoal(ctx, req, res, route, async () => void (await recheck()))
+    return
   }
   const agent = route.kind === 'session' && req.method === 'DELETE' ? ctx.agents.get(route.id) : undefined
   if (agent) {
@@ -347,6 +358,32 @@ async function handleBackgroundTask({ req, res, route, runner }: SessionCall<'ba
     fail(404, 'no foreground task to move to the background')
   }
   json(res, 200, { ok: true })
+}
+
+// The engine confirms a goal change, so the lifecycle lock is held only to issue it; a slow confirmation answers 202.
+async function handleGoal(
+  ctx: ServerContext,
+  req: IncomingMessage,
+  res: ServerResponse,
+  route: Extract<SessionItemRoute, { kind: 'goal' }>,
+  guard: () => Promise<void>,
+): Promise<void> {
+  requireMethod(req, ...(route.pause ? ['POST'] : ['POST', 'DELETE']))
+  const change: GoalChange = route.pause
+    ? { kind: 'pause', paused: ((await readJsonBody(req, ctx.maxBodyBytes)) as PauseGoalRequest | undefined)?.paused }
+    : req.method === 'POST'
+      ? { kind: 'set', goal: await readJsonBody(req, ctx.maxBodyBytes) }
+      : { kind: 'clear' }
+  const { outcome } = await ctx.goals.change(route.id, change, HUMAN_SETTER, guard)
+  const waited = await ctx.goals.within(route.id, outcome)
+  const session = ctx.registry.get(route.id)?.info() ?? (await sessionInfoOf(ctx, route.id))
+  if (!session) {
+    fail(404, 'session not found')
+  }
+  const body: GoalResponse = waited.done
+    ? { session: ctx.projects.withProject(session), goal: waited.goal }
+    : { session: ctx.projects.withProject(session), goal: session.goal ?? null, pending: true }
+  json(res, waited.done ? 200 : 202, body)
 }
 
 // A session that is not live has no engine child to stop, so asking it to sleep is already true.

@@ -1,5 +1,5 @@
 import type { ParkedExecution, Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, isJobRun, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, isJobRun, type SessionGoal, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import { engineOf } from '../lib/profile-env.ts'
 import type { SessionRegistry } from './registry.ts'
 import {
@@ -54,6 +54,7 @@ export class SessionParkManager {
   #renaming: Promise<void> | undefined
   #fencedIds = new Set<string>()
   #turned = new Set<string>()
+  #goalKeys = new Map<string, string>()
 
   constructor(options: SessionParkOptions) {
     this.#options = options
@@ -131,7 +132,14 @@ export class SessionParkManager {
           void this.#rememberDormant(runner)
           return
         }
+        case 'goal_changed': {
+          if (this.#noteGoal(runner.id, event.goal)) {
+            void this.#rememberDormant(runner)
+          }
+          return
+        }
         case 'conversation_reset': {
+          this.#noteGoal(runner.id, null)
           void this.#rememberDormant(runner)
           void this.#persistLive(runner)
           return
@@ -481,7 +489,25 @@ export class SessionParkManager {
     return true
   }
 
+  // The remembered config follows the goal, so a record keeps a cleared goal's `null` tombstone. True when the change is
+  // worth a write: a codex usage tick moves only the counters, which the turn's own status change saves anyway.
+  #noteGoal(sessionId: string, goal: SessionGoal | null): boolean {
+    const config = this.#configs.get(sessionId)
+    if (config) {
+      this.#configs.set(sessionId, { ...config, goal })
+    }
+    const key = goal
+      ? JSON.stringify([goal.text, goal.state, goal.limit, goal.setBy, goal.checks, goal.lastReason, goal.tokenBudget])
+      : 'none'
+    if (this.#goalKeys.get(sessionId) === key) {
+      return false
+    }
+    this.#goalKeys.set(sessionId, key)
+    return true
+  }
+
   #forgetSession(sessionId: string): void {
+    this.#goalKeys.delete(sessionId)
     this.#turned.delete(sessionId)
     this.#watches.delete(sessionId)
     clearTimeout(this.#detachTimers.get(sessionId))
@@ -738,7 +764,12 @@ function idleRecordBase(
     id: runner.id,
     info: { ...info, status: 'idle' },
     profile: info.profile,
-    config: { ...config, meta: info.meta, statusLabel: info.statusLabel },
+    config: {
+      ...config,
+      meta: info.meta,
+      statusLabel: info.statusLabel,
+      goal: info.goal ?? (config.goal === undefined ? undefined : null),
+    },
     cost: runner.costState?.(),
   }
 }

@@ -18,6 +18,7 @@ import { CUT_IN_PROGRESS } from '../services/lifecycle-locks.ts'
 import { CONVERSATION_ENDED, type CutOutcome } from '../services/conversation-cuts.ts'
 import { modelFor } from '../lib/models.ts'
 import { mentionsFor } from '../services/peers.ts'
+import { HUMAN_SETTER, type GoalChange } from '../services/goals.ts'
 import type { PromptOutcome } from '../services/prompt-acks.ts'
 import { shownEntryInfo } from './conversations.ts'
 import { sleepRunner } from './sleep.ts'
@@ -360,6 +361,23 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
         throw new Error('effort must be a string')
       }
       await runner.setEffort(frame.effort)
+      return
+    }
+    case 'set_goal':
+    case 'clear_goal':
+    case 'pause_goal': {
+      const change: GoalChange =
+        frame.type === 'set_goal'
+          ? { kind: 'set', goal: { text: frame.text, tokenBudget: frame.tokenBudget } }
+          : frame.type === 'pause_goal'
+            ? { kind: 'pause', paused: frame.paused }
+            : { kind: 'clear' }
+      const { outcome } = await ctx.goals.change(runner.id, change, HUMAN_SETTER, () => {
+        if (ctx.registry.get(runner.id) !== runner || tokenRefusal(ctx, frame, bound)) {
+          throw new Error(CONVERSATION_ENDED)
+        }
+      })
+      await outcome
       return
     }
     case 'tool_call_result': {

@@ -337,6 +337,7 @@ export function requestedConfig(config: SessionRunnerConfig): SessionRunnerConfi
     epoch: _epoch,
     engineHome: _home,
     statusLabel: _label,
+    goal: _goal,
     ...rest
   } = durableConfig(config)
   return rest

@@ -2,6 +2,7 @@ import type {
   AttachedFrame,
   ClientFrame,
   PermissionMode,
+  SetGoalRequest,
   ServerFrame,
   SessionEvent,
   ShellInfo,
@@ -149,6 +150,18 @@ export class SessionHandle {
 
   setEffort(effort?: string): void {
     this.#sendFrame({ type: 'set_effort', effort })
+  }
+
+  setGoal(goal: SetGoalRequest): void {
+    this.#sendFrame({ type: 'set_goal', ...goal })
+  }
+
+  clearGoal(): void {
+    this.#sendFrame({ type: 'clear_goal' })
+  }
+
+  pauseGoal(paused: boolean): void {
+    this.#sendFrame({ type: 'pause_goal', paused })
   }
 
   sendToolCallResult(executionId: string, output: ToolExecutionOutput, logs?: string[]): void {
