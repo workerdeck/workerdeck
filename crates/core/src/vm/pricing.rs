@@ -85,6 +85,7 @@ pub fn default_pricing() -> PricingTable {
         ("claude-haiku-5-5", anthropic(0.1, 0.5, None)),
         ("claude-haiku-4-5", anthropic(1.0, 5.0, None)),
         ("gpt-6.1-sol", openai(2.0, 10.0, 0.1)),
+        ("gpt-6.1-terra", openai(1.0, 5.0, 0.05)),
         ("gpt-6-astra", openai(10.0, 50.0, 1.0)),
         ("gpt-6-sol", openai(2.0, 10.0, 0.2)),
         ("gpt-6-luna", openai(0.1, 0.5, 0.01)),

@@ -2,7 +2,7 @@ import type { ModelCatalog } from '../adapter.ts'
 
 // The binary's embedded model table is the truth about reasoning efforts, not the SDK's stale `ModelReasoningEffort` union.
 export const CODEX_CATALOG: ModelCatalog = {
-  provenance: 'embedded model presets of @openai/codex@0.162.1 (darwin-arm64 binary), re-extracted 2026-10-20',
+  provenance: 'embedded model presets of @openai/codex@0.166.0 (darwin-arm64 binary), re-extracted 2026-11-06',
   defaultModel: 'gpt-6.1-sol',
   models: [
     {
@@ -42,6 +42,14 @@ export const CODEX_CATALOG: ModelCatalog = {
       resolvedModel: 'gpt-5.6-sol',
       displayName: 'GPT-5.6 Sol',
       description: 'Older generation workhorse model.',
+      primary: true,
+      reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    },
+    {
+      value: 'gpt-6.1-terra',
+      resolvedModel: 'gpt-6.1-terra',
+      displayName: 'GPT-6.1 Terra',
+      description: 'GPT-6.1 Terra Codex model.',
       primary: true,
       reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
     },
