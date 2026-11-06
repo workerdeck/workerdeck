@@ -55,7 +55,8 @@ fn a_row_names_its_model_by_the_gateways_name_then_the_id() {
 #[test]
 fn a_row_carries_its_model_badge_and_card_status() {
     let list = SessionList::new(None, None);
-    let labelled = idle("s1", r#","model":"gpt-6.1-sol","modelName":"GPT-6.1 Sol","statusLabel":{"text":"Porting","emoji":"🦀","setAt":1}"#);
+    let labelled =
+        idle("s1", r#","model":"gpt-6.1-sol","modelName":"GPT-6.1 Sol","statusLabel":{"text":"Porting","emoji":"🦀","setAt":1}"#);
     let titled = idle("s2", r#","model":"claude-opus-5-5","title":"  Fix the list  ""#);
     let starting = session("s3", "starting", r#","pendingPermissionCount":0"#);
     list.set_host("h1".into(), "mac".into(), true, body(&[labelled, titled, starting])).unwrap();

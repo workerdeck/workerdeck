@@ -1,4 +1,6 @@
-use crate::rest::{ChecklistStatus, Entries, GatewayRelayMeta, SessionInfo, SessionStatus, ShellInfo, ShellStatus, SubagentInfo, SubagentStatus};
+use crate::rest::{
+    ChecklistStatus, Entries, GatewayRelayMeta, SessionInfo, SessionStatus, ShellInfo, ShellStatus, SubagentInfo, SubagentStatus,
+};
 use crate::vm::agents::project_accent;
 use crate::vm::collate::{locale_compare, locale_compare_base};
 use crate::vm::text::{js_trim, utf16_len};
