@@ -1,5 +1,14 @@
 import { randomUUID } from 'node:crypto'
-import type { PermissionRequest, SessionEvent, SessionInfo, SessionStatus, StatusLabel, StatusLabelInput } from '@workerdeck/protocol'
+import type {
+  GoalNotice,
+  PermissionRequest,
+  SessionEvent,
+  SessionGoal,
+  SessionInfo,
+  SessionStatus,
+  StatusLabel,
+  StatusLabelInput,
+} from '@workerdeck/protocol'
 import type { EngineRunnerConfig, PermissionDecision, SendMessageOptions, SessionEventListener } from '../runner-interface.ts'
 import { resolveApprovalTimeoutMs } from './approval-timeout.ts'
 import { attachmentRef, type AttachmentInput } from './attachments.ts'
@@ -87,6 +96,16 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
     return label
   }
 
+  // The goal `info()` shows: the log's once it has seen a change or a reset, else the one the session was built with.
+  protected get goal(): SessionGoal | null {
+    const logged = this.core.log.goal
+    return logged === undefined ? (this.config.goal ?? null) : logged
+  }
+
+  protected emitGoal(goal: SessionGoal | null, notice?: GoalNotice): void {
+    this.core.emit(notice ? { type: 'goal_changed', goal, notice } : { type: 'goal_changed', goal })
+  }
+
   carryCost(state: CostLedgerState): void {
     this.core.carryCost(state)
   }
@@ -147,6 +166,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
       peers: this.config.peers,
       shells: this.config.shells,
       write: this.config.shellAgentWrite !== undefined,
+      goals: this.config.goals,
     }
   }
 
@@ -171,6 +191,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
       agentContextReset: this.config.contextReset ? (true as const) : undefined,
       title: sessionTitle(this.config, engineTitle),
       statusLabel: (log.statusLabel === undefined ? this.config.statusLabel : log.statusLabel) ?? undefined,
+      goal: this.goal ?? undefined,
       costUsd: this.core.cost.costUsd,
       usageByModel: this.core.cost.byModel,
       lastActivityAt: log.lastActivityAt,

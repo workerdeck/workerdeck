@@ -1,5 +1,7 @@
 import type {
   CreateSessionRequest,
+  GoalInput,
+  GoalSetter,
   InstructionScope,
   MessageOrigin,
   McpServerStatusInfo,
@@ -8,6 +10,7 @@ import type {
   PricingTable,
   ProfileEngine,
   SessionEvent,
+  SessionGoal,
   SessionInfo,
   StatusLabel,
   StatusLabelInput,
@@ -22,6 +25,7 @@ import type { LocalCommandResult, LocalShellSource } from './lib/local-command.t
 import type { PeerDirectory, PeerMention } from './lib/peers.ts'
 import type { ShellAgentWrite, ShellDirectory } from './lib/shells.ts'
 import type { ToolExecutionResult } from './executors/tool-executor.ts'
+import type { GoalDirectory } from './lib/goal-tool.ts'
 
 export type SessionEventListener = (event: SessionEvent) => void
 
@@ -56,6 +60,11 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   effortDefaults?: Record<string, string>
   // The status label a woken session last showed; the event log takes over once it sees a set or a reset.
   statusLabel?: StatusLabel
+  // The goal a woken session last showed; the event log takes over once it sees a change or a reset. A runner
+  // reconciles it with what the engine itself restores and never re-sends it to the engine.
+  goal?: SessionGoal
+  // Set by the gateway; its presence is what offers the `goal_*` tools.
+  goals?: GoalDirectory
   // Host-only: the session's lifetime counts when this conversation began, added to the log's own so
   // `activityCount` and `proseCount` never fall back across a cut.
   counterBase?: CounterBase
@@ -123,6 +132,12 @@ export interface Runner {
   setTitle(title: string | undefined): void
   // Null clears. Emits `status_label`; the label shows on `info().statusLabel`.
   setStatusLabel?(label: StatusLabelInput | null): StatusLabel | null
+  // Goals (engines with `capabilities.goals`). Each resolves once the engine confirmed the change and the
+  // `goal_changed` event is emitted; it rejects with the engine's refusal. Validation and provenance (`setBy`) are the
+  // gateway's: the runner stamps what it is given. `pauseGoal` only where `capabilities.goals.pause`.
+  setGoal?(input: GoalInput, setBy: GoalSetter): Promise<SessionGoal>
+  clearGoal?(): Promise<void>
+  pauseGoal?(paused: boolean): Promise<SessionGoal>
   resolvePermission(requestId: string, decision: PermissionDecision): boolean
   interrupt(): Promise<void>
   // Resolves false when the record has no stoppable background task (unknown, settled, or not the engine's to stop).

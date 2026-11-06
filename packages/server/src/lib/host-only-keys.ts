@@ -32,6 +32,8 @@ const HOST_ONLY_KEY_TABLE: Record<HostOnlyKey, 'durable' | 'transient'> = {
   startAsleep: 'transient',
   effortDefaults: 'transient',
   statusLabel: 'durable',
+  goal: 'durable',
+  goals: 'transient',
   counterBase: 'transient',
   connectFn: 'transient',
   codexHome: 'durable',

@@ -7,6 +7,7 @@ import {
   type ContextReading,
   type SessionEvent,
   type SessionEventBody,
+  type SessionGoal,
   type StatusLabel,
 } from '@workerdeck/protocol'
 
@@ -18,6 +19,7 @@ export class EventLog {
   #contextUsage: ContextReading | undefined
   #checklist: ChecklistItem[] | undefined
   #statusLabel: StatusLabel | null | undefined
+  #goal: SessionGoal | null | undefined
   #resetSeq = 0
   #lastActivityAt: number | undefined
 
@@ -51,6 +53,11 @@ export class EventLog {
     return this.#statusLabel
   }
 
+  // Like `statusLabel`: `undefined` until this log has seen a goal change or a reset.
+  get goal(): SessionGoal | null | undefined {
+    return this.#goal
+  }
+
   get resetSeq(): number {
     return this.#resetSeq
   }
@@ -82,6 +89,7 @@ export class EventLog {
     this.#contextUsage = undefined
     this.#checklist = undefined
     this.#statusLabel = undefined
+    this.#goal = undefined
     this.#resetSeq = 0
     for (const event of events) {
       this.#fold(event)
@@ -113,11 +121,15 @@ export class EventLog {
     if (event.type === 'status_label') {
       this.#statusLabel = event.label
     }
+    if (event.type === 'goal_changed') {
+      this.#goal = event.goal
+    }
     if (event.type === 'conversation_reset') {
       this.#resetSeq = event.seq
       this.#contextUsage = undefined
       this.#checklist = undefined
       this.#statusLabel = null
+      this.#goal = null
     }
   }
 }

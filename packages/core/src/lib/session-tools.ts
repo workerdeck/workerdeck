@@ -17,6 +17,7 @@ import { CHANGE_AVATAR_TOOL, CHANGE_AVATAR_TOOL_SHAPE, isChangeAvatarToolName, r
 import { SET_STATUS_TOOL, SET_STATUS_TOOL_SHAPE, isSetStatusToolName, runSetStatusTool, type StatusLabelSink } from './status-label.ts'
 import { MCP_TOOL_SHAPE, isMcpToolName, mcpToolNames, runMcpTool, type McpControl } from './mcp-tool.ts'
 import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, isPeerToolName, runPeerTool, type PeerDirectory } from './peers.ts'
+import { GOAL_TOOL_NAMES, GOAL_TOOL_SHAPE, isGoalToolName, runGoalTool, type GoalDirectory } from './goal-tool.ts'
 import { SHELL_TOOL_SHAPES, isShellToolName, runShellTool, shellToolNames, type ShellDirectory } from './shells.ts'
 
 export type SessionToolSources = {
@@ -27,15 +28,16 @@ export type SessionToolSources = {
   peers?: PeerDirectory
   shells?: ShellDirectory
   mcp?: McpControl
+  goals?: GoalDirectory
   write: boolean
 }
 
 export type SessionTool = GatewayToolShape & { name: string; run(args: unknown): Promise<GatewayToolOutput> }
 
-// The gateway's own tools a session is offered, session_info, set_status, change_avatar, context_reset, peers, shells, mcp_reconnect, mcp_reload: the order every engine
+// The gateway's own tools a session is offered, session_info, set_status, change_avatar, context_reset, peers, shells, mcp_reconnect, mcp_reload, goals: the order every engine
 // registers them in.
 export function sessionTools(sources: SessionToolSources, from: () => string): SessionTool[] {
-  const { report, status, avatar, reset, peers, shells, mcp, write } = sources
+  const { report, status, avatar, reset, peers, shells, mcp, goals, write } = sources
   return [
     ...(report ? [{ name: SESSION_INFO_TOOL, ...SESSION_INFO_TOOL_SHAPE, run: () => runSessionInfoTool(report, from()) }] : []),
     ...(status ? [{ name: SET_STATUS_TOOL, ...SET_STATUS_TOOL_SHAPE, run: (args: unknown) => runSetStatusTool(status, from(), args) }] : []),
@@ -57,6 +59,9 @@ export function sessionTools(sources: SessionToolSources, from: () => string): S
       : []),
     ...(mcp
       ? mcpToolNames(mcp).map((name) => ({ name, ...MCP_TOOL_SHAPE[name], run: (args: unknown) => runMcpTool(mcp, from(), name, args) }))
+      : []),
+    ...(goals
+      ? GOAL_TOOL_NAMES.map((name) => ({ name, ...GOAL_TOOL_SHAPE[name], run: (args: unknown) => runGoalTool(goals, from(), name, args) }))
       : []),
   ]
 }
@@ -92,6 +97,9 @@ export function runSessionTool(
   }
   if (sources.mcp && isMcpToolName(name)) {
     return runMcpTool(sources.mcp, from, name, args)
+  }
+  if (sources.goals && isGoalToolName(name)) {
+    return runGoalTool(sources.goals, from, name, args)
   }
   return undefined
 }

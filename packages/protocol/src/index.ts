@@ -1,5 +1,6 @@
 import type { AgentConfig, AgentRef, SessionAgentRequest, Sharing } from './agents.ts'
 import type { StatusLabel, StatusLabelInput } from './status-label.ts'
+import type { GoalCapabilities, GoalNotice, SessionGoal } from './goal.ts'
 import type { ByModel, PricingOverrides, ProfileSpend } from './pricing.ts'
 
 export const PROTOCOL_VERSION = 2
@@ -229,6 +230,8 @@ export type SessionEventBody =
   | { type: 'tool_titles'; titles: Record<string, string> }
   | { type: 'checklist'; items: ChecklistItem[] }
   | { type: 'status_label'; label: StatusLabel | null }
+  // `notice` marks the changes that earn a transcript row; one without is a state tick (codex usage) and coalesces.
+  | { type: 'goal_changed'; goal: SessionGoal | null; notice?: GoalNotice }
   | {
       type: 'file_produced'
       fileId: string
@@ -565,6 +568,7 @@ export type EngineCapabilities = {
   systemInstructions?: boolean
   engineSleep?: boolean
   backgroundTasks?: boolean
+  goals?: GoalCapabilities
   streaming: 'token' | 'item' | 'none'
 }
 
@@ -595,6 +599,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     systemInstructions: true,
     engineSleep: true,
     backgroundTasks: true,
+    goals: { pause: false, budget: false },
     streaming: 'token',
   },
   codex: {
@@ -622,6 +627,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     hostCwd: true,
     systemInstructions: true,
     engineSleep: true,
+    goals: { pause: true, budget: true },
     streaming: 'token',
   },
   provider: {
@@ -944,6 +950,7 @@ export type SessionInfo = {
   // Whom the session answers to: its agent's owner, or the owner stamped at create.
   owner?: string
   statusLabel?: StatusLabel
+  goal?: SessionGoal
   transcript?: 'unavailable'
 }
 
@@ -1064,6 +1071,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
     case 'status_label': {
       return 'status_label'
     }
+    case 'goal_changed': {
+      return body.notice ? undefined : 'goal_changed'
+    }
     case 'engine_sleep': {
       return 'engine_sleep'
     }
@@ -1092,7 +1102,9 @@ export function logCoalesceKey(body: SessionEventBody): string | undefined {
   if (body.type === 'sdk_event') {
     return body.payload.type === 'system' && body.payload.subtype === 'thinking_tokens' ? replayCoalesceKey(body) : undefined
   }
-  return (body.type === 'user_message' && body.shell) || body.type === 'tool_output' ? replayCoalesceKey(body) : undefined
+  return (body.type === 'user_message' && body.shell) || body.type === 'tool_output' || (body.type === 'goal_changed' && !body.notice)
+    ? replayCoalesceKey(body)
+    : undefined
 }
 
 export function replayRetains(body: SessionEventBody): boolean {
@@ -1427,6 +1439,7 @@ export * from './peer-mentions.ts'
 export * from './search.ts'
 export * from './session-list.ts'
 export * from './status-label.ts'
+export * from './goal.ts'
 export * from './tool-titles.ts'
 export * from './usage.ts'
 export * from './watermarks.ts'
