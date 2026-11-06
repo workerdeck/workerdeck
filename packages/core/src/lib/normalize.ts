@@ -32,7 +32,13 @@ function singleToolResult(message: ApiMessage): boolean {
   return content.filter((block) => block.type === 'tool_result').length === 1
 }
 
-const SYNTHETIC_USER_PREFIXES = ['<task-notification>', '<local-command-caveat>']
+// The goal pair: a failed `/goal` check, and the hook's own start prompt (`isMeta`, which a resumed transcript drops).
+const SYNTHETIC_USER_PREFIXES = [
+  '<task-notification>',
+  '<local-command-caveat>',
+  'Stop hook feedback:\n[',
+  'A session-scoped Stop hook is now active with condition:',
+]
 
 export function isSyntheticUserText(message: ApiMessage): boolean {
   const content = message.content

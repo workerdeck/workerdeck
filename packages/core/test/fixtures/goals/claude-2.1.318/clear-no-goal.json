@@ -1,0 +1,65 @@
+{
+  "source": "spike log claude2-clear.jsonl, CLI 2.1.318 (SDK 0.3.318), trimmed and scrubbed",
+  "transcript": [],
+  "steps": [
+    {
+      "m": {
+        "type": "system",
+        "subtype": "init",
+        "session_id": "39a676bd-498d-41b0-8aa9-b668d2896d75",
+        "model": "claude-haiku-5-5",
+        "cwd": "/tmp/project",
+        "tools": [],
+        "skills": [],
+        "slash_commands": [],
+        "permissionMode": "bypassPermissions",
+        "claude_code_version": "2.1.318",
+        "mcp_servers": [],
+        "apiKeySource": "none",
+        "uuid": "1c8c2cb7-674f-42e9-b842-397b561b0d64"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "f244b454-573b-43b8-80cb-d3dfe1652874",
+          "role": "assistant",
+          "model": "<synthetic>",
+          "content": [
+            {
+              "type": "text",
+              "text": "No goal set"
+            }
+          ],
+          "stop_reason": "end_turn"
+        },
+        "parent_tool_use_id": null,
+        "session_id": "39a676bd-498d-41b0-8aa9-b668d2896d75",
+        "uuid": "119e2489-74d8-492f-abf0-d2fd81845f0a",
+        "local_command_run": {
+          "command": "goal",
+          "args": "clear"
+        }
+      }
+    },
+    {
+      "m": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "duration_ms": 24,
+        "num_turns": 0,
+        "result": "No goal set",
+        "stop_reason": null,
+        "total_cost_usd": 0,
+        "usage": {},
+        "modelUsage": {},
+        "permission_denials": [],
+        "session_id": "39a676bd-498d-41b0-8aa9-b668d2896d75",
+        "uuid": "8dec843b-7677-4b0b-996a-5089bd0e8059",
+        "local_command": "goal"
+      }
+    }
+  ]
+}

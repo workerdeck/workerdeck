@@ -10,6 +10,14 @@ export class InputQueue implements AsyncIterable<SDKUserMessage> {
   }
 
   push(message: SDKUserMessage): void {
+    this.#add(message, 'push')
+  }
+
+  unshift(message: SDKUserMessage): void {
+    this.#add(message, 'unshift')
+  }
+
+  #add(message: SDKUserMessage, at: 'push' | 'unshift'): void {
     if (this.#done) {
       return
     }
@@ -18,7 +26,7 @@ export class InputQueue implements AsyncIterable<SDKUserMessage> {
       this.#waiter = null
       resolve({ value: message, done: false })
     } else {
-      this.#buffer.push(message)
+      this.#buffer[at](message)
     }
   }
 

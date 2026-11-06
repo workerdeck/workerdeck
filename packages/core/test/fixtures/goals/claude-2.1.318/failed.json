@@ -1,0 +1,190 @@
+{
+  "source": "spike log claude-fail.jsonl, CLI 2.1.318 (SDK 0.3.318), trimmed and scrubbed",
+  "transcript": [],
+  "steps": [
+    {
+      "goal_status": {
+        "type": "goal_status",
+        "met": false,
+        "sentinel": true,
+        "condition": "The file answer.txt contains the 12-digit number that is written on the sticky note on the user's desk. You cannot know it; do not guess, just say you cannot.",
+        "timestamp": "2026-11-06T03:21:38.185Z"
+      }
+    },
+    {
+      "m": {
+        "type": "system",
+        "subtype": "init",
+        "session_id": "329854f6-4746-4908-b064-e07b9845e897",
+        "model": "claude-haiku-5-5",
+        "cwd": "/tmp/project",
+        "tools": [],
+        "skills": [],
+        "slash_commands": [],
+        "permissionMode": "bypassPermissions",
+        "claude_code_version": "2.1.318",
+        "mcp_servers": [],
+        "apiKeySource": "none",
+        "uuid": "bc3837c4-2909-4e2d-b081-13e9b42971ed"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "1cdca03b-7225-44b7-aa06-e12df22f5c3f",
+          "role": "assistant",
+          "model": "<synthetic>",
+          "content": [
+            {
+              "type": "text",
+              "text": "Goal set: The file answer.txt contains the 12-digit number that is written on the sticky note on the user's desk. You cannot know it; do not guess, just say you cannot."
+            }
+          ],
+          "stop_reason": "end_turn"
+        },
+        "parent_tool_use_id": null,
+        "session_id": "329854f6-4746-4908-b064-e07b9845e897",
+        "uuid": "da742a8f-89f3-438b-b52b-2439e54f5d2c",
+        "local_command_run": {
+          "command": "goal",
+          "args": "The file answer.txt contains the 12-digit number that is written on the sticky note on the user's desk. You cannot know it; do not guess, just say you cannot."
+        }
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgkxNxjc1Brc1KGz8Qx8o",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": ""
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "329854f6-4746-4908-b064-e07b9845e897",
+        "uuid": "19c792f9-37ca-4a3e-8c95-becdd09f454c"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgkxNxjc1Brc1KGz8Qx8o",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_01UK1js1usqEt7u1nr8qB4Xd",
+              "name": "Bash",
+              "input": {
+                "command": "pwd; ls -la answer.txt 2>/dev/null && cat answer.txt; find \"$HOME\" -maxdepth 4 -name answer.txt 2>/dev/null | head",
+                "description": "Look for answer.txt in working directory and home"
+              }
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "329854f6-4746-4908-b064-e07b9845e897",
+        "uuid": "ffa2bd97-3524-429b-96bf-5cf4242eb5c1"
+      }
+    },
+    {
+      "m": {
+        "type": "user",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "tool_use_id": "toolu_01UK1js1usqEt7u1nr8qB4Xd",
+              "type": "tool_result",
+              "content": "/tmp/project",
+              "is_error": false
+            }
+          ]
+        },
+        "parent_tool_use_id": null,
+        "session_id": "329854f6-4746-4908-b064-e07b9845e897",
+        "uuid": "a68556b6-42a8-4528-80cc-3e7d48d896df"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgkxPVLM84XzWMkiHpiSU",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": ""
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "329854f6-4746-4908-b064-e07b9845e897",
+        "uuid": "d48126a9-ac9a-45cb-8c33-7ac92b6510ef"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgkxPVLM84XzWMkiHpiSU",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "text",
+              "text": "I can't complete this goal. I don't have access to your desk or the sticky note, so I can't read the 12-digit number. I also didn't find an `answer.txt` in the working directory or your home directory, so I haven't written one. I won't guess the number.\n\nIf you can read the number to me, or put it in a file and tell me the path, I'll write it to `answer.txt`."
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "329854f6-4746-4908-b064-e07b9845e897",
+        "uuid": "0ff75d64-7851-4e65-b231-0bfb90e8edb4"
+      }
+    },
+    {
+      "goal_status": {
+        "type": "goal_status",
+        "met": false,
+        "failed": true,
+        "condition": "The file answer.txt contains the 12-digit number that is written on the sticky note on the user's desk. You cannot know it; do not guess, just say you cannot.",
+        "reason": "The condition requires answer.txt to contain the sticky-note number, but the transcript shows no such file: the search found no answer.txt, and the assistant wrote none (\"I also didn't find an `answer.txt`... so I haven't written one\"). The assistant has no access to the user's desk, so it cannot read the number. The goal is unachievable in this session.",
+        "iterations": 1,
+        "durationMs": 12409,
+        "tokens": 975,
+        "timestamp": "2026-11-06T03:21:50.594Z"
+      }
+    },
+    {
+      "m": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "duration_ms": 12426,
+        "num_turns": 2,
+        "result": "I can't complete this goal. I don't have access to your desk or the sticky note, so I can't read the 12-digit number. I also didn't find an `answer.txt` in the working directory or your home directory, so I haven't written one. I won't guess the number.\n\nIf you can read the number to me, or put it in a file and tell me the path, I'll write it to `answer.txt`.",
+        "stop_reason": "end_turn",
+        "total_cost_usd": 0.006694944999999999,
+        "usage": {},
+        "modelUsage": {},
+        "permission_denials": [],
+        "session_id": "329854f6-4746-4908-b064-e07b9845e897",
+        "uuid": "9e6681df-4957-4eca-b468-6f0fb851945b"
+      }
+    }
+  ]
+}
