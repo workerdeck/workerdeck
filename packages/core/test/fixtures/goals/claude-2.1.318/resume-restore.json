@@ -1,0 +1,192 @@
+{
+  "source": "spike log claude-resume.jsonl, CLI 2.1.318 (SDK 0.3.318), trimmed and scrubbed",
+  "note": "resumed with a goal left active; the first turn after resume ran the check and worked on to met. `transcript` is what the resumed transcript held",
+  "transcript": [
+    {
+      "type": "goal_status",
+      "met": false,
+      "sentinel": true,
+      "condition": "The file step2.txt exists in the working directory. (Instruction for the assistant: in your FIRST attempt create only step1.txt and then stop and end your reply; create step2.txt only after a stop hook tells you the goal is not met yet.)",
+      "timestamp": "2026-11-06T03:22:27.998Z"
+    }
+  ],
+  "steps": [
+    {
+      "m": {
+        "type": "system",
+        "subtype": "init",
+        "session_id": "9d64a981-d265-44f3-9d50-3285532d042d",
+        "model": "claude-haiku-5-5",
+        "cwd": "/tmp/project",
+        "tools": [],
+        "skills": [],
+        "slash_commands": [],
+        "permissionMode": "bypassPermissions",
+        "claude_code_version": "2.1.318",
+        "mcp_servers": [],
+        "apiKeySource": "none",
+        "uuid": "5b31deec-82d3-4036-bcf2-925695c9191e"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgkxVrdvnGDqdpJzwxp3n",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "text",
+              "text": "HI"
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "9d64a981-d265-44f3-9d50-3285532d042d",
+        "uuid": "f8834ca5-fc9a-40ec-9724-5863d0be3d4c"
+      }
+    },
+    {
+      "m": {
+        "type": "user",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Stop hook feedback:\n[The file step2.txt exists in the working directory. (Instruction for the assistant: in your FIRST attempt create only step1.txt and then stop and end your reply; create step2.txt only after a stop hook tells you the goal is not met yet.)]: The transcript shows only step1.txt was created (\"-rw-r--r--@ 1 user  staff  0 Nov  6 11:22 step1.txt\"). There is no evidence that step2.txt exists in the working directory. The assistant was instructed to create step2.txt only after a stop hook reports the goal is not met, and the last assistant message is just \"HI\", so the condition is not satisfied."
+            }
+          ]
+        },
+        "parent_tool_use_id": null,
+        "session_id": "9d64a981-d265-44f3-9d50-3285532d042d",
+        "uuid": "be41ef5d-a379-402c-8bbe-789dbb37ec76",
+        "isSynthetic": true
+      }
+    },
+    {
+      "goal_status": {
+        "type": "goal_status",
+        "met": false,
+        "condition": "The file step2.txt exists in the working directory. (Instruction for the assistant: in your FIRST attempt create only step1.txt and then stop and end your reply; create step2.txt only after a stop hook tells you the goal is not met yet.)",
+        "reason": "The transcript shows only step1.txt was created (\"-rw-r--r--@ 1 user  staff  0 Nov  6 11:22 step1.txt\"). There is no evidence that step2.txt exists in the working directory. The assistant was instructed to create step2.txt only after a stop hook reports the goal is not met, and the last assistant message is just \"HI\", so the condition is not satisfied.",
+        "timestamp": "2026-11-06T03:23:14.975Z"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgkxW4rQ93jkQEbTQuu3J",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": ""
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "9d64a981-d265-44f3-9d50-3285532d042d",
+        "uuid": "6cd22bbc-4660-419f-b9ea-139e04d5a702"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgkxW4rQ93jkQEbTQuu3J",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_01CZtKR5KBUPUK4T1rQkMcPQ",
+              "name": "Bash",
+              "input": {
+                "command": "touch step2.txt && ls -la step1.txt step2.txt",
+                "description": "Create step2.txt and list both step files"
+              }
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "9d64a981-d265-44f3-9d50-3285532d042d",
+        "uuid": "e0fe9a6c-dfc4-440f-94f7-098d4f01de74"
+      }
+    },
+    {
+      "m": {
+        "type": "user",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "tool_use_id": "toolu_01CZtKR5KBUPUK4T1rQkMcPQ",
+              "type": "tool_result",
+              "content": "-rw-r--r--@ 1 user  staff  0 Nov  6 11:22 step1.txt\n-rw-r--r--@ 1 user  staff  0 Nov  6 11:23 step2.txt",
+              "is_error": false
+            }
+          ]
+        },
+        "parent_tool_use_id": null,
+        "session_id": "9d64a981-d265-44f3-9d50-3285532d042d",
+        "uuid": "0fb17773-a7b0-44a3-a958-0b159da85eb0"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgkxWD9iYg9NRpWvDcjSB",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "text",
+              "text": "step2.txt now exists in the working directory, alongside step1.txt, so the goal condition should hold."
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "9d64a981-d265-44f3-9d50-3285532d042d",
+        "uuid": "47274f82-a5e6-482b-b512-4880a5904227"
+      }
+    },
+    {
+      "goal_status": {
+        "type": "goal_status",
+        "met": true,
+        "condition": "The file step2.txt exists in the working directory. (Instruction for the assistant: in your FIRST attempt create only step1.txt and then stop and end your reply; create step2.txt only after a stop hook tells you the goal is not met yet.)",
+        "reason": "The Bash tool ran `touch step2.txt && ls -la step1.txt step2.txt` in the working directory /tmp/project, and the output shows `-rw-r--r--@ 1 user  staff  0 Nov  6 11:23 step2.txt`. The step2.txt creation came after the stop hook reported the goal was not met, which matches the instruction.",
+        "iterations": 2,
+        "durationMs": 22262,
+        "tokens": 857,
+        "timestamp": "2026-11-06T03:23:21.174Z"
+      }
+    },
+    {
+      "m": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "duration_ms": 9319,
+        "num_turns": 3,
+        "result": "step2.txt now exists in the working directory, alongside step1.txt, so the goal condition should hold.",
+        "stop_reason": "end_turn",
+        "total_cost_usd": 0.0078049849999999995,
+        "usage": {},
+        "modelUsage": {},
+        "permission_denials": [],
+        "session_id": "9d64a981-d265-44f3-9d50-3285532d042d",
+        "uuid": "c349ad78-ec82-4a70-9230-d247256b4e9c"
+      }
+    }
+  ]
+}

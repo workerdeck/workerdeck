@@ -9,6 +9,7 @@ import {
   type Options,
   type PermissionResult,
   type Query,
+  type SDKAssistantMessage,
   type SDKMessage,
   type SDKSessionInfo,
   type SDKUserMessage,
@@ -18,11 +19,15 @@ import {
   ENGINE_CAPABILITIES,
   errorMessage,
   type ContextUsage,
+  type GoalInput,
+  type GoalNotice,
+  type GoalSetter,
   type McpServerStatusInfo,
   type ModelOption,
   type PermissionMode,
   type PermissionRequest,
   type SessionEventBody,
+  type SessionGoal,
   type SessionInfo,
   type SessionStatus,
 } from '@workerdeck/protocol'
@@ -39,6 +44,7 @@ import {
   modelOptionsFromSdk,
   normalizeSdkMessage,
   rateLimitEventsFromUsage,
+  toApiMessage,
 } from '../../lib/normalize.ts'
 import type {
   ClearContextOptions,
@@ -64,6 +70,23 @@ import { AddressedThinking, apiMessageId } from './addressed-thinking.ts'
 import { claudeHistoryEvent } from './history.ts'
 import { ancestorInstructionExcludes, foreignHomeExcludes, withInstructionExcludes } from './instruction-scope.ts'
 import { CLAUDE_CATALOG } from './catalog.ts'
+import {
+  GOAL_CLEAR_COMMAND,
+  activeGoal,
+  claudeConfigDir,
+  goalCheckReason,
+  goalCommand,
+  goalCommandRun,
+  goalVerdict,
+  isClearArgs,
+  messageText,
+  parseGoalReply,
+  readGoalStatuses,
+  restorableGoal,
+  withGoalSettings,
+  type GoalStatus,
+  type GoalStatusFn,
+} from './goals.ts'
 import { SubagentTracker } from './subagents.ts'
 import { tailTaskOutput, taskOutputRoots } from './task-output.ts'
 
@@ -80,6 +103,14 @@ export type SessionInfoFn = (sdkSessionId: string, options: { dir?: string }) =>
 
 type EffortLevel = NonNullable<Options['effort']>
 
+type GoalCommand = {
+  kind: 'set' | 'clear'
+  args: string
+  setBy?: GoalSetter
+  resolve: (goal: SessionGoal | null) => void
+  reject: (error: Error) => void
+}
+
 type SettingsQuery = Query & { getSettings?: () => Promise<{ applied?: { model?: string; effort?: string | null } }> }
 
 export type SessionRunnerConfig = EngineRunnerConfig & {
@@ -89,6 +120,7 @@ export type SessionRunnerConfig = EngineRunnerConfig & {
   backfillHistory?: boolean
   historyFn?: HistoryFn
   sessionInfoFn?: SessionInfoFn
+  goalStatusFn?: GoalStatusFn
 }
 
 export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements Runner {
@@ -136,6 +168,10 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #started = false
   #runPromise: Promise<void> | undefined
   #backfill: Promise<void> | undefined
+  // Host `/goal` commands sent and not answered yet, oldest first.
+  #goalCommands: GoalCommand[] = []
+  #hideGoalResult = false
+  #clearRestoredGoal = false
 
   constructor(config: SessionRunnerConfig, id: string = randomUUID()) {
     super(config, id, Date.now(), { cost: 'reconcile' })
@@ -213,12 +249,14 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   sendMessage(text: string, attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void {
     this.assertAccepting()
     const blocks = attachments?.length ? attachmentContentBlocks(attachments) : []
-    // A slash command is matched on the message text by the CLI, so held output waits for the next plain message.
-    const context = isSlashCommand(text) ? undefined : this.localCommands.take()
+    const modelText = withPeerContext(text, options)
+    // The CLI matches a slash command on the text it receives, so a peer's `/goal` or `/clear` arrives as a prompt.
+    // Held output waits for the next plain message.
+    const command = isSlashCommand(modelText)
+    const context = command ? undefined : this.localCommands.take()
     if (context) {
       blocks.unshift({ type: 'text', text: context })
     }
-    const modelText = withPeerContext(text, options)
     // A message may be attachments alone; an empty text block is not valid API input.
     const content = blocks.length
       ? ([...blocks, ...(modelText ? [{ type: 'text', text: modelText }] : [])] as unknown as SDKUserMessage['message']['content'])
@@ -228,7 +266,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (options?.origin) {
       this.#peerSends.add(uuid)
     }
-    if (!isSlashCommand(text)) {
+    if (!command) {
       this.#unanswered.push(uuid)
     }
     this.#input.push({
@@ -240,7 +278,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     })
     if (this.#asleep) {
       this.#wake()
-    } else if (!isSlashCommand(text)) {
+    } else if (!command) {
       void this.#healMcpServers()
     }
     this.echoUser(text, attachments, options)
@@ -305,6 +343,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     // the queue counts there, or such a session could never sleep.
     if (this.#input.pending > 0 || (this.#stamps && this.#unanswered.length > 0)) {
       return 'a message is waiting for the engine'
+    }
+    if (this.#goalCommands.length > 0) {
+      return 'a goal change is waiting for the engine'
     }
     if (!this.#query || !this.#sdkSessionId) {
       return 'the engine has not started a conversation yet'
@@ -436,6 +477,171 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     this.sendMessage('/clear')
   }
 
+  async setGoal(input: GoalInput, setBy: GoalSetter): Promise<SessionGoal> {
+    this.assertAccepting()
+    if (input.tokenBudget !== undefined) {
+      throw new Error('this engine does not support goal token budgets')
+    }
+    const text = input.text.trim()
+    const goal = await this.#goalCommand({ kind: 'set', args: text, setBy }, goalCommand(text))
+    return goal!
+  }
+
+  // The engine holds no goal once it is met or failed, so only an active one is the engine's to clear. A clear sent
+  // during a turn would wait for that turn to end, and a goal turn may run to its verdict first: interrupt it.
+  async clearGoal(): Promise<void> {
+    this.assertAccepting()
+    const goal = this.goal
+    if (goal?.state !== 'active' && !this.#goalCommands.some((command) => command.kind === 'set')) {
+      if (goal) {
+        this.emitGoal(null, 'cleared')
+      }
+      return
+    }
+    if (this.core.status === 'running' || this.core.status === 'awaiting_approval') {
+      await this.interrupt()
+    }
+    await this.#goalCommand({ kind: 'clear', args: 'clear' }, GOAL_CLEAR_COMMAND)
+  }
+
+  #goalCommand(command: Omit<GoalCommand, 'resolve' | 'reject'>, text: string): Promise<SessionGoal | null> {
+    return new Promise((resolve, reject) => {
+      this.#goalCommands.push({ ...command, resolve, reject })
+      this.#sendHost(text)
+    })
+  }
+
+  // The CLI runs host input as the person's own command, but no user row is echoed for it.
+  #sendHost(text: string, first = false): void {
+    const message: SDKUserMessage = {
+      type: 'user',
+      message: { role: 'user', content: text },
+      parent_tool_use_id: null,
+      session_id: this.#sdkSessionId ?? '',
+      uuid: randomUUID(),
+    }
+    if (first) {
+      this.#input.unshift(message)
+      return
+    }
+    this.#input.push(message)
+    if (this.#asleep) {
+      this.#wake()
+    }
+  }
+
+  #rejectGoalCommands(message: string): void {
+    for (const command of this.#goalCommands.splice(0)) {
+      command.reject(new Error(message))
+    }
+  }
+
+  // A reply to a host command is the goal notice's to show, not prose; a person's own `/goal` keeps its reply.
+  #onGoalReply(msg: SDKAssistantMessage): boolean {
+    const run = goalCommandRun(msg)
+    if (!run) {
+      return false
+    }
+    const args = run.args
+    const reply = parseGoalReply(messageText(toApiMessage(msg.message)), args)
+    if (reply.kind === 'status') {
+      return false
+    }
+    const clears = isClearArgs(args)
+    let index = this.#goalCommands.findIndex((candidate) => candidate.args === args)
+    if (index < 0) {
+      index = this.#goalCommands.findIndex((candidate) => (candidate.kind === 'clear') === clears)
+    }
+    const command = index < 0 ? undefined : this.#goalCommands.splice(index, 1)[0]
+    if (command) {
+      this.#hideGoalResult = reply.kind !== 'set'
+    }
+    if (reply.kind === 'set') {
+      const goal = activeGoal(reply.text, command?.setBy ?? { kind: 'human' })
+      this.emitGoal(goal, 'set')
+      command?.resolve(goal)
+    } else if (reply.kind === 'cleared') {
+      if (this.goal) {
+        this.emitGoal(null, 'cleared')
+      }
+      command?.resolve(null)
+    } else {
+      command?.reject(new Error(reply.message))
+    }
+    return command !== undefined
+  }
+
+  #observeGoalCheck(message: SDKUserMessage): void {
+    const goal = this.goal
+    if (goal?.state !== 'active' || message.isSynthetic !== true || message.parent_tool_use_id !== null) {
+      return
+    }
+    const reason = goalCheckReason(toApiMessage(message.message), goal.text)
+    if (reason !== undefined) {
+      this.emitGoal({ ...goal, checks: (goal.checks ?? 0) + 1, lastReason: reason }, 'check_failed')
+    }
+  }
+
+  #goalStatuses(sdkSessionId: string): Promise<GoalStatus[] | undefined> {
+    const read = this.config.goalStatusFn ?? readGoalStatuses
+    return read(sdkSessionId, { configDir: claudeConfigDir(this.config.env ?? process.env) }).catch(() => undefined)
+  }
+
+  // The verdict never reaches the stream: the CLI writes it to its transcript before the turn's result.
+  async #readGoalVerdict(): Promise<void> {
+    const goal = this.goal
+    const sdkSessionId = this.#sdkSessionId
+    if (goal?.state !== 'active' || !sdkSessionId) {
+      return
+    }
+    const statuses = await this.#goalStatuses(sdkSessionId)
+    const current = this.goal
+    if (this.core.closed || !statuses || current?.state !== 'active' || current.text !== goal.text || current.setAt !== goal.setAt) {
+      return
+    }
+    const next = goalVerdict(current, statuses)
+    if (next !== undefined) {
+      this.emitGoal(next, verdictNotice(next))
+    }
+  }
+
+  // The CLI restores the goal its transcript leaves open and starts no work for it; the record follows the
+  // transcript, and a goal this gateway saw cleared is cleared again at the next engine start, never resurrected.
+  async #reconcileGoal(): Promise<void> {
+    const resume = this.config.resume
+    if (!resume) {
+      return
+    }
+    const statuses = await this.#goalStatuses(resume)
+    if (this.core.closed || statuses === undefined || this.core.log.goal !== undefined) {
+      return
+    }
+    const restored = restorableGoal(statuses)
+    const known = this.goal
+    if (this.config.goal === null) {
+      this.#clearRestoredGoal = restored !== undefined
+      return
+    }
+    if (restored) {
+      const same = known?.text === restored.text ? known : undefined
+      const base = same ?? activeGoal(restored.text, { kind: 'human' }, restored.setAt)
+      const next: SessionGoal = {
+        ...base,
+        state: 'active',
+        checks: Math.max(base.checks ?? 0, restored.checks),
+        ...(restored.lastReason === undefined ? {} : { lastReason: restored.lastReason }),
+      }
+      if (!same || same.state !== 'active' || same.checks !== next.checks || same.lastReason !== next.lastReason) {
+        this.emitGoal(next)
+      }
+      return
+    }
+    if (known?.state === 'active') {
+      const next = goalVerdict(known, statuses) ?? null
+      this.emitGoal(next, next === null ? undefined : verdictNotice(next))
+    }
+  }
+
   async setPermissionMode(mode: PermissionMode): Promise<void> {
     await this.#query?.setPermissionMode(mode)
     this.#permissionMode = mode
@@ -512,6 +718,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
 
   close(reason: CloseReason = 'client'): void {
     this.core.close(reason, () => {
+      this.#rejectGoalCommands('session closed')
       this.localCommands.clear()
       this.#outputTails.clear()
       this.#input.end()
@@ -525,7 +732,11 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
 
   async #run(): Promise<void> {
     try {
-      this.#backfill = this.#backfillHistory()
+      // Only a record that knows a goal (or its clear) waits for the transcript; one that never saw a goal adopts what
+      // the CLI restores whenever the read lands.
+      this.#backfill = this.#backfillHistory().then(() =>
+        this.config.goal === undefined ? void this.#reconcileGoal() : this.#reconcileGoal(),
+      )
       await this.#backfill
       if (this.core.closed) {
         return
@@ -559,6 +770,11 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
 
   #openQuery(overrides: Partial<Options> = {}): Query {
     const queryFn = this.config.queryFn ?? (sdkQuery as QueryFn)
+    if (this.#clearRestoredGoal) {
+      this.#clearRestoredGoal = false
+      this.#goalCommands.unshift({ kind: 'clear', args: 'clear', resolve: () => {}, reject: () => {} })
+      this.#sendHost(GOAL_CLEAR_COMMAND, true)
+    }
     const query = queryFn({ prompt: this.#input, options: { ...this.#buildOptions(), ...overrides } })
     this.#query = query
     return query
@@ -582,7 +798,14 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (query !== this.#query) {
       return
     }
-    this.core.close('server', () => this.#input.end(), { settleApprovals: false })
+    this.core.close(
+      'server',
+      () => {
+        this.#rejectGoalCommands('the engine exited')
+        this.#input.end()
+      },
+      { settleApprovals: false },
+    )
   }
 
   async #backfillHistory(): Promise<void> {
@@ -635,6 +858,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
         ? {}
         : { systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: this.#instructions } }),
     }
+    options.settings = withGoalSettings(options.settings)
     const home = { configDir: options.env?.CLAUDE_CONFIG_DIR }
     const excludes = c.instructionScope === 'cwd' ? ancestorInstructionExcludes(this.#cwd, home) : foreignHomeExcludes(home)
     if (excludes.length > 0) {
@@ -774,11 +998,20 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       void this.#fetchContextUsage()
       return
     }
+    if (msg.type === 'assistant' && msg.parent_tool_use_id === null && this.#onGoalReply(msg)) {
+      return
+    }
     const sdkBody = normalizeSdkMessage(msg)
     const normalized = sdkBody && this.#addressed.stamp(msg.type === 'assistant' ? apiMessageId(msg.message) : undefined, sdkBody)
     const body = normalized?.type === 'conversation_reset' ? { ...normalized, ...this.#takeAgentReset() } : normalized
     if (body) {
-      this.core.emit(body)
+      const hidden = body.type === 'turn_result' && this.#takeHiddenGoalResult(msg)
+      if (!hidden) {
+        this.core.emit(body)
+      }
+      if (body.type === 'user_message' && msg.type === 'user') {
+        this.#observeGoalCheck(msg)
+      }
       if (body.type === 'conversation_reset') {
         this.core.cost.rollover()
         this.localCommands.clear()
@@ -808,8 +1041,17 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
         void this.#fetchContextUsage()
         void this.#fetchRateLimits()
         void this.#fetchEngineTitle()
+        if (!hidden) {
+          void this.#readGoalVerdict()
+        }
       }
     }
+  }
+
+  #takeHiddenGoalResult(msg: SDKMessage): boolean {
+    const hide = this.#hideGoalResult && (msg as { local_command?: string }).local_command === 'goal'
+    this.#hideGoalResult = false
+    return hide
   }
 
   #takeAgentReset(): { agentReason?: string } {
@@ -1101,6 +1343,13 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       this.core.emit({ type: 'checklist', items })
     }
   }
+}
+
+function verdictNotice(goal: SessionGoal | null): GoalNotice | undefined {
+  if (goal === null) {
+    return 'cleared'
+  }
+  return goal.state === 'met' ? 'met' : goal.state === 'failed' ? 'failed' : undefined
 }
 
 function permissionResult(request: PermissionRequest, decision: PermissionDecision): PermissionResult {

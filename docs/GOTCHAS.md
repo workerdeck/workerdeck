@@ -159,6 +159,27 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `<local-command-caveat>`). This belongs in the runner, not the reducer: `transcriptActivity`
   counts a non-synthetic user message as a row, so a row the client hides but the count counts is
   an unread badge for work nobody typed.
+- **Claude goals (`/goal`) are host commands, and the verdict lives only in the transcript** (CLI 2.1.318,
+  `engines/claude/goals.ts`). `setGoal`/`clearGoal` send `/goal <text>` / `/goal clear` as host input: no user row, not
+  in `#unanswered` (a slash command is the CLI's once read), matched to the reply by `local_command_run.args`. The
+  reply (`Goal set: `, `Goal cleared: `, `No goal set`, or a refusal such as the trusted-workspace or
+  `disableAllHooks` text) and its zero-turn `result` (`local_command: 'goal'`) are hidden; the `goal_changed` notice is
+  the row. A person's own typed `/goal` keeps its reply and is stamped `human`. A set queues behind a running turn by
+  itself; a clear does too and a goal turn can run to its verdict first, so `clearGoal` interrupts a running turn
+  first. A met or failed goal is already gone from the engine, so clearing one never talks to it.
+- **The stream carries no verdict.** A failed check is a synthetic `Stop hook feedback:\n[<condition>]: <reason>` user
+  message; only one naming the goal's exact condition counts (a settings Stop hook reports in the same shape). Met,
+  failed and every check are `goal_status` attachments in the transcript, on disk by the `result`: the runner reads the
+  last one read-only after each result while a goal is active (tail read, the project dir found by listing, never the
+  slug re-derived). `met: true, sentinel: true` is a clear (ours, or the CLI's own after an unrecoverable error).
+  Never infer "interrupted" from the result subtype: an interrupt after a check ended `success` with empty text.
+- **Resume: the CLI restores the last open goal itself and starts no work for it** (`uNo`: the last `goal_status`
+  unless `met` or `failed`). The runner reconciles the record to that and never resends `/goal`. A clear writes
+  `met: true, sentinel: true`, so a cleared goal is not restored; for a tombstoned record (`config.goal === null`)
+  whose transcript still shows an open goal, the runner puts a hidden `/goal clear` first into the next engine start.
+  A record that never saw a goal reads the transcript in the background; one that knows a goal waits for the read.
+- `modelProposedGoals: 'disabled'` rides the SDK `settings` (flag source) on every session: `ProposeGoal` is not
+  exposed to SDK sessions today, and an approval dialog for it would have no surface here.
 
 ## Permissions
 

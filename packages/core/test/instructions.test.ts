@@ -167,7 +167,7 @@ describe('instruction scope', () => {
     await tick()
     const settings = scoped.captured.options?.settings
     expect(typeof settings === 'object' ? settings.claudeMdExcludes : undefined).toContain('/tmp/project/AGENTS.md')
-    expect(plain.captured.options?.settings).toBeUndefined()
+    expect(plain.captured.options?.settings).toEqual({ modelProposedGoals: 'disabled' })
   })
 
   it('makes the cwd the codex project root when the scope is cwd', async () => {

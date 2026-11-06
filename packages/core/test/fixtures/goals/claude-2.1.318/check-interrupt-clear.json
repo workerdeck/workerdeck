@@ -1,0 +1,261 @@
+{
+  "source": "spike log claude2-midturn.jsonl, CLI 2.1.318 (SDK 0.3.318), trimmed and scrubbed",
+  "note": "a failed check, an interrupt (result success with empty text), then `/goal clear` on the idle session; the `/goal` status query between them is dropped",
+  "transcript": [
+    {
+      "type": "goal_status",
+      "met": false,
+      "sentinel": true,
+      "condition": "The file late.txt contains the word LATE.",
+      "timestamp": "2026-11-06T07:32:17.853Z"
+    },
+    {
+      "type": "goal_status",
+      "met": true,
+      "condition": "The file late.txt contains the word LATE.",
+      "reason": "The Bash call `printf 'LATE\\n' > late.txt && cat late.txt` ran in /tmp/project and printed `LATE`. The earlier check showed late.txt was missing, so this write created it, and the last assistant message says 'The condition now holds.'",
+      "iterations": 1,
+      "durationMs": 6900,
+      "tokens": 645,
+      "timestamp": "2026-11-06T07:32:24.753Z"
+    }
+  ],
+  "steps": [
+    {
+      "goal_status": {
+        "type": "goal_status",
+        "met": false,
+        "sentinel": true,
+        "condition": "The file never.txt contains the 12-digit number on the sticky note on my desk. Do not guess; you cannot know it, so just say so briefly each time.",
+        "timestamp": "2026-11-06T07:32:28.132Z"
+      }
+    },
+    {
+      "m": {
+        "type": "system",
+        "subtype": "init",
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "model": "claude-haiku-5-5",
+        "cwd": "/tmp/project",
+        "tools": [],
+        "skills": [],
+        "slash_commands": [],
+        "permissionMode": "bypassPermissions",
+        "claude_code_version": "2.1.318",
+        "mcp_servers": [],
+        "apiKeySource": "none",
+        "uuid": "531574a6-51aa-4f26-8956-c7d6cf217497"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "b33174e8-2c8c-49a1-b9d0-b84b21b71e5f",
+          "role": "assistant",
+          "model": "<synthetic>",
+          "content": [
+            {
+              "type": "text",
+              "text": "Goal set: The file never.txt contains the 12-digit number on the sticky note on my desk. Do not guess; you cannot know it, so just say so briefly each time."
+            }
+          ],
+          "stop_reason": "end_turn"
+        },
+        "parent_tool_use_id": null,
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "uuid": "f9720184-5482-46e3-ad9f-0cf163a00570",
+        "local_command_run": {
+          "command": "goal",
+          "args": "The file never.txt contains the 12-digit number on the sticky note on my desk. Do not guess; you cannot know it, so just say so briefly each time."
+        }
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgmHWKxhVifxLD8oeBD72",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": ""
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "uuid": "ab8c91f0-25fa-4934-beaa-69a8fae0a244"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_011CgmHWKxhVifxLD8oeBD72",
+          "role": "assistant",
+          "model": "claude-haiku-5-5",
+          "content": [
+            {
+              "type": "text",
+              "text": "I can't complete this goal: I have no way to see the sticky note on your desk, so I don't know the 12-digit number and won't guess. The stop hook will keep blocking until `never.txt` contains that number. To stop the loop, run `/goal clear`. If you type the number here, I'll write it to `never.txt`."
+            }
+          ],
+          "stop_reason": null
+        },
+        "parent_tool_use_id": null,
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "uuid": "8500991b-1f33-4db6-966e-303dc13dcb5e"
+      }
+    },
+    {
+      "m": {
+        "type": "user",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Stop hook feedback:\n[The file never.txt contains the 12-digit number on the sticky note on my desk. Do not guess; you cannot know it, so just say so briefly each time.]: insufficient evidence in transcript: no command created never.txt, and the transcript contains no 12-digit number. The assistant said it cannot see the sticky note and will not guess, and it offered to write the number if the user types it."
+            }
+          ]
+        },
+        "parent_tool_use_id": null,
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "uuid": "9b21c090-0f77-4dbb-8d3a-2e271f90ff84",
+        "isSynthetic": true
+      }
+    },
+    {
+      "goal_status": {
+        "type": "goal_status",
+        "met": false,
+        "condition": "The file never.txt contains the 12-digit number on the sticky note on my desk. Do not guess; you cannot know it, so just say so briefly each time.",
+        "reason": "insufficient evidence in transcript: no command created never.txt, and the transcript contains no 12-digit number. The assistant said it cannot see the sticky note and will not guess, and it offered to write the number if the user types it.",
+        "timestamp": "2026-11-06T07:32:31.928Z"
+      }
+    },
+    {
+      "m": {
+        "type": "user",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "[Request interrupted by user]"
+            }
+          ]
+        },
+        "parent_tool_use_id": null,
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "uuid": "b69c26dd-63fd-483b-b2d6-59ce8191d965"
+      }
+    },
+    {
+      "m": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "duration_ms": 3819,
+        "num_turns": 3,
+        "result": "",
+        "stop_reason": "end_turn",
+        "total_cost_usd": 0.008861984999999998,
+        "usage": {},
+        "modelUsage": {},
+        "permission_denials": [],
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "uuid": "410aeb3c-ac57-4354-a1a3-f6b2be8615cf"
+      }
+    },
+    {
+      "m": {
+        "type": "system",
+        "subtype": "init",
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "model": "claude-haiku-5-5",
+        "cwd": "/tmp/project",
+        "tools": [],
+        "skills": [],
+        "slash_commands": [],
+        "permissionMode": "bypassPermissions",
+        "claude_code_version": "2.1.318",
+        "mcp_servers": [],
+        "apiKeySource": "none",
+        "uuid": "662f1f5b-634e-46e0-ba58-159e3727d652"
+      }
+    },
+    {
+      "goal_status": {
+        "type": "goal_status",
+        "met": true,
+        "sentinel": true,
+        "condition": "The file never.txt contains the 12-digit number on the sticky note on my desk. Do not guess; you cannot know it, so just say so briefly each time.",
+        "timestamp": "2026-11-06T07:32:33.855Z"
+      }
+    },
+    {
+      "m": {
+        "type": "system",
+        "subtype": "init",
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "model": "claude-haiku-5-5",
+        "cwd": "/tmp/project",
+        "tools": [],
+        "skills": [],
+        "slash_commands": [],
+        "permissionMode": "bypassPermissions",
+        "claude_code_version": "2.1.318",
+        "mcp_servers": [],
+        "apiKeySource": "none",
+        "uuid": "80072c11-233c-41e8-9e25-0c213b9f92a9"
+      }
+    },
+    {
+      "m": {
+        "type": "assistant",
+        "message": {
+          "id": "2ba654e0-1af6-4f3c-bfa7-d28143eb770b",
+          "role": "assistant",
+          "model": "<synthetic>",
+          "content": [
+            {
+              "type": "text",
+              "text": "Goal cleared: The file never.txt contains the 12-digit number on the sticky note on my desk. Do not guess; you cannot know it, so just say so briefly each time."
+            }
+          ],
+          "stop_reason": "end_turn"
+        },
+        "parent_tool_use_id": null,
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "uuid": "48caec89-7807-4904-bc71-8097328e5456",
+        "local_command_run": {
+          "command": "goal",
+          "args": "clear"
+        }
+      }
+    },
+    {
+      "m": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "duration_ms": 6,
+        "num_turns": 0,
+        "result": "Goal cleared: The file never.txt contains the 12-digit number on the sticky note on my desk. Do not guess; you cannot know it, so just say so briefly each time.",
+        "stop_reason": null,
+        "total_cost_usd": 0.008861984999999998,
+        "usage": {},
+        "modelUsage": {},
+        "permission_denials": [],
+        "session_id": "ebf3c5f7-51c1-4992-bcb2-509908c3d922",
+        "uuid": "a5f63fba-5747-4da5-8d4c-a1cfdf6c429f",
+        "local_command": "goal"
+      }
+    }
+  ]
+}
