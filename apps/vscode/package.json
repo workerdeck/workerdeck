@@ -1790,7 +1790,7 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@types/vscode": "~1.106.1",
+    "@types/vscode": "~1.144.0",
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-react-swc": "^4.3.3",
     "@vscode/vsce": "^3.9.2",
