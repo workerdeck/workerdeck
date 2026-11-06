@@ -22,16 +22,18 @@ export async function sessionInfoOf(ctx: ServerContext, id: string): Promise<Ses
 // runtime still answers for the session: the record is the truth, the runner never saw it. Read views only (the list and
 // GET): a mutation's lookup must not add a record read.
 export async function withStoredFailure(ctx: ServerContext, info: SessionInfo): Promise<SessionInfo> {
-  return info.failure ? info : withRecordFailure(info, await ctx.records.peek(info.id))
+  return info.failure ? info : withRecordFailure(ctx, info, await ctx.records.peek(info.id))
 }
 
-function withRecordFailure(info: SessionInfo, record: SessionRecord | null | undefined): SessionInfo {
+function withRecordFailure(ctx: ServerContext, info: SessionInfo, record: SessionRecord | null | undefined): SessionInfo {
   const failure = record?.failure
   if (!failure || info.failure || record.closedAt !== undefined) {
     return info
   }
-  // A cut racing the read can pair an old conversation's failure with the next one's info.
-  const stale = failure.conversation !== undefined && failure.conversation !== (info.conversation ?? record.conversation)
+  // A cut racing the read can pair an old record's failure with the next conversation's runner: judged against the
+  // generation now, never the snapshot's.
+  const current = info.conversation ?? ctx.records.conversationOf(info.id) ?? record.conversation
+  const stale = failure.conversation !== undefined && failure.conversation !== current
   return stale ? info : { ...info, failure }
 }
 
@@ -52,7 +54,7 @@ export async function listSessions(ctx: ServerContext, closed: boolean): Promise
   const byId = new Map(records.map((record) => [record.id, record]))
   const sessions = [...ctx.registry.list(), ...(await ctx.parking.listInfo())]
     .filter((info) => !ctx.agents.tombstone(info.id))
-    .map((info) => withRecordFailure(info, byId.get(info.id)))
+    .map((info) => withRecordFailure(ctx, info, byId.get(info.id)))
   const shown = new Set(sessions.map((info) => info.id))
   for (const record of records) {
     if (shown.has(record.id) || ctx.registry.get(record.id) || (record.closedAt === undefined && ctx.agents.tombstone(record.id))) {
