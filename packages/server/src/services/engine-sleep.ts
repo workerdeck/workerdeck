@@ -1,4 +1,6 @@
 import type { Runner } from '@workerdeck/core'
+import { goalActive } from '@workerdeck/protocol'
+import { engineOf } from '../lib/profile-env.ts'
 
 export type EngineSleepOptions = {
   afterMs: number
@@ -28,7 +30,7 @@ export class EngineSleepTimers {
     }
     this.#runners.set(runner.id, runner)
     const unsubscribe = runner.subscribe((event) => {
-      if (event.type === 'status_changed') {
+      if (event.type === 'status_changed' || event.type === 'goal_changed') {
         this.#rearm(runner)
       }
     }, runner.info().lastSeq)
@@ -80,8 +82,12 @@ export class EngineSleepTimers {
     this.#timers.set(runner.id, timer)
   }
 
+  // An active codex goal keeps the engine awake: codex drives the goal's turns itself, and an idle sleep would stop it.
   #sleepable(runner: Runner): boolean {
     const info = runner.info()
+    if (engineOf(info) === 'codex' && goalActive(info.goal)) {
+      return false
+    }
     return info.status === 'idle' && info.engineAsleep !== true && this.#options.attachedCount(runner.id) === 0
   }
 

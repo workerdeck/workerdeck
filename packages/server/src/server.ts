@@ -5,9 +5,11 @@ import { WebSocketServer } from 'ws'
 import {
   avatarDirectoryHandle,
   contextResetDirectoryHandle,
+  goalDirectoryHandle,
   getEngineAdapter,
   installAvatarDirectory,
   installContextResetDirectory,
+  installGoalDirectory,
   installPeerDirectory,
   installShellDirectory,
   peerDirectoryHandle,
@@ -45,6 +47,7 @@ import { createAuthService } from './services/auth.ts'
 import { AvailabilityTracker } from './services/availability.ts'
 import { EngineSleepTimers } from './services/engine-sleep.ts'
 import { ContextResetService } from './services/context-resets.ts'
+import { GoalService } from './services/goals.ts'
 import { BridgeHub } from './services/bridge.ts'
 import { PromptAcks } from './services/prompt-acks.ts'
 import { resolveRipgrep } from './services/host-text-search.ts'
@@ -251,6 +254,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   }
   let ownAvatarChanges: AvatarDirectory | undefined = avatarChanges
   installAvatarDirectory(avatarChanges)
+  const goals = new GoalService(() => ctx, {
+    confirmWaitMs: options.goalConfirmWaitMs,
+    onError: (error) => diagnose(error, 'goal'),
+  })
+  let ownGoals: GoalService | undefined = goals
+  installGoalDirectory(goals)
   // Built first because everything else holds it. The watchers it attaches read the later-built services only when
   // a runner registers, which no code path does before this function returns.
   const registry = new SessionRegistry({
@@ -398,6 +407,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       ? { directory: contextResetDirectoryHandle(() => ownContextResets), defaultEnabled: contextResets.defaultEnabled }
       : undefined,
     shells: shellDirectory ? shellDirectoryHandle(() => ownShells) : undefined,
+    goals: goalDirectoryHandle(() => ownGoals),
     shellAgentWrite: options.shell?.agentWrite,
     pricing: pricing.pricing,
     registry,
@@ -496,6 +506,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     records,
     cuts,
     engineSleep,
+    goals,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
     bridge,
     promptAcks: new PromptAcks(),
@@ -573,6 +584,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       cuts.close()
       ownContextResets = undefined
       ownAvatarChanges = undefined
+      ownGoals = undefined
       return agentWrites
     },
   })
@@ -730,6 +742,7 @@ function rebuildRunner(factory: SessionFactory, record: StoredSessionRecord): Pr
       epoch: (record.info.epoch ?? 0) + 1,
       ...(record.config.engineHome ? { engineHome: record.config.engineHome } : {}),
       ...(record.config.counterBase ? { counterBase: record.config.counterBase } : {}),
+      ...(record.config.goal === undefined ? {} : { goal: record.config.goal }),
       fallbackTitle: record.info.title,
       startAsleep: true,
     },

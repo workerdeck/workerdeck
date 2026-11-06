@@ -1386,6 +1386,37 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
 - **The card never shows an empty line.** Protocol's `cardStatus` falls back label, the checklist item
   in progress, the title, then a state word; the UI draws the fallbacks a shade dimmer.
 
+## Session goals (`set_goal`, `goal_*` tools, `SessionInfo.goal`)
+
+A goal is engine state (Claude `/goal`, codex thread goals) the runner normalizes; the gateway owns who may change it.
+
+- **One change path.** REST, WS and the agent tools all go through `GoalService.change`: capability and input
+  (`readGoalInput`), `refuseJobInput`, provenance, then the issue under the lifecycle lock (the caller's guard re-run:
+  REST's generation header and scope recheck, the socket's bound runner and conversation, the tool's caller and
+  target conversation; the cut gate; the registry still holding the same runner; the vet again on the live info).
+  The engine's confirmation is awaited **outside** the lock: a Claude session mid-turn applies `/goal` only after the
+  turn, and holding the lock that long would stall every cut and close. Past `goalConfirmWaitMs` (5 s) REST answers
+  202 `pending` and the tool answers "requested"; a late refusal goes to `onDiagnostic` ('goal').
+- **A tool call must never wait for its own turn.** An agent setting its own Claude goal is inside the very turn the
+  `/goal` queues behind, so the bounded wait is what keeps that from deadlocking.
+- **Provenance.** Humans stamp `setBy: human` and may change any goal. An agent's write stamps `{ kind: 'agent',
+  sessionId, name }`, and an agent may set, clear or pause only where the current goal is absent or agent-set; a
+  human goal (any state, met included) answers 403 until a human clears it.
+- **Reach.** No `target` is the caller. A target is accepted only as a local member of the team the caller leads
+  (`agents.members`, by id or name), and only where the peer rule lets the lead send to it (`scopeMatches` +
+  `peerOps(...).send`). Anything else, a member aiming at its lead included, is refused with the same line.
+- **Dormant sessions are woken** (`parking.ensureLive`, then the attach's `restored` wait), like a peer send: the change
+  needs the engine. Two exceptions answer from the record: a clear with no goal is a no-op, a pause with none is 409.
+- **The record keeps a tombstone.** Parking folds every `goal_changed` into its remembered config, so the dormant record
+  writes the goal, or `null` once one was cleared (absent means never known), and a rebuild re-applies it after the host
+  hook. Ticks that only move counters (codex usage) skip the write. `requestedConfig` drops `goal`: a cut starts n+1
+  without one, and the log folds `conversation_reset` to `null`.
+- **Idle sleep keeps a codex goal running.** `EngineSleepTimers` refuses an idle sleep while a codex session's goal is
+  active and re-arms on `goal_changed`, so pausing it lets the timer fire. Explicit sleep is the runner's to pause
+  first. Claude never starts a goal turn by itself, so its goals do not hold sleep off.
+- **A peer's `/goal` is text.** Peer sends go through `sendMessage` with an `origin` (the envelope), never through the
+  goal path; `goals.test.ts` and `peer-relay.test.ts` pin it on the gateway and relay paths.
+
 ## Agent context reset (`context_reset`, `agentContextReset`)
 
 - **Behind a gateway every reset is a cut, a named session's too.** The turn-end run is

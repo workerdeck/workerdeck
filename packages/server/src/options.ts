@@ -103,6 +103,9 @@ export type WorkerServerOptions = {
   notifications?: SessionNotificationOptions
   // Stop a live session's engine child after it has sat idle with no client attached this long; 0 or omitted: never.
   engineSleepAfterMs?: number
+  // How long a goal change waits for the engine before the route answers 202 and the agent tool answers "requested"
+  // (default 5000): a Claude session applies a goal only after its running turn.
+  goalConfirmWaitMs?: number
   // The same for an agent's session when the agent sets no `sleepAfterMs` of its own; omitted: 15 minutes, 0: never.
   agentSleepAfterMs?: number
   // Private or shared with other owners' shared agents (a card in their lists and messages, no more). `default` is what

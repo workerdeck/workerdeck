@@ -13,6 +13,7 @@ import { SET_STATUS_GUIDANCE, composeInstructions } from '@workerdeck/core'
 import type {
   AvatarDirectory,
   ContextResetDirectory,
+  GoalDirectory,
   EngineAdapter,
   PeerDirectory,
   Runner,
@@ -46,6 +47,7 @@ export type SessionFactoryDeps = {
   requireApiKey?: boolean
   peers?: PeerDirectory
   contextReset?: { directory: ContextResetDirectory; defaultEnabled: boolean }
+  goals?: GoalDirectory
   shells?: ShellDirectory
   shellAgentWrite?: ShellAgentWriteOption
   pricing?: PricingTable
@@ -290,6 +292,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
       ...(deps.pricing ? { pricing: deps.pricing } : {}),
     }
     delete config.contextReset
+    delete config.goals
     delete config.avatar
     delete config.shells
     delete config.shellAgentWrite
@@ -308,6 +311,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
     if (deps.contextReset && (built.agentContextReset ?? profile?.defaults?.agentContextReset ?? deps.contextReset.defaultEnabled)) {
       config.contextReset = deps.contextReset.directory
+    }
+    if (deps.goals && capabilities.goals) {
+      config.goals = deps.goals
     }
     if (deps.shells && capabilities.hostCwd === true) {
       config.shells = deps.shells

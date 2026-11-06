@@ -236,6 +236,22 @@ describe('SessionHandle framing', () => {
     handle.detach()
   })
 
+  it('sends goal commands stamped with the conversation the socket attached to', () => {
+    const handle = makeClient().attach('s1')
+    settle()
+    latest().accept()
+    latest().deliver({ type: 'attached', protocolVersion: 2, session: { conversation: 2 }, replayingFrom: 0 })
+    handle.setGoal({ text: 'ship it', tokenBudget: 100 })
+    handle.pauseGoal(true)
+    handle.clearGoal()
+    expect(latest().sent.map((raw) => JSON.parse(raw))).toEqual([
+      { type: 'set_goal', text: 'ship it', tokenBudget: 100, generation: 2 },
+      { type: 'pause_goal', paused: true, generation: 2 },
+      { type: 'clear_goal', generation: 2 },
+    ])
+    handle.detach()
+  })
+
   it('advances lastSeq and drops events that replay at or below it', () => {
     const handle = makeClient().attach('s1', { afterSeq: 5 })
     settle()
@@ -523,6 +539,20 @@ describe('stable session address', () => {
     expect(calls).toEqual([
       { method: 'PATCH', url: 'http://host/v1/sessions/s1', body: { agent: { name: 'Atlas' } } },
       { method: 'PATCH', url: 'http://host/v1/sessions/s1', body: { agent: null }, generation: '2' },
+    ])
+  })
+
+  it('sets, pauses and clears a goal under the session conversation header', async () => {
+    const calls: { method?: string; url: string; body?: unknown; generation?: string }[] = []
+    const client = recording(calls, { session: { id: 's1', conversation: 2 }, goal: null })
+    client.noteConversation('s1', 2)
+    await client.setGoal('s1', { text: 'tests pass' })
+    await client.pauseGoal('s1', false)
+    expect(await client.clearGoal('s1')).toMatchObject({ goal: null })
+    expect(calls).toEqual([
+      { method: 'POST', url: 'http://host/v1/sessions/s1/goal', body: { text: 'tests pass' }, generation: '2' },
+      { method: 'POST', url: 'http://host/v1/sessions/s1/goal/pause', body: { paused: false }, generation: '2' },
+      { method: 'DELETE', url: 'http://host/v1/sessions/s1/goal', generation: '2' },
     ])
   })
 

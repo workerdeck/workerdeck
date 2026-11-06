@@ -520,6 +520,13 @@ as a future additive field), are in `docs/GOTCHAS.md` §Server, profiles & auth.
 
 `tool_output` (a running tool's whole output tail) is coalesced per tool id by both `replayCoalesceKey` and `logCoalesceKey` and never snapshotted; `EngineCapabilities.backgroundTasks` gates the `background_task` command. Invariants in `docs/GOTCHAS.md` §Live tool output & backgrounding.
 
+**Goals** (`goal.ts`): `SessionGoal`, `GoalSetter` (provenance), `GoalInput` and `readGoalInput(input, capabilities)` (the
+one validation every caller runs: text trimmed, non-empty, at most 4000, not a Claude clear alias; a budget only where
+`EngineCapabilities.goals.budget`), `goalActive`. Commands `set_goal { text, tokenBudget? }`, `clear_goal`, `pause_goal
+{ paused }`; REST bodies `SetGoalRequest` / `PauseGoalRequest`, answered with `GoalResponse { session, goal, pending? }`.
+A notice-less `goal_changed` is a state tick and coalesces (`replayCoalesceKey`, `logCoalesceKey`). There is no stop
+command: Stop stays `interrupt`. Rules in `docs/GOTCHAS.md` § Session goals.
+
 ## `packages/core`
 
 **Reasoning effort**: `Runner.setEffort?()` on `SessionRunner` and `CodexRunner`; both report the
@@ -855,6 +862,13 @@ limits, and the run at the next idle: the `cut` option the gateway wires to
 `ConversationCuts.clearOnIdle`, for every session; clear-then-prompt only where no cut is wired). `buildRunner` stamps `config.contextReset`
 (a transient host-only key) from request, profile default, then the `agentContextReset` option;
 `false` builds no service at all. Rules in `docs/GOTCHAS.md` §Agent context reset.
+
+**Goals** live in `services/goals.ts` (`GoalService`: the one change path for `POST`/`DELETE /sessions/:id/goal`,
+`POST /sessions/:id/goal/pause`, the WS `set_goal`/`clear_goal`/`pause_goal` frames, and the `GoalDirectory` behind the
+agents' `goal_*` tools). `buildRunner` stamps `config.goals` (transient) on every engine whose capability record has
+`goals`, so plain sessions and members get the tools too; the directory decides reach. Parking folds `goal_changed`
+into the remembered config, so the dormant record carries the goal and a clear's `null` tombstone; `requestedConfig`
+drops it, so a cut starts without one. Rules in `docs/GOTCHAS.md` § Session goals.
 
 HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
 profiles served with their engine's **capability record, static model catalog, and
@@ -1200,7 +1214,8 @@ false until one has, which is how react tells `connecting`/`unreachable` (never 
 `reconnecting`/`offline`. `reconnectNow` only skips the backoff wait: during a handshake it resets the ladder and
 reports attempt 0, never opening a second socket. `closeSession` sends `close` and detaches at once, which loses
 nothing because a WebSocket sends queued frames before its close handshake; the gateway runs a `close` behind the
-prompts sent before it. A refused REST
+prompts sent before it. Goals: `setGoal(id, { text, tokenBudget? })`, `clearGoal(id)`, `pauseGoal(id, paused)` (REST, a 202 answers `pending`)
+and the matching `SessionHandle` frame senders. A refused REST
 call throws `WorkerDeckError` (an `Error` subclass carrying `status`), which is what lets a
 caller tell "this server has no such route" (404 - stop asking) from "that file was too big".
 `AttachOptions.truncateResults` + `client.toolResult(...)` are the client half of the truncating
