@@ -197,9 +197,9 @@ pub struct ListRow {
     pub model_label: Option<String>,
     // The model after an agent's name: vendor mark (`mark`, tinted as `mark_tinted`), letter, superscript version.
     pub model_badge: Option<ModelBadge>,
-    // An agent card's second line (a Member's status): the label, else the task in progress, the title, the state.
+    // An agent card's second line (a Member's status): the label, else the goal, the task in progress, the title, the state.
     pub card_status: String,
-    // Only an agent's own status label draws a step brighter; the fallbacks sit one shade dimmer.
+    // An agent's own status label or goal draws a step brighter; the fallbacks sit one shade dimmer.
     pub card_status_is_label: bool,
     pub agent: Option<String>,
     pub agent_id: Option<String>,
@@ -625,7 +625,7 @@ fn list_row(
             .and_then(wd_native::vm::model_menu::model_badge)
             .map(|badge| ModelBadge { letter: badge.letter, version: badge.version }),
         model_label,
-        card_status_is_label: card_status.source == vm::CardStatusSource::Label,
+        card_status_is_label: matches!(card_status.source, vm::CardStatusSource::Label | vm::CardStatusSource::Goal),
         card_status: card_status.text,
         agent: info.agent.as_ref().map(|a| a.name.clone()),
         agent_id: info.agent.as_ref().map(|a| a.id.clone()),

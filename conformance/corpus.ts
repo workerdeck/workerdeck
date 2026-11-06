@@ -634,6 +634,32 @@ export const CORPUS: Case[] = [
       userText('sh-live', '<local-command-stdout>$ npm run dev\nlistening on :5173</local-command-stdout>', { synthetic: true, shell: SHELL }),
     ),
   },
+  {
+    name: 'goals',
+    tape: beat(
+      init(),
+      event({ type: 'goal_changed', notice: 'set', goal: { text: 'Ship the port', state: 'active', setAt: 1_760_000_000_000, setBy: { kind: 'human' }, tokensUsed: 0, tokenBudget: 60_000 } }),
+      event({ type: 'goal_changed', goal: { text: 'Ship the port', state: 'active', setAt: 1_760_000_000_000, setBy: { kind: 'human' }, tokensUsed: 1200, tokenBudget: 60_000, timeUsedSeconds: 4 } }),
+      event({ type: 'goal_changed', notice: 'limited', goal: { text: 'Ship the port', state: 'limited', limit: 'budget', setAt: 1_760_000_000_000, setBy: { kind: 'human' }, tokensUsed: 61_000, tokenBudget: 60_000 } }),
+      event({ type: 'goal_changed', notice: 'paused', goal: { text: 'Ship the port', state: 'paused', setAt: 1_760_000_000_000, setBy: { kind: 'human' } } }),
+      event({ type: 'goal_changed', notice: 'resumed', goal: { text: 'Ship the port', state: 'active', setAt: 1_760_000_000_000, setBy: { kind: 'human' } } }),
+      event({ type: 'goal_changed', notice: 'cleared', goal: null }),
+      event({ type: 'goal_changed', notice: 'set', goal: { text: 'Tests green', state: 'active', setAt: 1_760_000_100_000, setBy: { kind: 'agent', sessionId: 'sess-lead', name: 'WD-Lead' } } }),
+      event({ type: 'goal_changed', notice: 'check_failed', goal: { text: 'Tests green', state: 'active', setAt: 1_760_000_100_000, setBy: { kind: 'agent', sessionId: 'sess-lead', name: 'WD-Lead' }, checks: 1, lastReason: '  two tests still fail  ' } }),
+      event({ type: 'goal_changed', notice: 'blocked', goal: { text: 'Tests green', state: 'blocked', setAt: 1_760_000_100_000, setBy: { kind: 'agent', sessionId: 'sess-lead' }, checks: 1 } }),
+      event({ type: 'goal_changed', notice: 'failed', goal: { text: 'Tests green', state: 'failed', setAt: 1_760_000_100_000, setBy: { kind: 'agent', sessionId: 'sess-lead' }, checks: 2, lastReason: 'The suite cannot run here' } }),
+      event({ type: 'goal_changed', notice: 'met', goal: { text: 'Tests green', state: 'met', setAt: 1_760_000_100_000, setBy: { kind: 'human' }, checks: 2, lastReason: 'All green' } }),
+    ),
+  },
+  {
+    name: 'goal-reset',
+    tape: beat(
+      init(),
+      event({ type: 'goal_changed', notice: 'set', goal: { text: 'Ship the port', state: 'active', setAt: 1_760_000_000_000, setBy: { kind: 'human' } } }),
+      event({ type: 'conversation_reset', sdkSessionId: 'sdk-fresh' }),
+      user('Second conversation.'),
+    ),
+  },
 ]
 
 export const DUPLICATES = new Set(['duplicate-seq-replay'])

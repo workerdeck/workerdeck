@@ -233,6 +233,20 @@ pub fn update_session(id: &str, patch: &SessionPatch, generation: i64) -> HttpCa
     HttpCall::with("PATCH", session(id), Value::Object(body)).for_conversation(generation)
 }
 
+// A human's goal. `token_budget`: `None` leaves the budget alone, `Some(None)` removes it (codex only).
+pub fn set_goal(id: &str, input: &crate::vm::goal::GoalInput, generation: i64) -> HttpCall {
+    let body = serde_json::to_value(input).unwrap_or_else(|_| json!({ "text": input.text }));
+    HttpCall::with("POST", format!("{}/goal", session(id)), body).for_conversation(generation)
+}
+
+pub fn clear_goal(id: &str, generation: i64) -> HttpCall {
+    HttpCall { method: "DELETE", path: format!("{}/goal", session(id)), body: None, generation: Some(generation) }
+}
+
+pub fn pause_goal(id: &str, paused: bool, generation: i64) -> HttpCall {
+    HttpCall::with("POST", format!("{}/goal/pause", session(id)), json!({ "paused": paused })).for_conversation(generation)
+}
+
 pub fn sleep_session(id: &str, generation: i64) -> HttpCall {
     HttpCall::post(format!("{}/sleep", session(id))).for_conversation(generation)
 }
@@ -515,6 +529,17 @@ mod tests {
         assert_eq!(delete_session("s?1", 1), at("DELETE", "/sessions/s%3F1", None, 1));
         assert_eq!(stop_task("s", "tu/1", 3), at("POST", "/sessions/s/tasks/tu%2F1/stop", None, 3));
         assert_eq!(kill_shell("s", "sh#1", 1), at("POST", "/sessions/s/shells/sh%231/kill", None, 1));
+    }
+
+    #[test]
+    fn goal_calls_carry_the_budget_only_when_touched() {
+        use crate::vm::goal::GoalInput;
+        let set = |token_budget| set_goal("s", &GoalInput { text: "Ship it".into(), token_budget }, 3);
+        assert_eq!(set(None), at("POST", "/sessions/s/goal", Some(r#"{"text":"Ship it"}"#), 3));
+        assert_eq!(set(Some(None)), at("POST", "/sessions/s/goal", Some(r#"{"text":"Ship it","tokenBudget":null}"#), 3));
+        assert_eq!(set(Some(Some(60000))), at("POST", "/sessions/s/goal", Some(r#"{"text":"Ship it","tokenBudget":60000}"#), 3));
+        assert_eq!(clear_goal("s 1", 2), at("DELETE", "/sessions/s%201/goal", None, 2));
+        assert_eq!(pause_goal("s", false, 1), at("POST", "/sessions/s/goal/pause", Some(r#"{"paused":false}"#), 1));
     }
 
     #[test]

@@ -339,6 +339,7 @@ pub enum Body {
     Capabilities { models: Option<Arc<Value>>, commands: Option<Arc<Value>>, default_model: Option<String> },
     Skills(Arc<Value>),
     Checklist(Vec<Value>),
+    GoalChanged { goal: Option<Box<crate::rest::SessionGoal>>, notice: Option<crate::vm::goal::GoalNotice> },
     ToolTitles(Vec<(String, String)>),
     FileProduced { path: String, file_id: String, media_type: Option<String>, bytes: Option<f64> },
     ModelChanged(Option<String>),
@@ -841,6 +842,16 @@ fn decode_cold(ty: &str, e: &Value) -> Option<Body> {
         }
         "skills" => Body::Skills(present(e, "skills")?),
         "checklist" => Body::Checklist(e.get("items")?.as_array()?.clone()),
+        "goal_changed" => Body::GoalChanged {
+            goal: match e.get("goal")? {
+                Value::Null => None,
+                goal => Some(Box::new(serde_json::from_value(goal.clone()).ok()?)),
+            },
+            notice: match e.get("notice") {
+                None | Some(Value::Null) => None,
+                Some(notice) => crate::vm::goal::GoalNotice::parse(notice.as_str()?),
+            },
+        },
         "tool_titles" => Body::ToolTitles(
             e.get("titles")?.as_object()?.iter().filter_map(|(name, title)| Some((name.clone(), title.as_str()?.to_owned()))).collect(),
         ),

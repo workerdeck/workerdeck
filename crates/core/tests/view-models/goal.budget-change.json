@@ -1,0 +1,34 @@
+{
+  "input": {
+    "fn": "goalBudgetChangeOf",
+    "calls": [
+      [
+        "20000",
+        20000
+      ],
+      [
+        "",
+        20000
+      ],
+      [
+        " 60000 ",
+        null
+      ],
+      [
+        "",
+        null
+      ],
+      [
+        "60000",
+        20000
+      ]
+    ]
+  },
+  "output": [
+    "untouched",
+    null,
+    60000,
+    "untouched",
+    60000
+  ]
+}

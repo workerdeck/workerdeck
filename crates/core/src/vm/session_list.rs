@@ -308,6 +308,7 @@ pub fn session_state(info: &SessionInfo) -> SessionState {
 #[serde(rename_all = "lowercase")]
 pub enum CardStatusSource {
     Label,
+    Goal,
     Task,
     Title,
     State,
@@ -326,6 +327,9 @@ pub fn card_status(info: &SessionInfo, state: SessionState) -> CardStatus {
             _ => label.text.clone(),
         };
         return CardStatus { text, source: CardStatusSource::Label };
+    }
+    if let Some(text) = crate::vm::goal::goal_card_text(info.goal.as_ref()) {
+        return CardStatus { text, source: CardStatusSource::Goal };
     }
     let task = info.checklist.iter().flatten().find(|item| item.status == ChecklistStatus::InProgress).map(|item| js_trim(&item.text));
     if let Some(task) = task.filter(|task| !task.is_empty()) {

@@ -1,0 +1,261 @@
+{
+  "input": {
+    "fn": "goalHoldsEngine",
+    "calls": [
+      [
+        {
+          "id": "h1",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "goal": {
+            "text": "Ship the port",
+            "state": "active",
+            "setAt": 1760000000000,
+            "setBy": {
+              "kind": "human"
+            }
+          },
+          "capabilities": {
+            "interactiveApprovals": true,
+            "permissionModes": [
+              "default",
+              "acceptEdits",
+              "bypassPermissions",
+              "auto"
+            ],
+            "defaultPermissionMode": "default",
+            "resume": true,
+            "resumeBackfill": true,
+            "forkSession": false,
+            "listSessions": true,
+            "contextUsage": true,
+            "rateLimits": true,
+            "mcpStatus": true,
+            "mcpServerActions": false,
+            "sessionMcpServers": true,
+            "toolFilters": "mcp",
+            "slashCommands": false,
+            "clearContext": true,
+            "skillsList": true,
+            "settingSources": false,
+            "budgets": false,
+            "attachments": [
+              "image",
+              "text"
+            ],
+            "reasoningEfforts": [
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "vfs": false,
+            "hostCwd": true,
+            "systemInstructions": true,
+            "engineSleep": true,
+            "goals": {
+              "pause": true,
+              "budget": true
+            },
+            "streaming": "token"
+          }
+        }
+      ],
+      [
+        {
+          "id": "h2",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "goal": {
+            "text": "Ship the port",
+            "state": "active",
+            "setAt": 1760000000000,
+            "setBy": {
+              "kind": "human"
+            }
+          },
+          "capabilities": {
+            "interactiveApprovals": true,
+            "permissionModes": [
+              "default",
+              "acceptEdits",
+              "bypassPermissions",
+              "plan",
+              "dontAsk",
+              "auto"
+            ],
+            "defaultPermissionMode": "default",
+            "resume": true,
+            "resumeBackfill": true,
+            "forkSession": true,
+            "listSessions": true,
+            "contextUsage": true,
+            "rateLimits": true,
+            "mcpStatus": true,
+            "mcpServerActions": true,
+            "sessionMcpServers": true,
+            "toolFilters": "all",
+            "slashCommands": true,
+            "clearContext": true,
+            "skillsList": false,
+            "settingSources": true,
+            "budgets": true,
+            "attachments": [
+              "image",
+              "pdf",
+              "text"
+            ],
+            "reasoningEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "vfs": false,
+            "hostCwd": true,
+            "systemInstructions": true,
+            "engineSleep": true,
+            "backgroundTasks": true,
+            "goals": {
+              "pause": false,
+              "budget": false
+            },
+            "streaming": "token"
+          }
+        }
+      ],
+      [
+        {
+          "id": "h3",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "goal": {
+            "text": "Ship the port",
+            "state": "paused",
+            "setAt": 1760000000000,
+            "setBy": {
+              "kind": "human"
+            }
+          },
+          "capabilities": {
+            "interactiveApprovals": true,
+            "permissionModes": [
+              "default",
+              "acceptEdits",
+              "bypassPermissions",
+              "auto"
+            ],
+            "defaultPermissionMode": "default",
+            "resume": true,
+            "resumeBackfill": true,
+            "forkSession": false,
+            "listSessions": true,
+            "contextUsage": true,
+            "rateLimits": true,
+            "mcpStatus": true,
+            "mcpServerActions": false,
+            "sessionMcpServers": true,
+            "toolFilters": "mcp",
+            "slashCommands": false,
+            "clearContext": true,
+            "skillsList": true,
+            "settingSources": false,
+            "budgets": false,
+            "attachments": [
+              "image",
+              "text"
+            ],
+            "reasoningEfforts": [
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "vfs": false,
+            "hostCwd": true,
+            "systemInstructions": true,
+            "engineSleep": true,
+            "goals": {
+              "pause": true,
+              "budget": true
+            },
+            "streaming": "token"
+          }
+        }
+      ],
+      [
+        {
+          "id": "h4",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "capabilities": {
+            "interactiveApprovals": true,
+            "permissionModes": [
+              "default",
+              "acceptEdits",
+              "bypassPermissions",
+              "auto"
+            ],
+            "defaultPermissionMode": "default",
+            "resume": true,
+            "resumeBackfill": true,
+            "forkSession": false,
+            "listSessions": true,
+            "contextUsage": true,
+            "rateLimits": true,
+            "mcpStatus": true,
+            "mcpServerActions": false,
+            "sessionMcpServers": true,
+            "toolFilters": "mcp",
+            "slashCommands": false,
+            "clearContext": true,
+            "skillsList": true,
+            "settingSources": false,
+            "budgets": false,
+            "attachments": [
+              "image",
+              "text"
+            ],
+            "reasoningEfforts": [
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "vfs": false,
+            "hostCwd": true,
+            "systemInstructions": true,
+            "engineSleep": true,
+            "goals": {
+              "pause": true,
+              "budget": true
+            },
+            "streaming": "token"
+          }
+        }
+      ]
+    ]
+  },
+  "output": [
+    true,
+    false,
+    false,
+    false
+  ]
+}

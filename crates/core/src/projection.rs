@@ -10,6 +10,7 @@ pub fn project(state: &TranscriptState) -> Value {
     put(&mut out, "effort", state.effort.clone().flatten().map(Value::from));
     put(&mut out, "cwd", state.cwd.as_deref().map(Value::from));
     put(&mut out, "sdkSessionId", state.sdk_session_id.as_deref().map(Value::from));
+    put(&mut out, "goal", state.goal.clone().flatten().and_then(|goal| canonical(&serde_json::to_value(goal).ok()?)));
     put(&mut out, "checklist", state.checklist.as_ref().and_then(|items| canonical(&Value::Array(items.clone()))));
     put(&mut out, "toolTitles", pairs(&state.tool_titles, |title| json!(title)));
     put(
