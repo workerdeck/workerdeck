@@ -1461,8 +1461,9 @@ A goal is engine state (Claude `/goal`, codex thread goals) the runner normalize
   status label and the checklist (a met goal leaves the card); `goalHoldsEngine` is the codex "keeps the engine awake"
   hint; `goalBudgetChange` turns a budget field into untouched (omitted), removed (`null`) or a number. The reducer
   holds `TranscriptState.goal`, seeded from `SessionInfo.goal` until an event names one, and `conversation_reset`
-  sets it to `null`. The Rust core (P4) has none of this yet: no `goal_changed` reduction, no `SessionInfo.goal`
-  decode, no `card_status` goal branch, and no golden has a goal input, so parity needs its own shared fixtures.
+  sets it to `null`. The Rust core mirrors all of it (`vm/goal.rs`, `TranscriptState.goal` as `Option<Option<_>>` so
+  a held `null` survives a seed, `CardStatusSource::Goal`) and the native apps read `SessionChrome.goal`/`goals`;
+  parity is pinned by the `goals`/`goal-reset` corpus cases and the `goal.*` view-model goldens.
 - **A human goal change names the conversation the person saw.** Web and VS Code pass `info.conversation` to
   `setGoal`/`clearGoal`/`pauseGoal`, which sends it as the generation header instead of the client's cached one: an
   editor left open across a cut is refused (stale generation) rather than setting the old task on n+1.

@@ -103,7 +103,7 @@ in `AGENTS.md` if you want more.
 ## Goals
 
 A goal is a condition the agent keeps working toward, turn after turn, until it holds: "all tests in
-`packages/core` pass". Set one from the card menu (*Set goal…*; Codex sessions also take a token
+`packages/core` pass". Set one from the card or session menu on any client (*Set goal…*; Codex sessions also take a token
 budget), with `POST /v1/sessions/:id/goal` `{ "text": "..." }`, or let the agent set its own with the
 `goal_set` tool (a lead can set one on its members). Claude checks the goal at the end of every turn
 and keeps going while it is not met; Codex runs goal turns by itself until the goal is met, the budget
