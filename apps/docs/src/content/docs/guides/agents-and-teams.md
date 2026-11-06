@@ -58,8 +58,12 @@ conversation you were looking at, and is refused (409) if the session has moved 
 A team is a lead and the agents that name it as their lead, **one level deep**: a lead cannot join
 another team, and nobody can join a member. Drag a card onto another agent to join its team, drop
 it between members to place it, and drag a member out to leave; the card menus offer the same
-moves. In the list, members sit under their lead on a tree line, and a folded team shows each
-member's avatar and status on the lead's own line.
+moves. In the list, a team draws a member under its lead only while that member needs you: an
+approval waits, it failed, or it said it is blocked on you (`set_status` with `waitingOn: "human"`).
+Each such card carries a chip (*Approval*, *Failed*, *Blocked*), and the lead shows how many members
+need you. The rest sit as avatars on the lead's own line ("2 need you · 3 working · 1 idle"); the
+member you open stays drawn, and expanding the team shows everyone. The *Needs attention* filter and
+group use the same rule, for lone agents too.
 
 Teams also scope peer messaging: a member reaches only its lead and teammates, and nobody outside
 the team reaches a member. With a [relay](/workerdeck/docs/guides/cross-gateway-peers/) a team can

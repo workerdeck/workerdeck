@@ -7,6 +7,14 @@ gateway and protocol it talks to.
 
 ## [Unreleased]
 
+### Changed
+
+- **Teams surface members only when they need you.** A member draws under its lead while an
+  approval waits, it failed, or it set a status with `waitingOn: "human"`; working, unread and idle
+  members sit in the lead's tray (the 5 second linger is gone). Cards carry an *Approval*, *Failed*
+  or *Blocked* chip, the lead counts the members that need you, and the *Needs attention* filter and
+  group include failed and blocked sessions. Same on iOS and Android.
+
 ### Added
 
 - **Session goals.** Give a Claude or Codex session a condition to work toward across turns: *Set
