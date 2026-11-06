@@ -284,6 +284,80 @@ describe('claude goals: host command path', () => {
   })
 })
 
+describe('claude goals: replies bind to their own command', () => {
+  it('binds interleaved typed and host commands in delivery order, identical args included', async () => {
+    const r = rig({ transcript: [], steps: [] })
+    await started(r)
+    r.runner.sendMessage('/goal human-B')
+    const a = r.runner.setGoal({ text: 'host-A' }, { kind: 'human' })
+    r.runner.sendMessage('/goal same')
+    const same = r.runner.setGoal({ text: 'same' }, { kind: 'human' })
+    await tick()
+    r.harness.emit(reply('human-B', 'Goal set: human-B'))
+    r.harness.emit(reply('host-A', 'Goal set: host-A'))
+    r.harness.emit(reply('same', 'Goal set: same'))
+    await tick()
+    expect(assistantTexts(r.events)).toEqual(['Goal set: human-B', 'Goal set: same'])
+    expect(await a).toMatchObject({ text: 'host-A' })
+    let settled = false
+    void same.then(() => (settled = true))
+    await tick()
+    expect(settled).toBe(false)
+    r.harness.emit(reply('same', 'Goal set: same'))
+    await tick()
+    expect(await same).toMatchObject({ text: 'same' })
+    expect(assistantTexts(r.events)).toEqual(['Goal set: human-B', 'Goal set: same'])
+    expect(r.runner.pendingInput()).toBe(0)
+  })
+
+  it('keeps a typed status query in the order', async () => {
+    const r = rig({ transcript: [], steps: [] })
+    await started(r)
+    r.runner.sendMessage('/goal')
+    const set = r.runner.setGoal({ text: 'x' }, LEAD)
+    await tick()
+    r.harness.emit(reply('', 'No goal set. Usage: `/goal <condition>`'))
+    r.harness.emit(localResult('No goal set. Usage: `/goal <condition>`'))
+    r.harness.emit(reply('x', 'Goal set: x'))
+    expect(await set).toMatchObject({ text: 'x', setBy: LEAD })
+    expect(assistantTexts(r.events)).toEqual(['No goal set. Usage: `/goal <condition>`'])
+    expect(r.events.filter((event) => event.type === 'turn_result')).toHaveLength(1)
+  })
+
+  it('refuses an agent change while a human one is unconfirmed', async () => {
+    const r = rig({ transcript: [], steps: [] })
+    await started(r)
+    r.runner.sendMessage('/goal mine')
+    await expect(r.runner.setGoal({ text: 'theirs' }, LEAD)).rejects.toThrow('a human goal change is pending')
+    await tick()
+    r.harness.emit(reply('mine', 'Goal set: mine'))
+    await tick()
+    const human = r.runner.setGoal({ text: 'next' }, { kind: 'human' })
+    await expect(r.runner.clearGoal(LEAD)).rejects.toThrow('a human goal change is pending')
+    r.harness.emit(reply('next', 'Goal set: next'))
+    await human
+    const agent = r.runner.setGoal({ text: 'agent' }, LEAD)
+    r.harness.emit(reply('agent', 'Goal set: agent'))
+    expect(await agent).toMatchObject({ setBy: LEAD })
+  })
+
+  it('counts a host command the SDK took but the CLI has not run as pending input, and moves the revision', async () => {
+    const r = rig({ transcript: [], steps: [] })
+    await started(r)
+    const before = r.runner.inputSnapshot()
+    const set = r.runner.setGoal({ text: 'x' }, { kind: 'human' })
+    await tick()
+    expect(r.texts()).toEqual(['/goal x'])
+    const taken = r.runner.inputSnapshot()
+    expect(taken.pending).toBe(1)
+    expect(taken.revision).not.toBe(before.revision)
+    expect(r.runner.inputConfirmable()).toBe(true)
+    r.harness.emit(reply('x', 'Goal set: x'))
+    await set
+    expect(r.runner.pendingInput()).toBe(0)
+  })
+})
+
 describe('claude goals: what is not a goal', () => {
   it('keeps a person typing /goal visible and stamps it human', async () => {
     const r = rig({ transcript: [], steps: [] })
