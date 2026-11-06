@@ -13,7 +13,8 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
 - push: yes - branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes - `pnpm version:set <x.y.z> && pnpm install --lockfile-only && pnpm fix:dashes`
   (the last step is not optional: `npm version` rewrites each `package.json` and expands any
-  `\u2014` escape back into a literal em dash, so the ratchet fires on the bump itself) (the 12 packages
+  `\u2014` escape back into a literal em dash, so the ratchet fires on the bump itself) (and `pnpm install
+  --lockfile-only` still installs: never run the bump in the checkout a live dev gateway runs from, see 4.3.0) (the 12 packages
   plus `apps/vscode`; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 is published
   (protocol **7** + the codex engine + the session-runner parity work; it absorbed the
   never-published 0.8.0). 0.10.0 added codex skills and generated images, the codex MCP panel and
@@ -1751,7 +1752,13 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   test helpers to take `AiSdkRunnerConfig` (tsc's "union too complex"). **Verified**: `pnpm lint`, typecheck, full
   test (`--force`), `cargo test`, build, gatekeeper; paid smokes on the new engines: `smoke:mcp-reconnect` claude
   12/12 + codex 4/4, `smoke:shell-write` claude 17/17 + codex 16/16, `smoke:cut claude` 21/21, `smoke:codex`
-  39/39 + canary 11/11, `smoke:restart codex` 8/8.
+  39/39 + canary 11/11, `smoke:restart codex` 8/8, CI 5/5 on `b7e17fa5` (it also caught a `cargo fmt` drift from the
+  85th session), Publish `dry_run` green. **Published** 2026-11-06: tag `v4.3.0` at `b7e17fa5`, Publish green first try
+  (run 42150203342), npm 12/12 with `latest` 4.3.0 (web and the CLI staged for about two minutes), Marketplace
+  4.3.0. **Incident**: the bump's `pnpm install --lockfile-only` ran a real install in the checkout the dev gateway
+  runs from, deleting the old SDK, codex and node-pty directories under the live process (Node's resolver caches
+  the old paths): new Claude engines and new shells failed until the old directories were restored and the
+  gateway restarted. Bump in a worktree, or with the gateway stopped.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
