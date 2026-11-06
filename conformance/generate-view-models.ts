@@ -14,6 +14,7 @@ import {
   seedFromSessionInfo,
   type TranscriptState,
 } from '../packages/react/src/lib/transcript.ts'
+import { goalBudgetChange } from '../packages/protocol/src/goal.ts'
 import { projectTranscript } from '../packages/react/src/lib/transcript-projection.ts'
 import { permissionPromptModel } from '../packages/ui/src/lib/permission-prompt.ts'
 import { shellRequestLines } from '../packages/ui/src/lib/shell-request.ts'
@@ -237,7 +238,7 @@ const FNS: Record<string, Fn> = {
   teamLingerStartPeeked: (member: protocol.SessionRow, selected: string | undefined, now: number, peeked: string[]) =>
     protocol.teamLingerStart(member, selected, now, new Set(peeked)) ?? null,
   goalBudgetChangeOf: (field: string, shown: number | null) => {
-    const change = protocol.goalBudgetChange(field, shown ?? undefined)
+    const change = goalBudgetChange(field, shown ?? undefined)
     return change === undefined ? 'untouched' : change
   },
   defaultPricing: () => protocol.DEFAULT_PRICING,
