@@ -1,0 +1,59 @@
+{
+  "input": {
+    "fn": "goalStateText",
+    "calls": [
+      [
+        {
+          "state": "active"
+        }
+      ],
+      [
+        {
+          "state": "paused"
+        }
+      ],
+      [
+        {
+          "state": "blocked"
+        }
+      ],
+      [
+        {
+          "state": "met"
+        }
+      ],
+      [
+        {
+          "state": "failed"
+        }
+      ],
+      [
+        {
+          "state": "limited",
+          "limit": "budget"
+        }
+      ],
+      [
+        {
+          "state": "limited",
+          "limit": "usage"
+        }
+      ],
+      [
+        {
+          "state": "limited"
+        }
+      ]
+    ]
+  },
+  "output": [
+    "Active",
+    "Paused",
+    "Blocked",
+    "Met",
+    "Failed",
+    "Token budget reached",
+    "Usage limit reached",
+    "Usage limit reached"
+  ]
+}

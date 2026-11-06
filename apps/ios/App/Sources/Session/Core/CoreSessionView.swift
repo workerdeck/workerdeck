@@ -22,6 +22,7 @@ struct CoreSessionView: View {
   @State private var settleCut: Int64?
   @State private var confirmDelete = false
   @State private var actionError: String?
+  @State private var goalRequest: CoreGoalRequest?
   private let hostId: UUID
   private let sessionId: String
   private let client: WorkerClient?
@@ -86,6 +87,9 @@ struct CoreSessionView: View {
       ToolbarItem(placement: .topBarTrailing) { sessionMenu(ui.chrome) }
     }
     .modifier(CoreExtrasSheets(extras: extras, model: model, client: client, sessionId: sessionId))
+    .sheet(item: $goalRequest) { request in
+      CoreGoalSheet(request: request, sessionId: sessionId) { act("Could not set the goal", $0) }
+    }
     .sheet(item: $meterSheet) { sheet in
       switch sheet {
       case .context: CoreContextSheet(context: model.ui.usage?.context)
@@ -202,6 +206,18 @@ struct CoreSessionView: View {
       }
       if model.ui.extras.canSleep, chrome?.historical != true {
         Button("Sleep", systemImage: "moon.zzz", action: model.sleep)
+      }
+      if let chrome, let goals = chrome.goals, !chrome.historical, chrome.enabled, let n = chrome.conversation {
+        Divider()
+        CoreGoalMenu(
+          chrome: chrome, goals: goals,
+          onSet: { goalRequest = CoreGoalRequest(goals: goals, replacing: chrome.goal.flatMap { $0.state == .met ? nil : $0 }, conversation: n) },
+          onPause: { paused in
+            act(paused ? "Could not pause the goal" : "Could not resume the goal", pauseGoalCall(id: sessionId, paused: paused, generation: n))
+          },
+          onClear: { act("Could not clear the goal", clearGoalCall(id: sessionId, generation: n)) }
+        )
+        .disabled(client == nil)
       }
       if chrome?.historical != true {
         if chrome?.agentId != nil {

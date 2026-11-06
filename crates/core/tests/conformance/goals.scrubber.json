@@ -1,0 +1,187 @@
+[
+  {
+    "name": "top",
+    "frameParentId": null,
+    "recapAt": null,
+    "bookmarks": [],
+    "pending": 0,
+    "railH": 600,
+    "viewportH": 900,
+    "heights": [
+      176,
+      44,
+      132,
+      220,
+      88,
+      176,
+      44,
+      132,
+      220,
+      88
+    ],
+    "clusters": [
+      {
+        "lane": "r",
+        "kind": "error",
+        "y": 80,
+        "h": 20,
+        "marks": [
+          {
+            "kind": "error",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 80
+          }
+        ]
+      },
+      {
+        "lane": "r",
+        "kind": "error",
+        "y": 400,
+        "h": 160,
+        "marks": [
+          {
+            "kind": "error",
+            "itemIndex": 7,
+            "rowIndex": 7,
+            "turnIndex": null,
+            "y": 400
+          },
+          {
+            "kind": "error",
+            "itemIndex": 8,
+            "rowIndex": 8,
+            "turnIndex": null,
+            "y": 460
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "dense",
+    "frameParentId": null,
+    "recapAt": 5,
+    "bookmarks": [
+      "goal-5",
+      "goal-8",
+      "goal-11",
+      "not-in-this-transcript"
+    ],
+    "pending": 1,
+    "railH": 120,
+    "viewportH": 400,
+    "heights": [
+      176,
+      44,
+      132,
+      220,
+      88,
+      176,
+      44,
+      132,
+      220,
+      88,
+      176
+    ],
+    "clusters": [
+      {
+        "lane": "r",
+        "kind": "error",
+        "y": 14,
+        "h": 4,
+        "marks": [
+          {
+            "kind": "error",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 14
+          }
+        ]
+      },
+      {
+        "lane": "r",
+        "kind": "error",
+        "y": 81,
+        "h": 25,
+        "marks": [
+          {
+            "kind": "error",
+            "itemIndex": 7,
+            "rowIndex": 8,
+            "turnIndex": null,
+            "y": 81
+          },
+          {
+            "kind": "error",
+            "itemIndex": 8,
+            "rowIndex": 9,
+            "turnIndex": null,
+            "y": 99
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 14,
+        "h": 4,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 14
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 46,
+        "h": 21,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 4,
+            "rowIndex": 4,
+            "turnIndex": null,
+            "y": 46
+          },
+          {
+            "kind": "recap",
+            "itemIndex": null,
+            "rowIndex": 5,
+            "turnIndex": null,
+            "y": 53
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 81,
+        "h": 18,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 7,
+            "rowIndex": 8,
+            "turnIndex": null,
+            "y": 81
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "approval",
+        "y": 118,
+        "h": 2,
+        "marks": []
+      }
+    ]
+  }
+]

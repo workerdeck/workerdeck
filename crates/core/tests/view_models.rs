@@ -7,11 +7,14 @@ use std::sync::Arc;
 use wd_native::projection::project;
 use wd_native::protocol::{Frame, decode_frame};
 use wd_native::rest::{AgentInfo, ByModel, ChecklistItem, Entries, ModelOption, SessionInfo, SubagentInfo, TokenUsage};
+use wd_native::rest::{GoalLimit, GoalState, SessionGoal};
+use wd_native::transcript::NoticeLevel;
 use wd_native::transcript::{
     TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
 use wd_native::vm::conversations::{self, CurrentConversation, SessionAddress};
 use wd_native::vm::face::{self, FaceOptions, FaceState, FaceTheme};
+use wd_native::vm::goal;
 use wd_native::vm::session_list::{self as sl, CustomGroup, SessionRow, ViewConfig};
 use wd_native::vm::status_label::StatusLabelRead;
 use wd_native::vm::watermarks::{Watermark, Watermarks};
@@ -476,6 +479,33 @@ fn conversations_fn(fn_name: &str, a: &Args) -> Value {
     }
 }
 
+fn goal_fn(fn_name: &str, a: &Args) -> Value {
+    let goal_of = |index: usize| a.opt::<SessionGoal>(index);
+    match fn_name {
+        "goalStateText" => {
+            let state: GoalState = serde_json::from_value(a.raw(0)["state"].clone()).unwrap();
+            let limit: Option<GoalLimit> = serde_json::from_value(a.raw(0).get("limit").cloned().unwrap_or(Value::Null)).unwrap();
+            out(goal::goal_state_text(state, limit))
+        }
+        "goalCardText" => out(goal::goal_card_text(goal_of(0).as_ref())),
+        "goalNoticeRow" => {
+            let notice = goal::GoalNotice::parse(&a.str(0).unwrap()).unwrap();
+            let row = goal::goal_notice_row(notice, goal_of(1).as_ref());
+            json!({ "level": if row.level == NoticeLevel::Error { "error" } else { "info" }, "text": row.text })
+        }
+        "readGoalInput" => match goal::read_goal_input(a.raw(0), a.opt(1)) {
+            Ok(input) => out(input),
+            Err(message) => out(message),
+        },
+        "goalBudgetChangeOf" => match goal::goal_budget_change(&a.str(0).unwrap(), a.opt(1)) {
+            None => out("untouched"),
+            Some(change) => out(change),
+        },
+        "goalHoldsEngine" => out(goal::goal_holds_engine(&a.info(0))),
+        _ => panic!("goal.{fn_name} has no Rust binding"),
+    }
+}
+
 fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
     let a = Args(args);
     match module {
@@ -493,6 +523,7 @@ fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
         "prompt" => prompt_fn(fn_name, &a),
         "conversations" => conversations_fn(fn_name, &a),
         "face" => face_fn(fn_name, &a),
+        "goal" => goal_fn(fn_name, &a),
         _ => panic!("unknown view-model module {module}"),
     }
 }

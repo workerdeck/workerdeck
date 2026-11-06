@@ -17,6 +17,7 @@ mod create_form;
 mod extras;
 mod face;
 mod files;
+mod goal;
 mod list;
 mod pickers;
 mod prompt;
@@ -228,6 +229,9 @@ pub struct SessionChrome {
     pub agent_id: Option<String>,
     pub agent_name: Option<String>,
     pub new_conversation_blocked: Option<String>,
+    // `None` when the engine has no goals; `pause`/`budget` gate Pause/Resume and the dialog's budget box.
+    pub goals: Option<goal::GoalCapabilities>,
+    pub goal: Option<goal::GoalView>,
 }
 
 impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
@@ -254,6 +258,8 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
             agent_id: c.agent_id,
             agent_name: c.agent_name,
             new_conversation_blocked: c.new_conversation_blocked,
+            goals: c.goals.map(Into::into),
+            goal: c.goal.map(Into::into),
         }
     }
 }

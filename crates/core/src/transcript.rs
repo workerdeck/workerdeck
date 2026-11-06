@@ -1,5 +1,6 @@
 use crate::protocol::{Body, ContentBlock, ContextUsage, Event, SessionStatus, ToolResultContent};
-use crate::rest::{EngineCapabilities, ProfileEngine, SessionInfo};
+use crate::rest::{EngineCapabilities, ProfileEngine, SessionGoal, SessionInfo};
+use crate::vm::goal::goal_notice_row;
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -213,6 +214,8 @@ pub struct TranscriptState {
     pub commands: Option<Arc<Value>>,
     pub skills: Option<Arc<Value>>,
     pub checklist: Option<Vec<Value>>,
+    // Outer `None` is "never said"; `Some(None)` is no goal, which a seed must not overwrite.
+    pub goal: Option<Option<SessionGoal>>,
     pub tool_titles: Vec<(String, String)>,
     pub produced_files: Vec<(String, ProducedFile)>,
     pub default_model: Option<String>,
@@ -257,6 +260,9 @@ pub fn seed_from_session_info(state: &mut TranscriptState, info: &SessionInfo) {
     }
     if state.sdk_session_id.is_none() {
         state.sdk_session_id = info.sdk_session_id.clone();
+    }
+    if fresh || state.goal.is_none() {
+        state.goal = info.goal.clone().map(Some);
     }
     state.capabilities = info.capabilities.clone();
     if state.total_cost_usd == 0.0 {
@@ -546,6 +552,14 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
         }
         Body::Skills(skills) => state.skills = Some(skills),
         Body::Checklist(items) => state.checklist = (!items.is_empty()).then_some(items),
+        Body::GoalChanged { goal, notice } => {
+            let goal = goal.map(|goal| *goal);
+            if let Some(notice) = notice {
+                let row = goal_notice_row(notice, goal.as_ref());
+                state.items.push(Item::Notice { id: Str::from(format!("goal-{seq}")), level: row.level, text: Str::from(row.text) });
+            }
+            state.goal = Some(goal);
+        }
         Body::ToolTitles(titles) => {
             for (name, title) in titles {
                 set(&mut state.tool_titles, name, title);
@@ -582,6 +596,7 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
             }
             state.context_usage = None;
             state.checklist = None;
+            state.goal = Some(None);
             if sdk_session_id.is_some() {
                 state.sdk_session_id = sdk_session_id;
             }

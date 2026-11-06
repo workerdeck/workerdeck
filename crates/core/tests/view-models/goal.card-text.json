@@ -1,0 +1,58 @@
+{
+  "input": {
+    "fn": "goalCardText",
+    "calls": [
+      [
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        {
+          "text": "Ship the port",
+          "state": "met",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        {
+          "text": "Ship the port",
+          "state": "limited",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          },
+          "limit": "budget"
+        }
+      ],
+      [
+        {
+          "text": "Ship the port",
+          "state": "failed",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        null
+      ]
+    ]
+  },
+  "output": [
+    "🎯 Ship the port",
+    null,
+    "🎯 Goal stopped",
+    "🎯 Goal failed",
+    null
+  ]
+}

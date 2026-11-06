@@ -4,6 +4,7 @@ import type {
   AgentRef,
   ModelOption,
   ProfileUsage,
+  SessionGoal,
   SessionInfo,
   SessionRow,
   ShellInfo,
@@ -16,6 +17,8 @@ import type {
 export type VmCase = { module: string; name: string; fn: string; calls: unknown[][] }
 
 const T0 = 1_760_000_000_000
+
+const GOAL: SessionGoal = { text: 'Ship the port', state: 'active', setAt: T0, setBy: { kind: 'human' } }
 
 function info(id: string, over: Partial<SessionInfo> = {}): SessionInfo {
   return { id, status: 'idle', cwd: '/work/alpha', createdAt: T0, lastSeq: 0, pendingPermissionCount: 0, ...over }
@@ -301,6 +304,11 @@ const SESSION_LIST: VmCase[] = [
       [info('s5', { status: 'closed' })],
       [info('s6', { pendingPermissionCount: 1 })],
       [info('s7', { status: 'idle' }), 'working'],
+      [info('g1', { goal: GOAL, title: 'title', checklist: [{ text: 'task', status: 'in_progress' }] })],
+      [info('g2', { goal: GOAL, statusLabel: { text: 'Label wins', setAt: T0 } })],
+      [info('g3', { goal: { ...GOAL, state: 'met' }, title: 'Back to the title' })],
+      [info('g4', { goal: { ...GOAL, state: 'limited', limit: 'usage' } })],
+      [info('g5', { goal: { ...GOAL, state: 'paused' } })],
     ],
   },
   {
@@ -1230,6 +1238,11 @@ const TRANSCRIPT: VmCase[] = [
       [[['effort', null], ['seed', SNAPSHOT]]],
       [[['effort', 'low'], ['seed', SNAPSHOT]]],
       [[['seed', info('s2', { status: 'idle' })]]],
+      [[['seed', info('s3', { goal: GOAL })]]],
+      [[['seed', info('s3', { goal: GOAL })], ['events', 'basic-turn']]],
+      [[['events', 'goals'], ['seed', info('s3', { goal: GOAL })]]],
+      [[['events', 'goal-reset'], ['seed', info('s3', { goal: GOAL })]]],
+      [[['events', 'basic-turn'], ['seed', info('s3', { goal: GOAL })]]],
     ],
   },
   {
@@ -1452,7 +1465,85 @@ const FACES: VmCase[] = [
   },
 ]
 
+const CODEX_GOALS = { pause: true, budget: true }
+const CLAUDE_GOALS = { pause: false, budget: false }
+const AGENT_GOAL: SessionGoal = { ...GOAL, setBy: { kind: 'agent', sessionId: 'sess-lead-0001', name: 'WD-Lead' }, lastReason: '  not yet  ' }
+const NOTICES = ['set', 'check_failed', 'met', 'failed', 'limited', 'blocked', 'paused', 'resumed', 'cleared'] as const
+
+const GOALS: VmCase[] = [
+  {
+    module: 'goal',
+    name: 'state-text',
+    fn: 'goalStateText',
+    calls: [
+      ...(['active', 'paused', 'blocked', 'met', 'failed'] as const).map((state) => [{ state }]),
+      [{ state: 'limited', limit: 'budget' }],
+      [{ state: 'limited', limit: 'usage' }],
+      [{ state: 'limited' }],
+    ],
+  },
+  {
+    module: 'goal',
+    name: 'card-text',
+    fn: 'goalCardText',
+    calls: [[GOAL], [{ ...GOAL, state: 'met' }], [{ ...GOAL, state: 'limited', limit: 'budget' }], [{ ...GOAL, state: 'failed' }], [null]],
+  },
+  {
+    module: 'goal',
+    name: 'notice-row',
+    fn: 'goalNoticeRow',
+    calls: [
+      ...NOTICES.map((notice) => [notice, GOAL]),
+      ...NOTICES.map((notice) => [notice, AGENT_GOAL]),
+      ['set', { ...AGENT_GOAL, setBy: { kind: 'agent', sessionId: 'sess-lead-0001' } }],
+      ['limited', { ...GOAL, state: 'limited', limit: 'budget' }],
+      ['limited', null],
+      ['cleared', null],
+      ['set', null],
+    ],
+  },
+  {
+    module: 'goal',
+    name: 'read-input',
+    fn: 'readGoalInput',
+    calls: [
+      [{ text: '  Ship it  ' }, CLAUDE_GOALS],
+      [{ text: 'Ship it' }, undefined],
+      ['Ship it', CODEX_GOALS],
+      [{ text: 3 }, CODEX_GOALS],
+      [{ text: '   ' }, CODEX_GOALS],
+      [{ text: 'x'.repeat(4001) }, CODEX_GOALS],
+      [{ text: 'x'.repeat(4000) }, CODEX_GOALS],
+      [{ text: ' Cancel ' }, CODEX_GOALS],
+      [{ text: 'Ship it', tokenBudget: 60000 }, CLAUDE_GOALS],
+      [{ text: 'Ship it', tokenBudget: 60000 }, CODEX_GOALS],
+      [{ text: 'Ship it', tokenBudget: null }, CODEX_GOALS],
+      [{ text: 'Ship it', tokenBudget: 0 }, CODEX_GOALS],
+      [{ text: 'Ship it', tokenBudget: 1.5 }, CODEX_GOALS],
+      [{ text: 'Ship it', tokenBudget: '100' }, CODEX_GOALS],
+    ],
+  },
+  {
+    module: 'goal',
+    name: 'budget-change',
+    fn: 'goalBudgetChangeOf',
+    calls: [['20000', 20000], ['', 20000], [' 60000 ', null], ['', null], ['60000', 20000]],
+  },
+  {
+    module: 'goal',
+    name: 'holds-engine',
+    fn: 'goalHoldsEngine',
+    calls: [
+      [info('h1', { goal: GOAL, capabilities: ENGINE_CAPABILITIES.codex })],
+      [info('h2', { goal: GOAL, capabilities: ENGINE_CAPABILITIES.claude })],
+      [info('h3', { goal: { ...GOAL, state: 'paused' }, capabilities: ENGINE_CAPABILITIES.codex })],
+      [info('h4', { capabilities: ENGINE_CAPABILITIES.codex })],
+    ],
+  },
+]
+
 export const VM_CORPUS: VmCase[] = [
+  ...GOALS,
   ...SESSION_LIST,
   ...AGENTS,
   ...PRICING,

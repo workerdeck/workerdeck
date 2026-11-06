@@ -1,7 +1,9 @@
 use crate::protocol::SessionStatus;
 use crate::rest::AttachmentKind;
+use crate::rest::GoalCapabilities;
 use crate::row_menu::can_background;
 use crate::transcript::{Item, TranscriptState};
+use crate::vm::goal::{GoalView, goal_capabilities, goal_view};
 use crate::vm::model_name::friendly_model;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -30,6 +32,9 @@ pub struct SessionChrome {
     pub agent_id: Option<String>,
     pub agent_name: Option<String>,
     pub new_conversation_blocked: Option<String>,
+    // `None` when the engine has no goals (provider sessions).
+    pub goals: Option<GoalCapabilities>,
+    pub goal: Option<GoalView>,
 }
 
 pub const SEND_NOW_AFTER_MS: i64 = 5000;
@@ -116,6 +121,8 @@ pub fn session_chrome(
         agent_id: None,
         agent_name: None,
         new_conversation_blocked: None,
+        goals: goal_capabilities(state.capabilities.as_ref()),
+        goal: state.goal.as_ref().and_then(Option::as_ref).map(|goal| goal_view(goal, goal_capabilities(state.capabilities.as_ref()))),
     }
 }
 

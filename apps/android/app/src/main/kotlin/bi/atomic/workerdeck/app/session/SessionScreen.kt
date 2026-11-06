@@ -142,6 +142,7 @@ fun SessionScreen(
             val settleCut by model.settleCut.collectAsStateWithLifecycle()
             val returned by model.returned.collectAsStateWithLifecycle()
             var deleting by rememberSaveable { mutableStateOf(false) }
+            var goalRequest by remember { mutableStateOf<GoalRequest?>(null) }
             val readOnly = conversation != null
             Column(Modifier.fillMaxSize().imePadding()) {
                 SessionTopBar(
@@ -156,6 +157,7 @@ fun SessionScreen(
                             onDelete = if (it.agentId != null) ({ deleting = true }) else null,
                         )
                     },
+                    goals = goalMenu(chrome?.takeIf { !readOnly }, sessionId, onSet = { goalRequest = it }, onCall = model::goal),
                     onMeter = if (ui.usage != null) ({ meter = it }) else null,
                     contextMeter = ui.usage?.contextUsage == true,
                     sheets = listOfNotNull(
@@ -298,6 +300,9 @@ fun SessionScreen(
                     dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } },
                 )
             }
+            goalRequest?.let { request ->
+                GoalDialog(request, sessionId, onDismiss = { goalRequest = null }) { model.goal("Could not set the goal", it) }
+            }
             actionError?.let { message ->
                 AlertDialog(
                     onDismissRequest = model::actionErrorShown,
@@ -348,6 +353,7 @@ private fun SessionTopBar(
     onBack: () -> Unit,
     onReconnect: () -> Unit,
     actions: ConversationMenu?,
+    goals: GoalMenu?,
     onMeter: ((Meter) -> Unit)?,
     contextMeter: Boolean,
     sheets: List<ExtrasSheet>,
@@ -425,6 +431,7 @@ private fun SessionTopBar(
                                 },
                             )
                         }
+                        goals?.let { GoalMenuItems(it) { menu = false } }
                         actions?.onDelete?.let { delete ->
                             DropdownMenuItem(
                                 text = { Text("Delete agent…", color = colors.red) },

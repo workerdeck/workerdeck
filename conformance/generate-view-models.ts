@@ -236,6 +236,10 @@ const FNS: Record<string, Fn> = {
     protocol.teamView(lead, config, selected, now, new Set(peeked)),
   teamLingerStartPeeked: (member: protocol.SessionRow, selected: string | undefined, now: number, peeked: string[]) =>
     protocol.teamLingerStart(member, selected, now, new Set(peeked)) ?? null,
+  goalBudgetChangeOf: (field: string, shown: number | null) => {
+    const change = protocol.goalBudgetChange(field, shown ?? undefined)
+    return change === undefined ? 'untouched' : change
+  },
   defaultPricing: () => protocol.DEFAULT_PRICING,
   meteredCostOf: (byModel: protocol.ByModel) => protocol.meteredCost(protocol.costOfByModel(byModel)),
   pricingAge: (now: number, asOf?: string) => ({ days: protocol.pricingAgeDays(now, asOf), note: protocol.pricingAgeNote(now, asOf) ?? null }),

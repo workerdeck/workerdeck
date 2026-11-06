@@ -549,6 +549,109 @@
           "pendingPermissionCount": 0
         },
         "working"
+      ],
+      [
+        {
+          "id": "g1",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "goal": {
+            "text": "Ship the port",
+            "state": "active",
+            "setAt": 1760000000000,
+            "setBy": {
+              "kind": "human"
+            }
+          },
+          "title": "title",
+          "checklist": [
+            {
+              "text": "task",
+              "status": "in_progress"
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "id": "g2",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "goal": {
+            "text": "Ship the port",
+            "state": "active",
+            "setAt": 1760000000000,
+            "setBy": {
+              "kind": "human"
+            }
+          },
+          "statusLabel": {
+            "text": "Label wins",
+            "setAt": 1760000000000
+          }
+        }
+      ],
+      [
+        {
+          "id": "g3",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "goal": {
+            "text": "Ship the port",
+            "state": "met",
+            "setAt": 1760000000000,
+            "setBy": {
+              "kind": "human"
+            }
+          },
+          "title": "Back to the title"
+        }
+      ],
+      [
+        {
+          "id": "g4",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "goal": {
+            "text": "Ship the port",
+            "state": "limited",
+            "setAt": 1760000000000,
+            "setBy": {
+              "kind": "human"
+            },
+            "limit": "usage"
+          }
+        }
+      ],
+      [
+        {
+          "id": "g5",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "goal": {
+            "text": "Ship the port",
+            "state": "paused",
+            "setAt": 1760000000000,
+            "setBy": {
+              "kind": "human"
+            }
+          }
+        }
       ]
     ]
   },
@@ -652,6 +755,26 @@
     {
       "text": "Working…",
       "source": "state"
+    },
+    {
+      "text": "🎯 Ship the port",
+      "source": "goal"
+    },
+    {
+      "text": "Label wins",
+      "source": "label"
+    },
+    {
+      "text": "Back to the title",
+      "source": "title"
+    },
+    {
+      "text": "🎯 Goal stopped",
+      "source": "goal"
+    },
+    {
+      "text": "🎯 Goal paused",
+      "source": "goal"
     }
   ]
 }

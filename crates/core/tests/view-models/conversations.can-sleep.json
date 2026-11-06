@@ -53,6 +53,10 @@
             "systemInstructions": true,
             "engineSleep": true,
             "backgroundTasks": true,
+            "goals": {
+              "pause": false,
+              "budget": false
+            },
             "streaming": "token"
           },
           "sdkSessionId": "sdk"
@@ -109,6 +113,10 @@
             "systemInstructions": true,
             "engineSleep": true,
             "backgroundTasks": true,
+            "goals": {
+              "pause": false,
+              "budget": false
+            },
             "streaming": "token"
           }
         }
@@ -164,6 +172,10 @@
             "systemInstructions": true,
             "engineSleep": true,
             "backgroundTasks": true,
+            "goals": {
+              "pause": false,
+              "budget": false
+            },
             "streaming": "token"
           },
           "sdkSessionId": "sdk",
@@ -221,6 +233,10 @@
             "systemInstructions": true,
             "engineSleep": true,
             "backgroundTasks": true,
+            "goals": {
+              "pause": false,
+              "budget": false
+            },
             "streaming": "token"
           },
           "sdkSessionId": "sdk"

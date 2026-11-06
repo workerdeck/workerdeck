@@ -1,0 +1,363 @@
+{
+  "input": {
+    "fn": "goalNoticeRow",
+    "calls": [
+      [
+        "set",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        "check_failed",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        "met",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        "failed",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        "limited",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        "blocked",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        "paused",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        "resumed",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        "cleared",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          }
+        }
+      ],
+      [
+        "set",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001",
+            "name": "WD-Lead"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "check_failed",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001",
+            "name": "WD-Lead"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "met",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001",
+            "name": "WD-Lead"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "failed",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001",
+            "name": "WD-Lead"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "limited",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001",
+            "name": "WD-Lead"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "blocked",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001",
+            "name": "WD-Lead"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "paused",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001",
+            "name": "WD-Lead"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "resumed",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001",
+            "name": "WD-Lead"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "cleared",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001",
+            "name": "WD-Lead"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "set",
+        {
+          "text": "Ship the port",
+          "state": "active",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "agent",
+            "sessionId": "sess-lead-0001"
+          },
+          "lastReason": "  not yet  "
+        }
+      ],
+      [
+        "limited",
+        {
+          "text": "Ship the port",
+          "state": "limited",
+          "setAt": 1760000000000,
+          "setBy": {
+            "kind": "human"
+          },
+          "limit": "budget"
+        }
+      ],
+      [
+        "limited",
+        null
+      ],
+      [
+        "cleared",
+        null
+      ],
+      [
+        "set",
+        null
+      ]
+    ]
+  },
+  "output": [
+    {
+      "level": "info",
+      "text": "🎯 Goal set: Ship the port"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal not met yet"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal met"
+    },
+    {
+      "level": "error",
+      "text": "🎯 Goal failed"
+    },
+    {
+      "level": "error",
+      "text": "🎯 Goal stopped: active"
+    },
+    {
+      "level": "error",
+      "text": "🎯 Goal blocked"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal paused"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal resumed"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal cleared"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal set (set by WD-Lead): Ship the port"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal not met yet: not yet"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal met: not yet"
+    },
+    {
+      "level": "error",
+      "text": "🎯 Goal failed: not yet"
+    },
+    {
+      "level": "error",
+      "text": "🎯 Goal stopped: active"
+    },
+    {
+      "level": "error",
+      "text": "🎯 Goal blocked: not yet"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal paused"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal resumed"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal cleared"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal set (set by an agent): Ship the port"
+    },
+    {
+      "level": "error",
+      "text": "🎯 Goal stopped: token budget reached"
+    },
+    {
+      "level": "error",
+      "text": "🎯 Goal stopped: limit reached"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal cleared"
+    },
+    {
+      "level": "info",
+      "text": "🎯 Goal set: "
+    }
+  ]
+}

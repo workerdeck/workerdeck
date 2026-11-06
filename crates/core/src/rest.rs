@@ -94,6 +94,14 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
+// A goal a newer gateway shapes differently reads as no goal: the session itself must still decode.
+fn lenient_goal<'de, D>(deserializer: D) -> Result<Option<SessionGoal>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Value::deserialize(deserializer).ok().and_then(|value| serde_json::from_value(value).ok()))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
@@ -199,7 +207,15 @@ pub struct EngineCapabilities {
     pub engine_sleep: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_tasks: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goals: Option<GoalCapabilities>,
     pub streaming: StreamingMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoalCapabilities {
+    pub pause: bool,
+    pub budget: bool,
 }
 
 impl ProfileEngine {
@@ -235,6 +251,7 @@ impl ProfileEngine {
                 system_instructions: Some(true),
                 engine_sleep: Some(true),
                 background_tasks: None,
+                goals: Some(GoalCapabilities { pause: true, budget: true }),
                 streaming: StreamingMode::Token,
             },
             ProfileEngine::Provider => EngineCapabilities {
@@ -263,6 +280,7 @@ impl ProfileEngine {
                 system_instructions: Some(true),
                 engine_sleep: Some(false),
                 background_tasks: None,
+                goals: None,
                 streaming: StreamingMode::Token,
             },
             ProfileEngine::Claude | ProfileEngine::Unknown => EngineCapabilities {
@@ -291,6 +309,7 @@ impl ProfileEngine {
                 system_instructions: Some(true),
                 engine_sleep: Some(true),
                 background_tasks: Some(true),
+                goals: Some(GoalCapabilities { pause: false, budget: false }),
                 streaming: StreamingMode::Token,
             },
         }
@@ -631,8 +650,61 @@ pub struct SessionInfo {
     pub owner: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_label: Option<StatusLabel>,
+    #[serde(default, deserialize_with = "lenient_goal", skip_serializing_if = "Option::is_none")]
+    pub goal: Option<SessionGoal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum GoalSetter {
+    Human,
+    #[serde(rename_all = "camelCase")]
+    Agent {
+        session_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GoalState {
+    Active,
+    Paused,
+    Blocked,
+    Met,
+    Failed,
+    Limited,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GoalLimit {
+    Usage,
+    Budget,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionGoal {
+    pub text: String,
+    pub state: GoalState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<GoalLimit>,
+    pub set_at: f64,
+    pub set_by: GoalSetter,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checks: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_used: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_budget: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_used_seconds: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

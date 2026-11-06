@@ -1500,6 +1500,10 @@ team shows "Leave"; cards never reorder. A still hold is the long-press menu, a 
   and the content state carry `conversation`; without one the approval is not sent). A prompt the gateway hands
   back (`take_undelivered`) lands in an empty composer with a notice; staged files re-upload when the session
   moves on.
+- **Goals** (`Session/Core/CoreGoal.swift`) read only `SessionChrome.goals` / `.goal`: the session menu's goal
+  block (after Sleep; live, current conversation only), the Set goal sheet submits through `set_goal_call`, which
+  validates like the web dialog and answers `Refused` with the sentence to show, and the info sheet's goal section
+  draws the core's `tokens_text` / `time_text`. Notice rows and the card's goal line need nothing in the app.
 - **Bookmarks are per conversation** and notification / Live Activity taps carry n, so an old one opens its
   past conversation (`address_of`). Read marks and bookmarks are read as UserDefaults strings only; a value of
   the older `Data` shape reads as nothing (client state may reset). `CoreArchivedUITests` over
@@ -1663,6 +1667,8 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   `unconfirmed_input` 409 opens a discard dialog, a cut refused over an uncertain first message asks Send again
   or Dismiss. Every mutating call carries the conversation (`GatewayClient` sets the generation header).
   Bookmarks are per conversation (`SessionBookmarks` over the attached n). Past agents sit in the gateway menu.
+  Goals (`session/Goals.kt`) mirror iOS over the same `SessionChrome.goals` / `.goal` and `set_goal_call`; the
+  block sits after New conversation (the menu has no Sleep).
   Send again / Dismiss and Retry start on the session screen. The list floats a search field (core `SessionList.setSearch`, cleared at
   launch and by Back first) and the New `+` menu in a bottom bar, like iOS 26; the gateway menu stays on top.
 

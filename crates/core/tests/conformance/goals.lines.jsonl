@@ -1,0 +1,10 @@
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal set: Ship the port","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"red","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal stopped: token budget reached","tone":"red"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal paused","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal resumed","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal cleared","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal set (set by WD-Lead): Tests green","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal not met yet: two tests still fail","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"red","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal blocked","tone":"red"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"red","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal failed: The suite cannot run here","tone":"red"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"🎯 Goal met: All green","tone":"dim"}
