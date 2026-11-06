@@ -45,13 +45,11 @@ import {
   GoalsUnsupportedError,
   goalNotice,
   goalRefusal,
-  goalStamp,
   newerThan,
   sameGoal,
   sameGoalIdentity,
   sessionGoal,
   threadGoalOf,
-  type GoalStamp,
 } from './goals.ts'
 import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import {
@@ -127,6 +125,14 @@ export type CodexRunnerConfig = EngineRunnerConfig & {
 type QueuedTurn = { input: AppServerUserInput[] }
 
 type GoalTarget = { connection: AppServerConnection; threadId: string; close?: () => void }
+
+type GoalMark = { createdAt: number; status: AppServerThreadGoal['status'] } | null
+
+const GOAL_CONFIRM_MS = 2000
+
+function sameMark(a: GoalMark, b: GoalMark): boolean {
+  return a === null || b === null ? a === b : a.createdAt === b.createdAt && a.status === b.status
+}
 
 type OwnGoalSet = { text: string; setBy: GoalSetter; createdAt?: number }
 
@@ -259,10 +265,10 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   #goalChain: Promise<unknown> = Promise.resolve()
   #goalBusy = 0
   #goalNotes = 0
-  #goalSeen: GoalStamp | undefined
+  #goalSeen: AppServerThreadGoal | undefined
+  #goalWaiters = new Set<() => void>()
   #ownGoalSet: OwnGoalSet | undefined
   #goalsOff = false
-  #goalLastCleared = false
   #goalsAccepted = new Set<Promise<unknown>>()
   #humanGoalChanges = 0
   #stopping = 0
@@ -801,10 +807,13 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     return { connection: scratch, threadId, close: () => scratch.close() }
   }
 
-  // A notification can overtake the response it belongs to; the observed notification wins unless the response is
-  // strictly newer, and a clear's answer never wipes a goal notified after it was asked.
+  // Notifications can overtake the response they belong to, and stamps cannot order a status change against a tick
+  // of the same second. So: a response nothing overtook is applied; one a notification already confirmed is done; a
+  // status change notified during the call (the engine moved on) wins; after mere ticks the mutation waits, bounded,
+  // for the notification that carries its outcome, and applies the response itself if none comes.
   async #goalMutation(target: GoalTarget, method: string, params: Record<string, unknown>): Promise<AppServerThreadGoal | null> {
     const notes = this.#goalNotes
+    const before = this.#goalMark()
     let result: unknown
     try {
       result = await target.connection.request(method, params)
@@ -816,20 +825,72 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     if (this.core.closed) {
       throw new Error('session is closed')
     }
-    const current = target.threadId === this.#sdkSessionId
-    const noted = notes !== this.#goalNotes
-    if (method === 'thread/goal/clear') {
-      if (current && (!noted || this.#goalLastCleared)) {
-        this.#applyGoal(null, false)
-      }
+    const goal = method === 'thread/goal/clear' ? null : (threadGoalOf((result as { goal?: unknown } | null)?.goal) ?? null)
+    if (method !== 'thread/goal/clear' && !goal) {
       return null
     }
-    const goal = threadGoalOf((result as { goal?: unknown } | null)?.goal) ?? null
-    const overtaken = noted && (!this.#goalSeen || (goal !== null && !newerThan(goal, this.#goalSeen)))
-    if (goal && current && !overtaken) {
+    if (target.threadId !== this.#sdkSessionId) {
+      return goal
+    }
+    const wanted: GoalMark = goal ? { createdAt: goal.createdAt, status: goal.status } : null
+    if (notes === this.#goalNotes) {
+      this.#applyGoal(goal, false)
+      return goal
+    }
+    if (sameMark(this.#goalMark(), wanted)) {
+      return goal
+    }
+    if (!sameMark(this.#goalMark(), before)) {
+      if (goal && this.#goalSeen && newerThan(goal, this.#goalSeen)) {
+        this.#applyGoal(goal, false)
+      }
+      return goal
+    }
+    if ((await this.#awaitGoalMark(before, wanted)) === 'timeout' && !this.core.closed && target.threadId === this.#sdkSessionId) {
       this.#applyGoal(goal, false)
     }
     return goal
+  }
+
+  #goalMark(): GoalMark {
+    const seen = this.#goalSeen
+    return seen ? { createdAt: seen.createdAt, status: seen.status } : null
+  }
+
+  async #awaitGoalMark(before: GoalMark, wanted: GoalMark): Promise<'confirmed' | 'moved' | 'timeout'> {
+    const deadline = Date.now() + GOAL_CONFIRM_MS
+    for (;;) {
+      if (this.core.closed) {
+        return 'moved'
+      }
+      const mark = this.#goalMark()
+      if (sameMark(mark, wanted)) {
+        return 'confirmed'
+      }
+      if (!sameMark(mark, before)) {
+        return 'moved'
+      }
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) {
+        return 'timeout'
+      }
+      await new Promise<void>((resolve) => {
+        const done = (): void => {
+          clearTimeout(timer)
+          this.#goalWaiters.delete(done)
+          resolve()
+        }
+        const timer = setTimeout(done, remaining)
+        this.#goalWaiters.add(done)
+      })
+    }
+  }
+
+  #goalNoted(): void {
+    this.#goalNotes++
+    for (const wake of this.#goalWaiters) {
+      wake()
+    }
   }
 
   #goalRefused(error: unknown): Error {
@@ -878,7 +939,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     if (!own && next.status !== 'active' && this.core.log.goal === undefined && this.config.goal === null) {
       return
     }
-    this.#goalSeen = goalStamp(next)
+    this.#goalSeen = next
     const setBy = own?.setBy ?? (previous && sameGoalIdentity(previous, next) ? previous.setBy : this.#selfSetter())
     const goal = sessionGoal(next, setBy)
     if (previous && sameGoal(previous, goal)) {
@@ -1606,14 +1667,12 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       if (!goal || goal.threadId !== this.#sdkSessionId) {
         return
       }
-      this.#goalNotes++
-      this.#goalLastCleared = false
       this.#applyGoal(goal, false)
+      this.#goalNoted()
     },
     'thread/goal/cleared': () => {
-      this.#goalNotes++
-      this.#goalLastCleared = true
       this.#applyGoal(null, false)
+      this.#goalNoted()
     },
     'turn/plan/updated': (params) => {
       if (!this.#activeTurn) {

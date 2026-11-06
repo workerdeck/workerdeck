@@ -2,7 +2,7 @@ import type { GoalNotice, GoalSetter, GoalState, SessionGoal } from '@workerdeck
 import { JsonRpcError } from './jsonrpc.ts'
 import type { AppServerThreadGoal, AppServerThreadGoalStatus } from './types.ts'
 
-export type GoalStamp = Pick<AppServerThreadGoal, 'createdAt' | 'updatedAt' | 'timeUsedSeconds' | 'tokensUsed'>
+type GoalStamp = Pick<AppServerThreadGoal, 'createdAt' | 'updatedAt' | 'timeUsedSeconds' | 'tokensUsed'>
 
 const STATES: Record<AppServerThreadGoalStatus, Pick<SessionGoal, 'state' | 'limit'>> = {
   active: { state: 'active' },
@@ -93,10 +93,6 @@ export function goalNotice(previous: SessionGoal | null, next: SessionGoal): Goa
     return NOTICES[next.state]
   }
   return undefined
-}
-
-export function goalStamp(goal: AppServerThreadGoal): GoalStamp {
-  return { createdAt: goal.createdAt, updatedAt: goal.updatedAt, timeUsedSeconds: goal.timeUsedSeconds, tokensUsed: goal.tokensUsed }
 }
 
 // Equal stamps are real (a status change within the same second and no usage): a tie is not newer.

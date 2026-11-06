@@ -523,6 +523,47 @@ describe('CodexRunner goals: scripted', () => {
       expect(runner.info().goal?.state).toBe('met')
     })
 
+    it('a pause answered after a tick resolves paused once the paused notification lands (the smoke regression)', async () => {
+      const peer = scriptedPeer()
+      const { runner, events } = await liveIdleRunner(peer)
+      const goal = threadGoal()
+      peer.emit('thread/goal/updated', updated(goal))
+      const later = { ...goal, timeUsedSeconds: 4, updatedAt: goal.updatedAt + 4 }
+      peer.respond('thread/goal/set', () => {
+        peer.emit('thread/goal/updated', updated({ ...later, timeUsedSeconds: 5, updatedAt: goal.updatedAt + 5 }, 'goal-turn'))
+        setTimeout(() => peer.emit('thread/goal/updated', updated({ ...later, status: 'paused' })), 5)
+        return { goal: { ...later, status: 'paused' } }
+      })
+
+      await expect(runner.pauseGoal(true)).resolves.toMatchObject({ state: 'paused' })
+      expect(runner.info().goal?.state).toBe('paused')
+      expect(notices(events)).toEqual(['set', 'paused'])
+    })
+
+    it('a confirmed pause whose notification never comes is applied from the answer after the bounded wait', async () => {
+      const peer = scriptedPeer()
+      const { runner } = await liveIdleRunner(peer)
+      const goal = threadGoal()
+      peer.emit('thread/goal/updated', updated(goal))
+      peer.respond('thread/goal/set', () => {
+        peer.emit('thread/goal/updated', updated({ ...goal, timeUsedSeconds: 1, updatedAt: goal.updatedAt + 1 }, 'goal-turn'))
+        return { goal: { ...goal, status: 'paused' } }
+      })
+      await expect(runner.pauseGoal(true)).resolves.toMatchObject({ state: 'paused' })
+    })
+
+    it('a status change the engine makes during the call wins over the answer', async () => {
+      const peer = scriptedPeer()
+      const { runner } = await liveIdleRunner(peer)
+      const goal = threadGoal()
+      peer.emit('thread/goal/updated', updated(goal))
+      peer.respond('thread/goal/set', () => {
+        peer.emit('thread/goal/updated', updated({ ...goal, status: 'complete' }, 'goal-turn'))
+        return { goal: { ...goal, status: 'paused' } }
+      })
+      await expect(runner.pauseGoal(true)).resolves.toMatchObject({ state: 'met' })
+    })
+
     it("a clear's answer never wipes a goal notified after it", async () => {
       const peer = scriptedPeer()
       const { runner } = await liveIdleRunner(peer)
