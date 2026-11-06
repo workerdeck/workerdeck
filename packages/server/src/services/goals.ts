@@ -262,13 +262,13 @@ function issue(runner: Runner, change: VettedChange, setter: GoalSetter): Promis
       if (!runner.clearGoal) {
         fail(501, `the ${engine} engine cannot clear a goal`)
       }
-      return runner.clearGoal().then(() => null)
+      return runner.clearGoal(setter).then(() => null)
     }
     case 'pause': {
       if (!runner.pauseGoal) {
         fail(501, `the ${engine} engine cannot pause a goal`)
       }
-      return runner.pauseGoal(change.paused)
+      return runner.pauseGoal(change.paused, setter)
     }
   }
 }

@@ -135,10 +135,11 @@ export interface Runner {
   setStatusLabel?(label: StatusLabelInput | null): StatusLabel | null
   // Goals (engines with `capabilities.goals`). Each resolves once the engine confirmed the change and the
   // `goal_changed` event is emitted; it rejects with the engine's refusal. Validation and provenance (`setBy`) are the
-  // gateway's: the runner stamps what it is given. `pauseGoal` only where `capabilities.goals.pause`.
+  // gateway's: the runner stamps what it is given. `pauseGoal` only where `capabilities.goals.pause`. `by` names who
+  // asks: a runner may refuse an agent's change while a human's is still unconfirmed.
   setGoal?(input: GoalInput, setBy: GoalSetter): Promise<SessionGoal>
-  clearGoal?(): Promise<void>
-  pauseGoal?(paused: boolean): Promise<SessionGoal>
+  clearGoal?(by?: GoalSetter): Promise<void>
+  pauseGoal?(paused: boolean, by?: GoalSetter): Promise<SessionGoal>
   resolvePermission(requestId: string, decision: PermissionDecision): boolean
   interrupt(): Promise<void>
   // Resolves false when the record has no stoppable background task (unknown, settled, or not the engine's to stop).

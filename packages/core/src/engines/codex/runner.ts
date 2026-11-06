@@ -46,7 +46,7 @@ import {
   goalNotice,
   goalRefusal,
   goalStamp,
-  olderThan,
+  newerThan,
   sameGoal,
   sameGoalIdentity,
   sessionGoal,
@@ -262,6 +262,10 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   #goalSeen: GoalStamp | undefined
   #ownGoalSet: OwnGoalSet | undefined
   #goalsOff = false
+  #goalLastCleared = false
+  #goalsAccepted = new Set<Promise<unknown>>()
+  #humanGoalChanges = 0
+  #stopping = 0
   readonly #sink: HistorySink = {
     agents: this.#agents,
     model: () => this.#model ?? this.#resolvedModel,
@@ -615,21 +619,64 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   }
 
   // Stop pauses an active goal too: an interrupted goal stays active, and the next resume would restart it.
+  // A goal change already accepted is waited for, so a set or resume that confirms after Stop is paused too, and an
+  // engine turn it starts meanwhile is interrupted on adoption.
   async interrupt(): Promise<void> {
     this.core.settleAllApprovals({ behavior: 'deny', message: 'interrupted', interrupt: true }, 'policy')
-    const active = this.#activeTurn
-    const pausing = goalActive(this.goal)
-      ? this.#pauseActiveGoal().catch((error: unknown) => {
+    this.#stopping++
+    try {
+      const active = this.#activeTurn
+      const accepted = Promise.allSettled(this.#goalsAccepted)
+      const pausing = accepted
+        .then(() => (goalActive(this.goal) ? this.#pauseActiveGoal() : undefined))
+        .catch((error: unknown) => {
           this.core.emit({ type: 'session_error', message: `could not pause the goal: ${errorMessage(error)}` })
         })
-      : undefined
-    await this.#interruptTurn()
-    await pausing
-    await active?.finished
-    await this.#turnChain
+      await this.#interruptTurn()
+      await pausing
+      if (this.#activeTurn && !this.#activeTurn.interrupted) {
+        await this.#interruptTurn()
+      }
+      await active?.finished
+      await this.#engineTurnsFinished()
+      await this.#turnChain
+    } finally {
+      this.#stopping--
+    }
   }
 
-  async setGoal(input: GoalInput, setBy: GoalSetter): Promise<SessionGoal> {
+  // Accepted at the call, before any await: Stop and the human-first rule see it from the start.
+  #acceptGoalChange<T>(by: GoalSetter | undefined, run: () => Promise<T>): Promise<T> {
+    if (by?.kind === 'agent' && this.#humanGoalChanges > 0) {
+      return Promise.reject(new Error('a human goal change is pending'))
+    }
+    const human = by?.kind === 'human'
+    if (human) {
+      this.#humanGoalChanges++
+    }
+    const change = run().finally(() => {
+      this.#goalsAccepted.delete(change)
+      if (human) {
+        this.#humanGoalChanges--
+      }
+    })
+    this.#goalsAccepted.add(change)
+    return change
+  }
+
+  setGoal(input: GoalInput, setBy: GoalSetter): Promise<SessionGoal> {
+    return this.#acceptGoalChange(setBy, () => this.#setGoalNow(input, setBy))
+  }
+
+  clearGoal(by?: GoalSetter): Promise<void> {
+    return this.#acceptGoalChange(by, () => this.#clearGoalNow())
+  }
+
+  pauseGoal(paused: boolean, by?: GoalSetter): Promise<SessionGoal> {
+    return this.#acceptGoalChange(by, () => this.#pauseGoalNow(paused))
+  }
+
+  async #setGoalNow(input: GoalInput, setBy: GoalSetter): Promise<SessionGoal> {
     await this.#loadGoalThread()
     return this.#goalOp(async () => {
       const target = this.#loadedGoalTarget()
@@ -650,7 +697,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     })
   }
 
-  async clearGoal(): Promise<void> {
+  async #clearGoalNow(): Promise<void> {
     await this.#goalOp(async () => {
       const target = await this.#idleGoalTarget()
       if (!target) {
@@ -662,7 +709,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   }
 
   // Resuming is deliberate work and wakes the engine like a send; pausing never does.
-  async pauseGoal(paused: boolean): Promise<SessionGoal> {
+  async #pauseGoalNow(paused: boolean): Promise<SessionGoal> {
     if (!paused) {
       await this.#loadGoalThread()
     }
@@ -754,7 +801,8 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     return { connection: scratch, threadId, close: () => scratch.close() }
   }
 
-  // A notification can overtake the response it belongs to: an older response is not applied over it.
+  // A notification can overtake the response it belongs to; the observed notification wins unless the response is
+  // strictly newer, and a clear's answer never wipes a goal notified after it was asked.
   async #goalMutation(target: GoalTarget, method: string, params: Record<string, unknown>): Promise<AppServerThreadGoal | null> {
     const notes = this.#goalNotes
     let result: unknown
@@ -769,14 +817,15 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       throw new Error('session is closed')
     }
     const current = target.threadId === this.#sdkSessionId
+    const noted = notes !== this.#goalNotes
     if (method === 'thread/goal/clear') {
-      if (current) {
+      if (current && (!noted || this.#goalLastCleared)) {
         this.#applyGoal(null, false)
       }
       return null
     }
     const goal = threadGoalOf((result as { goal?: unknown } | null)?.goal) ?? null
-    const overtaken = notes !== this.#goalNotes && (!this.#goalSeen || (goal !== null && olderThan(goal, this.#goalSeen)))
+    const overtaken = noted && (!this.#goalSeen || (goal !== null && !newerThan(goal, this.#goalSeen)))
     if (goal && current && !overtaken) {
       this.#applyGoal(goal, false)
     }
@@ -1368,6 +1417,9 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     this.#idleScope = { nonce: active.nonce, toolUseEmitted: new Set(), sectionIndex: new Map() }
     this.core.setStatus('running')
     void this.#settleTurn(active, outcome, Date.now())
+    if (this.#stopping > 0) {
+      void this.#interruptTurn()
+    }
   }
 
   async #settleTurn(active: ActiveTurn, outcome: Promise<AppServerTurn>, startedAt: number): Promise<void> {
@@ -1555,10 +1607,12 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
         return
       }
       this.#goalNotes++
+      this.#goalLastCleared = false
       this.#applyGoal(goal, false)
     },
     'thread/goal/cleared': () => {
       this.#goalNotes++
+      this.#goalLastCleared = true
       this.#applyGoal(null, false)
     },
     'turn/plan/updated': (params) => {

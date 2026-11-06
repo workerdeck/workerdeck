@@ -455,4 +455,118 @@ describe('CodexRunner goals: scripted', () => {
       expect(notices(second.events)).toEqual([])
     })
   })
+
+  describe('review fixes', () => {
+    function delayed<T>() {
+      let release!: (value: T) => void
+      const promise = new Promise<T>((resolve) => {
+        release = resolve
+      })
+      return { promise, release }
+    }
+
+    it('Stop waits for a set still in flight, pauses the goal it confirmed and interrupts the turn it started', async () => {
+      const peer = scriptedPeer()
+      const { runner, events } = await liveIdleRunner(peer)
+      const goal = threadGoal()
+      const answer = delayed<unknown>()
+      peer.respond('thread/goal/set', (params) => {
+        if ((params as { status: string }).status === 'paused') {
+          return { goal: { ...goal, status: 'paused', updatedAt: goal.updatedAt + 1 } }
+        }
+        return answer.promise
+      })
+      peer.respond('turn/interrupt', (params) => {
+        peer.emit('turn/completed', { threadId: 'thread-1', turn: { id: (params as { turnId: string }).turnId, status: 'interrupted' } })
+        return {}
+      })
+
+      const setting = runner.setGoal({ text: 'ship it' }, HUMAN)
+      await eventually(() => expect(requests(peer, 'thread/goal/set')).toHaveLength(1))
+      const stopping = runner.interrupt()
+      peer.emit('thread/goal/updated', updated(goal))
+      answer.release({ goal })
+      await setting
+      peer.emit('turn/started', { threadId: 'thread-1', turn: { id: 'goal-1', status: 'inProgress' } })
+      await stopping
+
+      expect(requests(peer, 'thread/goal/set').map((r) => (r.params as { status: string }).status)).toEqual(['active', 'paused'])
+      expect(requests(peer, 'turn/interrupt').map((r) => (r.params as { turnId: string }).turnId)).toEqual(['goal-1'])
+      expect(runner.info().goal?.state).toBe('paused')
+      expect(runner.status).toBe('idle')
+      expect(ofType(events, 'turn_result').at(-1)).toMatchObject({ errors: ['interrupted'] })
+    })
+
+    it('Stop right after a set on an asleep runner (still waking) pauses the goal once it lands', async () => {
+      const peer = scriptedPeer()
+      const { runner } = await dormant(peer, undefined, { backfillHistory: false, startAsleep: true })
+      peer.respond('thread/goal/set', (params) => ({ goal: threadGoal({ status: (params as { status: 'active' | 'paused' }).status }) }))
+
+      const setting = runner.setGoal({ text: 'ship it' }, HUMAN)
+      await runner.interrupt()
+      await setting
+      expect(requests(peer, 'thread/goal/set').map((r) => (r.params as { status: string }).status)).toEqual(['active', 'paused'])
+      expect(runner.info().goal?.state).toBe('paused')
+    })
+
+    it('a response tied with an observed notification loses to it', async () => {
+      const peer = scriptedPeer()
+      const { runner } = await liveIdleRunner(peer)
+      const goal = threadGoal()
+      peer.respond('thread/goal/set', () => {
+        peer.emit('thread/goal/updated', updated(goal))
+        peer.emit('thread/goal/updated', updated({ ...goal, status: 'complete' }))
+        return { goal }
+      })
+      const result = await runner.setGoal({ text: 'ship it' }, HUMAN)
+      expect(result.state).toBe('met')
+      expect(runner.info().goal?.state).toBe('met')
+    })
+
+    it("a clear's answer never wipes a goal notified after it", async () => {
+      const peer = scriptedPeer()
+      const { runner } = await liveIdleRunner(peer)
+      peer.emit('thread/goal/updated', updated(threadGoal()))
+      peer.respond('thread/goal/clear', () => {
+        peer.emit('thread/goal/cleared', { threadId: 'thread-1' })
+        peer.emit('thread/goal/updated', updated(threadGoal({ objective: 'next', createdAt: 1_800_000_010, updatedAt: 1_800_000_010 })))
+        return { cleared: true }
+      })
+      await runner.clearGoal(HUMAN)
+      expect(runner.info().goal).toMatchObject({ text: 'next', state: 'active' })
+    })
+
+    it("an agent's change is refused while a human's is unconfirmed", async () => {
+      const peer = scriptedPeer()
+      const { runner } = await liveIdleRunner(peer)
+      const answer = delayed<unknown>()
+      peer.respond('thread/goal/set', () => answer.promise)
+
+      const human = runner.setGoal({ text: 'human goal' }, HUMAN)
+      await expect(runner.setGoal({ text: 'agent goal' }, LEAD)).rejects.toThrow('a human goal change is pending')
+      await expect(runner.clearGoal(LEAD)).rejects.toThrow('a human goal change is pending')
+      await expect(runner.pauseGoal(true, LEAD)).rejects.toThrow('a human goal change is pending')
+      answer.release({ goal: threadGoal({ objective: 'human goal' }) })
+      await human
+      expect(requests(peer, 'thread/goal/set')).toHaveLength(1)
+
+      peer.respond('thread/goal/set', () => ({ goal: threadGoal({ objective: 'agent goal', createdAt: 1_800_000_020 }) }))
+      await expect(runner.setGoal({ text: 'agent goal' }, LEAD)).resolves.toMatchObject({ setBy: LEAD })
+    })
+
+    it('a best-effort pause right before a server close: idle loaded thread, no turn, resolves at once', async () => {
+      const peer = scriptedPeer()
+      const { runner, events } = await liveIdleRunner(peer)
+      const goal = threadGoal()
+      peer.emit('thread/goal/updated', updated(goal))
+      peer.respond('thread/goal/set', () => ({ goal: { ...goal, status: 'paused', updatedAt: goal.updatedAt + 1 } }))
+
+      const before = peer.requests.length
+      await expect(runner.pauseGoal(true)).resolves.toMatchObject({ state: 'paused' })
+      runner.close('server')
+      expect(peer.requests.slice(before).map((r) => r.method)).toEqual(['thread/goal/set'])
+      expect(ofType(events, 'turn_result')).toHaveLength(1)
+      expect(runner.status).not.toBe('running')
+    })
+  })
 })

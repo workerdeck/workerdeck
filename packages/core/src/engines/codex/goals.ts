@@ -99,10 +99,11 @@ export function goalStamp(goal: AppServerThreadGoal): GoalStamp {
   return { createdAt: goal.createdAt, updatedAt: goal.updatedAt, timeUsedSeconds: goal.timeUsedSeconds, tokensUsed: goal.tokensUsed }
 }
 
-export function olderThan(goal: AppServerThreadGoal, stamp: GoalStamp): boolean {
+// Equal stamps are real (a status change within the same second and no usage): a tie is not newer.
+export function newerThan(goal: AppServerThreadGoal, stamp: GoalStamp): boolean {
   for (const key of ['createdAt', 'updatedAt', 'timeUsedSeconds', 'tokensUsed'] as const) {
     if (goal[key] !== stamp[key]) {
-      return goal[key] < stamp[key]
+      return goal[key] > stamp[key]
     }
   }
   return false
