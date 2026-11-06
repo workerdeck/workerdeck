@@ -1,4 +1,5 @@
 use crate::rest::HttpCall;
+use wd_native::planner::{fmt_duration, fmt_tokens};
 use wd_native::rest::calls;
 use wd_native::rest::{GoalCapabilities as CoreCapabilities, GoalState};
 use wd_native::vm::goal as core;
@@ -60,11 +61,22 @@ pub struct GoalView {
     pub tokens_used: Option<u64>,
     pub token_budget: Option<u64>,
     pub time_used_seconds: Option<u64>,
+    // The info sheet's "Goal tokens" ("12.0k of 50.0k") and "Goal time" values, `None` when there is nothing to show.
+    pub tokens_text: Option<String>,
+    pub time_text: Option<String>,
     pub holds_engine: bool,
 }
 
 impl From<core::GoalView> for GoalView {
     fn from(v: core::GoalView) -> Self {
+        let tokens_text = match (v.tokens_used, v.token_budget) {
+            (None, None) => None,
+            (used, budget) => Some(match budget {
+                Some(budget) => format!("{} of {}", fmt_tokens(used.unwrap_or(0) as f64), fmt_tokens(budget as f64)),
+                None => fmt_tokens(used.unwrap_or(0) as f64),
+            }),
+        };
+        let time_text = v.time_used_seconds.filter(|s| *s > 0).map(|s| fmt_duration(s as f64 * 1000.0));
         Self {
             text: v.text,
             state: v.state.into(),
@@ -78,6 +90,8 @@ impl From<core::GoalView> for GoalView {
             tokens_used: v.tokens_used,
             token_budget: v.token_budget,
             time_used_seconds: v.time_used_seconds,
+            tokens_text,
+            time_text,
             holds_engine: v.holds_engine,
         }
     }
@@ -125,4 +139,39 @@ pub fn goal_holds_engine_hint() -> String {
 #[uniffi::export]
 pub fn goal_text_max() -> u32 {
     core::GOAL_TEXT_MAX as u32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn view(tokens_used: Option<u64>, token_budget: Option<u64>, time_used_seconds: Option<u64>) -> GoalView {
+        core::GoalView {
+            text: "ship".into(),
+            state: GoalState::Active,
+            state_text: "Active".into(),
+            card_text: None,
+            set_by: "You".into(),
+            set_by_agent: false,
+            set_at: 0,
+            checks: None,
+            last_reason: None,
+            tokens_used,
+            token_budget,
+            time_used_seconds,
+            holds_engine: false,
+        }
+        .into()
+    }
+
+    #[test]
+    fn tokens_and_time_read_like_the_web_info_rows() {
+        let none = view(None, None, None);
+        assert_eq!((none.tokens_text, none.time_text), (None, None));
+        assert_eq!(view(Some(12_000), Some(50_000), None).tokens_text.as_deref(), Some("12.0k of 50.0k"));
+        assert_eq!(view(None, Some(50_000), None).tokens_text.as_deref(), Some("0 of 50.0k"));
+        assert_eq!(view(Some(900), None, None).tokens_text.as_deref(), Some("900"));
+        assert_eq!(view(None, None, Some(0)).time_text, None);
+        assert_eq!(view(None, None, Some(64)).time_text.as_deref(), Some("1m 4s"));
+    }
 }

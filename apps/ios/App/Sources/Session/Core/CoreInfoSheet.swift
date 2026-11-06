@@ -45,6 +45,10 @@ struct SessionInfoSheet: View {
             CopyableRow(label: "SDK session id", value: sdkSessionId)
           }
         }
+
+        if let goal = chrome?.goal {
+          CoreGoalRows(goal: goal)
+        }
       }
       .navigationTitle("Session info")
       .navigationBarTitleDisplayMode(.inline)
