@@ -138,6 +138,7 @@ export interface Runner {
   // gateway's: the runner stamps what it is given. `pauseGoal` only where `capabilities.goals.pause`. `by` names who
   // asks: a runner may refuse an agent's change while a human's is still unconfirmed.
   setGoal?(input: GoalInput, setBy: GoalSetter): Promise<SessionGoal>
+  // `by` is who asks; absent is the gateway itself (Stop, cut), never refused.
   clearGoal?(by?: GoalSetter): Promise<void>
   pauseGoal?(paused: boolean, by?: GoalSetter): Promise<SessionGoal>
   resolvePermission(requestId: string, decision: PermissionDecision): boolean

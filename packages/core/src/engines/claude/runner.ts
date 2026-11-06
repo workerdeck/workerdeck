@@ -83,6 +83,7 @@ import {
   parseGoalReply,
   readGoalStatuses,
   restorableGoal,
+  typedGoalArgs,
   withGoalSettings,
   type GoalStatus,
   type GoalStatusFn,
@@ -103,10 +104,12 @@ export type SessionInfoFn = (sdkSessionId: string, options: { dir?: string }) =>
 
 type EffortLevel = NonNullable<Options['effort']>
 
+// Every `/goal` the CLI was handed, host or typed, in delivery order: the CLI runs local commands in order.
 type GoalCommand = {
-  kind: 'set' | 'clear'
+  kind: 'set' | 'clear' | 'status'
   args: string
-  setBy?: GoalSetter
+  setBy: GoalSetter
+  host: boolean
   resolve: (goal: SessionGoal | null) => void
   reject: (error: Error) => void
 }
@@ -263,6 +266,10 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       : modelText
     const uuid = randomUUID()
     this.#inputCount++
+    const typedGoal = command && !blocks.length ? typedGoalArgs(modelText) : undefined
+    if (typedGoal !== undefined) {
+      this.#goalCommands.push({ ...goalCommandOf(typedGoal), setBy: { kind: 'human' }, host: false, resolve: () => {}, reject: () => {} })
+    }
     if (options?.origin) {
       this.#peerSends.add(uuid)
     }
@@ -482,6 +489,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (input.tokenBudget !== undefined) {
       throw new Error('this engine does not support goal token budgets')
     }
+    this.#refuseAgentOverHuman(setBy)
     const text = input.text.trim()
     const goal = await this.#goalCommand({ kind: 'set', args: text, setBy }, goalCommand(text))
     return goal!
@@ -489,8 +497,11 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
 
   // The engine holds no goal once it is met or failed, so only an active one is the engine's to clear. A clear sent
   // during a turn would wait for that turn to end, and a goal turn may run to its verdict first: interrupt it.
-  async clearGoal(): Promise<void> {
+  async clearGoal(by?: GoalSetter): Promise<void> {
     this.assertAccepting()
+    if (by) {
+      this.#refuseAgentOverHuman(by)
+    }
     const goal = this.goal
     if (goal?.state !== 'active' && !this.#goalCommands.some((command) => command.kind === 'set')) {
       if (goal) {
@@ -501,12 +512,19 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (this.core.status === 'running' || this.core.status === 'awaiting_approval') {
       await this.interrupt()
     }
-    await this.#goalCommand({ kind: 'clear', args: 'clear' }, GOAL_CLEAR_COMMAND)
+    await this.#goalCommand({ kind: 'clear', args: 'clear', setBy: by ?? { kind: 'human' } }, GOAL_CLEAR_COMMAND)
   }
 
-  #goalCommand(command: Omit<GoalCommand, 'resolve' | 'reject'>, text: string): Promise<SessionGoal | null> {
+  // An agent's change must never land after a human one the engine has not confirmed yet.
+  #refuseAgentOverHuman(setBy: GoalSetter): void {
+    if (setBy.kind === 'agent' && this.#goalCommands.some((command) => command.kind !== 'status' && command.setBy.kind === 'human')) {
+      throw new Error('a human goal change is pending')
+    }
+  }
+
+  #goalCommand(command: Omit<GoalCommand, 'resolve' | 'reject' | 'host'>, text: string): Promise<SessionGoal | null> {
     return new Promise((resolve, reject) => {
-      this.#goalCommands.push({ ...command, resolve, reject })
+      this.#goalCommands.push({ ...command, host: true, resolve, reject })
       this.#sendHost(text)
     })
   }
@@ -520,6 +538,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       session_id: this.#sdkSessionId ?? '',
       uuid: randomUUID(),
     }
+    this.#inputCount++
     if (first) {
       this.#input.unshift(message)
       return
@@ -542,19 +561,14 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (!run) {
       return false
     }
-    const args = run.args
-    const reply = parseGoalReply(messageText(toApiMessage(msg.message)), args)
+    const reply = parseGoalReply(messageText(toApiMessage(msg.message)), run.args)
+    const command = this.#takeGoalCommand(run.args)
+    const host = command?.host === true
+    if (host) {
+      this.#hideGoalResult = reply.kind !== 'set'
+    }
     if (reply.kind === 'status') {
       return false
-    }
-    const clears = isClearArgs(args)
-    let index = this.#goalCommands.findIndex((candidate) => candidate.args === args)
-    if (index < 0) {
-      index = this.#goalCommands.findIndex((candidate) => (candidate.kind === 'clear') === clears)
-    }
-    const command = index < 0 ? undefined : this.#goalCommands.splice(index, 1)[0]
-    if (command) {
-      this.#hideGoalResult = reply.kind !== 'set'
     }
     if (reply.kind === 'set') {
       const goal = activeGoal(reply.text, command?.setBy ?? { kind: 'human' })
@@ -568,7 +582,17 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     } else {
       command?.reject(new Error(reply.message))
     }
-    return command !== undefined
+    return host
+  }
+
+  // The head, unless a later command carries exactly these args: then the ones before it were never answered.
+  #takeGoalCommand(args: string): GoalCommand | undefined {
+    const head = this.#goalCommands[0]
+    const at = head === undefined || head.args === args ? 0 : this.#goalCommands.findIndex((command) => command.args === args)
+    for (const lost of this.#goalCommands.splice(0, Math.max(at, 0))) {
+      lost.reject(new Error('the engine did not answer this goal change'))
+    }
+    return this.#goalCommands.shift()
   }
 
   #observeGoalCheck(message: SDKUserMessage): void {
@@ -772,7 +796,14 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     const queryFn = this.config.queryFn ?? (sdkQuery as QueryFn)
     if (this.#clearRestoredGoal) {
       this.#clearRestoredGoal = false
-      this.#goalCommands.unshift({ kind: 'clear', args: 'clear', resolve: () => {}, reject: () => {} })
+      this.#goalCommands.unshift({
+        kind: 'clear',
+        args: 'clear',
+        setBy: { kind: 'human' },
+        host: true,
+        resolve: () => {},
+        reject: () => {},
+      })
       this.#sendHost(GOAL_CLEAR_COMMAND, true)
     }
     const query = queryFn({ prompt: this.#input, options: { ...this.#buildOptions(), ...overrides } })
@@ -895,12 +926,13 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   }
 
   // A slash command is the CLI's to run once it has read it, turn or not; any other send waits for a reply naming it.
+  // A `/goal` waits for its local reply, which needs no stamp.
   pendingInput(): number {
-    return Math.max(this.#unanswered.length, this.#input.pending)
+    return Math.max(this.#unanswered.length + this.#goalCommands.length, this.#input.pending)
   }
 
   inputConfirmable(): boolean {
-    return this.#stamps
+    return this.#stamps || this.#unanswered.length === 0
   }
 
   inputSnapshot(): InputSnapshot {
@@ -1343,6 +1375,10 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       this.core.emit({ type: 'checklist', items })
     }
   }
+}
+
+function goalCommandOf(args: string): Pick<GoalCommand, 'kind' | 'args'> {
+  return { kind: args === '' ? 'status' : isClearArgs(args) ? 'clear' : 'set', args }
 }
 
 function verdictNotice(goal: SessionGoal | null): GoalNotice | undefined {

@@ -32,6 +32,11 @@ export function withGoalSettings(settings: Options['settings']): Options['settin
   return { ...settings, modelProposedGoals: 'disabled' } as Options['settings']
 }
 
+export function typedGoalArgs(text: string): string | undefined {
+  const match = /^\s*\/goal(?:\s+([\s\S]*))?$/.exec(text)
+  return match ? (match[1] ?? '').trim() : undefined
+}
+
 export function goalCommandRun(msg: unknown): { args: string } | undefined {
   const run = (msg as { local_command_run?: { command?: unknown; args?: unknown } }).local_command_run
   return run?.command === 'goal' ? { args: typeof run.args === 'string' ? run.args.trim() : '' } : undefined
