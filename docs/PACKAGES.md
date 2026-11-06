@@ -523,7 +523,7 @@ as a future additive field), are in `docs/GOTCHAS.md` §Server, profiles & auth.
 **Goals** (`goal.ts`): `SessionGoal`, `GoalSetter` (provenance), `GoalInput` and `readGoalInput(input, capabilities)` (the
 one validation every caller runs: text trimmed, non-empty, at most 4000, not a Claude clear alias; a budget only where
 `EngineCapabilities.goals.budget`), `goalActive`; the drawing rules `goalStateText`, `goalCardText` (the `cardStatus`
-`goal` source), `goalNoticeRow` (the transcript row per `notice`), `goalHoldsEngine`. Commands `set_goal { text, tokenBudget? }`, `clear_goal`, `pause_goal
+`goal` source), `goalNoticeRow` (the transcript row per `notice`), `goalHoldsEngine`, `goalBudgetChange`. Commands `set_goal { text, tokenBudget? }`, `clear_goal`, `pause_goal
 { paused }`; REST bodies `SetGoalRequest` / `PauseGoalRequest`, answered with `GoalResponse { session, goal, pending? }`.
 A notice-less `goal_changed` is a state tick and coalesces (`replayCoalesceKey`, `logCoalesceKey`). There is no stop
 command: Stop stays `interrupt`. Rules in `docs/GOTCHAS.md` § Session goals.
@@ -1217,7 +1217,7 @@ false until one has, which is how react tells `connecting`/`unreachable` (never 
 `reconnecting`/`offline`. `reconnectNow` only skips the backoff wait: during a handshake it resets the ladder and
 reports attempt 0, never opening a second socket. `closeSession` sends `close` and detaches at once, which loses
 nothing because a WebSocket sends queued frames before its close handshake; the gateway runs a `close` behind the
-prompts sent before it. Goals: `setGoal(id, { text, tokenBudget? })`, `clearGoal(id)`, `pauseGoal(id, paused)` (REST, a 202 answers `pending`)
+prompts sent before it. Goals: `setGoal(id, { text, tokenBudget? }, conversation?)`, `clearGoal(id, conversation?)`, `pauseGoal(id, paused, conversation?)` (REST, a 202 answers `pending`; `conversation` overrides the cached generation header)
 and the matching `SessionHandle` frame senders. A refused REST
 call throws `WorkerDeckError` (an `Error` subclass carrying `status`), which is what lets a
 caller tell "this server has no such route" (404 - stop asking) from "that file was too big".

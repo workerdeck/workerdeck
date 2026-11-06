@@ -485,6 +485,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
             : [{ kind: 'notice', id: `reset-${event.seq}`, level: 'info', text: agentResetNotice(event.agentReason) }],
         contextUsage: undefined,
         checklist: undefined,
+        goal: null,
         sdkSessionId: event.sdkSessionId ?? base.sdkSessionId,
       }
     }

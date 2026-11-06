@@ -152,3 +152,13 @@ export function goalHoldsEngine(info: { goal?: SessionGoal; capabilities?: { goa
 }
 
 export const GOAL_HOLDS_ENGINE_HINT = 'The goal keeps the engine working and awake; pause or clear it to let the session sleep'
+
+// What a budget field asks for: `undefined` leaves the budget alone (untouched, so a change made elsewhere meanwhile
+// stands), `null` removes the one that was shown, a number sets it.
+export function goalBudgetChange(field: string, shown: number | undefined): number | null | undefined {
+  const value = field.trim()
+  if (value === (shown === undefined ? '' : String(shown))) {
+    return undefined
+  }
+  return value ? Number(value) : null
+}

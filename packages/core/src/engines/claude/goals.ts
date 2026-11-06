@@ -243,22 +243,13 @@ function goalStatusOf(line: string): GoalStatus | undefined {
   }
 }
 
-const COMMAND = /^\s*<command-name>\/goal<\/command-name>[\s\S]*?(?:<command-args>([\s\S]*?)<\/command-args>)?\s*$/
+const COMMAND = /^\s*<command-name>\/goal<\/command-name>/
 
-// A resumed transcript keeps every `/goal`, host ones too, as the raw command row; it replays as the CLI's own reply.
-// `null` is a status query, which says nothing.
-export function replayedGoalCommand(message: ApiMessage): ApiMessage | null | undefined {
+// A resumed transcript keeps every `/goal`, host ones too, as the raw command row. It holds no outcome (the CLI may have
+// refused it), so it replays hidden; the goal's state comes from the record and the transcript's `goal_status`.
+export function isReplayedGoalCommand(message: ApiMessage): boolean {
   const content = message.content
   const text =
     typeof content === 'string' ? content : content.length === 1 && content[0]?.type === 'text' ? (content[0] as TextBlock).text : undefined
-  const match = text === undefined ? null : COMMAND.exec(text)
-  if (!match) {
-    return undefined
-  }
-  const args = (match[1] ?? '').trim()
-  if (!args) {
-    return null
-  }
-  const reply = GOAL_CLEAR_ALIASES.has(args.toLowerCase()) ? 'Goal cleared' : `${SET}${args}`
-  return { ...message, content: `<local-command-stdout>${reply}</local-command-stdout>` }
+  return text !== undefined && COMMAND.test(text)
 }

@@ -3,6 +3,7 @@ import {
   STATUS_LABEL_EMOJI_MAX,
   STATUS_LABEL_TEXT_MAX,
   GOAL_TEXT_MAX,
+  goalBudgetChange,
   goalStateText,
   readGoalInput,
   canSleep as canSleepRule,
@@ -376,7 +377,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           detail: paused ? 'The turn in flight finishes; no new goal turn starts' : 'The engine picks the goal up again',
           run: () =>
             this.#agentCall(hostId, paused ? 'could not pause the goal' : 'could not resume the goal', (client) =>
-              client.pauseGoal(sessionId, paused),
+              client.pauseGoal(sessionId, paused, info.conversation),
             ),
         }
       }
@@ -384,7 +385,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         return {
           label: '$(circle-slash) Clear goal',
           detail: 'Drop the goal; the agent stops working toward it',
-          run: () => this.#agentCall(hostId, 'could not clear the goal', (client) => client.clearGoal(sessionId)),
+          run: () => this.#agentCall(hostId, 'could not clear the goal', (client) => client.clearGoal(sessionId, info.conversation)),
         }
       }
       case 'newConversation': {
@@ -680,7 +681,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       if (budget === undefined) {
         return
       }
-      tokenBudget = budget.trim() ? Number(budget.trim()) : current === undefined ? undefined : null
+      tokenBudget = goalBudgetChange(budget, current)
     }
     const input = readGoalInput({ text, ...(tokenBudget === undefined ? {} : { tokenBudget }) }, capabilities)
     if (typeof input === 'string') {
@@ -688,7 +689,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       return
     }
     await this.#agentCall(hostId, 'could not set the goal', async (client) => {
-      const response = await client.setGoal(info.id, input)
+      const response = await client.setGoal(info.id, input, info.conversation)
       if (response.pending) {
         void vscode.window.showInformationMessage('WorkerDeck: goal sent. It starts when the engine confirms it.')
       }

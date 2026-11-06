@@ -322,12 +322,12 @@ export function SessionsSidebar() {
         break
       }
       case 'clear-goal': {
-        agentCall(row, 'Could not clear the goal', (client) => client.clearGoal(row.info.id))
+        agentCall(row, 'Could not clear the goal', (client) => client.clearGoal(row.info.id, row.info.conversation))
         break
       }
       case 'pause-goal': {
         agentCall(row, action.paused ? 'Could not pause the goal' : 'Could not resume the goal', (client) =>
-          client.pauseGoal(row.info.id, action.paused),
+          client.pauseGoal(row.info.id, action.paused, row.info.conversation),
         )
         break
       }
@@ -592,7 +592,7 @@ export function SessionsSidebar() {
           const row = goalFor
           if (row) {
             agentCall(row, 'Could not set the goal', async (client) => {
-              const response = await client.setGoal(row.info.id, goal)
+              const response = await client.setGoal(row.info.id, goal, row.info.conversation)
               if (response.pending) {
                 toast('Goal sent. It starts when the engine confirms it.')
               }

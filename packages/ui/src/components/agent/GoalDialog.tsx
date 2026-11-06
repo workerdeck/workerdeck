@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { GOAL_TEXT_MAX, readGoalInput, type GoalCapabilities, type GoalInput, type SessionGoal } from '@workerdeck/protocol'
+import {
+  GOAL_TEXT_MAX,
+  goalBudgetChange,
+  readGoalInput,
+  type GoalCapabilities,
+  type GoalInput,
+  type SessionGoal,
+} from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Dialog, DialogBody, DialogContent, DialogHeader } from '../ui/Dialog.tsx'
 import { Input } from '../ui/Input.tsx'
@@ -43,8 +50,7 @@ function GoalForm({
   const [error, setError] = useState<string>()
   const budgeted = capabilities?.budget === true
   const submit = () => {
-    const trimmed = budget.trim()
-    const tokenBudget = !budgeted ? undefined : trimmed ? Number(trimmed) : goal?.tokenBudget === undefined ? undefined : null
+    const tokenBudget = budgeted ? goalBudgetChange(budget, goal?.tokenBudget) : undefined
     const input = readGoalInput({ text, ...(tokenBudget === undefined ? {} : { tokenBudget }) }, capabilities)
     if (typeof input === 'string') {
       setError(input.replace(/^goal\.(text|tokenBudget) /, (_, field: string) => (field === 'text' ? 'The goal ' : 'The token budget ')))

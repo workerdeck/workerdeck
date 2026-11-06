@@ -202,17 +202,18 @@ export class WorkerDeckClient {
     return await this.#pick('POST', this.#sess(id, '/sleep'), 'session')
   }
 
-  // A human's goal (`setBy: human`); `pending` while the engine has not confirmed it yet.
-  async setGoal(id: string, goal: SetGoalRequest): Promise<GoalResponse> {
-    return await this.#call('POST', this.#sess(id, '/goal'), goal)
+  // A human's goal (`setBy: human`); `pending` while the engine has not confirmed it yet. `conversation` pins the change
+  // to the conversation the person was looking at: after a cut the gateway refuses it instead of applying it to n+1.
+  async setGoal(id: string, goal: SetGoalRequest, conversation?: number): Promise<GoalResponse> {
+    return await this.#call('POST', this.#sess(id, '/goal'), goal, conversation)
   }
 
-  async clearGoal(id: string): Promise<GoalResponse> {
-    return await this.#call('DELETE', this.#sess(id, '/goal'))
+  async clearGoal(id: string, conversation?: number): Promise<GoalResponse> {
+    return await this.#call('DELETE', this.#sess(id, '/goal'), undefined, conversation)
   }
 
-  async pauseGoal(id: string, paused: boolean): Promise<GoalResponse> {
-    return await this.#call('POST', this.#sess(id, '/goal/pause'), { paused } satisfies PauseGoalRequest)
+  async pauseGoal(id: string, paused: boolean, conversation?: number): Promise<GoalResponse> {
+    return await this.#call('POST', this.#sess(id, '/goal/pause'), { paused } satisfies PauseGoalRequest, conversation)
   }
 
   async deleteSession(id: string): Promise<SessionInfo> {
@@ -615,12 +616,12 @@ export class WorkerDeckClient {
     return payload[key]!
   }
 
-  async #call<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+  async #call<T = unknown>(method: string, path: string, body?: unknown, conversation?: number): Promise<T> {
     const res = await this.#fetch(`${this.#options.baseUrl}${path}`, {
       method,
       headers: {
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-        ...this.#generationHeader(method, path),
+        ...(conversation === undefined ? this.#generationHeader(method, path) : { [GENERATION_HEADER]: String(conversation) }),
         ...this.#options.headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,

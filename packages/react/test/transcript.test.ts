@@ -779,6 +779,17 @@ describe('transcript reducer', () => {
     expect(seedFromSessionInfo(cleared, info).goal).toBeNull()
   })
 
+  it('drops the goal on a reset, keeps it dropped on a reattach, and takes the next one', () => {
+    seq = 0
+    const goal = { text: 'old', state: 'active', setAt: 1, setBy: { kind: 'human' } } as const
+    const reset = run(initialTranscriptState, [{ type: 'goal_changed', goal, notice: 'set' }, { type: 'conversation_reset' }])
+    expect(reset.goal).toBeNull()
+    const info: SessionInfo = { id: 's', status: 'idle', cwd: '/w', createdAt: 0, lastSeq: 0, pendingPermissionCount: 0 }
+    expect(seedFromSessionInfo(reset, info).goal).toBeNull()
+    const next = { ...goal, text: 'new' }
+    expect(run(reset, [{ type: 'goal_changed', goal: next, notice: 'set' }]).goal).toEqual(next)
+  })
+
   it('conversation_reset without a new id keeps the known one, and resets stack', () => {
     seq = 0
     const state = run(initialTranscriptState, [
