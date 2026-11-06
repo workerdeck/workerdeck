@@ -1435,17 +1435,22 @@ A goal is engine state (Claude `/goal`, codex thread goals) the runner normalize
 - **A tool call must never wait for its own turn.** An agent setting its own Claude goal is inside the very turn the
   `/goal` queues behind, so the bounded wait is what keeps that from deadlocking.
 - **Provenance.** Humans stamp `setBy: human` and may change any goal. An agent's write stamps `{ kind: 'agent',
-  sessionId, name }`, and an agent may set, clear or pause only where the current goal is absent or agent-set; a
-  human goal (any state, met included) answers 403 until a human clears it.
+  sessionId, name }`. An unfinished human goal (any state but `met` or `failed`) answers an agent 403; once it is met or
+  failed an agent may replace or clear it, and the result is stamped as the agent's.
 - **Reach.** No `target` is the caller. A target is accepted only as a local member of the team the caller leads
   (`agents.members`, by id or name), and only where the peer rule lets the lead send to it (`scopeMatches` +
-  `peerOps(...).send`). Anything else, a member aiming at its lead included, is refused with the same line.
+  `peerOps(...).send`). Anything else, a member aiming at its lead included, is refused with the same line. The check
+  runs again inside the lock on the captured target id: a member that left the team, or whose scope or owner rule
+  changed, during the wait is refused there.
 - **Dormant sessions are woken** (`parking.ensureLive`, then the attach's `restored` wait), like a peer send: the change
   needs the engine. Two exceptions answer from the record: a clear with no goal is a no-op, a pause with none is 409.
 - **The record keeps a tombstone.** Parking folds every `goal_changed` into its remembered config, so the dormant record
   writes the goal, or `null` once one was cleared (absent means never known), and a rebuild re-applies it after the host
   hook. Ticks that only move counters (codex usage) skip the write. `requestedConfig` drops `goal`: a cut starts n+1
   without one, and the log folds `conversation_reset` to `null`.
+- **A cut pauses an active codex goal first.** After the intent is written and before the old runner closes,
+  `ConversationCuts` calls `pauseGoal(true)` once, bounded by `CUT_GOAL_PAUSE_MS` (2 s), errors ignored: codex would
+  otherwise keep n's goal active and continue it whenever that thread is resumed. A rolled-back cut leaves it paused.
 - **Idle sleep keeps a codex goal running.** `EngineSleepTimers` refuses an idle sleep while a codex session's goal is
   active and re-arms on `goal_changed`, so pausing it lets the timer fire. Explicit sleep is the runner's to pause
   first. Claude never starts a goal turn by itself, so its goals do not hold sleep off.
