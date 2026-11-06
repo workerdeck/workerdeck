@@ -61,8 +61,9 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   // The status label a woken session last showed; the event log takes over once it sees a set or a reset.
   statusLabel?: StatusLabel
   // The goal a woken session last showed; the event log takes over once it sees a change or a reset. A runner
-  // reconciles it with what the engine itself restores and never re-sends it to the engine.
-  goal?: SessionGoal
+  // reconciles it with what the engine itself restores and never re-sends it to the engine. `null` is a tombstone (the
+  // goal was cleared) and differs from absent (never known): a cleared goal must not come back from the engine's store.
+  goal?: SessionGoal | null
   // Set by the gateway; its presence is what offers the `goal_*` tools.
   goals?: GoalDirectory
   // Host-only: the session's lifetime counts when this conversation began, added to the log's own so
