@@ -544,6 +544,11 @@ over unanswered input (claude has all three, codex and provider the count only).
 (the sink is `EngineRunner.setStatusLabel`, which emits `status_label`), offered on every engine
 right after `session_info`. See `docs/GOTCHAS.md` §Status label.
 
+**MCP reconnect**: `lib/mcp-tool.ts` defines `mcp_reconnect` over an `McpControl` (list +
+reconnect one server), offered last and only by `SessionRunner`, which also reconnects `failed`
+servers when a plain message reaches a running engine (at most once a minute). See
+`docs/GOTCHAS.md` §MCP status.
+
 the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
 per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model
 catalog versioned with the release, a credential-availability probe, a runner factory), looked

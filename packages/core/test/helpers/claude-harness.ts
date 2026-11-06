@@ -9,6 +9,7 @@ export type HarnessCapabilities = {
   commands?: Array<{ name: string; description: string; argumentHint: string }>
   contextUsage?: Record<string, unknown>
   usage?: Record<string, unknown>
+  mcpServers?: Array<{ name: string; status: string; error?: string }>
 }
 
 // Pass `capabilities` to also implement supportedModels/supportedCommands/usage.
@@ -22,6 +23,14 @@ export function fakeHarness(capabilities?: HarnessCapabilities) {
   const backgroundTasks = vi.fn(async (toolUseId?: string) => toolUseId !== 'unknown')
   const setPermissionMode = vi.fn(async () => {})
   const setModel = vi.fn(async () => {})
+  const mcpServers = capabilities?.mcpServers
+  const reconnectMcpServer = vi.fn(async (name: string) => {
+    const server = mcpServers?.find((candidate) => candidate.name === name)
+    if (server) {
+      server.status = 'connected'
+      delete server.error
+    }
+  })
 
   const emit = (msg: SDKMessage) => {
     if (waiter) {
@@ -69,6 +78,7 @@ export function fakeHarness(capabilities?: HarnessCapabilities) {
           supportedCommands: vi.fn(async () => capabilities.commands ?? []),
         }
       : {}),
+    ...(mcpServers ? { mcpServerStatus: vi.fn(async () => mcpServers.map((server) => ({ ...server }))), reconnectMcpServer } : {}),
     ...(capabilities?.contextUsage ? { getContextUsage: vi.fn(async () => capabilities.contextUsage) } : {}),
     ...(capabilities?.usage
       ? {
@@ -87,7 +97,7 @@ export function fakeHarness(capabilities?: HarnessCapabilities) {
     return query
   }
 
-  return { emit, end, captured, interrupt, stopTask, backgroundTasks, setPermissionMode, setModel, queryFn }
+  return { emit, end, captured, interrupt, stopTask, backgroundTasks, setPermissionMode, setModel, reconnectMcpServer, queryFn }
 }
 
 // Let the runner's queued microtasks and its message pump drain.

@@ -2976,6 +2976,15 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   none. So tools imply connected: a server with neither a notification nor tools stays `pending`,
   genuinely ambiguous between not started and disabled in config. `authStatus: 'notLoggedIn'` beats
   a missing notification and maps to `needs-auth`.
+- **A failed server stays failed until something reconnects it.** The CLI dials each server once
+  at start; one that was down then (Shuttle started later) is `failed` for the life of that engine.
+  Two things heal it on Claude: `mcp_reconnect` (the agent's own tool; no argument = every `failed`
+  server, a name = that one in any state), and `SessionRunner` itself, which on a plain send to an
+  awake engine reads the status and reconnects every `failed` server, fire-and-forget and at most
+  once per `MCP_HEAL_INTERVAL_MS`, so the reconnected tools may arrive one step into the turn.
+  `needs-auth` waits on the human and `disabled` was a choice: neither is healed unasked. A woken
+  engine dials everything afresh, so a wake skips the heal. Codex is not offered the tool (no
+  per-server reconnect).
 - **The three actions are session-scoped where they exist.** `reconnect`/`enable`/`disable` go to
   the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this.
 

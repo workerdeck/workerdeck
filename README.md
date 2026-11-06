@@ -158,6 +158,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   needs an API key". It stays until the agent changes it, clears when the conversation resets, and
   you can set or clear it yourself from the card menu. An `AGENTS.md` line telling agents when to
   use it is all the setup there is.
+- **MCP servers that come back.** A Claude session reconnects any MCP server that was down when
+  its engine started (say you launched it later) the next time you message it, and the agent can
+  do it itself with `mcp_reconnect` when a tool it expected is missing.
 - **Sessions that know their own budget.** Every session, on any engine, gets `session_info`:
   engine, vendor and model, context usage (tokens used, window, percent left), turns, cost and
   the account rate-limit windows. An agent can check it before a big step and wrap up, summarise

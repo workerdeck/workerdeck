@@ -8,6 +8,7 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Live model loop | `<KEY>=... pnpm smoke:live [provider] [model]` | **Yes, real tokens** |
 | Full SDK-client stack | `<KEY>=... pnpm smoke:sdk [provider] [model]` | **Yes, real tokens** |
 | Live MCP | `pnpm smoke:mcp --probe` / `<KEY>=... pnpm smoke:mcp [provider] [model]` | Probe: no. Full: **yes** |
+| MCP reconnect (claude) | `pnpm smoke:mcp-reconnect` (local fake MCP server down at engine start; heal on send, `mcp_reconnect` mid-turn, same-turn tool use) | **Yes, two or more short haiku turns** |
 | Message attachments | `pnpm smoke:media [image\|pdf\|text]` | **Yes, real tokens** |
 | Codex engine | `pnpm smoke:codex --canary` / `--clear` / `--steer` / `pnpm smoke:codex [model]` | Canary: no. Clear: **two tiny turns**. Steer: **one short turn**. Full: **yes, plan/API usage** |
 | Attach bytes | `pnpm smoke:attach <host> <sessionId> [truncate] [refs]` | No |

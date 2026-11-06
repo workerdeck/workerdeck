@@ -29,6 +29,8 @@ export const BUILTIN_TOOL_TITLES: Record<string, string> = {
   mcp__workerdeck__set_status: 'Setting status',
   change_avatar: 'Changing avatar',
   mcp__workerdeck__change_avatar: 'Changing avatar',
+  mcp_reconnect: 'Reconnecting MCP servers',
+  mcp__workerdeck__mcp_reconnect: 'Reconnecting MCP servers',
 }
 
 export function toolTitle(name: string, titles?: Record<string, string>): string | undefined {

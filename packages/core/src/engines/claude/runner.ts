@@ -56,7 +56,8 @@ import { resolveInstructions } from '../../lib/instructions.ts'
 import { PEER_MCP_SERVER, withPeerContext } from '../../lib/peers.ts'
 import { liveContextFromReading, withDeadline, type LiveContext } from '../../lib/session-report.ts'
 import { assertEffort, effortDefaultFor } from '../../lib/effort.ts'
-import { sessionTools } from '../../lib/session-tools.ts'
+import { mcpNeedsReconnect, reconnectAll } from '../../lib/mcp-tool.ts'
+import { sessionTools, type SessionToolSources } from '../../lib/session-tools.ts'
 import { agentResetFields } from '../../lib/context-reset.ts'
 import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
 import { AddressedThinking, apiMessageId } from './addressed-thinking.ts'
@@ -69,6 +70,7 @@ import { tailTaskOutput, taskOutputRoots } from './task-output.ts'
 // An attach is a client arriving to look at the number, not a reason to ask the CLI a second time within the minute.
 const USAGE_REFRESH_MIN_MS = 60_000
 const REPORT_PROBE_TIMEOUT_MS = 5_000
+const MCP_HEAL_INTERVAL_MS = 60_000
 
 export type QueryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => Query
 
@@ -128,6 +130,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #subscriptionType: string | undefined
   #engineTitle: string | undefined
   #lastRateLimitPoll = 0
+  #lastMcpHeal = 0
   #started = false
   #runPromise: Promise<void> | undefined
   #backfill: Promise<void> | undefined
@@ -229,6 +232,8 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     })
     if (this.#asleep) {
       this.#wake()
+    } else if (!isSlashCommand(text)) {
+      void this.#healMcpServers()
     }
     this.echoUser(text, attachments, options)
   }
@@ -332,6 +337,34 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       throw new Error('this session cannot enable or disable MCP servers')
     }
     await query.toggleMcpServer(name, enabled)
+  }
+
+  protected override get toolSources(): SessionToolSources {
+    return {
+      ...super.toolSources,
+      mcp: { list: () => this.mcpServers(), reconnect: (name) => this.reconnectMcpServer(name) },
+    }
+  }
+
+  // A server that was down when the engine started stays failed for good; a woken engine dials every server afresh.
+  async #healMcpServers(): Promise<void> {
+    const query = this.#query
+    const now = Date.now()
+    if (now - this.#lastMcpHeal < MCP_HEAL_INTERVAL_MS || typeof query?.mcpServerStatus !== 'function') {
+      return
+    }
+    this.#lastMcpHeal = now
+    try {
+      const failed = (await query.mcpServerStatus()).map(mcpStatusInfo).filter(mcpNeedsReconnect)
+      if (failed.length > 0 && query === this.#query && typeof query.reconnectMcpServer === 'function') {
+        await reconnectAll(
+          (name) => query.reconnectMcpServer(name),
+          failed.map((server) => server.name),
+        )
+      }
+    } catch {
+      // Best effort: the next send tries again, and `mcp_reconnect` reports what this swallows.
+    }
   }
 
   #awakeQuery(): Query | undefined {

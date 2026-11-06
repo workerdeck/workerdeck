@@ -33,6 +33,7 @@
     "smoke:sdk": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/sdk-client.ts",
     "smoke:media": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/media.ts",
     "smoke:mcp": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/mcp-live.ts",
+    "smoke:mcp-reconnect": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/mcp-reconnect.ts",
     "smoke:codex": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/codex.ts",
     "smoke:hot-reload": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/hot-reload.ts",
     "smoke:relay": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/relay.ts",

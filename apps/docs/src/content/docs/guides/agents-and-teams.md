@@ -100,6 +100,14 @@ It stays until changed and clears when the conversation resets. Every agent is t
 current (set it when starting a task, when blocked or waiting, and when done); add your own rules
 in `AGENTS.md` if you want more.
 
+## MCP servers that were down
+
+An engine dials its MCP servers once, when it starts; one that was not running then stays failed.
+On Claude sessions WorkerDeck reconnects every failed server when the next message reaches a running
+engine (at most once a minute), and the agent has an `mcp_reconnect` tool for doing it itself: no
+argument reconnects every failed server, `server` reconnects that one. Servers waiting for sign-in
+or switched off are left alone. A sleeping engine needs neither: it dials everything again on wake.
+
 ## Sleep
 
 An idle agent's engine sleeps after 15 minutes by default, freeing its memory; the next message
