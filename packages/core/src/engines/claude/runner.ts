@@ -497,9 +497,11 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
 
   // The engine holds no goal once it is met or failed, so only an active one is the engine's to clear. A clear sent
   // during a turn would wait for that turn to end, and a goal turn may run to its verdict first: interrupt it.
-  async clearGoal(setBy: GoalSetter = { kind: 'human' }): Promise<void> {
+  async clearGoal(by?: GoalSetter): Promise<void> {
     this.assertAccepting()
-    this.#refuseAgentOverHuman(setBy)
+    if (by) {
+      this.#refuseAgentOverHuman(by)
+    }
     const goal = this.goal
     if (goal?.state !== 'active' && !this.#goalCommands.some((command) => command.kind === 'set')) {
       if (goal) {
@@ -510,7 +512,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (this.core.status === 'running' || this.core.status === 'awaiting_approval') {
       await this.interrupt()
     }
-    await this.#goalCommand({ kind: 'clear', args: 'clear', setBy }, GOAL_CLEAR_COMMAND)
+    await this.#goalCommand({ kind: 'clear', args: 'clear', setBy: by ?? { kind: 'human' } }, GOAL_CLEAR_COMMAND)
   }
 
   // An agent's change must never land after a human one the engine has not confirmed yet.

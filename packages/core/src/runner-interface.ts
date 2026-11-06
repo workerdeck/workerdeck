@@ -137,8 +137,8 @@ export interface Runner {
   // `goal_changed` event is emitted; it rejects with the engine's refusal. Validation and provenance (`setBy`) are the
   // gateway's: the runner stamps what it is given. `pauseGoal` only where `capabilities.goals.pause`.
   setGoal?(input: GoalInput, setBy: GoalSetter): Promise<SessionGoal>
-  // `setBy` is who asks; absent means the human.
-  clearGoal?(setBy?: GoalSetter): Promise<void>
+  // `by` is who asks; absent is the gateway itself (Stop, cut), never refused.
+  clearGoal?(by?: GoalSetter): Promise<void>
   pauseGoal?(paused: boolean): Promise<SessionGoal>
   resolvePermission(requestId: string, decision: PermissionDecision): boolean
   interrupt(): Promise<void>
