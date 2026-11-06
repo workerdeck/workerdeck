@@ -214,19 +214,9 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         return errors.entries.joinToString("\n") { (id, error) -> "${clients[id]?.gateway?.name ?: id}: $error" }
     }
 
-    private var linger: Job? = null
-
-    // Auto's linger window closes on a clock, not on a poll, so the list redraws itself when the soonest one ends.
     private fun draw(): List<ListGroup> {
         val groups = list.groups(System.currentTimeMillis().toDouble())
         loadIcons(groups)
-        linger?.cancel()
-        list.lingerEnds()?.let { ends ->
-            linger = viewModelScope.launch {
-                delay((ends - System.currentTimeMillis()).toLong().coerceAtLeast(0) + 50)
-                state.value = state.value.copy(groups = draw())
-            }
-        }
         return groups
     }
 

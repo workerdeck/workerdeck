@@ -97,10 +97,7 @@ private fun CardUnitView(unit: CardUnit, tones: ListTones, icons: Map<String, Im
         Chromed(lead, null, CARD_SHAPE, tones, drag, events) { SessionCard(lead, tones, events.card, icons, tray) }
         Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             for (member in unit.members) {
-                Box {
-                    Chromed(member, lead.key, MEMBER_SHAPE, tones, drag, events) { MemberCard(member, tones, events.card) }
-                    member.lingerStart?.let { LingerBar(it, tones, Modifier.align(Alignment.BottomCenter).padding(horizontal = 8.dp)) }
-                }
+                Chromed(member, lead.key, MEMBER_SHAPE, tones, drag, events) { MemberCard(member, tones, events.card) }
             }
         }
     }

@@ -1,8 +1,5 @@
 package bi.atomic.workerdeck.app.sessions
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,6 +88,8 @@ data class ListTones(
     val success: Color,
     val danger: Color,
     val warning: Color,
+    val warningBg: Color,
+    val dangerBg: Color,
     val active: Color,
     val border: Color,
     val badge: Color,
@@ -106,6 +104,7 @@ fun listTones(dark: Boolean): ListTones = if (dark) {
         nest = Color(0xFF232426), attention = Color(0xFF5C3906), selected = Color(0xFF04395E), name = Color(0xFFB8B8B8),
         fg1 = Color(0xFFEDEDED), fg2 = Color(0xFFA1A1A1), fg3 = Color(0xFF8F8F8F), fg4 = Color(0xFF6E6E6E),
         shell = Color(0xFFC586C0), success = Color(0xFF3ECF8E), danger = Color(0xFFFF6166), warning = Color(0xFFF5A623),
+        warningBg = Color(0xFF2A1F04), dangerBg = Color(0xFF2A1114),
         active = Color.White.copy(alpha = 0.1f), border = Color(0xFF3D3D3D), badge = Color(0xFF616161), badgeFg = Color(0xFFCCCCCC),
         accent = Color(0xFF0078D4), claude = Color(0xFFCC7C5E), openai = Color.White,
     )
@@ -114,6 +113,7 @@ fun listTones(dark: Boolean): ListTones = if (dark) {
         nest = Color(0xFFECECEC), attention = Color(0xFFFBDCB8), selected = Color(0xFFCFE4F7), name = Color(0xFF4A4A4A),
         fg1 = Color(0xFF171717), fg2 = Color(0xFF454545), fg3 = Color(0xFF737373), fg4 = Color(0xFFA1A1A1),
         shell = Color(0xFF8B3A8B), success = Color(0xFF0F7B4F), danger = Color(0xFFD93036), warning = Color(0xFFA35200),
+        warningBg = Color(0xFFFFF6ED), dangerBg = Color(0xFFFEF1F1),
         active = Color.Black.copy(alpha = 0.08f), border = Color(0xFFC9C9C9), badge = Color(0xFFC4C4C4), badgeFg = Color(0xFF333333),
         accent = Color(0xFF0078D4), claude = Color(0xFFB3573A), openai = Color(0xFF373737),
     )
@@ -131,7 +131,6 @@ private val MICRO = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, letterSpacin
 
 val CARD_SHAPE = RoundedCornerShape(8.dp)
 val MEMBER_SHAPE = RoundedCornerShape(4.dp)
-const val TEAM_LINGER_MS = 5_000.0
 
 // A card and the Members its team card holds: a lead's depth-1 rows follow it in the core's order.
 data class CardUnit(val lead: ListRow, val members: List<ListRow>)
@@ -154,7 +153,7 @@ class CardEvents(
     val onToggleTeam: (ListRow) -> Unit,
 )
 
-fun needsYou(row: ListRow): Boolean = row.state == RowState.ATTENTION || row.teamState == RowState.ATTENTION
+fun needsYou(row: ListRow): Boolean = row.needsYou
 
 // The web `SessionItem` card: an agent (or, in tile mode, a plain session) as a 40 face beside two 20 lines; any other
 // plain session in the gutter layout. `tray` is the lead's first-line team control.
@@ -181,6 +180,7 @@ fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<S
                             if (agent) ModelBadge(row, tones, 13.sp)
                             if (row.shared) Icon(painterResource(R.drawable.globe), contentDescription = "Shared with other owners", tint = tones.fg4, modifier = Modifier.size(12.dp))
                         }
+                        Reasons(row, tones)
                         Unread(row, tones)
                         tray?.invoke()
                         if (!agent) ContextRing(row.contextPercent, tones)
@@ -202,6 +202,7 @@ fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<S
                         row.badge?.let { BadgeGlyph(it, size = 14.dp) } ?: StateGlyph(row.state)
                     }
                     Name(row, tones, BODY, Modifier.weight(1f))
+                    Reasons(row, tones)
                     Unread(row, tones)
                     ContextRing(row.contextPercent, tones)
                 }
@@ -238,31 +239,13 @@ fun MemberCard(row: ListRow, tones: ListTones, events: CardEvents) {
                         ModelBadge(row, tones, 12.sp)
                         CardStatus(row, tones, LABEL, Modifier.weight(1f, fill = false))
                     }
+                    Reasons(row, tones)
                     Unread(row, tones)
                     Chips(row, tones, events)
                 }
             }
         }
         StepRows(row, tones, events)
-    }
-}
-
-// A Member Auto keeps only for its linger window: a hairline that fills left to right, then the row leaves.
-@Composable
-fun LingerBar(start: Double, tones: ListTones, modifier: Modifier = Modifier) {
-    val progress = remember(start) { Animatable(((System.currentTimeMillis() - start) / TEAM_LINGER_MS).toFloat().coerceIn(0f, 1f)) }
-    LaunchedEffect(start) {
-        val left = (start + TEAM_LINGER_MS - System.currentTimeMillis()).toLong()
-        if (left > 0) progress.animateTo(1f, tween(left.toInt(), easing = LinearEasing))
-    }
-    Canvas(modifier.fillMaxWidth().height(2.dp)) {
-        drawLine(
-            tones.fg4.copy(alpha = 0.5f),
-            Offset(size.height / 2, size.height / 2),
-            Offset(size.height / 2 + (size.width - size.height) * progress.value, size.height / 2),
-            strokeWidth = size.height,
-            cap = StrokeCap.Round,
-        )
     }
 }
 
@@ -325,6 +308,20 @@ private fun CardStatus(row: ListRow, tones: ListTones, style: TextStyle, modifie
 }
 
 // Grey while the turn still produces, accent once it stopped: the colour answers "is this waiting for me".
+// One chip per reason the session needs a person: "Approval", "Failed", "Blocked".
+@Composable
+private fun Reasons(row: ListRow, tones: ListTones) {
+    for (reason in row.reasons) {
+        Box(
+            Modifier.height(16.dp).clip(RoundedCornerShape(3.dp)).background(if (reason.danger) tones.dangerBg else tones.warningBg)
+                .semantics { contentDescription = reason.title }.padding(horizontal = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(reason.label, style = MICRO, color = if (reason.danger) tones.danger else tones.warning, maxLines = 1)
+        }
+    }
+}
+
 @Composable
 private fun Unread(row: ListRow, tones: ListTones) {
     if (row.unseen == 0u) return
@@ -480,8 +477,17 @@ private fun StepLine(step: ListStep, tones: ListTones, onOpen: () -> Unit, onSto
 // that expands the team. Expanded, `^ N` returns it to Auto.
 @Composable
 fun TeamTray(row: ListRow, tones: ListTones, onOpenMember: (TrayMember) -> Unit, onToggle: () -> Unit) {
-    if (row.tray.isEmpty() && !row.teamExpanded) return
+    if (row.tray.isEmpty() && !row.teamExpanded && row.teamAttention == 0u) return
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (row.teamAttention > 0u) {
+            Box(
+                Modifier.height(16.dp).clip(RoundedCornerShape(50)).background(tones.warningBg)
+                    .semantics { contentDescription = row.teamSummary ?: "" }.padding(horizontal = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(row.teamAttention.toString(), fontSize = 12.sp, lineHeight = 12.sp, color = tones.warning)
+            }
+        }
         if (row.tray.isNotEmpty()) {
             for (member in row.tray) {
                 Box(Modifier.clip(RoundedCornerShape(3.dp)).clickable { onOpenMember(member) }.semantics { contentDescription = "Open ${member.title}" }) {
@@ -495,7 +501,7 @@ fun TeamTray(row: ListRow, tones: ListTones, onOpenMember: (TrayMember) -> Unit,
                     Icon(painterResource(R.drawable.chevron_right), contentDescription = null, tint = tones.fg4, modifier = Modifier.size(12.dp))
                 }
             }
-        } else {
+        } else if (row.teamExpanded) {
             TrayButton(tones, "Show only active Members", onToggle) {
                 Icon(painterResource(R.drawable.chevron_up), contentDescription = null, tint = tones.fg3, modifier = Modifier.size(12.dp))
                 Text(row.members.toString(), style = LABEL, color = tones.fg3)
