@@ -162,6 +162,11 @@ export class SessionRecords {
     return this.#serial(id, async () => this.#known(id, await this.#store.get(id)))
   }
 
+  // Outside the per-session queue, like `list()`: a read for display must never wait behind a write in flight.
+  peek(id: string): Promise<SessionRecord | null> {
+    return this.#store.get(id)
+  }
+
   async list(): Promise<SessionRecord[]> {
     const records = await this.#store.list()
     for (const record of records) {

@@ -349,6 +349,8 @@ describe('sessions that survive a restart', () => {
       expect((await list(gateway.base)).find((row) => row.id === crashed.id)?.status).toBe('idle')
     })
     expect((await gateway.server.records.get(crashed.id))?.failure).toBeUndefined()
+    expect((await gateway.server.records.get(crashed.id))?.runtime?.info.failure).toBeUndefined()
+    expect((await list(gateway.base)).find((row) => row.id === crashed.id)?.failure).toBeUndefined()
   })
 
   it('lists the session after a restart and resumes it on attach, under the same id', async () => {

@@ -27,7 +27,7 @@ import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
 import { handleProjectIcon } from './project-icon.ts'
 import { createNamedSession, editSettings, endSession, identityOf, nameSession, retireAgent, unnameSession } from './named-sessions.ts'
-import { listSessions, requireLive, resolveSession, sessionInfoOf, type ResolvedSession } from './session-lookup.ts'
+import { listSessions, requireLive, resolveSession, sessionInfoOf, withStoredFailure, type ResolvedSession } from './session-lookup.ts'
 import { HUMAN_SETTER, type GoalChange } from '../services/goals.ts'
 import { handleShells } from './shells.ts'
 import { handleToolResult } from './tool-results.ts'
@@ -94,7 +94,7 @@ export async function handleSessions(
   const mutating = req.method !== 'GET' && req.method !== 'HEAD'
   if (!mutating) {
     const resolved = await resolveSession(ctx, route.id, auth)
-    await dispatchItem(ctx, req, res, auth, route, resolved)
+    await dispatchItem(ctx, req, res, auth, route, { ...resolved, info: await withStoredFailure(ctx, resolved.info) })
     return
   }
   const before = await resolveSession(ctx, route.id, auth)

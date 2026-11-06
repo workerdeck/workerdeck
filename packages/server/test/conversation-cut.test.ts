@@ -210,11 +210,16 @@ describe('conversation cut under a stable id', () => {
     expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 2 })).status).toBe(409)
     expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1, prompt: 'p' })).status).toBe(502)
     expect((await call(base, `/sessions/${id}/conversations`)).body).toMatchObject({ conversation: 2, startFailed: { n: 2 } })
+    const failed = { failure: { message: expect.stringContaining('start'), conversation: 2 } }
+    expect(((await call(base, '/sessions')).body.sessions as SessionInfo[]).find((info) => info.id === id)).toMatchObject(failed)
+    expect((await call(base, `/sessions/${id}`)).body.session).toMatchObject(failed)
     expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 2 })).status).toBe(409)
     cutsOf(server).faults.clear()
     const retried = await call(base, `/sessions/${id}/conversations/retry`, 'POST', { expectedGeneration: 2 })
     expect(retried.body.conversation).toBe(2)
     await eventually(() => expect(built.at(-1)!.sent).toEqual(['p']))
+    await eventually(async () => expect((await server.records.get(id))?.failure).toBeUndefined())
+    expect(((await call(base, '/sessions')).body.sessions as SessionInfo[]).find((info) => info.id === id)?.failure).toBeUndefined()
   })
 
   it('announces the new conversation only once the cut has lifted its gate', async () => {

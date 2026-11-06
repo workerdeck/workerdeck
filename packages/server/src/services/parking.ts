@@ -765,7 +765,7 @@ function idleRecordBase(
   runner: Runner,
   config: SessionRunnerConfig,
 ): Pick<ParkedSessionRecord, 'id' | 'info' | 'profile' | 'config' | 'cost'> {
-  const { engineAsleep: _engineAsleep, ...info } = runner.info()
+  const { engineAsleep: _engineAsleep, failure: _failure, ...info } = runner.info()
   return {
     id: runner.id,
     info: { ...info, status: 'idle' },

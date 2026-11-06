@@ -1435,6 +1435,11 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
   `disposable()`. `#failStart` writes it beside `startFailed`.
 - **Not set**: a crash `#retireCrashed` keeps dormant (asleep, the next open resumes it), a clean `'server'` end, an
   interrupt or a park. `absentStatus`'s `failed` for a record without runtime is a status, not attention.
+- **Gateway-side failures** (`#failStart`: a start that did not take, a conversation that could not be saved) are stamped
+  onto the stored runtime's info too, after `#failStart` awaits the parking drain (a queued save of the failed attempt
+  would clear it). The list and `GET /sessions/:id` also merge `record.failure` into a live or stored info that lacks it
+  (`withStoredFailure`, via the unserialized `records.peek`); mutation lookups never add that read. The dormant
+  projection (`idleRecordBase`) strips a runner's `failure`, so a crash `#retireCrashed` keeps is never attention.
 - **Cleared**: any `saveRuntime` (a runner for the session runs again: wake, Retry start, new conversation), the
   start transaction in `#startCommitted`, `#confirm`, `closeLocked`. `recordInfo` never shows it on a closed record.
 - **The card never shows an empty line.** Protocol's `cardStatus` falls back label, the checklist item
