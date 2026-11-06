@@ -687,6 +687,38 @@ describe('the successor is durable before the intent goes', () => {
     expect(second.built[0]!.config.resume).toBe(`engine-${id}`)
     expect(second.built[0]!.sent).toEqual([])
   })
+
+  it('clears a failed start on a kept successor when recovery confirms it, in the record and on every view', async () => {
+    const dir = await fixture.stateDir()
+    const first = await gateway(dir)
+    const id = await create(first.base)
+    await settled(first.server, id)
+    await call(first.base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })
+    await settled(first.server, id)
+    const cut = { from: 1, to: 2, phase: 'committed' as const, epoch: 1, target: { cwd: '/tmp/project', profile: 'claude-a' } }
+    const failure = { message: 'the new conversation could not be saved', at: 1, conversation: 2 }
+    await first.server.records.transact(id, (current) => ({ ...current!, cut, startFailed: { n: 2, error: failure.message }, failure }))
+    expect(((await call(first.base, '/sessions')).body.sessions as SessionInfo[]).find((info) => info.id === id)?.failure).toEqual(failure)
+    expect((await call(first.base, `/sessions/${id}`)).body.session.failure).toEqual(failure)
+    await stop(first.server)
+
+    const second = await gateway(dir)
+    const record = await second.server.records.get(id)
+    expect(record?.cut).toBeUndefined()
+    expect(record?.failure).toBeUndefined()
+    expect(record?.runtime?.info.failure).toBeUndefined()
+    expect(((await call(second.base, '/sessions')).body.sessions as SessionInfo[]).find((info) => info.id === id)?.failure).toBeUndefined()
+    expect((await call(second.base, `/sessions/${id}`)).body.session.failure).toBeUndefined()
+  })
+
+  it('never pairs a failure with another conversation\'s info', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base } = await gateway(dir)
+    const id = await create(base)
+    await settled(server, id)
+    await server.records.transact(id, (current) => ({ ...current!, failure: { message: 'old', at: 1, conversation: 7 } }))
+    expect((await call(base, `/sessions/${id}`)).body.session.failure).toBeUndefined()
+  })
 })
 
 describe('a mutation names its conversation and is re-checked under the lock', () => {

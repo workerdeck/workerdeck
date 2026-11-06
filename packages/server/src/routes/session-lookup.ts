@@ -26,7 +26,13 @@ export async function withStoredFailure(ctx: ServerContext, info: SessionInfo): 
 }
 
 function withRecordFailure(info: SessionInfo, record: SessionRecord | null | undefined): SessionInfo {
-  return record?.failure && !info.failure && record.closedAt === undefined ? { ...info, failure: record.failure } : info
+  const failure = record?.failure
+  if (!failure || info.failure || record.closedAt !== undefined) {
+    return info
+  }
+  // A cut racing the read can pair an old conversation's failure with the next one's info.
+  const stale = failure.conversation !== undefined && failure.conversation !== (info.conversation ?? record.conversation)
+  return stale ? info : { ...info, failure }
 }
 
 // Missing and not-visible answer the same 404: whether a session exists outside the caller's scope is not its business.

@@ -785,10 +785,8 @@ export class ConversationCuts {
     const failure = { message: error, at: Date.now(), conversation: to }
     return await this.#owned(id, to, (current) => {
       const prompt = current!.pendingPrompt
-      const runtime = current!.runtime
       return {
         ...current!,
-        ...(runtime ? { runtime: { ...runtime, info: { ...runtime.info, failure } } } : {}),
         startFailed: { n: to, error },
         failure,
         ...(unsent && prompt?.n === to ? { pendingPrompt: { ...prompt, state: 'pending' as const } } : {}),
