@@ -98,6 +98,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #sdkSessionId: string | undefined
   #model: string | undefined
   #apiKeySource: string | undefined
+  #engineVersion: string | undefined
   #permissionMode: PermissionMode | undefined
   #effortRequest: string | undefined
   #effortExplicit: boolean
@@ -189,6 +190,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       permissionMode: this.#permissionMode,
       canBypassPermissions: this.config.permissionMode === 'bypassPermissions' || this.config.allowDangerouslySkipPermissions === true,
       apiKeySource: this.#apiKeySource,
+      engineVersion: this.#engineVersion,
       subagents: this.#subagents.list(),
       totalCostUsd: this.core.cost.reportedCostUsd,
       numTurns: this.#numTurns,
@@ -712,6 +714,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       this.#model = msg.model
       this.#permissionMode = msg.permissionMode
       this.#apiKeySource = msg.apiKeySource
+      this.#engineVersion = msg.claude_code_version
       this.core.emit({
         type: 'system_init',
         sdkSessionId: msg.session_id,

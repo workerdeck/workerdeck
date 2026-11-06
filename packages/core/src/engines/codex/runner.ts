@@ -113,6 +113,11 @@ function rolloutMissing(error: unknown): boolean {
   return error instanceof JsonRpcError && error.code === -32600 && error.message.startsWith('no rollout found for thread id')
 }
 
+function codexVersion(result: unknown): string | undefined {
+  const agent = (result as { userAgent?: unknown } | null)?.userAgent
+  return typeof agent === 'string' ? /^[^/\s]+\/(\S+)/.exec(agent)?.[1] : undefined
+}
+
 function threadLostNotice(threadId: string): string {
   return (
     `Codex has no record of this session's thread (${threadId}): it was never saved to CODEX_HOME, or has since been removed. ` +
@@ -173,6 +178,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   readonly #instructions: string | undefined
   #sdkSessionId: string | undefined
   #model: string | undefined
+  #engineVersion: string | undefined
   #permissionMode: PermissionMode
   #reasoningEffort: string | undefined
   #effortExplicit: boolean
@@ -276,6 +282,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       ...(this.#currentEffort() !== undefined ? { effort: this.#currentEffort() } : {}),
       permissionMode: this.#permissionMode,
       canBypassPermissions: true,
+      engineVersion: this.#engineVersion,
       totalCostUsd: this.core.cost.reportedCostUsd,
       numTurns: this.#numTurns || undefined,
       subagents: this.#agents.list(),
@@ -707,7 +714,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       this.#activeTurn?.reject(new Error(message))
     })
     try {
-      await connection.request('initialize', INITIALIZE_PARAMS)
+      this.#engineVersion = codexVersion(await connection.request('initialize', INITIALIZE_PARAMS)) ?? this.#engineVersion
     } catch (error) {
       // Don't leave a half-initialized child around: the next message must respawn from scratch.
       connection.close()

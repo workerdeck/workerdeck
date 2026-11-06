@@ -233,6 +233,18 @@ function modelFamily(id: string): string {
   return parts[0] ?? id
 }
 
+export function writesLostNotice(code: string, lost: readonly string[]): string {
+  const cause = code === 'EDQUOT' ? 'the disk quota is used up' : code === 'ENOSPC' ? 'the disk is full' : code
+  const what = [
+    lost.includes('transcript') ? 'part of the session transcript' : undefined,
+    lost.includes('global_config') ? 'changes to ~/.claude.json' : undefined,
+  ]
+    .filter(Boolean)
+    .join(' and ')
+  const resume = lost.includes('transcript') ? ' Resuming this conversation later may miss part of it.' : ''
+  return `Claude Code could not save ${what || 'its session data'} (${cause}).${resume}`
+}
+
 export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
   switch (msg.type) {
     case 'assistant': {
@@ -295,6 +307,9 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
     case 'system': {
       if (msg.subtype === 'init' || msg.subtype === 'session_state_changed') {
         return null
+      }
+      if (msg.subtype === 'session_writes_lost') {
+        return { type: 'session_error', message: writesLostNotice(msg.error_code, msg.lost) }
       }
       return { type: 'sdk_event', payload: msg as unknown as { type: string } }
     }

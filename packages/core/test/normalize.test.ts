@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { byModelFromSdk, modelOptionsFromSdk, rateLimitEventsFromUsage } from '../src/lib/normalize.ts'
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import { byModelFromSdk, modelOptionsFromSdk, normalizeSdkMessage, rateLimitEventsFromUsage } from '../src/lib/normalize.ts'
 
 describe('modelOptionsFromSdk', () => {
   const reported = [
@@ -143,5 +144,32 @@ describe('byModelFromSdk', () => {
   it('leaves the basis absent when the process has not priced the model yet', () => {
     const byModel = byModelFromSdk({ 'claude-sonnet-5': entry })
     expect(byModel?.['claude-sonnet-5']?.costBasis).toBeUndefined()
+  })
+})
+
+describe('session_writes_lost', () => {
+  const lost = (error_code: string, kinds: string[]) =>
+    normalizeSdkMessage({
+      type: 'system',
+      subtype: 'session_writes_lost',
+      error_code,
+      lost: kinds,
+      uuid: 'u',
+      session_id: 's',
+    } as unknown as SDKMessage)
+
+  it('surfaces a lost transcript as a session error that warns about resume', () => {
+    expect(lost('ENOSPC', ['transcript'])).toEqual({
+      type: 'session_error',
+      message:
+        'Claude Code could not save part of the session transcript (the disk is full). Resuming this conversation later may miss part of it.',
+    })
+  })
+
+  it('names lost config changes without the resume warning', () => {
+    expect(lost('EDQUOT', ['global_config'])).toEqual({
+      type: 'session_error',
+      message: 'Claude Code could not save changes to ~/.claude.json (the disk quota is used up).',
+    })
   })
 })

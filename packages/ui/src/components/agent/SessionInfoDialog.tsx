@@ -42,6 +42,11 @@ export function SessionInfoPanel({ state, client, sessionId, active = true }: Se
     <div className="flex flex-col divide-y divide-border">
       <div className="pb-2">
         <DialogRow label="Engine">{state.engine ?? 'claude'}</DialogRow>
+        {session?.engineVersion ? (
+          <DialogRow label="Engine version" mono>
+            {session.engineVersion}
+          </DialogRow>
+        ) : null}
         {session?.profile ? <DialogRow label="Profile">{session.profile}</DialogRow> : null}
         {state.model ? (
           <DialogRow label="Model" mono>

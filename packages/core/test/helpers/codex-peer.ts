@@ -60,7 +60,10 @@ export function scriptedPeer() {
   let requestHandler: ((method: string, params: unknown, id: string | number) => Promise<unknown>) | undefined
   let closeHandler: ((message: string) => void) | undefined
 
-  responders.set('initialize', () => ({ codexHome: '/tmp/.codex' }))
+  responders.set('initialize', () => ({
+    userAgent: 'workerdeck/0.166.0 (Mac OS 26.5.1; arm64) unknown (workerdeck; protocol-2)',
+    codexHome: '/tmp/.codex',
+  }))
   responders.set('thread/start', () => THREAD_RESULT)
   responders.set('thread/resume', () => THREAD_RESULT)
 

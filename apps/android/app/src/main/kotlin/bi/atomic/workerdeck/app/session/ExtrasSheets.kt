@@ -196,6 +196,7 @@ private fun InfoBody(model: SessionModel, chrome: SessionChrome?) {
             chrome?.modelLabel?.let { "Model" to it },
             chrome?.modeLabel?.let { "Permission mode" to it },
             "Engine" to facts.engine,
+            facts.engineVersion?.let { "Engine version" to it },
             facts.profile?.let { "Profile" to it },
             facts.apiKeySource?.let { "Credentials" to it },
         )

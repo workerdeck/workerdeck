@@ -211,6 +211,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   first result closes it). Lowering its mode lifts the lock; raising it back is refused.
   The job's own `context_reset` is not locked: the agent asking is the one already in bypass.
   Every new path that feeds a message into a session must call `refuseJobInput`.
+- **`session_writes_lost` is a `session_error`, not an `sdk_event`.** The CLI sends it once, as it
+  exits, when ENOSPC/EDQUOT cost transcript lines or `~/.claude.json` changes. `normalizeSdkMessage`
+  turns it into a `session_error` notice (`writesLostNotice`), the same channel codex uses for a lost
+  or incomplete thread, so every client draws it without a protocol change.
+- **`SessionInfo.engineVersion` is the engine's own version, never ours.** Claude: `system/init`'s
+  `claude_code_version`. Codex: the version in `initialize`'s `userAgent` (`<client>/<version> ...`),
+  read on every connect. Absent until the engine has started (a dormant record has none).
 
 ## Provider engine (AI SDK v7)
 

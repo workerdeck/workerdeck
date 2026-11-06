@@ -7,6 +7,15 @@ gateway and protocol it talks to.
 
 ## [Unreleased]
 
+### Added
+
+- **Engine version in Session info.** The info dialog (and the iOS and Android info sheets) shows
+  the version of the engine running the session: Claude Code's for a Claude session, codex's for a
+  Codex one.
+- **Lost transcript writes are reported.** When Claude Code cannot save a session's transcript or
+  `~/.claude.json` because the disk is full or over quota, the session shows an error notice that
+  a later resume may miss part of the conversation.
+
 ## [4.3.0] - 2026-11-06
 
 ### Added

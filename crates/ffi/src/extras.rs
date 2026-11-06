@@ -233,6 +233,7 @@ pub struct SessionExtras {
     pub engine: String,
     pub profile: Option<String>,
     pub api_key_source: Option<String>,
+    pub engine_version: Option<String>,
     pub cwd: Option<String>,
     pub sdk_session_id: Option<String>,
 }
@@ -247,6 +248,7 @@ impl From<core::SessionExtras> for SessionExtras {
             engine: e.engine,
             profile: e.profile,
             api_key_source: e.api_key_source,
+            engine_version: e.engine_version,
             cwd: e.cwd,
             sdk_session_id: e.sdk_session_id,
         }

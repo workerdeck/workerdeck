@@ -26,6 +26,9 @@ struct SessionInfoSheet: View {
             LabeledContent("Permission mode", value: mode)
           }
           LabeledContent("Engine", value: facts.engine)
+          if let engineVersion = facts.engineVersion {
+            LabeledContent("Engine version", value: engineVersion)
+          }
           if let profile = facts.profile {
             LabeledContent("Profile", value: profile)
           }

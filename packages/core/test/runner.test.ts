@@ -103,6 +103,7 @@ describe('SessionRunner', () => {
     expect(runner.sdkSessionId).toBe('sdk-session-1')
     expect(runner.info().model).toBe('claude-test-1')
     expect(runner.apiKeySource).toBe('user')
+    expect(runner.info().engineVersion).toBe('2.0.0')
     expect(events.every((e, i) => e.seq === i + 1)).toBe(true)
   })
 

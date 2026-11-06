@@ -580,6 +580,8 @@ pub struct SessionInfo {
     pub can_bypass_permissions: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_version: Option<String>,
     pub created_at: f64,
     pub last_seq: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]

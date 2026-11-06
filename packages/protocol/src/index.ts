@@ -906,6 +906,7 @@ export type SessionInfo = {
   permissionMode?: PermissionMode
   canBypassPermissions?: boolean
   apiKeySource?: string
+  engineVersion?: string
   createdAt: number
   lastSeq: number
   // Which log the seqs belong to. A dormant wake starts a fresh log and bumps it, so a `seq`

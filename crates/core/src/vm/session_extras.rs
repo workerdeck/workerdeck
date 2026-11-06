@@ -386,6 +386,7 @@ pub struct SessionExtras {
     pub engine: String,
     pub profile: Option<String>,
     pub api_key_source: Option<String>,
+    pub engine_version: Option<String>,
     pub cwd: Option<String>,
     pub sdk_session_id: Option<String>,
 }
@@ -407,6 +408,7 @@ impl SessionExtras {
             engine: serde_json::to_value(engine).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default(),
             profile: info.profile,
             api_key_source: info.api_key_source,
+            engine_version: info.engine_version,
             cwd: Some(info.cwd),
             sdk_session_id: info.sdk_session_id,
         })

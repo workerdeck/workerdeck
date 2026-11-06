@@ -199,6 +199,7 @@ describe('CodexRunner: turns, streaming and item mapping', () => {
     expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/start', 'skills/list', 'turn/start'])
     expect(peer.notifies).toEqual(['initialized'])
     expect(peer.requests[0]!.params).toMatchObject({ capabilities: { experimentalApi: true } })
+    expect(runner.info().engineVersion).toBe('0.166.0')
     expect(peer.requests[1]!.params).toEqual({ cwd: '/tmp/project' })
     expect(peer.requests[2]!.params).toMatchObject({
       cwd: '/tmp/project',
