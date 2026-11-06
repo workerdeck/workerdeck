@@ -88,6 +88,10 @@ class GoalEngine extends EngineRunner {
     return goal
   }
 
+  finish(state: 'met' | 'failed'): void {
+    this.#publish({ ...this.#goal!, state }, state)
+  }
+
   tick(tokensUsed: number): void {
     this.#publish({ ...this.#goal!, tokensUsed })
   }
@@ -99,7 +103,7 @@ class GoalEngine extends EngineRunner {
     }
   }
 
-  #publish(goal: SessionGoal | null, notice?: 'set' | 'cleared' | 'paused' | 'resumed'): void {
+  #publish(goal: SessionGoal | null, notice?: 'set' | 'cleared' | 'paused' | 'resumed' | 'met' | 'failed'): void {
     this.#goal = goal
     this.emit(notice ? { type: 'goal_changed', goal, notice } : { type: 'goal_changed', goal })
   }
@@ -340,7 +344,7 @@ describe('goal tools', () => {
     expect((await call(base, `/sessions/${member}/goal`, 'POST', { text: 'human goal' }, 1)).status).toBe(200)
     const tools = latest(lead).config.goals!
     await expect(tools.set(lead, { text: 'mine now', target: 'Pip' })).rejects.toThrow(
-      'the human set this goal; an agent cannot replace it',
+      'the human set this goal and it is not finished; an agent cannot replace it',
     )
     await expect(tools.clear(lead, { target: 'Pip' })).rejects.toThrow(/cannot clear it/)
     await expect(tools.pause(member, { paused: true })).rejects.toThrow(/cannot pause it/)
@@ -350,6 +354,42 @@ describe('goal tools', () => {
     expect((await call(base, `/sessions/${member}/goal`, 'POST', { text: 'human again' }, 1)).body.goal).toMatchObject({
       setBy: { kind: 'human' },
     })
+  })
+
+  it('lets an agent replace or clear a human goal once it is met or failed, stamping itself', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, latest } = await gateway(dir)
+    const lead = await agent(base, 'Atlas', 'codex-a')
+    const member = await agent(base, 'Pip', 'codex-a', lead)
+    await settled(server, member)
+    const tools = latest(lead).config.goals!
+    await call(base, `/sessions/${member}/goal`, 'POST', { text: 'human goal' }, 1)
+    latest(member).finish('met')
+    expect(await tools.set(lead, { text: 'next step', target: 'Pip' })).toMatch(/^Goal set on Pip: next step/)
+    expect(goalOf(server, member)).toMatchObject({ setBy: { kind: 'agent', sessionId: lead } })
+    await call(base, `/sessions/${member}/goal`, 'POST', { text: 'human again' }, 1)
+    latest(member).finish('failed')
+    expect(await tools.clear(lead, { target: 'Pip' })).toBe('Goal cleared on Pip.')
+  })
+
+  it('refuses a lead whose member left the team between the reach check and the change', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, latest } = await gateway(dir)
+    const lead = await agent(base, 'Atlas', 'codex-a')
+    const member = await agent(base, 'Pip', 'codex-a', lead)
+    await settled(server, member)
+    const locks = server.locks
+    const run = locks.run.bind(locks)
+    let armed = true
+    locks.run = async <T>(ids: readonly string[], step: () => Promise<T>): Promise<T> => {
+      if (armed && ids.includes(member)) {
+        armed = false
+        expect((await call(base, `/agents/${member}`, 'PATCH', { lead: null })).status).toBe(200)
+      }
+      return run(ids, step)
+    }
+    await expect(latest(lead).config.goals!.set(lead, { text: 'x', target: 'Pip' })).rejects.toThrow(/not a member of a team you lead/)
+    expect(latest(member).goalCalls).toEqual([])
   })
 
   it("answers 'requested' when its own engine applies the goal only after the running turn", async () => {
@@ -417,6 +457,36 @@ describe('goal persistence', () => {
     expect((await call(second.base, `/sessions/${id}/goal`, 'DELETE', undefined, 1)).body.goal).toBeNull()
     expect((await call(second.base, `/sessions/${id}/goal/pause`, 'POST', { paused: true }, 1)).status).toBe(409)
     expect(second.built).toEqual([])
+  })
+
+  it.each([
+    ['confirms', undefined, undefined],
+    ['hangs', new Promise<void>(() => {}), undefined],
+    ['refuses', undefined, 'no such thread'],
+  ])('pauses an active codex goal before the cut stops the old runner, and cuts anyway when the pause %s', async (_case, hold, refuse) => {
+    const dir = await fixture.stateDir()
+    const { server, base, latest } = await gateway(dir)
+    const id = await create(base, 'codex-a')
+    await settled(server, id)
+    await call(base, `/sessions/${id}/goal`, 'POST', { text: 'old work' }, 1)
+    const old = latest(id)
+    old.confirmHold = hold
+    old.refuse = refuse
+    expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
+    expect(old.goalCalls).toEqual(['set:old work:human', 'pause:true'])
+    await settled(server, id)
+    expect(latest(id)).not.toBe(old)
+  })
+
+  it('never pauses a claude goal at a cut', async () => {
+    const dir = await fixture.stateDir()
+    const { server, base, latest } = await gateway(dir)
+    const id = await create(base, 'claude-a')
+    await settled(server, id)
+    await call(base, `/sessions/${id}/goal`, 'POST', { text: 'old work' }, 1)
+    const old = latest(id)
+    expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1 })).status).toBe(200)
+    expect(old.goalCalls).toEqual(['set:old work:human'])
   })
 
   it('drops the goal at a cut: the next conversation starts without one', async () => {

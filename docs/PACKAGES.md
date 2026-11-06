@@ -868,7 +868,9 @@ limits, and the run at the next idle: the `cut` option the gateway wires to
 agents' `goal_*` tools). `buildRunner` stamps `config.goals` (transient) on every engine whose capability record has
 `goals`, so plain sessions and members get the tools too; the directory decides reach. Parking folds `goal_changed`
 into the remembered config, so the dormant record carries the goal and a clear's `null` tombstone; `requestedConfig`
-drops it, so a cut starts without one. Rules in `docs/GOTCHAS.md` § Session goals.
+drops it, so a cut starts without one, and the cut pauses an active codex goal (bounded, best effort) before it stops
+the old runner. An agent may replace or clear a human goal only once it is met or failed. Rules in `docs/GOTCHAS.md`
+§ Session goals.
 
 HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
 profiles served with their engine's **capability record, static model catalog, and

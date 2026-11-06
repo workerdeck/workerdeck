@@ -6,6 +6,7 @@ import {
   type GoalCapabilities,
   type GoalInput,
   type GoalSetter,
+  type GoalState,
   type SessionGoal,
   type SessionInfo,
 } from '@workerdeck/protocol'
@@ -34,6 +35,9 @@ export type GoalServiceOptions = {
 
 export const GOAL_CONFIRM_WAIT_MS = 5000
 export const HUMAN_SETTER: GoalSetter = { kind: 'human' }
+
+// A human goal is locked against agents only while it is still in play.
+const FINISHED: ReadonlySet<GoalState> = new Set(['met', 'failed'])
 
 const VERBS = { set: 'replace', clear: 'clear', pause: 'pause' } as const
 
@@ -132,13 +136,16 @@ export class GoalService implements GoalDirectory {
     const caller = ctx.registry.get(from)
     const reach = await this.#reach(from, target)
     const setter: GoalSetter = { kind: 'agent', sessionId: from, ...agentName(ctx, from) }
-    const { outcome } = await this.change(reach.id, change, setter, () => {
-      if (ctx.registry.get(from) !== caller) {
+    const { outcome } = await this.change(reach.id, change, setter, async () => {
+      if (!caller || ctx.registry.get(from) !== caller) {
         fail(409, 'your session changed while the goal was being changed')
       }
       const current = ctx.records.conversationOf(reach.id) ?? 1
       if (current !== reach.conversation) {
         fail(409, `${reach.label} moved on to conversation ${current}; check its goal again`)
+      }
+      if (!reach.self && !(await this.#reaches(caller, reach.id))) {
+        fail(403, reachRefusal(target))
       }
     })
     const waited = await this.within(reach.id, outcome)
@@ -167,17 +174,26 @@ export class GoalService implements GoalDirectory {
     const member = agent
       ? ctx.agents.members(from).find((row) => row.id.toLowerCase() === wanted || row.name.toLowerCase() === wanted)
       : undefined
-    const refused = `${target} is not a member of a team you lead: you can change your own goal, and a lead its members' goals`
-    if (!member) {
-      throw new Error(refused)
-    }
-    const stored = ctx.registry.get(member.id)?.info() ?? (await ctx.parking.get(member.id))?.info
-    const fromInfo = ctx.projects.withProject(caller.info())
-    const toInfo = stored ? ctx.projects.withProject(stored) : undefined
-    if (!toInfo || !scopeMatches(fromInfo.scope, toInfo.scope) || !peerOps(fromInfo, toInfo, ctx.owners.multi()).send) {
-      throw new Error(refused)
+    if (!member || !(await this.#reaches(caller, member.id))) {
+      throw new Error(reachRefusal(target))
     }
     return { id: member.id, label: member.name, self: false, conversation: conversationOf(member.id) }
+  }
+
+  // Membership and the peer rule, read afresh: the lead check runs again inside the lock, where a member that left the
+  // team, or a scope or owner change, must refuse the call.
+  async #reaches(caller: Runner, memberId: string): Promise<boolean> {
+    const ctx = this.#ctx()
+    if (ctx.agents.get(memberId)?.lead !== caller.id) {
+      return false
+    }
+    const stored = ctx.registry.get(memberId)?.info() ?? (await ctx.parking.get(memberId))?.info
+    if (!stored) {
+      return false
+    }
+    const fromInfo = ctx.projects.withProject(caller.info())
+    const toInfo = ctx.projects.withProject(stored)
+    return scopeMatches(fromInfo.scope, toInfo.scope) && peerOps(fromInfo, toInfo, ctx.owners.multi()).send
   }
 
   #vet(info: SessionInfo, change: GoalChange, setter: GoalSetter): VettedChange {
@@ -190,8 +206,8 @@ export class GoalService implements GoalDirectory {
     if (locked) {
       fail(409, locked)
     }
-    if (setter.kind === 'agent' && info.goal?.setBy.kind === 'human') {
-      fail(403, `the human set this goal; an agent cannot ${VERBS[change.kind]} it`)
+    if (setter.kind === 'agent' && info.goal?.setBy.kind === 'human' && !FINISHED.has(info.goal.state)) {
+      fail(403, `the human set this goal and it is not finished; an agent cannot ${VERBS[change.kind]} it`)
     }
     if (change.kind === 'clear') {
       return change
@@ -242,6 +258,10 @@ export function describeGoal(goal: SessionGoal): string {
   ].filter((fact) => fact !== undefined)
   const reason = goal.lastReason ? ` Last check: ${goal.lastReason}` : ''
   return `${goal.text} [${facts.join(', ')}]${reason}`
+}
+
+function reachRefusal(target: string | undefined): string {
+  return `${target} is not a member of a team you lead: you can change your own goal, and a lead its members' goals`
 }
 
 function agentName(ctx: ServerContext, sessionId: string): { name?: string } {

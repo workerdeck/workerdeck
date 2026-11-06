@@ -5,6 +5,7 @@ import {
   UNCERTAIN_PROMPT_CODE,
   UNCONFIRMED_INPUT_CODE,
   errorMessage,
+  goalActive,
   isJobRun,
   type ConversationTarget,
   type SessionInfo,
@@ -375,6 +376,9 @@ export class ConversationCuts {
         counters: lifetimeCounters(record?.counters, info),
       }
       await ctx.records.transactDurable(id, (current) => ({ ...(current ?? freshRecord(id)), cut }))
+      if (live) {
+        await pauseCodexGoal(live)
+      }
       // A hot reload carried the runner away while the intent was being written: it is the next generation's now.
       if (this.#closed || (live && ctx.registry.get(id) !== live)) {
         await this.#rollback(id)
@@ -1067,4 +1071,31 @@ function armTimer(expire: () => void, ms: number): () => void {
   const timer = setTimeout(expire, ms)
   timer.unref?.()
   return () => clearTimeout(timer)
+}
+
+export const CUT_GOAL_PAUSE_MS = 2000
+
+// Codex keeps a goal's thread going by itself; a goal left active in n would continue whenever that thread is resumed.
+// Best effort and bounded: the cut never waits on it, and a refusal changes nothing about the cut.
+async function pauseCodexGoal(runner: Runner): Promise<void> {
+  const info = runner.info()
+  const pause = runner.pauseGoal?.bind(runner)
+  if (engineOf(info) !== 'codex' || !goalActive(info.goal) || !pause) {
+    return
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const bound = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, CUT_GOAL_PAUSE_MS)
+  })
+  const paused = Promise.resolve()
+    .then(() => pause(true))
+    .then(
+      () => undefined,
+      () => undefined,
+    )
+  try {
+    await Promise.race([paused, bound])
+  } finally {
+    clearTimeout(timer)
+  }
 }
