@@ -316,26 +316,28 @@ struct TrayView: View {
           .accessibilityLabel("Open \(member.title)")
         }
       }
-      Button(action: tray.toggle) {
-        Group {
-          if tray.expanded {
-            HStack(spacing: 2) {
-              Image(systemName: "chevron.up").font(.system(size: 9, weight: .semibold))
-              Text("\(tray.row.members)").monospacedDigit()
+      if tray.expanded || !tray.members.isEmpty {
+        Button(action: tray.toggle) {
+          Group {
+            if tray.expanded {
+              HStack(spacing: 2) {
+                Image(systemName: "chevron.up").font(.system(size: 9, weight: .semibold))
+                Text("\(tray.row.members)").monospacedDigit()
+              }
+            } else if tray.overflow > 0 {
+              Text("+\(tray.overflow)").monospacedDigit()
+            } else {
+              Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
             }
-          } else if tray.overflow > 0 {
-            Text("+\(tray.overflow)").monospacedDigit()
-          } else {
-            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
           }
+          .font(ListType.label())
+          .foregroundStyle(tray.expanded ? ListPalette.fg3 : ListPalette.fg4)
+          .padding(.horizontal, 2)
+          .hitPadding()
         }
-        .font(ListType.label())
-        .foregroundStyle(tray.expanded ? ListPalette.fg3 : ListPalette.fg4)
-        .padding(.horizontal, 2)
-        .hitPadding()
+        .buttonStyle(.borderless)
+        .accessibilityLabel(tray.expanded ? "Show only active Members" : "Show all Team Members")
       }
-      .buttonStyle(.borderless)
-      .accessibilityLabel(tray.expanded ? "Show only active Members" : "Show all Team Members")
     }
   }
 }

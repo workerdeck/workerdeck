@@ -487,7 +487,7 @@ struct SessionListView: View {
       let row = item.row
       SessionCard(
         item: item,
-        tray: row.depth == 0 && (!row.tray.isEmpty || row.teamExpanded)
+        tray: row.depth == 0 && (!row.tray.isEmpty || row.teamExpanded || row.teamAttention > 0)
           ? TeamTray(
             row: row,
             select: { member in open(member, model: model) },
