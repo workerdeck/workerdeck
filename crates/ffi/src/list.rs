@@ -1,7 +1,6 @@
 // The sessions list for a native app: every gateway's REST rollup, the read watermarks and the view config go in,
 // display-ready groups come out. The rules are `wd_native::vm::session_list`; nothing here decides visibility.
 use crate::face::{FaceSpec, face_spec};
-use std::collections::HashSet;
 use std::sync::Mutex;
 use wd_native::planner::fmt_cost;
 use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, ProjectIcon, SessionInfo, Sharing};
@@ -215,8 +214,13 @@ pub struct ListRow {
     pub chips: Vec<ListChip>,
     // The list mixes agents and plain sessions: a plain session draws in the agent card's shape, an engine tile for a face.
     pub tile: bool,
-    // A Member Auto draws only for its linger window: when that window started (a hairline fills until it closes).
-    pub linger_start: Option<f64>,
+    // The card's tint: it needs a person itself (`attention_of`), or (on a lead) a Member does.
+    pub needs_you: bool,
+    // One chip per reason the session needs a person, in `attention_of` order.
+    pub reasons: Vec<ReasonChip>,
+    // A lead's Members that need a person, and its tray line ("2 need you · 3 working · 1 idle").
+    pub team_attention: u32,
+    pub team_summary: Option<String>,
     pub last_activity_at: f64,
     pub context_percent: Option<f64>,
     pub lead: bool,
@@ -243,6 +247,14 @@ pub struct ListRow {
     // New conversation is offered to every live session; `new_conversation_blocked` says why it waits.
     pub can_new_conversation: bool,
     pub new_conversation_blocked: Option<String>,
+}
+
+// "Approval", "Failed" or "Blocked"; `danger` draws a failure in the error colour, the rest in the warning one.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ReasonChip {
+    pub label: String,
+    pub title: String,
+    pub danger: bool,
 }
 
 // A Member the lead's tray holds in Auto: a picture to tap, which opens that Member.
@@ -455,8 +467,6 @@ struct State {
     config: ViewConfig,
     marks: Watermarks,
     selected: Option<String>,
-    peeked: HashSet<String>,
-    linger_ends: Option<f64>,
     agent_defaults: Entries<GatewayAgentDefaults>,
     profiles: Entries<Vec<ProfileInfo>>,
 }
@@ -489,18 +499,6 @@ impl State {
         let options =
             GroupOptions { gateway_count: Some(self.hosts.len()), all: Some(rows.to_vec()), relay_hosts: Some(self.relay_hosts.clone()) };
         vm::order_groups(&group_rows(&filtered, &self.config, &options), &self.config)
-    }
-
-    // A Member the operator opened stops lingering in Auto; it lingers again once it next works or asks.
-    fn peek(&mut self, groups: &[SessionGroup]) {
-        for member in groups.iter().flat_map(|g| g.rows.iter()).flat_map(|row| row.members.iter().flatten()) {
-            let key = vm::session_key(&member.host_id, &member.info.id);
-            if matches!(member.state, SessionState::Working | SessionState::Attention) {
-                self.peeked.remove(&key);
-            } else if self.selected.as_deref() == Some(key.as_str()) {
-                self.peeked.insert(key);
-            }
-        }
     }
 
     fn row(&self, host_id: &str, session_id: &str) -> Option<SessionRow> {
@@ -578,14 +576,7 @@ struct RowLook {
     tile: bool,
 }
 
-fn list_row(
-    row: &SessionRow,
-    depth: u8,
-    look: &RowLook,
-    team: Option<&vm::TeamView>,
-    card: CardSteps,
-    linger_start: Option<f64>,
-) -> ListRow {
+fn list_row(row: &SessionRow, depth: u8, look: &RowLook, team: Option<&vm::TeamView>, card: CardSteps) -> ListRow {
     let show_gateway = look.show_gateway;
     let info = &row.info;
     let mark = engine_mark(&row.adapter, info.model.as_deref());
@@ -639,7 +630,18 @@ fn list_row(
         steps: card.shown,
         chips: card.chips,
         tile: look.tile,
-        linger_start,
+        needs_you: vm::list_state(row) == SessionState::Attention || row.team_state == Some(SessionState::Attention),
+        reasons: vm::attention_of(info)
+            .reasons
+            .into_iter()
+            .map(|reason| ReasonChip {
+                label: vm::attention_label(reason).to_owned(),
+                title: vm::attention_title(reason, info),
+                danger: reason == vm::AttentionReason::Failed,
+            })
+            .collect(),
+        team_attention: if row.members.is_some() { vm::team_summary(row).attention as u32 } else { 0 },
+        team_summary: if row.members.is_some() { vm::team_summary_text(row) } else { None },
         last_activity_at: info.last_activity_at.unwrap_or(info.created_at),
         context_percent: info.context_usage.as_ref().map(|c| c.percentage),
         lead: info.agent.as_ref().is_some_and(|a| a.leads == Some(true)),
@@ -725,8 +727,6 @@ impl SessionList {
                 config: normalize_view_config(stored.as_ref()),
                 marks: Watermarks::from_json(marks_json.as_deref()),
                 selected: None,
-                peeked: HashSet::new(),
-                linger_ends: None,
                 agent_defaults: Entries::new(),
                 profiles: Entries::new(),
             }),
@@ -763,19 +763,17 @@ impl SessionList {
         state.marks.forget_host(&host_id)
     }
 
-    // `now_ms` drives Auto's linger window; `linger_ends` then says when to ask again.
+    // `now_ms` dates the cards' steps (a shell's promotion window).
     pub fn groups(&self, now_ms: f64) -> Vec<ListGroup> {
-        let mut state = self.state();
+        let state = self.state();
         let rows = state.rows();
         let drawn = state.drawn(&rows);
         let config = state.config.clone();
-        state.peek(&drawn);
         let look =
             RowLook { show_gateway: vm::shows_gateway(state.hosts.len(), &config), tile: rows.iter().any(|row| row.info.agent.is_some()) };
         let reorderable = vm::ordered_group_by(config.group_by);
         let selected = state.selected.clone();
-        let mut linger: Option<f64> = None;
-        let groups = drawn
+        drawn
             .into_iter()
             .map(|group| {
                 let summary = vm::group_summary(&group.rows);
@@ -785,18 +783,12 @@ impl SessionList {
                 let mut out = Vec::new();
                 for row in &group.rows {
                     if row.members.is_none() {
-                        out.push(list_row(row, 0, &look, None, steps_of(row, &config, now_ms), None));
+                        out.push(list_row(row, 0, &look, None, steps_of(row, &config, now_ms)));
                         continue;
                     }
-                    let team = vm::team_view(row, &config, selected.as_deref(), now_ms, Some(&state.peeked));
-                    if let Some(ends) = vm::team_linger_ends(&team, now_ms) {
-                        linger = Some(linger.map_or(ends, |l| l.min(ends)));
-                    }
-                    out.push(list_row(row, 0, &look, Some(&team), steps_of(row, &config, now_ms), None));
-                    out.extend(team.shown.iter().map(|m| {
-                        let start = vm::team_linger_start(m, selected.as_deref(), now_ms, Some(&state.peeked));
-                        list_row(m, 1, &look, None, steps_of(m, &config, now_ms), start)
-                    }));
+                    let team = vm::team_view(row, &config, selected.as_deref());
+                    out.push(list_row(row, 0, &look, Some(&team), steps_of(row, &config, now_ms)));
+                    out.extend(team.shown.iter().map(|m| list_row(m, 1, &look, None, steps_of(m, &config, now_ms))));
                 }
                 let project = config.group_by == GroupBy::Project;
                 let icon = group.rows.first().and_then(|row| row.info.project.as_ref()).and_then(|p| p.icon.clone());
@@ -836,9 +828,7 @@ impl SessionList {
                     rows: out,
                 }
             })
-            .collect();
-        state.linger_ends = linger;
-        groups
+            .collect()
     }
 
     // Drops heading `key` onto heading `onto`: further down lands after it, further up before it.
@@ -864,11 +854,6 @@ impl SessionList {
     pub fn toggle_steps(&self, host_id: String, session_id: String, kind: StepFold) {
         let mut state = self.state();
         state.config = vm::toggle_steps_expanded(&state.config, &host_id, &session_id, kind.into());
-    }
-
-    // When the last `groups` call's soonest linger window closes, so the app redraws then; None when nothing lingers.
-    pub fn linger_ends(&self) -> Option<f64> {
-        self.state().linger_ends
     }
 
     // The Member a phone counts as selected: the one opened last, since nothing stays highlighted on a phone.

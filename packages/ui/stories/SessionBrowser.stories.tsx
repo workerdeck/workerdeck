@@ -199,8 +199,8 @@ const AUTO_ROWS = [
   makeRow({
     id: 't3',
     title: 'peers.ts: team visibility',
-    status: 'idle',
-    lastActivityAt: Date.now() - 1_000,
+    status: 'closed',
+    failure: { message: 'Claude Code process exited with code 1', at: 1 },
     agent: agent('juno', 'Juno', { lead: 'atlas', team: 'Atlas', order: 1 }),
   } as never),
   makeRow({
@@ -208,22 +208,23 @@ const AUTO_ROWS = [
     title: 'iOS mirror review',
     status: 'idle',
     engineAsleep: true,
-    statusLabel: { text: 'waiting for the Swift port', emoji: '🧭', setAt: 1 },
+    statusLabel: { text: 'needs the Apple team id', emoji: '🧭', setAt: 1, waitingOn: 'human' },
     checklist: [
-      { text: 'Mirror teamView in SessionList.swift', status: 'completed' },
-      { text: 'Port the linger goldens to XCTest', status: 'in_progress' },
+      { text: 'Mirror teamView in the Rust core', status: 'completed' },
+      { text: 'Check the build on a device', status: 'in_progress' },
     ],
     agent: agent('rook', 'Rook', { lead: 'atlas', team: 'Atlas', order: 2 }),
   } as never),
   makeRow({
     id: 't5',
     title: 'Relay follow-ups',
-    status: 'idle',
+    status: 'running',
     agent: agent('marlow', 'Marlow', { lead: 'atlas', team: 'Atlas', order: 3 }),
   } as never),
 ]
 
-// Juno went idle a second ago, so its row carries the linger countdown; hover a tray avatar for its card.
+// Juno failed and Rook waits on the human, so both draw with a reason chip; Marlow is working and stays in the tray.
+// The lead's count and tray tooltip read "2 need you · 1 working · 1 idle"; hover a tray avatar for its card.
 export const TeamsAuto: Story = {
   render: () => <Browser rows={AUTO_ROWS} showControls={false} initial={{ groupBy: 'none' }} />,
 }

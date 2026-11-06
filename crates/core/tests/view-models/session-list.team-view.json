@@ -173,23 +173,57 @@
               "hostName": "Mac mini",
               "local": true,
               "adapter": "claude",
-              "state": "idle",
+              "state": "ended",
               "info": {
-                "id": "s-linger",
-                "status": "idle",
+                "id": "s-failed",
+                "status": "closed",
                 "cwd": "/work/alpha",
                 "createdAt": 1760000000000,
                 "lastSeq": 0,
                 "pendingPermissionCount": 0,
-                "title": "s-linger",
+                "title": "s-failed",
                 "agent": {
-                  "id": "ag-s-linger",
-                  "name": "s-linger",
+                  "id": "ag-s-failed",
+                  "name": "s-failed",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
                   "order": 5
                 },
-                "lastActivityAt": 1760000057000
+                "lastActivityAt": 1760000000000,
+                "failure": {
+                  "message": "engine exited",
+                  "at": 1760000000000
+                }
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "working",
+              "info": {
+                "id": "s-blocked",
+                "status": "running",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-blocked",
+                "agent": {
+                  "id": "ag-s-blocked",
+                  "name": "s-blocked",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 6
+                },
+                "lastActivityAt": 1760000000000,
+                "statusLabel": {
+                  "text": "Need the key",
+                  "waitingOn": "human",
+                  "setAt": 1760000000000
+                }
               },
               "unseen": 0
             },
@@ -212,7 +246,7 @@
                   "name": "s-quiet-b",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
-                  "order": 6
+                  "order": 7
                 },
                 "lastActivityAt": 1760000000000
               },
@@ -233,8 +267,7 @@
           "shells": "active",
           "tasks": "active"
         },
-        null,
-        1760000060000
+        null
       ],
       [
         {
@@ -407,23 +440,57 @@
               "hostName": "Mac mini",
               "local": true,
               "adapter": "claude",
-              "state": "idle",
+              "state": "ended",
               "info": {
-                "id": "s-linger",
-                "status": "idle",
+                "id": "s-failed",
+                "status": "closed",
                 "cwd": "/work/alpha",
                 "createdAt": 1760000000000,
                 "lastSeq": 0,
                 "pendingPermissionCount": 0,
-                "title": "s-linger",
+                "title": "s-failed",
                 "agent": {
-                  "id": "ag-s-linger",
-                  "name": "s-linger",
+                  "id": "ag-s-failed",
+                  "name": "s-failed",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
                   "order": 5
                 },
-                "lastActivityAt": 1760000057000
+                "lastActivityAt": 1760000000000,
+                "failure": {
+                  "message": "engine exited",
+                  "at": 1760000000000
+                }
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "working",
+              "info": {
+                "id": "s-blocked",
+                "status": "running",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-blocked",
+                "agent": {
+                  "id": "ag-s-blocked",
+                  "name": "s-blocked",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 6
+                },
+                "lastActivityAt": 1760000000000,
+                "statusLabel": {
+                  "text": "Need the key",
+                  "waitingOn": "human",
+                  "setAt": 1760000000000
+                }
               },
               "unseen": 0
             },
@@ -446,7 +513,7 @@
                   "name": "s-quiet-b",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
-                  "order": 6
+                  "order": 7
                 },
                 "lastActivityAt": 1760000000000
               },
@@ -467,8 +534,7 @@
           "shells": "active",
           "tasks": "active"
         },
-        "mac:s-quiet-a",
-        1760000060000
+        "mac:s-quiet-a"
       ],
       [
         {
@@ -641,23 +707,57 @@
               "hostName": "Mac mini",
               "local": true,
               "adapter": "claude",
-              "state": "idle",
+              "state": "ended",
               "info": {
-                "id": "s-linger",
-                "status": "idle",
+                "id": "s-failed",
+                "status": "closed",
                 "cwd": "/work/alpha",
                 "createdAt": 1760000000000,
                 "lastSeq": 0,
                 "pendingPermissionCount": 0,
-                "title": "s-linger",
+                "title": "s-failed",
                 "agent": {
-                  "id": "ag-s-linger",
-                  "name": "s-linger",
+                  "id": "ag-s-failed",
+                  "name": "s-failed",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
                   "order": 5
                 },
-                "lastActivityAt": 1760000057000
+                "lastActivityAt": 1760000000000,
+                "failure": {
+                  "message": "engine exited",
+                  "at": 1760000000000
+                }
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "working",
+              "info": {
+                "id": "s-blocked",
+                "status": "running",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-blocked",
+                "agent": {
+                  "id": "ag-s-blocked",
+                  "name": "s-blocked",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 6
+                },
+                "lastActivityAt": 1760000000000,
+                "statusLabel": {
+                  "text": "Need the key",
+                  "waitingOn": "human",
+                  "setAt": 1760000000000
+                }
               },
               "unseen": 0
             },
@@ -680,7 +780,7 @@
                   "name": "s-quiet-b",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
-                  "order": 6
+                  "order": 7
                 },
                 "lastActivityAt": 1760000000000
               },
@@ -701,8 +801,7 @@
           "shells": "active",
           "tasks": "active"
         },
-        null,
-        1760000100000
+        "mac:s-failed"
       ],
       [
         {
@@ -875,23 +974,57 @@
               "hostName": "Mac mini",
               "local": true,
               "adapter": "claude",
-              "state": "idle",
+              "state": "ended",
               "info": {
-                "id": "s-linger",
-                "status": "idle",
+                "id": "s-failed",
+                "status": "closed",
                 "cwd": "/work/alpha",
                 "createdAt": 1760000000000,
                 "lastSeq": 0,
                 "pendingPermissionCount": 0,
-                "title": "s-linger",
+                "title": "s-failed",
                 "agent": {
-                  "id": "ag-s-linger",
-                  "name": "s-linger",
+                  "id": "ag-s-failed",
+                  "name": "s-failed",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
                   "order": 5
                 },
-                "lastActivityAt": 1760000057000
+                "lastActivityAt": 1760000000000,
+                "failure": {
+                  "message": "engine exited",
+                  "at": 1760000000000
+                }
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "working",
+              "info": {
+                "id": "s-blocked",
+                "status": "running",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-blocked",
+                "agent": {
+                  "id": "ag-s-blocked",
+                  "name": "s-blocked",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 6
+                },
+                "lastActivityAt": 1760000000000,
+                "statusLabel": {
+                  "text": "Need the key",
+                  "waitingOn": "human",
+                  "setAt": 1760000000000
+                }
               },
               "unseen": 0
             },
@@ -914,7 +1047,7 @@
                   "name": "s-quiet-b",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
-                  "order": 6
+                  "order": 7
                 },
                 "lastActivityAt": 1760000000000
               },
@@ -938,8 +1071,7 @@
             "mac:ag-lead"
           ]
         },
-        null,
-        1760000060000
+        null
       ],
       [
         {
@@ -1112,23 +1244,57 @@
               "hostName": "Mac mini",
               "local": true,
               "adapter": "claude",
-              "state": "idle",
+              "state": "ended",
               "info": {
-                "id": "s-linger",
-                "status": "idle",
+                "id": "s-failed",
+                "status": "closed",
                 "cwd": "/work/alpha",
                 "createdAt": 1760000000000,
                 "lastSeq": 0,
                 "pendingPermissionCount": 0,
-                "title": "s-linger",
+                "title": "s-failed",
                 "agent": {
-                  "id": "ag-s-linger",
-                  "name": "s-linger",
+                  "id": "ag-s-failed",
+                  "name": "s-failed",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
                   "order": 5
                 },
-                "lastActivityAt": 1760000057000
+                "lastActivityAt": 1760000000000,
+                "failure": {
+                  "message": "engine exited",
+                  "at": 1760000000000
+                }
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "working",
+              "info": {
+                "id": "s-blocked",
+                "status": "running",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-blocked",
+                "agent": {
+                  "id": "ag-s-blocked",
+                  "name": "s-blocked",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 6
+                },
+                "lastActivityAt": 1760000000000,
+                "statusLabel": {
+                  "text": "Need the key",
+                  "waitingOn": "human",
+                  "setAt": 1760000000000
+                }
               },
               "unseen": 0
             },
@@ -1151,7 +1317,7 @@
                   "name": "s-quiet-b",
                   "lead": "ag-lead",
                   "team": "WD-Lead",
-                  "order": 6
+                  "order": 7
                 },
                 "lastActivityAt": 1760000000000
               },
@@ -1172,8 +1338,7 @@
           "shells": "active",
           "tasks": "active"
         },
-        null,
-        1760000060000
+        null
       ],
       [
         {
@@ -1211,8 +1376,7 @@
           "shells": "active",
           "tasks": "active"
         },
-        null,
-        1760000000000
+        null
       ]
     ]
   },
@@ -1254,6 +1418,67 @@
           "hostId": "mac",
           "hostName": "Mac mini",
           "local": true,
+          "adapter": "claude",
+          "state": "ended",
+          "info": {
+            "id": "s-failed",
+            "status": "closed",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-failed",
+            "agent": {
+              "id": "ag-s-failed",
+              "name": "s-failed",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 5
+            },
+            "lastActivityAt": 1760000000000,
+            "failure": {
+              "message": "engine exited",
+              "at": 1760000000000
+            }
+          },
+          "unseen": 0
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "working",
+          "info": {
+            "id": "s-blocked",
+            "status": "running",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-blocked",
+            "agent": {
+              "id": "ag-s-blocked",
+              "name": "s-blocked",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 6
+            },
+            "lastActivityAt": 1760000000000,
+            "statusLabel": {
+              "text": "Need the key",
+              "waitingOn": "human",
+              "setAt": 1760000000000
+            }
+          },
+          "unseen": 0
+        }
+      ],
+      "tray": [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
           "adapter": "codex",
           "state": "working",
           "info": {
@@ -1289,58 +1514,6 @@
           "adapter": "claude",
           "state": "idle",
           "info": {
-            "id": "s-unread",
-            "status": "idle",
-            "cwd": "/work/alpha",
-            "createdAt": 1760000000000,
-            "lastSeq": 0,
-            "pendingPermissionCount": 0,
-            "title": "s-unread",
-            "agent": {
-              "id": "ag-s-unread",
-              "name": "s-unread",
-              "lead": "ag-lead",
-              "team": "WD-Lead",
-              "order": 4
-            },
-            "lastActivityAt": 1760000000000
-          },
-          "unseen": 2
-        },
-        {
-          "hostId": "mac",
-          "hostName": "Mac mini",
-          "local": true,
-          "adapter": "claude",
-          "state": "idle",
-          "info": {
-            "id": "s-linger",
-            "status": "idle",
-            "cwd": "/work/alpha",
-            "createdAt": 1760000000000,
-            "lastSeq": 0,
-            "pendingPermissionCount": 0,
-            "title": "s-linger",
-            "agent": {
-              "id": "ag-s-linger",
-              "name": "s-linger",
-              "lead": "ag-lead",
-              "team": "WD-Lead",
-              "order": 5
-            },
-            "lastActivityAt": 1760000057000
-          },
-          "unseen": 0
-        }
-      ],
-      "tray": [
-        {
-          "hostId": "mac",
-          "hostName": "Mac mini",
-          "local": true,
-          "adapter": "claude",
-          "state": "idle",
-          "info": {
             "id": "s-quiet-a",
             "status": "idle",
             "cwd": "/work/alpha",
@@ -1366,6 +1539,31 @@
           "adapter": "claude",
           "state": "idle",
           "info": {
+            "id": "s-unread",
+            "status": "idle",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-unread",
+            "agent": {
+              "id": "ag-s-unread",
+              "name": "s-unread",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 4
+            },
+            "lastActivityAt": 1760000000000
+          },
+          "unseen": 2
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "idle",
+          "info": {
             "id": "s-quiet-b",
             "status": "idle",
             "cwd": "/work/alpha",
@@ -1378,7 +1576,7 @@
               "name": "s-quiet-b",
               "lead": "ag-lead",
               "team": "WD-Lead",
-              "order": 6
+              "order": 7
             },
             "lastActivityAt": 1760000000000
           },
@@ -1423,6 +1621,92 @@
           "hostId": "mac",
           "hostName": "Mac mini",
           "local": true,
+          "adapter": "claude",
+          "state": "idle",
+          "info": {
+            "id": "s-quiet-a",
+            "status": "idle",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-quiet-a",
+            "agent": {
+              "id": "ag-s-quiet-a",
+              "name": "s-quiet-a",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 3
+            },
+            "lastActivityAt": 1760000000000
+          },
+          "unseen": 0
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "ended",
+          "info": {
+            "id": "s-failed",
+            "status": "closed",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-failed",
+            "agent": {
+              "id": "ag-s-failed",
+              "name": "s-failed",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 5
+            },
+            "lastActivityAt": 1760000000000,
+            "failure": {
+              "message": "engine exited",
+              "at": 1760000000000
+            }
+          },
+          "unseen": 0
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "working",
+          "info": {
+            "id": "s-blocked",
+            "status": "running",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-blocked",
+            "agent": {
+              "id": "ag-s-blocked",
+              "name": "s-blocked",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 6
+            },
+            "lastActivityAt": 1760000000000,
+            "statusLabel": {
+              "text": "Need the key",
+              "waitingOn": "human",
+              "setAt": 1760000000000
+            }
+          },
+          "unseen": 0
+        }
+      ],
+      "tray": [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
           "adapter": "codex",
           "state": "working",
           "info": {
@@ -1458,31 +1742,6 @@
           "adapter": "claude",
           "state": "idle",
           "info": {
-            "id": "s-quiet-a",
-            "status": "idle",
-            "cwd": "/work/alpha",
-            "createdAt": 1760000000000,
-            "lastSeq": 0,
-            "pendingPermissionCount": 0,
-            "title": "s-quiet-a",
-            "agent": {
-              "id": "ag-s-quiet-a",
-              "name": "s-quiet-a",
-              "lead": "ag-lead",
-              "team": "WD-Lead",
-              "order": 3
-            },
-            "lastActivityAt": 1760000000000
-          },
-          "unseen": 0
-        },
-        {
-          "hostId": "mac",
-          "hostName": "Mac mini",
-          "local": true,
-          "adapter": "claude",
-          "state": "idle",
-          "info": {
             "id": "s-unread",
             "status": "idle",
             "cwd": "/work/alpha",
@@ -1508,33 +1767,6 @@
           "adapter": "claude",
           "state": "idle",
           "info": {
-            "id": "s-linger",
-            "status": "idle",
-            "cwd": "/work/alpha",
-            "createdAt": 1760000000000,
-            "lastSeq": 0,
-            "pendingPermissionCount": 0,
-            "title": "s-linger",
-            "agent": {
-              "id": "ag-s-linger",
-              "name": "s-linger",
-              "lead": "ag-lead",
-              "team": "WD-Lead",
-              "order": 5
-            },
-            "lastActivityAt": 1760000057000
-          },
-          "unseen": 0
-        }
-      ],
-      "tray": [
-        {
-          "hostId": "mac",
-          "hostName": "Mac mini",
-          "local": true,
-          "adapter": "claude",
-          "state": "idle",
-          "info": {
             "id": "s-quiet-b",
             "status": "idle",
             "cwd": "/work/alpha",
@@ -1547,7 +1779,7 @@
               "name": "s-quiet-b",
               "lead": "ag-lead",
               "team": "WD-Lead",
-              "order": 6
+              "order": 7
             },
             "lastActivityAt": 1760000000000
           },
@@ -1592,6 +1824,67 @@
           "hostId": "mac",
           "hostName": "Mac mini",
           "local": true,
+          "adapter": "claude",
+          "state": "ended",
+          "info": {
+            "id": "s-failed",
+            "status": "closed",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-failed",
+            "agent": {
+              "id": "ag-s-failed",
+              "name": "s-failed",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 5
+            },
+            "lastActivityAt": 1760000000000,
+            "failure": {
+              "message": "engine exited",
+              "at": 1760000000000
+            }
+          },
+          "unseen": 0
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "working",
+          "info": {
+            "id": "s-blocked",
+            "status": "running",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-blocked",
+            "agent": {
+              "id": "ag-s-blocked",
+              "name": "s-blocked",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 6
+            },
+            "lastActivityAt": 1760000000000,
+            "statusLabel": {
+              "text": "Need the key",
+              "waitingOn": "human",
+              "setAt": 1760000000000
+            }
+          },
+          "unseen": 0
+        }
+      ],
+      "tray": [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
           "adapter": "codex",
           "state": "working",
           "info": {
@@ -1627,33 +1920,6 @@
           "adapter": "claude",
           "state": "idle",
           "info": {
-            "id": "s-unread",
-            "status": "idle",
-            "cwd": "/work/alpha",
-            "createdAt": 1760000000000,
-            "lastSeq": 0,
-            "pendingPermissionCount": 0,
-            "title": "s-unread",
-            "agent": {
-              "id": "ag-s-unread",
-              "name": "s-unread",
-              "lead": "ag-lead",
-              "team": "WD-Lead",
-              "order": 4
-            },
-            "lastActivityAt": 1760000000000
-          },
-          "unseen": 2
-        }
-      ],
-      "tray": [
-        {
-          "hostId": "mac",
-          "hostName": "Mac mini",
-          "local": true,
-          "adapter": "claude",
-          "state": "idle",
-          "info": {
             "id": "s-quiet-a",
             "status": "idle",
             "cwd": "/work/alpha",
@@ -1679,23 +1945,23 @@
           "adapter": "claude",
           "state": "idle",
           "info": {
-            "id": "s-linger",
+            "id": "s-unread",
             "status": "idle",
             "cwd": "/work/alpha",
             "createdAt": 1760000000000,
             "lastSeq": 0,
             "pendingPermissionCount": 0,
-            "title": "s-linger",
+            "title": "s-unread",
             "agent": {
-              "id": "ag-s-linger",
-              "name": "s-linger",
+              "id": "ag-s-unread",
+              "name": "s-unread",
               "lead": "ag-lead",
               "team": "WD-Lead",
-              "order": 5
+              "order": 4
             },
-            "lastActivityAt": 1760000057000
+            "lastActivityAt": 1760000000000
           },
-          "unseen": 0
+          "unseen": 2
         },
         {
           "hostId": "mac",
@@ -1716,7 +1982,7 @@
               "name": "s-quiet-b",
               "lead": "ag-lead",
               "team": "WD-Lead",
-              "order": 6
+              "order": 7
             },
             "lastActivityAt": 1760000000000
           },
@@ -1844,23 +2110,57 @@
           "hostName": "Mac mini",
           "local": true,
           "adapter": "claude",
-          "state": "idle",
+          "state": "ended",
           "info": {
-            "id": "s-linger",
-            "status": "idle",
+            "id": "s-failed",
+            "status": "closed",
             "cwd": "/work/alpha",
             "createdAt": 1760000000000,
             "lastSeq": 0,
             "pendingPermissionCount": 0,
-            "title": "s-linger",
+            "title": "s-failed",
             "agent": {
-              "id": "ag-s-linger",
-              "name": "s-linger",
+              "id": "ag-s-failed",
+              "name": "s-failed",
               "lead": "ag-lead",
               "team": "WD-Lead",
               "order": 5
             },
-            "lastActivityAt": 1760000057000
+            "lastActivityAt": 1760000000000,
+            "failure": {
+              "message": "engine exited",
+              "at": 1760000000000
+            }
+          },
+          "unseen": 0
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "working",
+          "info": {
+            "id": "s-blocked",
+            "status": "running",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-blocked",
+            "agent": {
+              "id": "ag-s-blocked",
+              "name": "s-blocked",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 6
+            },
+            "lastActivityAt": 1760000000000,
+            "statusLabel": {
+              "text": "Need the key",
+              "waitingOn": "human",
+              "setAt": 1760000000000
+            }
           },
           "unseen": 0
         },
@@ -1883,7 +2183,7 @@
               "name": "s-quiet-b",
               "lead": "ag-lead",
               "team": "WD-Lead",
-              "order": 6
+              "order": 7
             },
             "lastActivityAt": 1760000000000
           },
@@ -2012,23 +2312,57 @@
           "hostName": "Mac mini",
           "local": true,
           "adapter": "claude",
-          "state": "idle",
+          "state": "ended",
           "info": {
-            "id": "s-linger",
-            "status": "idle",
+            "id": "s-failed",
+            "status": "closed",
             "cwd": "/work/alpha",
             "createdAt": 1760000000000,
             "lastSeq": 0,
             "pendingPermissionCount": 0,
-            "title": "s-linger",
+            "title": "s-failed",
             "agent": {
-              "id": "ag-s-linger",
-              "name": "s-linger",
+              "id": "ag-s-failed",
+              "name": "s-failed",
               "lead": "ag-lead",
               "team": "WD-Lead",
               "order": 5
             },
-            "lastActivityAt": 1760000057000
+            "lastActivityAt": 1760000000000,
+            "failure": {
+              "message": "engine exited",
+              "at": 1760000000000
+            }
+          },
+          "unseen": 0
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "working",
+          "info": {
+            "id": "s-blocked",
+            "status": "running",
+            "cwd": "/work/alpha",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "s-blocked",
+            "agent": {
+              "id": "ag-s-blocked",
+              "name": "s-blocked",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 6
+            },
+            "lastActivityAt": 1760000000000,
+            "statusLabel": {
+              "text": "Need the key",
+              "waitingOn": "human",
+              "setAt": 1760000000000
+            }
           },
           "unseen": 0
         },
@@ -2051,7 +2385,7 @@
               "name": "s-quiet-b",
               "lead": "ag-lead",
               "team": "WD-Lead",
-              "order": 6
+              "order": 7
             },
             "lastActivityAt": 1760000000000
           },

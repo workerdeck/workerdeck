@@ -264,8 +264,9 @@ pub struct GroupSummary {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeamSummary {
     pub members: u64,
-    pub working: u64,
     pub attention: u64,
+    pub working: u64,
+    pub idle: u64,
     pub unseen: u64,
 }
 
@@ -313,6 +314,35 @@ pub fn attention_of(info: &SessionInfo) -> Attention {
         reasons.push(AttentionReason::Blocked);
     }
     Attention { reasons }
+}
+
+pub fn attention_label(reason: AttentionReason) -> &'static str {
+    match reason {
+        AttentionReason::Approval => "Approval",
+        AttentionReason::Failed => "Failed",
+        AttentionReason::Blocked => "Blocked",
+    }
+}
+
+// A reason chip's tooltip: the failure's message, the label the agent is blocked on, or how many approvals wait.
+pub fn attention_title(reason: AttentionReason, info: &SessionInfo) -> String {
+    match reason {
+        AttentionReason::Failed => {
+            info.failure.as_ref().map(|f| f.message.clone()).filter(|m| !m.is_empty()).unwrap_or_else(|| "Failed".to_owned())
+        }
+        AttentionReason::Blocked => match info.status_label.as_ref().map(|l| l.text.as_str()).filter(|t| !t.is_empty()) {
+            Some(text) => format!("Waiting on you: {text}"),
+            None => "Waiting on you".to_owned(),
+        },
+        AttentionReason::Approval if info.pending_permission_count > 1 => format!("{} approvals waiting", info.pending_permission_count),
+        AttentionReason::Approval => "An approval is waiting".to_owned(),
+    }
+}
+
+// The state a list sorts, filters and groups by: activity, overridden by `attention_of`, so a failed or blocked session
+// reads as Needs attention there while its card still draws what it is doing.
+pub fn list_state(row: &SessionRow) -> SessionState {
+    if attention_of(&row.info).reasons.is_empty() { row.state } else { SessionState::Attention }
 }
 
 pub fn session_state(info: &SessionInfo) -> SessionState {
@@ -668,7 +698,7 @@ pub fn filter_rows(rows: &[SessionRow], config: &ViewConfig, scope: Option<&Work
         .filter(|row| {
             (config.gateways.is_empty() || config.gateways.contains(&row.host_id))
                 && (config.adapters.is_empty() || config.adapters.contains(&row.adapter))
-                && (config.states.is_empty() || config.states.contains(&row.state))
+                && (config.states.is_empty() || config.states.contains(&list_state(row)))
                 && (projects.is_empty() || projects.contains(&project_key(row)))
                 && scoping.is_none_or(|scope| in_scope(row, scope))
                 && matches_search(row, &needle)
@@ -678,7 +708,7 @@ pub fn filter_rows(rows: &[SessionRow], config: &ViewConfig, scope: Option<&Work
 }
 
 fn unit_state(row: &SessionRow) -> SessionState {
-    row.team_state.unwrap_or(row.state)
+    row.team_state.unwrap_or_else(|| list_state(row))
 }
 
 fn facet_key(row: &SessionRow, facet: Facet) -> String {
@@ -739,7 +769,7 @@ fn compare(a: &SessionRow, b: &SessionRow, sort_by: SortBy) -> Ordering {
 }
 
 fn is_earlier(row: &SessionRow) -> bool {
-    row.info.agent.is_none() && row.state == SessionState::Ended
+    row.info.agent.is_none() && list_state(row) == SessionState::Ended
 }
 
 fn project_target(row: &SessionRow, group: &mut SessionGroup) {
@@ -867,7 +897,7 @@ fn by_team_order(a: &SessionRow, b: &SessionRow) -> Ordering {
 }
 
 pub fn team_state(rows: &[SessionRow]) -> SessionState {
-    rows.iter().map(|row| row.state).min_by_key(|state| state.rank()).unwrap_or(SessionState::Ended)
+    rows.iter().map(list_state).min_by_key(|state| state.rank()).unwrap_or(SessionState::Ended)
 }
 
 pub fn is_team_expanded(config: &ViewConfig, row: &SessionRow) -> bool {
@@ -890,8 +920,6 @@ pub fn toggle_team_expanded(config: &ViewConfig, row: &SessionRow) -> ViewConfig
     }
 }
 
-pub const TEAM_LINGER_MS: f64 = 5_000.0;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TeamView {
     pub expanded: bool,
@@ -899,45 +927,18 @@ pub struct TeamView {
     pub tray: Vec<SessionRow>,
 }
 
-fn lingering(member: &SessionRow, now: f64) -> Option<f64> {
-    member.info.last_activity_at.filter(|at| now - at < TEAM_LINGER_MS)
-}
-
-// Auto draws a member that is busy, selected, unread, or idle for under `TEAM_LINGER_MS` by `lastActivityAt` (unless
-// the operator already peeked at it); the rest sit in the lead's tray. An expanded team, or one under a search or facet
-// filter, draws every member.
-pub fn team_view(lead: &SessionRow, config: &ViewConfig, selected: Option<&str>, now: f64, peeked: Option<&HashSet<String>>) -> TeamView {
+// Auto draws a member that needs a person (`attention_of`) or is selected; the rest sit in the lead's tray. An expanded
+// team, or one under a search or facet filter, draws every member.
+pub fn team_view(lead: &SessionRow, config: &ViewConfig, selected: Option<&str>) -> TeamView {
     let members = lead.members.clone().unwrap_or_default();
     let expanded = is_team_expanded(config, lead);
     if expanded || has_facet_filter(config) {
         return TeamView { expanded, shown: members, tray: Vec::new() };
     }
-    let (shown, tray) = members.into_iter().partition(|member| {
-        let key = row_key(member);
-        matches!(member.state, SessionState::Working | SessionState::Attention)
-            || member.unseen > 0
-            || selected == Some(key.as_str())
-            || (lingering(member, now).is_some() && !peeked.is_some_and(|p| p.contains(&key)))
-    });
+    let (shown, tray) = members
+        .into_iter()
+        .partition(|member| !attention_of(&member.info).reasons.is_empty() || selected == Some(row_key(member).as_str()));
     TeamView { expanded, shown, tray }
-}
-
-// When a member Auto draws only for its linger window started, so a host can draw the countdown; None otherwise.
-pub fn team_linger_start(member: &SessionRow, selected: Option<&str>, now: f64, peeked: Option<&HashSet<String>>) -> Option<f64> {
-    let key = row_key(member);
-    if matches!(member.state, SessionState::Working | SessionState::Attention)
-        || member.unseen > 0
-        || selected == Some(key.as_str())
-        || peeked.is_some_and(|p| p.contains(&key))
-    {
-        return None;
-    }
-    lingering(member, now)
-}
-
-// When the next lingering member's window closes, so a host can redraw then; None when none is lingering.
-pub fn team_linger_ends(view: &TeamView, now: f64) -> Option<f64> {
-    view.shown.iter().filter_map(|member| lingering(member, now)).map(|at| at + TEAM_LINGER_MS).min_by(f64::total_cmp)
 }
 
 // `SessionBrowser`'s `showGateway`: a row names its gateway only when there is more than one and the list is not
@@ -1028,7 +1029,7 @@ pub fn toggle_steps_expanded(config: &ViewConfig, host_id: &str, session_id: &st
 }
 
 fn count_state(rows: &[&SessionRow], state: SessionState) -> u64 {
-    rows.iter().filter(|row| row.state == state).count() as u64
+    rows.iter().filter(|row| list_state(row) == state).count() as u64
 }
 
 pub fn group_summary(rows: &[SessionRow]) -> GroupSummary {
@@ -1063,12 +1064,29 @@ pub fn group_fold_summary(rows: &[SessionRow]) -> Option<GroupFoldSummary> {
 
 pub fn team_summary(lead: &SessionRow) -> TeamSummary {
     let members: Vec<&SessionRow> = lead.members.iter().flatten().collect();
+    let attention = count_state(&members, SessionState::Attention);
+    let working = count_state(&members, SessionState::Working);
     TeamSummary {
         members: members.len() as u64,
-        working: count_state(&members, SessionState::Working),
-        attention: count_state(&members, SessionState::Attention),
+        attention,
+        working,
+        idle: members.len() as u64 - attention - working,
         unseen: members.iter().map(|row| row.unseen).sum(),
     }
+}
+
+// The lead's tray line: "2 need you · 3 working · 1 idle", None for a lead without members.
+pub fn team_summary_text(lead: &SessionRow) -> Option<String> {
+    let summary = team_summary(lead);
+    let parts: Vec<String> = [
+        (summary.attention > 0).then(|| format!("{} need{} you", summary.attention, if summary.attention == 1 { "s" } else { "" })),
+        (summary.working > 0).then(|| format!("{} working", summary.working)),
+        (summary.idle > 0).then(|| format!("{} idle", summary.idle)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    (!parts.is_empty()).then(|| parts.join(" \u{00B7} "))
 }
 
 fn custom_group_rows(sorted: Vec<SessionRow>, custom: &[CustomGroup]) -> Vec<SessionGroup> {

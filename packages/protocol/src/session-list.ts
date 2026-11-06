@@ -50,6 +50,25 @@ export function attentionOf(info: SessionInfo): Attention {
   return { reasons }
 }
 
+export const ATTENTION_LABELS: Record<AttentionReason, string> = { approval: 'Approval', failed: 'Failed', blocked: 'Blocked' }
+
+// A reason chip's tooltip: the failure's message, the label the agent is blocked on, or how many approvals wait.
+export function attentionTitle(reason: AttentionReason, info: SessionInfo): string {
+  if (reason === 'failed') {
+    return info.failure?.message || ATTENTION_LABELS.failed
+  }
+  if (reason === 'blocked') {
+    return info.statusLabel?.text ? `Waiting on you: ${info.statusLabel.text}` : 'Waiting on you'
+  }
+  return info.pendingPermissionCount > 1 ? `${info.pendingPermissionCount} approvals waiting` : 'An approval is waiting'
+}
+
+// The state a list sorts, filters and groups by: activity, overridden by `attentionOf`, so a failed or blocked session
+// reads as Needs attention there while its card still draws what it is doing.
+export function listState(row: Pick<SessionRow, 'state' | 'info'>): SessionState {
+  return attentionOf(row.info).reasons.length > 0 ? 'attention' : row.state
+}
+
 export type CardStatus = { text: string; source: 'label' | 'goal' | 'task' | 'title' | 'state' }
 
 // An agent card's second line: its own status label, else its goal, else the checklist item in progress, else its title,
@@ -191,7 +210,7 @@ export type SessionRow = {
   unseen: number
   // Set by `groupRows` on a lead: its members, in team order, drawn under it and never top-level.
   members?: SessionRow[]
-  // Set by `groupRows` on a lead: the most urgent state across the lead and its members.
+  // Set by `groupRows` on a lead: the most urgent `listState` across the lead and its members.
   teamState?: SessionState
   // A lead drawn only because a filter matched one of its members.
   context?: true
@@ -363,7 +382,7 @@ export function filterRows(rows: readonly SessionRow[], config: ViewConfig, scop
     (row) =>
       (config.gateways.length === 0 || config.gateways.includes(row.hostId)) &&
       (config.adapters.length === 0 || config.adapters.includes(row.adapter)) &&
-      (config.states.length === 0 || config.states.includes(row.state)) &&
+      (config.states.length === 0 || config.states.includes(listState(row))) &&
       (!config.projects?.length || config.projects.includes(projectKey(row))) &&
       (!scoping || inScope(row, scoping)) &&
       matchesSearch(row, needle),
@@ -375,7 +394,7 @@ function facetKey(row: SessionRow, facet: Facet): string {
 }
 
 function unitState(row: SessionRow): SessionState {
-  return row.teamState ?? row.state
+  return row.teamState ?? listState(row)
 }
 
 function facetLabel(row: SessionRow, facet: Facet, multiGateway = false): string {
@@ -469,7 +488,7 @@ function leadKeyOf(row: SessionRow, relayHosts: Readonly<Record<string, string>>
 }
 
 function isEarlier(row: SessionRow): boolean {
-  return row.info.agent === undefined && row.state === 'ended'
+  return row.info.agent === undefined && listState(row) === 'ended'
 }
 
 // A member whose lead is not in the list at all (its session gone) stays top-level rather than vanish.
@@ -518,7 +537,7 @@ function byTeamOrder(a: SessionRow, b: SessionRow): number {
 export function teamState(rows: readonly SessionRow[]): SessionState {
   let best = STATE_ORDER.length - 1
   for (const row of rows) {
-    best = Math.min(best, STATE_ORDER.indexOf(row.state))
+    best = Math.min(best, STATE_ORDER.indexOf(listState(row)))
   }
   return STATE_ORDER[best]!
 }
@@ -537,20 +556,11 @@ export function toggleTeamExpanded(config: ViewConfig, row: SessionRow): ViewCon
   return { ...config, expandedTeams: held.includes(key) ? held.filter((k) => k !== key) : [...held, key] }
 }
 
-export const TEAM_LINGER_MS = 5_000
-
 export type TeamView = { expanded: boolean; shown: SessionRow[]; tray: SessionRow[] }
 
-// Auto draws a member that is busy, selected, unread, or idle for under `TEAM_LINGER_MS` by `lastActivityAt`; the rest
-// sit in the lead's tray. An expanded team, or one under a search or facet filter, draws every member. `peeked` holds
-// members opened while idle and not busy since: a peek folds back the moment the selection moves on, with no linger.
-export function teamView(
-  lead: SessionRow,
-  config: ViewConfig,
-  selected: string | undefined,
-  now: number,
-  peeked?: ReadonlySet<string>,
-): TeamView {
+// Auto draws a member that needs a person (`attentionOf`) or is selected; the rest sit in the lead's tray. An expanded
+// team, or one under a search or facet filter, draws every member.
+export function teamView(lead: SessionRow, config: ViewConfig, selected: string | undefined): TeamView {
   const members = lead.members ?? []
   const expanded = isTeamExpanded(config, lead)
   if (expanded || hasFacetFilter(config)) {
@@ -559,43 +569,10 @@ export function teamView(
   const shown: SessionRow[] = []
   const tray: SessionRow[] = []
   for (const member of members) {
-    const at = member.info.lastActivityAt
-    const auto =
-      member.state === 'working' ||
-      member.state === 'attention' ||
-      member.unseen > 0 ||
-      sessionKey(member) === selected ||
-      (at !== undefined && now - at < TEAM_LINGER_MS && !peeked?.has(sessionKey(member)))
+    const auto = attentionOf(member.info).reasons.length > 0 || sessionKey(member) === selected
     ;(auto ? shown : tray).push(member)
   }
   return { expanded, shown, tray }
-}
-
-// When a member Auto draws only for its linger window started, so a host can show the countdown; undefined otherwise.
-export function teamLingerStart(
-  member: SessionRow,
-  selected: string | undefined,
-  now: number,
-  peeked?: ReadonlySet<string>,
-): number | undefined {
-  const key = sessionKey(member)
-  if (member.state === 'working' || member.state === 'attention' || member.unseen > 0 || key === selected || peeked?.has(key)) {
-    return undefined
-  }
-  const at = member.info.lastActivityAt
-  return at !== undefined && now - at < TEAM_LINGER_MS ? at : undefined
-}
-
-// When the next lingering member's window closes, so a host can redraw then; undefined when none is lingering.
-export function teamLingerEnds(view: TeamView, now: number): number | undefined {
-  let next: number | undefined
-  for (const member of view.shown) {
-    const at = member.info.lastActivityAt
-    if (at !== undefined && now - at < TEAM_LINGER_MS && (next === undefined || at + TEAM_LINGER_MS < next)) {
-      next = at + TEAM_LINGER_MS
-    }
-  }
-  return next
 }
 
 export function expandedStepsOf(config: ViewConfig, row: Pick<SessionRow, 'hostId' | 'info'>): FoldableStepKind[] {
@@ -685,8 +662,8 @@ export function groupSummary(group: Pick<SessionGroup, 'rows'>): GroupSummary {
   const all = group.rows.flatMap((row) => [row, ...(row.members ?? [])])
   return {
     sessions: all.length,
-    working: all.filter((row) => row.state === 'working').length,
-    attention: all.filter((row) => row.state === 'attention').length,
+    working: all.filter((row) => listState(row) === 'working').length,
+    attention: all.filter((row) => listState(row) === 'attention').length,
     unseen: all.reduce((sum, row) => sum + row.unseen, 0),
   }
 }
@@ -746,16 +723,31 @@ export function stepChips(steps: readonly FoldableStep[], expanded: readonly Fol
   })
 }
 
-export type TeamSummary = { members: number; working: number; attention: number; unseen: number }
+// Members, each counted once: `attention` those with a reason, `working` and `idle` the rest, so the three add up.
+export type TeamSummary = { members: number; attention: number; working: number; idle: number; unseen: number }
 
 export function teamSummary(lead: SessionRow): TeamSummary {
   const members = lead.members ?? []
+  const attention = members.filter((row) => listState(row) === 'attention').length
+  const working = members.filter((row) => listState(row) === 'working').length
   return {
     members: members.length,
-    working: members.filter((row) => row.state === 'working').length,
-    attention: members.filter((row) => row.state === 'attention').length,
+    attention,
+    working,
+    idle: members.length - attention - working,
     unseen: members.reduce((sum, row) => sum + row.unseen, 0),
   }
+}
+
+// The lead's tray line: "2 need you · 3 working · 1 idle", undefined for a lead without members.
+export function teamSummaryText(lead: SessionRow): string | undefined {
+  const summary = teamSummary(lead)
+  const parts = [
+    summary.attention ? `${summary.attention} need${summary.attention === 1 ? 's' : ''} you` : undefined,
+    summary.working ? `${summary.working} working` : undefined,
+    summary.idle ? `${summary.idle} idle` : undefined,
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : undefined
 }
 
 function projectTarget(row: SessionRow): { hostId: string; cwd?: string } {

@@ -1,0 +1,106 @@
+{
+  "input": {
+    "fn": "attentionTitle",
+    "calls": [
+      [
+        "failed",
+        {
+          "id": "t1",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "failure": {
+            "message": "engine exited",
+            "at": 1760000000000
+          }
+        }
+      ],
+      [
+        "failed",
+        {
+          "id": "t2",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "failure": {
+            "message": "",
+            "at": 1760000000000
+          }
+        }
+      ],
+      [
+        "blocked",
+        {
+          "id": "t3",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "statusLabel": {
+            "text": "Need the key",
+            "waitingOn": "human",
+            "setAt": 1760000000000
+          }
+        }
+      ],
+      [
+        "blocked",
+        {
+          "id": "t4",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ],
+      [
+        "approval",
+        {
+          "id": "t5",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 1
+        }
+      ],
+      [
+        "approval",
+        {
+          "id": "t6",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 3
+        }
+      ],
+      [
+        "approval",
+        {
+          "id": "t7",
+          "status": "awaiting_approval",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ]
+    ]
+  },
+  "output": [
+    "engine exited",
+    "Failed",
+    "Waiting on you: Need the key",
+    "Waiting on you",
+    "An approval is waiting",
+    "3 approvals waiting",
+    "An approval is waiting"
+  ]
+}

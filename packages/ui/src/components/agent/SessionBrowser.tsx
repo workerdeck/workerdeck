@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { HTMLAttributes, ReactNode } from 'react'
 import { BedDouble, ChevronDown, ChevronRight, ChevronUp, FolderOpen, Layers, Pencil, Plus, RotateCcw, Search, SearchX, Trash2, X } from 'lucide-react'
 import {
@@ -11,9 +11,8 @@ import {
   sessionKey,
   sessionLabel,
   subsetSummary,
-  teamLingerEnds,
-  teamLingerStart,
-  TEAM_LINGER_MS,
+  teamSummary,
+  teamSummaryText,
   teamView,
   toggleTeamExpanded,
   expandedStepsOf,
@@ -159,47 +158,18 @@ export function SessionBrowser({
   const tiles = useMemo(() => rows.some((row) => row.info.agent !== undefined), [rows])
   const custom = config.groupBy === 'custom'
   const [editingGroup, setEditingGroup] = useState<string>()
-  const [tick, setTick] = useState(() => Date.now())
-  const clock = now ?? tick
-  const [peeked, setPeeked] = useState<ReadonlySet<string>>(() => new Set())
-  useEffect(() => {
-    const next = new Set(peeked)
-    for (const group of groups) {
-      for (const member of group.rows.flatMap((row) => row.members ?? [])) {
-        if (member.state === 'working' || member.state === 'attention') {
-          next.delete(sessionKey(member))
-        } else if (isActive(member)) {
-          next.add(sessionKey(member))
-        }
-      }
-    }
-    if (next.size !== peeked.size || [...next].some((key) => !peeked.has(key))) {
-      setPeeked(next)
-    }
-  }, [groups, isActive, peeked])
   const views = useMemo(() => {
     const out = new Map<string, TeamView>()
     for (const group of groups) {
       for (const row of group.rows) {
         if (row.members?.length) {
           const selected = row.members.find(isActive)
-          out.set(sessionKey(row), teamView(row, config, selected && sessionKey(selected), clock, peeked))
+          out.set(sessionKey(row), teamView(row, config, selected && sessionKey(selected)))
         }
       }
     }
     return out
-  }, [groups, config, isActive, clock, peeked])
-  const lingerEnds = useMemo(() => {
-    const ends = [...views.values()].map((view) => teamLingerEnds(view, clock)).filter((end) => end !== undefined)
-    return ends.length ? Math.min(...ends) : undefined
-  }, [views, clock])
-  useEffect(() => {
-    if (now !== undefined || lingerEnds === undefined) {
-      return
-    }
-    const timer = setTimeout(() => setTick(Date.now()), Math.max(0, lingerEnds - Date.now()) + 50)
-    return () => clearTimeout(timer)
-  }, [now, lingerEnds])
+  }, [groups, config, isActive])
 
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
   const byKey = useMemo(() => new Map(rows.map((row) => [sessionKey(row), row])), [rows])
@@ -388,9 +358,6 @@ export function SessionBrowser({
                         key={sessionKey(row)}
                         lead={row}
                         view={view}
-                        selected={row.members.find(isActive)}
-                        peeked={peeked}
-                        now={now}
                         onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
                         onSelectMember={(member) => onSelect?.(member, { meta: false, ctrl: false, alt: false })}
                         onConversations={onAgentConversations}
@@ -589,13 +556,10 @@ const TRAY_MAX = 4
 
 // Auto draws the members `teamView` shows inside the team's card under the lead, and the rest as a tray on its first
 // line: a face selects that member, the trailing `+N` or chevron expands the team. Expanded, the lead's `^ N` chip returns
-// it to Auto.
+// it to Auto. A leading count says how many members need a person.
 function TeamBlock({
   lead,
   view,
-  selected,
-  peeked,
-  now,
   onToggle,
   onSelectMember,
   onConversations,
@@ -604,9 +568,6 @@ function TeamBlock({
 }: {
   lead: SessionRow
   view: TeamView
-  selected?: SessionRow
-  peeked?: ReadonlySet<string>
-  now?: number
   onToggle: () => void
   onSelectMember: (member: SessionRow) => void
   onConversations?: (member: SessionRow) => void
@@ -616,8 +577,10 @@ function TeamBlock({
   const team = lead.info.agent?.name ?? 'team'
   const overflow = view.tray.length > TRAY_MAX
   const avatarsShown = view.tray.slice(0, overflow ? TRAY_MAX - 1 : TRAY_MAX)
-  const tray = view.tray.length ? (
-    <span className="flex shrink-0 items-center gap-1">
+  const summary = teamSummaryText(lead)
+  const needs = teamSummary(lead).attention
+  const members = view.tray.length ? (
+    <>
       {avatarsShown.map((member) => {
         const name = member.info.agent?.name ?? sessionLabel(member.info)
         return (
@@ -654,7 +617,7 @@ function TeamBlock({
       >
         {overflow ? `+${view.tray.length - avatarsShown.length}` : <ChevronRight className="size-3" />}
       </button>
-    </span>
+    </>
   ) : view.expanded ? (
     <button
       type="button"
@@ -671,6 +634,20 @@ function TeamBlock({
       {lead.members?.length ?? view.shown.length}
     </button>
   ) : undefined
+  const tray =
+    members || needs ? (
+      <span title={summary} className="flex shrink-0 items-center gap-1">
+        {needs ? (
+          <span
+            aria-label={summary}
+            className="flex h-4 shrink-0 items-center rounded-full bg-warning-bg px-1.5 text-[0.75rem] leading-none text-warning tabular-nums"
+          >
+            {needs}
+          </span>
+        ) : null}
+        {members}
+      </span>
+    ) : undefined
   const nested = view.shown.length > 0
   return (
     <div
@@ -682,41 +659,11 @@ function TeamBlock({
       {nested ? (
         <div className="flex flex-col gap-1 p-1">
           {view.shown.map((member) => (
-            <div key={sessionKey(member)} className="relative">
-              {renderMember(member)}
-              <LingerBar member={member} selected={selected} peeked={peeked} now={now} />
-            </div>
+            <div key={sessionKey(member)}>{renderMember(member)}</div>
           ))}
         </div>
       ) : null}
     </div>
-  )
-}
-
-// A member Auto keeps only for its linger window: a hairline fills left to right and the row leaves when it is full.
-function LingerBar({
-  member,
-  selected,
-  peeked,
-  now,
-}: {
-  member: SessionRow
-  selected?: SessionRow
-  peeked?: ReadonlySet<string>
-  now?: number
-}) {
-  const clock = now ?? Date.now()
-  const start = teamLingerStart(member, selected && sessionKey(selected), clock, peeked)
-  if (start === undefined) {
-    return null
-  }
-  return (
-    <span
-      aria-hidden
-      title="Idle, leaving the list soon"
-      className="wd-linger pointer-events-none absolute right-2 bottom-0 left-2 h-0.5 rounded-full bg-fg-4/50"
-      style={{ animationDuration: `${TEAM_LINGER_MS}ms`, animationDelay: `${start - clock}ms` }}
-    />
   )
 }
 

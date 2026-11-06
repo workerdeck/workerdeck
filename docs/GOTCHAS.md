@@ -1428,6 +1428,10 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
 `attentionOf(info)` (protocol, ported to Rust with goldens) lists what a person must act on: `approval`, `failed`
 (`info.failure` set), `blocked` (`statusLabel.waitingOn === 'human'`). Unread is never attention.
 
+- **Lists read it through `listState`, never `sessionState`.** The state filter, state grouping, `teamState`, team
+  Auto and the summaries switch to attention; `sessionState` stays activity only, because the gateway's shutdown drain
+  sorts live sessions by it (a blocked but running agent must still count as `working` there).
+
 - **Set**: `RunnerCore.fail()` keeps `{ message, at }` and `baseInfo` shows it, so a live failed runner carries it. Only
   Claude (engine death, `requireApiKey`) calls `fail()`; codex respawns and provider fails per turn. Parking's
   `session_closed` arm with `'error'` passes it (stamped with the conversation) to `store.delete(..., failure)`, which

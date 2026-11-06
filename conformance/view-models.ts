@@ -185,7 +185,8 @@ function quiet(id: string, order: number, over: Partial<SessionInfo> = {}, unsee
   return { ...row('mac', info(id, { title: id, agent, lastActivityAt: T0, ...over })), unseen }
 }
 
-// A lead with every reason a member shows in Auto: working, attention, unread, lingering, and two quiet ones.
+// A lead with every kind of member: working, approval, unread, failed, blocked, and two quiet ones. Auto draws only the
+// approval, failed and blocked ones.
 const TEAM: SessionRow = {
   ...BY_ID.get('s-lead-0001')!,
   members: [
@@ -193,8 +194,9 @@ const TEAM: SessionRow = {
     BY_ID.get('s-review-02')!,
     quiet('s-quiet-a', 3),
     quiet('s-unread', 4, {}, 2),
-    quiet('s-linger', 5, { lastActivityAt: T0 + 57_000 }),
-    quiet('s-quiet-b', 6),
+    quiet('s-failed', 5, { status: 'closed', failure: { message: 'engine exited', at: T0 } }),
+    quiet('s-blocked', 6, { status: 'running', statusLabel: { text: 'Need the key', waitingOn: 'human', setAt: T0 } }),
+    quiet('s-quiet-b', 7),
   ],
 }
 
@@ -482,22 +484,12 @@ const SESSION_LIST: VmCase[] = [
     name: 'team-view',
     fn: 'teamView',
     calls: [
-      [TEAM, config(), undefined, T0 + 60_000],
-      [TEAM, config(), 'mac:s-quiet-a', T0 + 60_000],
-      [TEAM, config(), undefined, T0 + 100_000],
-      [TEAM, config({ expandedTeams: ['mac:ag-lead'] }), undefined, T0 + 60_000],
-      [TEAM, config({ search: 'quiet' }), undefined, T0 + 60_000],
-      [BY_ID.get('s-solo-0004'), config(), undefined, T0],
-    ],
-  },
-  {
-    module: 'session-list',
-    name: 'team-linger-ends',
-    fn: 'teamLingerEnds',
-    calls: [
-      [{ expanded: false, shown: TEAM.members!, tray: [] }, T0 + 60_000],
-      [{ expanded: false, shown: TEAM.members!, tray: [] }, T0 + 100_000],
-      [{ expanded: false, shown: [], tray: [] }, T0],
+      [TEAM, config(), undefined],
+      [TEAM, config(), 'mac:s-quiet-a'],
+      [TEAM, config(), 'mac:s-failed'],
+      [TEAM, config({ expandedTeams: ['mac:ag-lead'] }), undefined],
+      [TEAM, config({ search: 'quiet' }), undefined],
+      [BY_ID.get('s-solo-0004'), config(), undefined],
     ],
   },
   {
@@ -528,7 +520,56 @@ const SESSION_LIST: VmCase[] = [
     module: 'session-list',
     name: 'team-summaries',
     fn: 'teamSummary',
-    calls: [[{ ...BY_ID.get('s-lead-0001')!, members: pick('s-review-02', 's-art-0003', 's-remote-07') }], [BY_ID.get('s-solo-0004')]],
+    calls: [[{ ...BY_ID.get('s-lead-0001')!, members: pick('s-review-02', 's-art-0003', 's-remote-07') }], [BY_ID.get('s-solo-0004')], [TEAM]],
+  },
+  {
+    module: 'session-list',
+    name: 'team-summary-text',
+    fn: 'teamSummaryText',
+    calls: [
+      [TEAM],
+      [{ ...BY_ID.get('s-lead-0001')!, members: pick('s-review-02') }],
+      [{ ...BY_ID.get('s-lead-0001')!, members: pick('s-art-0003', 's-remote-07') }],
+      [BY_ID.get('s-solo-0004')],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'attention-title',
+    fn: 'attentionTitle',
+    calls: [
+      ['failed', info('t1', { failure: { message: 'engine exited', at: T0 } })],
+      ['failed', info('t2', { failure: { message: '', at: T0 } })],
+      ['blocked', info('t3', { statusLabel: { text: 'Need the key', waitingOn: 'human', setAt: T0 } })],
+      ['blocked', info('t4')],
+      ['approval', info('t5', { pendingPermissionCount: 1 })],
+      ['approval', info('t6', { pendingPermissionCount: 3 })],
+      ['approval', info('t7', { status: 'awaiting_approval' })],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'list-state',
+    fn: 'listState',
+    calls: [...ROWS.map((r) => [r]), ...TEAM.members!.map((r) => [r])],
+  },
+  {
+    module: 'session-list',
+    name: 'attention-groups',
+    fn: 'groupRows',
+    calls: [
+      [TEAM.members!, config({ groupBy: 'state' })],
+      [[TEAM], config({ groupBy: 'state' })],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'attention-filter',
+    fn: 'filterRows',
+    calls: [
+      [TEAM.members!, config({ states: ['attention'] })],
+      [[...TEAM.members!, ...ROWS], config({ states: ['ended'] })],
+    ],
   },
   {
     module: 'session-list',
@@ -598,25 +639,6 @@ const SESSION_LIST: VmCase[] = [
       [config({ groupBy: 'project', groupOrder: { project: ['p'] } })],
       [config({ groupBy: 'custom', groupOrder: { state: ['idle'] } })],
     ],
-  },
-  {
-    module: 'session-list',
-    name: 'team-view-peeked',
-    fn: 'teamViewPeeked',
-    calls: [
-      [TEAM, config(), undefined, T0 + 60_000, ['mac:s-linger']],
-      [TEAM, config(), undefined, T0 + 60_000, ['mac:s-unread', 'mac:s-art-0003']],
-    ],
-  },
-  {
-    module: 'session-list',
-    name: 'team-linger-start',
-    fn: 'teamLingerStartPeeked',
-    calls: TEAM.members!.flatMap((member) => [
-      [member, undefined, T0 + 60_000, []],
-      [member, 'mac:s-linger', T0 + 60_000, []],
-      [member, undefined, T0 + 60_000, ['mac:s-linger']],
-    ]),
   },
   {
     module: 'session-list',

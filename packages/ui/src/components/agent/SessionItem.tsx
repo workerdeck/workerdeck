@@ -2,8 +2,12 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { Globe, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import {
+  ATTENTION_LABELS,
   GOAL_HOLDS_ENGINE_HINT,
+  attentionOf,
+  attentionTitle,
   cardStatus,
+  listState,
   goalHoldsEngine,
   projectLabel,
   projectName,
@@ -138,8 +142,9 @@ export function SessionItem({
 
   const model = info.modelName ?? friendlyModel(info.model)
   const status = statusLine(info.statusLabel)
-  // Its own approval or question, or (on a lead) a team member's: the one card that asks for an action.
-  const needsYou = row.state === 'attention' || row.teamState === 'attention' || badgeState === 'attention'
+  // Its own reason to need a person, or (on a lead) a team member's: the one card that asks for an action.
+  const needsYou = listState(row) === 'attention' || row.teamState === 'attention' || badgeState === 'attention'
+  const reasons = <ReasonChips info={info} />
   const parts: ReactNode[] = []
   if (model) {
     parts.push(
@@ -294,6 +299,7 @@ export function SessionItem({
               </span>
             ) : null}
             <span className="flex-1" />
+            {reasons}
             {unread}
             {chips}
             {actions}
@@ -312,6 +318,7 @@ export function SessionItem({
                 </span>
               ) : null}
               <span className="flex-1" />
+              {reasons}
               {unread}
               {teamUnseen > 0 ? (
                 <span
@@ -362,6 +369,7 @@ export function SessionItem({
             </Gutter>
             {nameLabel}
             <span className="flex-1" />
+            {reasons}
             {unread}
             <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />
           </div>
@@ -400,6 +408,21 @@ export function SessionItem({
       ) : null}
     </div>
   )
+}
+
+function ReasonChips({ info }: { info: SessionInfo }) {
+  return attentionOf(info).reasons.map((reason) => (
+    <span
+      key={reason}
+      title={attentionTitle(reason, info)}
+      className={cn(
+        'flex h-4 shrink-0 items-center rounded-[3px] px-1 text-micro leading-none',
+        reason === 'failed' ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning',
+      )}
+    >
+      {ATTENTION_LABELS[reason]}
+    </span>
+  ))
 }
 
 function Gutter({ children }: { children: ReactNode }) {

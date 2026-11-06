@@ -418,7 +418,7 @@ them. The pure edits (`addCustomGroup`, `renameCustomGroup`, `removeCustomGroup`
 unreadable during `dragover`. iOS mirrors the gateway merge only, and does not draw custom groups yet.
 
 **Agent teams in the list.** `groupRows` assembles team units before grouping: a lead row carries
-`members` (team order, then creation) and `teamState` (the most urgent state across the team, which
+`members` (team order, then creation) and `teamState` (the most urgent `listState` across the team, which
 is what state grouping places it by), and members never appear top-level. Pass the unfiltered list
 as `options.all`: a filter that matches only a member then pulls its lead in as a `context` row. A
 member whose lead is not in the list at all stays top-level rather than vanish. Ended sessions with
@@ -428,17 +428,19 @@ Ended) and custom grouping (the operator placed them). `expandedTeams` (team key
 dropped on normalize, never migrated, because its meaning is the inverse.
 
 **Team Auto.** Every team is in Auto unless its key is in `expandedTeams`; there is no setting and no
-fully collapsed state. `teamView(lead, config, selected, now, peeked?)` returns `{ expanded, shown, tray }`:
-in Auto a Member is shown when it is `working` or `attention`, is the selected row (`selected` is a
-`sessionKey`), has `unseen > 0`, or has `lastActivityAt` within `TEAM_LINGER_MS` (5 s) of `now`;
-the rest go to `tray`. Expanded, or under any search or facet filter, every Member is shown.
-`peeked` (TS only so far) holds Members opened while idle and not busy since: they never linger, so a peek folds back
-the moment the selection moves on. `ui`'s `SessionBrowser` keeps that set itself.
-`teamLingerEnds(view, now)` is when the next lingering Member drops out, so a host can redraw then.
-`teamLingerStart(member, selected, now, peeked?)` is when the window began for a Member shown *only* because it lingers
-(not busy, unread, selected or peeked), so a host can draw the countdown: `ui` fills a hairline under that row and the row
-leaves when it is full. The Rust core mirrors `teamView` and `teamLingerEnds` in
-`vm/session_list.rs` (iOS and Android both draw from it), without `peeked`.
+fully collapsed state. `teamView(lead, config, selected)` returns `{ expanded, shown, tray }`: in Auto a Member is
+shown when `attentionOf` gives it a reason (approval, failed, blocked) or it is the selected row (`selected` is a
+`sessionKey`); working, unread and idle Members go to `tray`. Expanded, or under any search or facet filter, every
+Member is shown. There is no clock and no linger: a Member leaves the moment its reason clears and it is not selected.
+
+**Attention in the list.** `listState(row)` is `'attention'` when `attentionOf(row.info)` has a reason, else
+`row.state`. The state filter, state grouping, `teamState`, the Earlier fold and the summaries read it, so a failed or
+blocked session (lone agents and plain sessions too) sits under Needs attention while `row.state` (and the card's
+dot) still says what it is doing. `sessionState` itself is unchanged: the gateway's drain sorts by it. `teamSummary`
+counts each Member once (`attention`, then `working` and `idle` from the rest, adding up to `members`) and
+`teamSummaryText` is the lead's tray line ("2 need you · 3 working · 1 idle"). `ATTENTION_LABELS` and
+`attentionTitle(reason, info)` are the reason chip's word and tooltip. The Rust core mirrors all of these in
+`vm/session_list.rs` with goldens.
 
 A `ProjectIcon` is either a named glyph - looked up in the client's own icon set, with an unknown
 name drawing the no-project fallback - or an image **address, never bytes**, fetched from
@@ -2069,12 +2071,13 @@ the corner, busy strip played by CSS `steps()`, desaturated asleep), named by th
 session title as its topic. Members are the one-row `variant="member"` under the lead on a tree
 line (`TeamBlock` in `SessionBrowser`). In Auto (see `teamView` in protocol) the tree shows only the
 Members `shown`; the rest are avatars on the lead's first line before the context ring (`teamTray`,
-at most four, then `+n`). An avatar selects that Member through `onSelect`; hovering it opens `MemberCard` in a `HoverCard`
+at most four, then `+n`), led by a warning-coloured count of Members that need a person (`teamSummary.attention`),
+with `teamSummaryText` as the tray's tooltip. Every card draws one chip per `attentionOf` reason before its unread
+badge, and tints as needing you by `listState`. An avatar selects that Member through `onSelect`; hovering it opens `MemberCard` in a `HoverCard`
 (Base UI PreviewCard, portalled under `PortalScope`: avatar, state, status label, in-progress checklist item, unread and
 approvals), not a native `title`, which VS Code webviews do not show;
 the trailing chevron or `+n` expands the team, and the knob atop an expanded tree returns it to Auto.
-The selected Member comes from `isActive`, so hosts pass nothing new; with no `now` prop the browser
-runs its own timer to the next `teamLingerEnds`. `onTeamMove` makes cards draggable onto each other (`lib/team-drop.ts`, pure): the
+The selected Member comes from `isActive`, so hosts pass nothing new. `onTeamMove` makes cards draggable onto each other (`lib/team-drop.ts`, pure): the
 middle of a card joins its team, a member's edges place the drop beside it, a member dropped on a
 top-level edge or empty space leaves. Joining renumbers the team densely (`TeamMove.siblings`).
 `teamDropRefusal` mirrors the gateway's `leadRefusal` wording so a refused hover says why; a

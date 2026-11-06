@@ -233,10 +233,6 @@ const FNS: Record<string, Fn> = {
   faceTree,
   faceStateOf,
   expandedStepsScript,
-  teamViewPeeked: (lead: protocol.SessionRow, config: ViewConfig, selected: string | undefined, now: number, peeked: string[]) =>
-    protocol.teamView(lead, config, selected, now, new Set(peeked)),
-  teamLingerStartPeeked: (member: protocol.SessionRow, selected: string | undefined, now: number, peeked: string[]) =>
-    protocol.teamLingerStart(member, selected, now, new Set(peeked)) ?? null,
   goalBudgetChangeOf: (field: string, shown: number | null) => {
     const change = goalBudgetChange(field, shown ?? undefined)
     return change === undefined ? 'untouched' : change

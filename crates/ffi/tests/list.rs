@@ -1,4 +1,4 @@
-use wdffi::{ListError, ListFacet, ListGroupBy, ListSortBy, RowState, SessionList, StepFold, StepKind, StepShow};
+use wdffi::{ListError, ListFacet, ListGroupBy, ListSortBy, ReasonChip, RowState, SessionList, StepFold, StepKind, StepShow};
 
 fn session(id: &str, status: &str, extra: &str) -> String {
     format!(r#"{{"id":"{id}","status":"{status}","cwd":"/work/app","createdAt":1000,"lastSeq":4{extra}}}"#)
@@ -129,34 +129,44 @@ fn values_from_a_newer_gateway_read_as_unknown() {
 }
 
 #[test]
-fn auto_shows_busy_and_selected_members_and_trays_the_rest() {
+fn auto_shows_members_that_need_a_person_and_the_selected_one_and_trays_the_rest() {
     let list = SessionList::new(None, None);
     let agent = |id: &str, lead: &str| format!(r#","agent":{{"id":"{id}","name":"{id}"{lead}}}"#);
     let member = |id: &str, order: u32| agent(id, &format!(r#","lead":"L","order":{order}"#));
     let sessions = [
         idle("lead", &agent("L", "")),
         session("busy", "running", &format!(r#","pendingPermissionCount":0{}"#, member("M1", 1))),
-        idle("quiet1", &format!(r#","lastActivityAt":1000{}"#, member("M2", 2))),
-        idle("quiet2", &format!(r#","lastActivityAt":1000{}"#, member("M3", 3))),
-        idle("recent", &format!(r#","lastActivityAt":98000{}"#, member("M4", 4))),
+        idle("quiet", &member("M2", 2)),
+        session(
+            "failed",
+            "closed",
+            &format!(r#","pendingPermissionCount":0,"failure":{{"message":"engine exited","at":1}}{}"#, member("M3", 3)),
+        ),
+        idle("blocked", &format!(r#","statusLabel":{{"text":"Need the key","waitingOn":"human","setAt":1}}{}"#, member("M4", 4))),
     ];
     list.set_host("h1".into(), "mac".into(), true, body(&sessions)).unwrap();
-    let rows = |list: &SessionList| list.groups(100_000.0).into_iter().flat_map(|g| g.rows).collect::<Vec<_>>();
+    let rows = |list: &SessionList| list.groups(0.0).into_iter().flat_map(|g| g.rows).collect::<Vec<_>>();
     let drawn = rows(&list);
     let ids: Vec<_> = drawn.iter().map(|r| r.session_id.as_str()).collect();
-    assert!(ids.contains(&"busy") && ids.contains(&"recent") && !ids.contains(&"quiet1"), "{ids:?}");
+    assert_eq!(ids, ["lead", "failed", "blocked"]);
     let lead = drawn.iter().find(|r| r.session_id == "lead").unwrap();
-    assert_eq!(lead.tray.iter().map(|t| t.session_id.as_str()).collect::<Vec<_>>(), ["quiet1", "quiet2"]);
-    assert!(!lead.team_expanded);
-    assert_eq!(list.linger_ends(), Some(103_000.0));
+    assert_eq!(lead.tray.iter().map(|t| t.session_id.as_str()).collect::<Vec<_>>(), ["busy", "quiet"]);
+    assert!(!lead.team_expanded && lead.needs_you);
+    assert_eq!(lead.team_attention, 2);
+    assert_eq!(lead.team_summary.as_deref(), Some("2 need you \u{00B7} 1 working \u{00B7} 1 idle"));
+    let failed = drawn.iter().find(|r| r.session_id == "failed").unwrap();
+    assert!(failed.needs_you);
+    assert_eq!(failed.reasons, [ReasonChip { label: "Failed".into(), title: "engine exited".into(), danger: true }]);
+    let blocked = drawn.iter().find(|r| r.session_id == "blocked").unwrap();
+    assert_eq!(blocked.reasons[0].title, "Waiting on you: Need the key");
 
-    list.select("h1".into(), "quiet2".into());
+    list.select("h1".into(), "quiet".into());
     let ids: Vec<_> = rows(&list).into_iter().map(|r| r.session_id).collect();
-    assert!(ids.contains(&"quiet2".to_owned()));
+    assert!(ids.contains(&"quiet".to_owned()));
 
     list.toggle_team("h1".into(), "lead".into());
     let drawn = rows(&list);
-    assert!(drawn.iter().any(|r| r.session_id == "quiet1"));
+    assert!(drawn.iter().any(|r| r.session_id == "busy"));
     assert!(drawn.iter().find(|r| r.session_id == "lead").unwrap().team_expanded);
 }
 

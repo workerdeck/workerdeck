@@ -30,10 +30,9 @@ import {
   sessionState,
   subsetSummary,
   teamSummary,
-  teamLingerEnds,
-  teamLingerStart,
+  teamSummaryText,
+  listState,
   teamView,
-  TEAM_LINGER_MS,
   toggleTeamExpanded,
   groupSummary,
   isGroupCollapsed,
@@ -608,72 +607,73 @@ describe('agent teams in the list', () => {
     expect(expanded.expandedTeams).toEqual(['mac:A'])
     expect(isTeamExpanded(expanded, unit)).toBe(true)
     expect(isTeamExpanded(toggleTeamExpanded(expanded, unit), unit)).toBe(false)
-    expect(teamSummary(unit)).toEqual({ members: 2, working: 1, attention: 1, unseen: 0 })
+    expect(teamSummary(unit)).toEqual({ members: 2, attention: 1, working: 1, idle: 0, unseen: 0 })
   })
 })
 
 describe('teamView', () => {
-  const now = 1_000_000
-  const member = (id: string, over: Partial<SessionInfo> = {}, unseen = 0): SessionRow => ({
-    ...row({ info: info({ id, lastActivityAt: now - 10 * TEAM_LINGER_MS, ...over }) }),
-    unseen,
-  })
+  const member = (id: string, over: Partial<SessionInfo> = {}, unseen = 0) => row({ info: info({ id, ...over }), unseen })
   const busy = member('s-busy', { status: 'running' })
   const asks = member('s-asks', { pendingPermissionCount: 1 })
   const unread = member('s-unread', {}, 2)
-  const recent = member('s-recent', { lastActivityAt: now - 1_000 })
+  const failed = member('s-failed', { status: 'closed', failure: { message: 'engine died', at: 1 } })
+  const blocked = member('s-blocked', { status: 'running', statusLabel: { text: 'need a key', waitingOn: 'human', setAt: 1 } })
   const quiet = member('s-quiet')
   const gone = member('s-gone', { status: 'closed' })
   const lead: SessionRow = {
     ...row({ info: info({ id: 's-lead', agent: { id: 'A', name: 'Atlas', leads: true } }) }),
-    members: [busy, asks, unread, recent, quiet, gone],
+    members: [busy, asks, unread, failed, blocked, quiet, gone],
   }
   const ids = (rows: SessionRow[]) => rows.map((r) => r.info.id)
 
-  it('shows busy, unread and lingering members in Auto and trays the rest', () => {
-    const view = teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now)
+  it('shows only members that need a person in Auto; working and unread members sit in the tray', () => {
+    const view = teamView(lead, DEFAULT_VIEW_CONFIG, undefined)
     expect(view.expanded).toBe(false)
-    expect(ids(view.shown)).toEqual(['s-busy', 's-asks', 's-unread', 's-recent'])
-    expect(ids(view.tray)).toEqual(['s-quiet', 's-gone'])
+    expect(ids(view.shown)).toEqual(['s-asks', 's-failed', 's-blocked'])
+    expect(ids(view.tray)).toEqual(['s-busy', 's-unread', 's-quiet', 's-gone'])
   })
 
   it('keeps the selected member in the list', () => {
-    const view = teamView(lead, DEFAULT_VIEW_CONFIG, 'mac:s-quiet', now)
-    expect(ids(view.tray)).toEqual(['s-gone'])
-  })
-
-  it('drops a member once its linger window has passed', () => {
-    expect(ids(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now + TEAM_LINGER_MS).tray)).toContain('s-recent')
+    const view = teamView(lead, DEFAULT_VIEW_CONFIG, 'mac:s-quiet')
+    expect(ids(view.tray)).toEqual(['s-busy', 's-unread', 's-gone'])
   })
 
   it('shows every member when expanded or under a filter', () => {
-    const expanded = teamView(lead, toggleTeamExpanded(DEFAULT_VIEW_CONFIG, lead), undefined, now)
+    const expanded = teamView(lead, toggleTeamExpanded(DEFAULT_VIEW_CONFIG, lead), undefined)
     expect(expanded).toMatchObject({ expanded: true, tray: [] })
-    expect(expanded.shown).toHaveLength(6)
-    const searched = teamView(lead, config({ search: 'x' }), undefined, now)
+    expect(expanded.shown).toHaveLength(7)
+    const searched = teamView(lead, config({ search: 'x' }), undefined)
     expect(searched).toMatchObject({ expanded: false, tray: [] })
-    expect(searched.shown).toHaveLength(6)
+    expect(searched.shown).toHaveLength(7)
   })
 
-  it('reports when the next lingering member leaves', () => {
-    expect(teamLingerEnds(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now), now)).toBe(now - 1_000 + TEAM_LINGER_MS)
-    expect(teamLingerEnds(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now + TEAM_LINGER_MS), now + TEAM_LINGER_MS)).toBeUndefined()
+  it('counts each member once: attention first, then working and idle, adding up to the team', () => {
+    expect(teamSummary(lead)).toEqual({ members: 7, attention: 3, working: 1, idle: 3, unseen: 2 })
+    expect(teamSummaryText(lead)).toBe('3 need you · 1 working · 3 idle')
+    expect(teamSummaryText({ ...lead, members: [asks] })).toBe('1 needs you')
+    expect(teamSummaryText({ ...lead, members: [] })).toBeUndefined()
+  })
+})
+
+describe('listState', () => {
+  const failed = row({ info: info({ status: 'closed', failure: { message: 'x', at: 1 } }) })
+  const blocked = row({
+    info: info({ id: 'sess-00000002', status: 'running', statusLabel: { text: 'stuck', waitingOn: 'human', setAt: 1 } }),
+  })
+  const plain = row({ info: info({ id: 'sess-00000003' }) })
+
+  it('reads attention for a failed or blocked session and the activity state otherwise', () => {
+    expect(listState(failed)).toBe('attention')
+    expect(listState(blocked)).toBe('attention')
+    expect(listState(plain)).toBe('idle')
   })
 
-  it('starts a countdown only for a member shown just for its linger window', () => {
-    expect(teamLingerStart(recent, undefined, now)).toBe(now - 1_000)
-    expect(teamLingerStart(recent, sessionKey(recent), now)).toBeUndefined()
-    expect(teamLingerStart({ ...recent, unseen: 1 }, undefined, now)).toBeUndefined()
-    expect(teamLingerStart(member('s-run', { status: 'running', lastActivityAt: now - 1_000 }), undefined, now)).toBeUndefined()
-    expect(teamLingerStart(quiet, undefined, now)).toBeUndefined()
-    expect(teamLingerStart(recent, undefined, now - 1_000 + TEAM_LINGER_MS)).toBeUndefined()
-  })
-
-  it('folds a peeked member back at once instead of lingering', () => {
-    const peeked = new Set([sessionKey(recent)])
-    expect(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now, peeked).tray).toContain(recent)
-    expect(teamView(lead, DEFAULT_VIEW_CONFIG, sessionKey(recent), now, peeked).shown).toContain(recent)
-    expect(teamLingerStart(recent, undefined, now, peeked)).toBeUndefined()
+  it('drives the Needs attention filter and the state group, and keeps a failed one-off out of Earlier', () => {
+    const rows = [failed, blocked, plain]
+    expect(filterRows(rows, config({ states: ['attention'] })).map((r) => r.info.id)).toEqual([failed.info.id, blocked.info.id])
+    const groups = groupRows(rows, { ...DEFAULT_VIEW_CONFIG, groupBy: 'state' })
+    expect(groups.find((g) => g.key === 'attention')!.rows).toHaveLength(2)
+    expect(groupRows(rows, { ...DEFAULT_VIEW_CONFIG, groupBy: 'project' }).some((g) => g.earlier)).toBe(false)
   })
 })
 

@@ -1618,8 +1618,9 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   `SessionModel`, reconnect, replay and drop an open shell. `onConfigurationChanged` re-derives the
   system bar icon colours.
 - **Teams are Auto** (`teamView` in the core, goldens `session-list.team-view.json`): a lead's
-  row carries its `tray` (four idle Members, or three and `tray_overflow`, as on the web) and `team_expanded`;
-  `SessionList.groups(now)` takes the clock and `linger_ends()` says when to redraw. A phone has no
+  row carries its `tray` (four Members, or three and `tray_overflow`, as on the web), `team_expanded`,
+  `team_attention` and `team_summary` (the tray line); every row carries `needs_you` (the tint) and `reasons` (one
+  chip each, `danger` for a failure). Auto has no clock: a Member draws only while it needs a person. A phone has no
   lasting highlight, so the Member opened last counts as selected (`SessionList.select`), as on iOS.
 - **The sessions list draws the web's `SessionItem`** (`sessions/SessionCard.kt`, `SessionsList.kt`): 48 dp
   agent cards (4 padding, 40 face, two 20 lines, no time, no dividers, 4 dp apart; line one the name and the
@@ -1627,7 +1628,7 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   Members in one row (20 face, name capped at 60%, 12 sp badge, the status truncating first), the gutter card for plain
   sessions or, once any row is an agent (`ListRow.tile`), the engine tile in the agent shape; step chips per fold
   kind (`ListRow.chips`, `SessionList.toggleSteps`), the unfolded kinds' rows under the card. A team that shows a
-  Member is one nested card (`cardUnits`); a lingering Member fills a hairline from `linger_start`. Headings fold
+  Member is one nested card (`cardUnits`). Headings fold
   every group, keep a project's own case, badge its gateway and offer `+` (create in that cwd). The colours are
   the web theme's tokens (`listTones`). A still long press peeks (`sessions/SessionPeek.kt`): the list blurs (API 31+,
   a darker scrim below), the live transcript shows read-only and marks what it shows read, as on the session screen,
