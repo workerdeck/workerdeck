@@ -7,13 +7,34 @@ gateway and protocol it talks to.
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-11-06
+
 ### Added
 
+- **MCP servers that come back.** A Claude agent reconnects any MCP server that was down when its
+  engine started the next time you message it, and can do it itself with `mcp_reconnect`. After an
+  agent installs a new server it calls `mcp_reload`: a Claude engine restarts on the same
+  conversation when the turn ends (the card never shows it asleep), a Codex engine re-reads its MCP
+  config in place, mid-turn.
+- **GPT-6.1 Terra** in the Codex model picker.
 - **Agent Search.** A Search view of its own in the activity bar for the open session's folder,
   local or on a remote gateway: match case, whole word, regex, files to include and exclude, the
   ignore-files toggle, list or tree results, dismiss, and replace (one, per file, all) with Preserve
   Case and the Replace Preview diff. Cmd+Shift+F and Cmd+Shift+H open it in a window with no folder.
 - **Find in Folder...** in Agent Files' context menu searches that folder in Agent Search.
+
+### Changed
+
+- **Engines upgraded**: Claude Agent SDK 0.3.318 (Claude Code 2.1.318) and Codex 0.166.0.
+
+### Fixed
+
+- **Stopping or restarting Host Mode no longer kills agent engines mid-drain**: the stop signal goes
+  to the gateway alone unless it was launched with npx, and a session whose engine dies during the
+  shutdown drain keeps its runtime.
+- **An engine that crashes after a completed turn stays resumable** (the card shows asleep and the
+  next message resumes it) instead of failing the session.
+- **New conversation works on a session that lost its runtime.**
 
 ## [4.2.0] - 2026-11-04
 

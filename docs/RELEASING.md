@@ -1737,6 +1737,21 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   Android `:app` unit tests, Publish `dry_run` green on master. **Published** 2026-11-04: tag `v4.2.0` at `79da6f80`,
   Publish green first try (run 41769887067), npm 12/12 with `latest` 4.2.0, Marketplace 4.2.0. Decks upgraded the
   same day (mini atomic + relay, PiBo, MAGWIN; nothing to migrate).
+
+  **4.3.0** - **MCP self-heal, Agent Search, engine upgrades**, a **minor**: protocol stays **2**, relay wire **2**,
+  additive only. Core gains `mcp_reconnect` and `mcp_reload` (`lib/mcp-tool.ts`, `docs/GOTCHAS.md` § MCP status):
+  Claude reconnects `failed` servers on a send to an awake engine and its reload restarts the engine on the same
+  conversation after the turn; Codex's reload is a live `config/mcpServer/reload`. Agent Search in VS Code over
+  the gateway's ripgrep (`POST /v1/fs/search`, shared `searchGlobs`/`replacementFor`/`useHostSearch`). Parking
+  fixes: `beginShutdown()` from the start of a drain, a crash after a completed turn stays resumable
+  (`#retireCrashed`), a runtime-less record can be cut; the VS Code supervisor signals the gateway alone unless
+  launched via npx. Engines: claude-agent-sdk 0.3.318, `@openai/codex ~0.166.0` (core's optional peer now
+  `>=0.149.0 <0.167.0`), `CODEX_CATALOG` re-extracted with `gpt-6.1-terra` (priced 1/5/0.05 per MTok from
+  third-party reports of OpenAI's page). Minor and patch updates across the workspace; `ai` 7.0.140+ needed two
+  test helpers to take `AiSdkRunnerConfig` (tsc's "union too complex"). **Verified**: `pnpm lint`, typecheck, full
+  test (`--force`), `cargo test`, build, gatekeeper; paid smokes on the new engines: `smoke:mcp-reconnect` claude
+  12/12 + codex 4/4, `smoke:shell-write` claude 17/17 + codex 16/16, `smoke:cut claude` 21/21, `smoke:codex`
+  39/39 + canary 11/11, `smoke:restart codex` 8/8.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
