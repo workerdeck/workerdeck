@@ -3342,7 +3342,7 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   `createdAt` at construction; `AiSdkRunner` restores it exactly when it restores the event array).
   Reachable even before any cache existed: a `SessionHandle` reconnect after a gateway restart
   re-attaches with its own advanced `#lastSeq` and freezes the same way.
-- **The native apps keep the same cache in the Rust core.** `crates/ffi` holds the last 4 closed sessions'
+- **The native apps keep the same cache in the Rust core.** `crates/ffi` holds the last 16 closed sessions'
   `TranscriptSnapshot`s (reduced state, seq index), keyed by the host's `cache_key` (gateway and session id; none for
   a past conversation or a fixture). Hosts call `Session.park()` on close (Kotlin drops the object only at GC);
   `Drop` is the fallback. A `Session` built with a cached key runs `LiveSession::resume`: the snapshot draws at once,
@@ -3350,7 +3350,7 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   or a dormant wake (both bump `epoch`) falls back to a replay from zero. A resume, unlike a reconnect, holds its
   catch-up like a fresh attach (`resumed` flag), and shows progress target 0 (an indeterminate bar) until the attach
   says how far the log goes. Measured on 5G + tailscale (100th session): a 2 MB replay took 13 s, the phone itself
-  0.16 s of it; a cached reopen is ~0.3 s.
+  0.16 s of it; a cached reopen is ~0.3 s. A snapshot of a 1.2-1.6 MB replay holds 0.8-1.1 MB of heap.
 - **The gateway's sockets negotiate `permessage-deflate`** (`perMessageDeflate: true` in `server.ts`, ws's 1 KB
   threshold, context takeover on) for first opens, where the cache cannot help: replay JSON compresses ~3x. Browsers,
   OkHttp and iOS `URLSessionWebSocketTask` all offer it; a client that does not gets plain frames. `bufferedAmount`

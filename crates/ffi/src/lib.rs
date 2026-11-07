@@ -337,8 +337,8 @@ pub struct FrameStrip {
 }
 
 // The last few closed sessions' transcripts, newest last, shared by every Session in the process: reopening one resumes
-// after its last seq instead of replaying the whole log over a slow link.
-const CACHED_SESSIONS: usize = 4;
+// after its last seq instead of replaying the whole log over a slow link. A big session's snapshot holds ~1 MB.
+const CACHED_SESSIONS: usize = 16;
 static TRANSCRIPTS: Mutex<Vec<(String, TranscriptSnapshot)>> = Mutex::new(Vec::new());
 
 fn transcripts() -> MutexGuard<'static, Vec<(String, TranscriptSnapshot)>> {
