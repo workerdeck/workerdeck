@@ -1098,7 +1098,14 @@ pub struct FleetRow {
     pub reasons: Vec<AttentionReason>,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub retry: Option<u32>,
+    pub retry: Option<FleetRetry>,
+}
+
+// The failed start Retry repeats: its generation, and `at` so the gateway refuses once a later attempt replaced it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FleetRetry {
+    pub n: u32,
+    pub at: i64,
 }
 
 // Recomputed from the rows the client holds on every render, never kept: a row leaves when its reason clears.
@@ -1119,7 +1126,12 @@ pub fn lead_fleet(lead: &SessionRow, rows: &[SessionRow]) -> Vec<FleetRow> {
         .filter_map(|row| {
             let reasons = attention_of(&row.info).reasons;
             let first = *reasons.first()?;
-            let retry = row.info.failure.as_ref().filter(|f| f.start == Some(true)).and_then(|f| f.conversation);
+            let retry = row
+                .info
+                .failure
+                .as_ref()
+                .filter(|f| f.start == Some(true))
+                .and_then(|f| Some(FleetRetry { n: f.conversation?, at: f.at as i64 }));
             Some(FleetRow {
                 key: row_key(row),
                 id: row.info.id.clone(),

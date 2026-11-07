@@ -187,7 +187,12 @@ fun SessionScreen(
                     onSettle = { model.settle(it) },
                     onRetryStart = model::retryStart,
                 )
-                if (!readOnly) fleet?.let { lead -> FleetStrip(lead, onRetry = { member, n -> model.retryMemberStart(member.sessionId, n, lead.refresh) }) }
+                if (!readOnly) {
+                    fleet?.let { lead ->
+                        val retrying by model.fleetRetrying.collectAsStateWithLifecycle()
+                        FleetStrip(lead, retrying, onRetry = { member -> model.retryMemberStart(member, lead.refresh) })
+                    }
+                }
                 if (ui.rows.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         if (ui.progress == null && past.archived?.unavailable == true) {

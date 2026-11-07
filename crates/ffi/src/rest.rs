@@ -213,8 +213,8 @@ pub fn discard_and_cut_call(id: String, expected_generation: i64, input_revision
 }
 
 #[uniffi::export]
-pub fn retry_conversation_start_call(id: String, expected_generation: i64) -> HttpCall {
-    calls::retry_conversation_start(&id, expected_generation).into()
+pub fn retry_conversation_start_call(id: String, expected_generation: i64, failure_at: Option<i64>) -> HttpCall {
+    calls::retry_conversation_start(&id, expected_generation, failure_at).into()
 }
 
 #[uniffi::export]

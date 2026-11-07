@@ -294,8 +294,12 @@ pub fn discard_and_cut(id: &str, expected_generation: i64, input_revision: &str,
     HttpCall::with("POST", format!("{}/conversations/discard", session(id)), Value::Object(body))
 }
 
-pub fn retry_conversation_start(id: &str, expected_generation: i64) -> HttpCall {
-    HttpCall::with("POST", format!("{}/conversations/retry", session(id)), json!({ "expectedGeneration": expected_generation }))
+pub fn retry_conversation_start(id: &str, expected_generation: i64, failure_at: Option<i64>) -> HttpCall {
+    let body = match failure_at {
+        Some(at) => json!({ "expectedGeneration": expected_generation, "failureAt": at }),
+        None => json!({ "expectedGeneration": expected_generation }),
+    };
+    HttpCall::with("POST", format!("{}/conversations/retry", session(id)), body)
 }
 
 pub fn settle_pending_prompt(id: &str, send: bool, expected_generation: i64) -> HttpCall {
@@ -616,7 +620,10 @@ mod tests {
             discard_and_cut("s", 3, "r.4", None),
             call("POST", "/sessions/s/conversations/discard", Some(r#"{"expectedGeneration":3,"inputRevision":"r.4"}"#))
         );
-        assert_eq!(retry_conversation_start("s", 2), call("POST", "/sessions/s/conversations/retry", Some(r#"{"expectedGeneration":2}"#)));
+        assert_eq!(
+            retry_conversation_start("s", 2, None),
+            call("POST", "/sessions/s/conversations/retry", Some(r#"{"expectedGeneration":2}"#))
+        );
         assert_eq!(
             settle_pending_prompt("s", true, 2),
             call("POST", "/sessions/s/conversations/pending", Some(r#"{"expectedGeneration":2,"send":true}"#))

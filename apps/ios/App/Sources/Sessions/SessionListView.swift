@@ -62,12 +62,12 @@ struct SessionListView: View {
   }
 
   private var pollKey: PollKey {
-    PollKey(active: scenePhase == .active && (path.isEmpty || leadOnTop), hosts: hosts.hosts)
+    PollKey(active: scenePhase == .active && (path.isEmpty || leadMayBeOnTop), hosts: hosts.hosts)
   }
 
-  private var leadOnTop: Bool {
+  private var leadMayBeOnTop: Bool {
     guard case .session(let hostId, let sessionId, _, _, _, _, _, _, _) = path.last else { return false }
-    return model?.isLead(hostId: hostId, sessionId: sessionId) == true
+    return model?.mayLead(hostId: hostId, sessionId: sessionId) ?? true
   }
 
   var body: some View {

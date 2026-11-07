@@ -139,7 +139,7 @@ private fun App(store: GatewayStore) {
     } else {
         val conversation = target.getOrNull(3)?.toLongOrNull()
         val list by sessions.ui.collectAsStateWithLifecycle()
-        val members = remember(list.groups, target[0], target[1], conversation) {
+        val members = remember(list.revision, target[0], target[1], conversation) {
             if (conversation == null) sessions.fleet(target[0], target[1]) else emptyList()
         }
         val fleet = LeadFleet(

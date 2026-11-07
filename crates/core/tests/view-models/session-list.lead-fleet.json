@@ -2110,7 +2110,10 @@
           "failed"
         ],
         "text": "could not start",
-        "retry": 3
+        "retry": {
+          "n": 3,
+          "at": 1760000000000
+        }
       }
     ],
     [],

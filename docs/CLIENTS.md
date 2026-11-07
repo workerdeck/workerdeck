@@ -1460,7 +1460,8 @@ and `AgentAvatarView`: an agent draws its face through `FaceView` (the core's dr
 30 fps `TimelineView`, paused under Reduce Motion; the canvas keeps a 4-unit margin because the bubble, ring and chip reach
 past the 32-unit box), a plain session a dashed engine tile with the status badge. A card whose session or team needs an
 answer is tinted orange. A lead's session screen draws the fleet strip (`CoreFleetStrip`, the core's `SessionList.fleet`) under
-its header: one line per Member that needs you, a tap opens it, Retry start on a failed start; the list's poll keeps running while a lead is on
+its header: one line per Member that needs you, a tap opens it, Retry start on a failed start (disabled while one is in flight); the list's poll keeps running while a session that
+may lead (`SessionList.mayLead`, over the unfiltered rows: an agent that is no one's member, or one not read yet) is on
 top of the stack so the strip stays current. Verbs follow the web menu (rename, status, avatar, make agent, add to
 team, leave, dissolve, sharing, new conversation, conversations, delete agent), from a long
 press and swipes (leading rename and new conversation). Make agent and a team join name the session in
@@ -1626,7 +1627,8 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   lasting highlight, so the Member opened last counts as selected (`SessionList.select`), as on iOS.
   A lead's session screen draws the fleet strip (`session/FleetStrip.kt`, `SessionList.fleet`) under its header,
   current conversation only: one line per Member that needs you, a tap opens it, Retry start on a failed start. The
-  list's poll lives in `SessionsModel` and never stops while a session is open, so the strip stays current.
+  list's poll lives in `SessionsModel` and never stops while a session is open; the strip recomputes on
+  `SessionsUi.revision` (bumped on every unfiltered read), never on the filtered groups, which a search can hold still.
 - **The sessions list draws the web's `SessionItem`** (`sessions/SessionCard.kt`, `SessionsList.kt`): 48 dp
   agent cards (4 padding, 40 face, two 20 lines, no time, no dividers, 4 dp apart; line one the name and the
   `ModelBadge` from `ListRow.model_badge`, line two `card_status`, fg-3 only when `card_status_is_label`), 28 dp

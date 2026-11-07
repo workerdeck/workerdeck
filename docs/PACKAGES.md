@@ -441,7 +441,8 @@ counts each Member once (`attention`, then `working` and `idle` from the rest, a
 `teamSummaryText` is the lead's tray line ("2 need you · 3 working · 1 idle"). `ATTENTION_LABELS` and
 `attentionTitle(reason, info)` are the reason chip's word and tooltip. `leadFleet(lead, rows)` is the lead's fleet
 strip: its same-gateway Members with a reason, in team order, `text` = `attentionTitle` of the first reason, `retry` =
-`failure.conversation` only when `failure.start` (a conversation that never started, so Retry start applies). A
+`{ n: failure.conversation, at: failure.at }` only when `failure.start` (a conversation that never started, so Retry
+start applies; `at` goes out as `failureAt`, so a failure replaced since is refused). A
 projection of whatever rows the caller passes, recomputed every render, never retained; it ignores filters by taking
 the unfiltered rows. The Rust core mirrors all of these in `vm/session_list.rs` with goldens.
 

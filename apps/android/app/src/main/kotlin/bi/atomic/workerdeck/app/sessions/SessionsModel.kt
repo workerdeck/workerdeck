@@ -58,6 +58,8 @@ data class SessionsUi(
     val search: String = "",
     val orderCustomized: Boolean = false,
     val projectIcons: Map<String, ImageBitmap> = emptyMap(),
+    // Bumped on every read of the unfiltered list: the lead's fleet must not wait for the filtered groups to change.
+    val revision: Long = 0,
 )
 
 // A deleted agent under Past agents; its conversations open the same sheet a live agent's do.
@@ -136,7 +138,13 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         val reached = answers.filter { it.second.isSuccess }.map { it.first }
         readMetas(reached)
         for (client in reached) if (client.gateway.id !in pastRead) readPastAgents(client.gateway.id)
-        state.value = state.value.copy(groups = draw(), loaded = true, error = errorText(), orderCustomized = list.groupOrderCustomized())
+        state.value = state.value.copy(
+            groups = draw(),
+            loaded = true,
+            error = errorText(),
+            orderCustomized = list.groupOrderCustomized(),
+            revision = state.value.revision + 1,
+        )
     }
 
     private val metaRead = mutableSetOf<String>()

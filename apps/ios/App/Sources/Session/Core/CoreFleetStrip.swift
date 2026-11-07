@@ -9,7 +9,8 @@ struct LeadFleet {
 
 struct CoreFleetStrip: View {
   let fleet: LeadFleet
-  let retry: (FleetMember, Int64) -> Void
+  let retry: (FleetMember, FleetRetry, @escaping @MainActor () -> Void) -> Void
+  @State private var retrying: String?
 
   var body: some View {
     let members = fleet.members()
@@ -41,8 +42,12 @@ struct CoreFleetStrip: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Open \(member.name)")
-      if let n = member.retry {
-        Button("Retry start") { retry(member, Int64(n)) }.buttonStyle(.bordered).controlSize(.small)
+      if let start = member.retry {
+        Button(retrying == member.key ? "Retrying…" : "Retry start") {
+          retrying = member.key
+          retry(member, start) { retrying = nil }
+        }
+        .buttonStyle(.bordered).controlSize(.small).disabled(retrying != nil)
       }
     }
   }

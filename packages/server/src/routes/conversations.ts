@@ -16,7 +16,7 @@ import type { ConversationEntry, SessionRecord } from '../services/session-recor
 import { settingsOf } from './named-sessions.ts'
 import { sessionInfoOf } from './session-lookup.ts'
 
-type CutBody = Partial<NewConversationRequest> & Partial<SettlePendingPromptRequest> & { inputRevision?: unknown }
+type CutBody = Partial<NewConversationRequest> & Partial<SettlePendingPromptRequest> & { inputRevision?: unknown; failureAt?: unknown }
 
 // The info a history entry is authorized and shown as: its frozen projection, never the current record.
 export function entryInfo(id: string, entry: ConversationEntry): SessionInfo {
@@ -124,7 +124,7 @@ export async function handleConversations(
   const expected = body.expectedGeneration
   const guard = conversationGuard(ctx, id, auth, expected)
   if (conversation === 'retry') {
-    json(res, 200, await cuts.retryStart(id, guard))
+    json(res, 200, await cuts.retryStart(id, guard, typeof body.failureAt === 'number' ? body.failureAt : undefined))
     return
   }
   if (conversation === 'pending') {

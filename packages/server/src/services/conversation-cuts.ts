@@ -444,13 +444,17 @@ export class ConversationCuts {
   }
 
   // The same n again, never a second cut.
-  retryStart(id: string, guard: CutGuard): Promise<CutResult> {
+  // `failureAt` names the failure the caller showed; a later attempt's failure is not its to retry.
+  retryStart(id: string, guard: CutGuard, failureAt?: number): Promise<CutResult> {
     const ctx = this.#ctx
     return ctx.locks.run([id], async () => {
       const record = await ctx.records.get(id)
       await guard(record)
       if (!record?.startFailed || record.cut?.phase !== 'committed') {
         fail(409, 'no new conversation is waiting to start')
+      }
+      if (failureAt !== undefined && record.failure?.at !== failureAt) {
+        fail(409, 'the start failed again since; look at the new failure first')
       }
       this.#failedStarts.delete(id)
       const stuck = ctx.registry.get(id)

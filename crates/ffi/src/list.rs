@@ -279,7 +279,13 @@ pub struct FleetMember {
     pub face: Option<FaceSpec>,
     pub reasons: Vec<ReasonChip>,
     pub text: String,
-    pub retry: Option<u32>,
+    pub retry: Option<FleetRetry>,
+}
+
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct FleetRetry {
+    pub n: u32,
+    pub at: i64,
 }
 
 // The tray draws this many pictures; past it, one slot gives way to a `+n` count.
@@ -1077,6 +1083,13 @@ impl SessionList {
             .collect()
     }
 
+    // Whether an open session may draw a fleet strip, over every row whatever the filters: an agent that is no one's
+    // member (it can gain members while open), or a session the list has not read yet. False for members and plain sessions.
+    pub fn may_lead(&self, host_id: String, session_id: String) -> bool {
+        let state = self.state();
+        state.find(&host_id, &session_id).is_none_or(|info| info.agent.as_ref().is_some_and(|agent| agent.lead.is_none()))
+    }
+
     // The lead's fleet strip, recomputed from the current rows on every call; empty for anything but a lead.
     pub fn fleet(&self, host_id: String, session_id: String) -> Vec<FleetMember> {
         let state = self.state();
@@ -1102,7 +1115,7 @@ impl SessionList {
                         })
                         .collect(),
                     text: entry.text,
-                    retry: entry.retry,
+                    retry: entry.retry.map(|r| FleetRetry { n: r.n, at: r.at }),
                 })
             })
             .collect()

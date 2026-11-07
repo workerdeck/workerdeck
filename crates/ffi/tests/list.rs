@@ -1,4 +1,4 @@
-use wdffi::{ListError, ListFacet, ListGroupBy, ListSortBy, ReasonChip, RowState, SessionList, StepFold, StepKind, StepShow};
+use wdffi::{FleetRetry, ListError, ListFacet, ListGroupBy, ListSortBy, ReasonChip, RowState, SessionList, StepFold, StepKind, StepShow};
 
 fn session(id: &str, status: &str, extra: &str) -> String {
     format!(r#"{{"id":"{id}","status":"{status}","cwd":"/work/app","createdAt":1000,"lastSeq":4{extra}}}"#)
@@ -191,10 +191,15 @@ fn a_leads_fleet_lists_members_that_need_a_person_whatever_the_filters() {
     list.set_search("nothing matches this".into());
     let fleet = list.fleet("h1".into(), "lead".into());
     assert_eq!(fleet.iter().map(|m| m.session_id.as_str()).collect::<Vec<_>>(), ["unstarted", "asking"]);
-    assert_eq!((fleet[0].name.as_str(), fleet[0].text.as_str(), fleet[0].retry), ("M2", "could not start", Some(3)));
+    assert_eq!(
+        (fleet[0].name.as_str(), fleet[0].text.as_str(), fleet[0].retry.clone()),
+        ("M2", "could not start", Some(FleetRetry { n: 3, at: 1 }))
+    );
     assert!(fleet[0].reasons[0].danger && fleet[0].face.is_some());
-    assert_eq!((fleet[1].text.as_str(), fleet[1].retry), ("2 approvals waiting", None));
+    assert_eq!((fleet[1].text.as_str(), fleet[1].retry.clone()), ("2 approvals waiting", None));
     assert!(list.fleet("h1".into(), "busy".into()).is_empty());
+    assert!(list.may_lead("h1".into(), "lead".into()) && list.may_lead("h1".into(), "unread".into()));
+    assert!(!list.may_lead("h1".into(), "busy".into()));
 }
 
 #[test]

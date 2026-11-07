@@ -59,8 +59,8 @@ class ConversationCalls(private val transport: Transport) {
     suspend fun settle(sessionId: String, send: Boolean, conversation: Long): Result<Unit> =
         perform(settlePendingPromptCall(sessionId, send, conversation)).map {}
 
-    suspend fun retryStart(sessionId: String, conversation: Long): Result<Unit> =
-        perform(retryConversationStartCall(sessionId, conversation)).map {}
+    suspend fun retryStart(sessionId: String, conversation: Long, failureAt: Long? = null): Result<Unit> =
+        perform(retryConversationStartCall(sessionId, conversation, failureAt)).map {}
 
     // The session's own conversations list, or null when it did not answer: an unread list never reads as closed.
     suspend fun conversationsBody(sessionId: String): String? =

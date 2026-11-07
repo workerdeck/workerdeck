@@ -4,7 +4,7 @@ import { FleetStrip } from '../src/components/agent/FleetStrip.tsx'
 
 const FLEET: FleetRow[] = [
   { key: 'mac:s1', id: 's1', name: 'WD-Art', reasons: ['approval'], text: '2 approvals waiting' },
-  { key: 'mac:s2', id: 's2', name: 'WD-Review', reasons: ['failed'], text: 'the new conversation did not start: spawn claude ENOENT', retry: 3 },
+  { key: 'mac:s2', id: 's2', name: 'WD-Review', reasons: ['failed'], text: 'the new conversation did not start: spawn claude ENOENT', retry: { n: 3, at: 0 } },
   { key: 'mac:s3', id: 's3', name: 'WD-Docs', reasons: ['blocked'], text: 'Waiting on you: which release notes format?' },
   { key: 'mac:s4', id: 's4', name: 'WD-Test', reasons: ['approval', 'blocked'], text: 'An approval is waiting' },
 ]

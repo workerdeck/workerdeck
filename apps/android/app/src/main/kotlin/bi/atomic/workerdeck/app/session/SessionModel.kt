@@ -10,6 +10,7 @@ import bi.atomic.workerdeck.core.ShellGrid
 import bi.atomic.workerdeck.core.SessionWorker
 import bi.atomic.workerdeck.core.Snapshots
 import bi.atomic.workerdeck.core.TranscriptLine
+import bi.atomic.workerdeck.core.ffi.FleetMember
 import bi.atomic.workerdeck.core.ffi.ConversationNotice
 import bi.atomic.workerdeck.core.ffi.DiscardConfirmation
 import bi.atomic.workerdeck.core.ffi.ArchivedView
@@ -164,6 +165,8 @@ class SessionModel(
     private var conversationReadKey: Pair<Long?, String>? = null
     private val actionErrorState = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = actionErrorState
+    private val fleetRetryingState = MutableStateFlow<String?>(null)
+    val fleetRetrying: StateFlow<String?> = fleetRetryingState
     private val discardState = MutableStateFlow<DiscardConfirmation?>(null)
     val discard: StateFlow<DiscardConfirmation?> = discardState
     private val settleState = MutableStateFlow<Long?>(null)
@@ -290,8 +293,17 @@ class SessionModel(
         }
     }
 
-    fun retryMemberStart(memberId: String, n: Long, then: () -> Unit) {
-        act("Could not start the conversation") { calls.retryStart(memberId, n).map { then() } }
+    fun retryMemberStart(member: FleetMember, then: () -> Unit) {
+        val start = member.retry ?: return
+        if (fleetRetryingState.value != null) return
+        fleetRetryingState.value = member.key
+        act("Could not start the conversation") {
+            try {
+                calls.retryStart(member.sessionId, start.n.toLong(), start.at).map { then() }
+            } finally {
+                fleetRetryingState.value = null
+            }
+        }
     }
 
     fun goal(failure: String, call: HttpCall) = act(failure) { calls.send(call) }

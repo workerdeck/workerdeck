@@ -376,7 +376,7 @@ export function SessionPanel({
   const retryStart = useCallback(
     async (row: FleetRow) => {
       try {
-        await client.retryConversationStart(row.id, row.retry!)
+        await client.retryConversationStart(row.id, row.retry!.n, row.retry!.at)
       } catch (error) {
         setProtocolError(`Could not start ${row.name}: ${error instanceof Error ? error.message : String(error)}`)
       }

@@ -39,18 +39,18 @@ import bi.atomic.workerdeck.core.ffi.FleetMember
 class LeadFleet(val members: List<FleetMember>, val open: (FleetMember) -> Unit, val refresh: () -> Unit)
 
 @Composable
-fun FleetStrip(fleet: LeadFleet, onRetry: (FleetMember, Long) -> Unit) {
+fun FleetStrip(fleet: LeadFleet, retrying: String?, onRetry: (FleetMember) -> Unit) {
     if (fleet.members.isEmpty()) return
     Column(Modifier.testTag("fleet-strip").fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (member in fleet.members) FleetRow(member, open = { fleet.open(member) }, onRetry = onRetry)
+            for (member in fleet.members) FleetRow(member, retrying, open = { fleet.open(member) }, onRetry = onRetry)
         }
         HorizontalDivider(color = Wd.colors.tertiary.copy(alpha = 0.3f))
     }
 }
 
 @Composable
-private fun FleetRow(member: FleetMember, open: () -> Unit, onRetry: (FleetMember, Long) -> Unit) {
+private fun FleetRow(member: FleetMember, retrying: String?, open: () -> Unit, onRetry: (FleetMember) -> Unit) {
     val colors = Wd.colors
     val small = MaterialTheme.typography.bodySmall
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -64,9 +64,14 @@ private fun FleetRow(member: FleetMember, open: () -> Unit, onRetry: (FleetMembe
             ReasonChips(member.reasons, rememberListTones())
             Text(member.text, style = small, color = colors.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
-        member.retry?.let { n ->
-            OutlinedButton(onClick = { onRetry(member, n.toLong()) }, contentPadding = PaddingValues(horizontal = 8.dp), modifier = Modifier.height(28.dp)) {
-                Text("Retry start", style = small, color = colors.accent)
+        if (member.retry != null) {
+            OutlinedButton(
+                onClick = { onRetry(member) },
+                enabled = retrying == null,
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.height(28.dp),
+            ) {
+                Text(if (retrying == member.key) "Retrying…" else "Retry start", style = small, color = colors.accent)
             }
         }
     }

@@ -190,8 +190,10 @@ export class WorkerDeckClient {
     return await this.#call('POST', this.#sess(id, '/conversations/discard'), request)
   }
 
-  async retryConversationStart(id: string, expectedGeneration: number): Promise<NewConversationResponse> {
-    return await this.#call('POST', this.#sess(id, '/conversations/retry'), { expectedGeneration })
+  // `failureAt`: refused (409) once another attempt replaced the failure the caller showed.
+  async retryConversationStart(id: string, expectedGeneration: number, failureAt?: number): Promise<NewConversationResponse> {
+    const body = failureAt === undefined ? { expectedGeneration } : { expectedGeneration, failureAt }
+    return await this.#call('POST', this.#sess(id, '/conversations/retry'), body)
   }
 
   async settlePendingPrompt(id: string, send: boolean, expectedGeneration: number): Promise<void> {

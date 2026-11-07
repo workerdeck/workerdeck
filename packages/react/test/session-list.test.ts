@@ -753,7 +753,7 @@ describe('leadFleet', () => {
   it('lists the members that need a person, in team order, each with its first reason as text', () => {
     expect(leadFleet(lead, rows)).toEqual([
       { key: 'mac:s-crashed', id: 's-crashed', name: 'S-CRASHED', reasons: ['failed'], text: 'engine died' },
-      { key: 'mac:s-unstarted', id: 's-unstarted', name: 'S-UNSTARTED', reasons: ['failed'], text: 'no start', retry: 5 },
+      { key: 'mac:s-unstarted', id: 's-unstarted', name: 'S-UNSTARTED', reasons: ['failed'], text: 'no start', retry: { n: 5, at: 1 } },
       { key: 'mac:s-blocked', id: 's-blocked', name: 'S-BLOCKED', reasons: ['blocked'], text: 'Waiting on you: need a key' },
     ])
   })

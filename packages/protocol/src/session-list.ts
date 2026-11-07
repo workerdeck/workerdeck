@@ -750,8 +750,10 @@ export function teamSummaryText(lead: SessionRow): string | undefined {
   return parts.length ? parts.join(' · ') : undefined
 }
 
-// A lead's fleet strip row: a same-gateway member that needs a person now. `retry` is the generation Retry start names.
-export type FleetRow = { key: string; id: string; name: string; reasons: AttentionReason[]; text: string; retry?: number }
+// A lead's fleet strip row: a same-gateway member that needs a person now. `retry` names the failed start Retry repeats:
+// its generation, and `at` so the gateway refuses once a later attempt replaced the failure this row shows.
+export type FleetRetry = { n: number; at: number }
+export type FleetRow = { key: string; id: string; name: string; reasons: AttentionReason[]; text: string; retry?: FleetRetry }
 
 // Recomputed from the rows the client holds on every render, never kept: a row leaves when its reason clears.
 export function leadFleet(lead: Pick<SessionRow, 'hostId' | 'info'>, rows: Iterable<SessionRow>): FleetRow[] {
@@ -768,7 +770,7 @@ export function leadFleet(lead: Pick<SessionRow, 'hostId' | 'info'>, rows: Itera
       return []
     }
     const failure = row.info.failure
-    const retry = failure?.start && failure.conversation !== undefined ? { retry: failure.conversation } : {}
+    const retry = failure?.start && failure.conversation !== undefined ? { retry: { n: failure.conversation, at: failure.at } } : {}
     return [{ key: sessionKey(row), id: row.info.id, name: row.info.agent!.name, reasons, text: attentionTitle(reasons[0]!, row.info), ...retry }]
   })
 }

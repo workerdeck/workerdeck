@@ -255,9 +255,13 @@ struct CoreSessionView: View {
     notice = model.history == nil ? body.flatMap { conversationNotice(body: $0) } : nil
   }
 
-  private func act(_ failure: String, _ call: HttpCall, then: @escaping @MainActor (Data) -> Void = { _ in }) {
-    guard let client else { return }
+  private func act(
+    _ failure: String, _ call: HttpCall, then: @escaping @MainActor (Data) -> Void = { _ in },
+    always: @escaping @MainActor () -> Void = {}
+  ) {
+    guard let client else { return always() }
     Task { @MainActor in
+      defer { always() }
       do {
         then(try await client.perform(call))
       } catch {
@@ -319,16 +323,15 @@ struct CoreSessionView: View {
 
   private func retryStart() {
     guard let n = notice?.startFailedN else { return }
-    act("Could not start the conversation", retryConversationStartCall(id: sessionId, expectedGeneration: n)) { _ in
+    act("Could not start the conversation", retryConversationStartCall(id: sessionId, expectedGeneration: n, failureAt: nil)) { _ in
       model.reconnect()
       Task { await readConversations() }
     }
   }
 
-  private func retryMemberStart(_ member: FleetMember, _ n: Int64) {
-    act("Could not start the conversation", retryConversationStartCall(id: member.sessionId, expectedGeneration: n)) { _ in
-      fleet?.refresh()
-    }
+  private func retryMemberStart(_ member: FleetMember, _ retry: FleetRetry, _ done: @escaping @MainActor () -> Void) {
+    let call = retryConversationStartCall(id: member.sessionId, expectedGeneration: Int64(retry.n), failureAt: retry.at)
+    act("Could not start the conversation", call, then: { _ in fleet?.refresh() }, always: done)
   }
 
   private var rowActions: CoreRowActions {

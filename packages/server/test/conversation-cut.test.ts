@@ -658,8 +658,13 @@ describe('the successor is durable before the intent goes', () => {
     release!()
     await eventually(async () => expect((await server.records.get(id))?.startFailed).toEqual({ n: 2, error: 'engine fell over' }))
     expect((await server.records.get(id))?.cut?.phase).toBe('committed')
+    const shown = (await server.records.get(id))!.failure!.at
 
-    const retried = await call(base, `/sessions/${id}/conversations/retry`, 'POST', { expectedGeneration: 2 })
+    const stale = await call(base, `/sessions/${id}/conversations/retry`, 'POST', { expectedGeneration: 2, failureAt: shown - 1 })
+    expect(stale.status).toBe(409)
+    expect(built).toHaveLength(2)
+
+    const retried = await call(base, `/sessions/${id}/conversations/retry`, 'POST', { expectedGeneration: 2, failureAt: shown })
     expect(retried.status).toBe(200)
     expect(built).toHaveLength(3)
     expect(await server.records.get(id)).toMatchObject({ conversation: 2 })
