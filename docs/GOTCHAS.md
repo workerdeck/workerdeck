@@ -3351,6 +3351,10 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   catch-up like a fresh attach (`resumed` flag), and shows progress target 0 (an indeterminate bar) until the attach
   says how far the log goes. Measured on 5G + tailscale (100th session): a 2 MB replay took 13 s, the phone itself
   0.16 s of it; a cached reopen is ~0.3 s.
+- **The gateway's sockets negotiate `permessage-deflate`** (`perMessageDeflate: true` in `server.ts`, ws's 1 KB
+  threshold, context takeover on) for first opens, where the cache cannot help: replay JSON compresses ~3x. Browsers,
+  OkHttp and iOS `URLSessionWebSocketTask` all offer it; a client that does not gets plain frames. `bufferedAmount`
+  (the live backpressure bound) counts bytes before compression.
 - **Recovering from a stale attach has three traps.** Unhook the event listener before resyncing (a
   rebuilt log advanced past the held seq must not compose new-log events into old-log state in the
   same tick); seed the reducer back to `initialTranscriptState` (`applyEvent`'s `seq <= lastSeq`

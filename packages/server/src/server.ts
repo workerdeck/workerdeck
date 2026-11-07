@@ -459,7 +459,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const auth = createAuthService({ options, registry })
 
-  const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES })
+  const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES, perMessageDeflate: true })
   const queueSockets = createQueueSocketHub({ wss, auth, queue: () => queue, diagnose })
 
   const queue = options.queue
