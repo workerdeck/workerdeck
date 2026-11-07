@@ -289,3 +289,60 @@ describe('SessionNotifier and policy', () => {
     expect(observed[0]).toMatchObject({ type: 'permission_requested', request: { id: 'p2' } })
   })
 })
+
+describe('SessionNotifier and blocked agents', () => {
+  function labelledRunner(waiting: boolean) {
+    let listener: ((event: SessionEvent) => void) | undefined
+    const base = fakeRunner('s1', { cwd: '/tmp' })
+    const runner = {
+      ...base,
+      info: (): SessionInfo => ({
+        ...base.info(),
+        ...(waiting ? { statusLabel: { text: 'stuck', setAt: 1, waitingOn: 'human' as const } } : {}),
+      }),
+      subscribe: (next: (event: SessionEvent) => void) => {
+        listener = next
+        return () => {}
+      },
+    }
+    let seq = 0
+    const label = (text: string | null, waitingOn?: 'human') =>
+      listener?.({
+        type: 'status_label',
+        label: text === null ? null : { text, setAt: 1, ...(waitingOn ? { waitingOn } : {}) },
+        seq: ++seq,
+        ts: seq,
+      } as SessionEvent)
+    return { runner, label }
+  }
+
+  it('notifies when an agent starts waiting on a person, once per stretch', async () => {
+    const observed: SessionNotification[] = []
+    const notifier = new SessionNotifier({ onNotification: (n) => void observed.push(n) })
+    const { runner, label } = labelledRunner(false)
+    notifier.watch(runner)
+    label('testing')
+    label('need the staging password', 'human')
+    label('still need it', 'human')
+    label('back to work')
+    label('need a decision', 'human')
+    await eventually(() => expect(observed).toHaveLength(2))
+    expect(observed.map((n) => [n.type, n.preview, n.seq])).toEqual([
+      ['session_blocked', 'need the staging password', 2],
+      ['session_blocked', 'need a decision', 5],
+    ])
+  })
+
+  it('stays quiet for a session already blocked when the watch began', async () => {
+    const observed: SessionNotification[] = []
+    const notifier = new SessionNotifier({ onNotification: (n) => void observed.push(n) })
+    const { runner, label } = labelledRunner(true)
+    notifier.watch(runner)
+    label('stuck', 'human')
+    label(null)
+    label('stuck again', 'human')
+    await eventually(() => expect(observed).toHaveLength(1))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(observed.map((n) => n.preview)).toEqual(['stuck again'])
+  })
+})

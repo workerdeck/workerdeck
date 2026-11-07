@@ -153,9 +153,9 @@ boundary: anything a client needs must be expressible as protocol events and com
   `authenticate` hook (refuses to start without one unless `allowUnauthenticated: true`), and -
   when the `queue` option is set - `/jobs` + `/queue` routes plus a `/queue/ws` stream of job
   events and stats. Job sessions are ordinary registry sessions, so dashboards can watch them.
-  `SessionNotifier` is the outbound half of the same idea for *interactive* sessions: the four
+  `SessionNotifier` is the outbound half of the same idea for *interactive* sessions: the five
   moments a person acts on (`permission_requested`, `turn_completed`, `session_error`,
-  `session_closed`) POSTed to a server-wide webhook and/or a local observer, ordered per session
+  `session_closed`, `session_blocked`) POSTed to a server-wide webhook and/or a local observer, ordered per session
   and retried with backoff. It subscribes through `SessionRegistry`'s `onRegister` hook - the one
   chokepoint every path funnels into, the rebuild of a parked session included - and stays
   transport-agnostic, so the gateway holds no push credentials.

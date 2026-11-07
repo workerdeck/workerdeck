@@ -1325,7 +1325,7 @@ export type CompleteAccountResponse = { profile: ProfileInfo; pending?: boolean 
 export type GetProfileResponse = { profile: ProfileInfo; config: ProfileConfigSnapshot }
 export type ErrorResponse = { error: string }
 
-export type SessionNotificationType = 'permission_requested' | 'turn_completed' | 'session_error' | 'session_closed'
+export type SessionNotificationType = 'permission_requested' | 'turn_completed' | 'session_error' | 'session_closed' | 'session_blocked'
 
 export type SessionNotification = {
   type: SessionNotificationType

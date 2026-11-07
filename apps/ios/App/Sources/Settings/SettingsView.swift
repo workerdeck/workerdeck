@@ -49,7 +49,7 @@ struct SettingsView: View {
         Text("Notifications")
       } footer: {
         Text(
-          "The gateway sends only what is ticked here, so an event you turn off never reaches the phone at all. Approvals and questions are the ones that actually need you - a session with several tool calls waiting collapses into a single banner showing the newest. Session ended is off by default: it fires whenever a session goes away, which across a few open sessions is most of the noise."
+          "The gateway sends only what is ticked here, so an event you turn off never reaches the phone at all. Approvals, questions and blocked agents are the ones that actually need you - a session with several tool calls waiting collapses into a single banner showing the newest. Session ended is off by default: it fires whenever a session goes away, which across a few open sessions is most of the noise."
         )
       }
 

@@ -29,8 +29,17 @@ export class SessionNotifier {
     if (this.idle) {
       return () => {}
     }
+    let blocked = runner.info().statusLabel?.waitingOn === 'human'
     return runner.subscribe((event) => {
       switch (event.type) {
+        case 'status_label': {
+          const now = event.label?.waitingOn === 'human'
+          if (now && !blocked) {
+            this.#emit(runner, event.seq, event.ts, { type: 'session_blocked', preview: event.label?.text })
+          }
+          blocked = now
+          return
+        }
         case 'permission_requested': {
           if (event.byPolicy) {
             return

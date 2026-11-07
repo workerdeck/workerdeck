@@ -66,8 +66,10 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 && value.length <= 200 ? value : undefined
 }
 
+// A blocked agent is filed under approvals: both mean an agent waits for a person, and an app that
+// predates the type keeps sending a list without it (a gateway that predates it would refuse the entry).
 export function wantsNotification(device: Pick<DeviceRecord, 'notify'>, type: SessionNotificationType): boolean {
-  return (device.notify ?? DEFAULT_NOTIFY).includes(type)
+  return (device.notify ?? DEFAULT_NOTIFY).includes(type === 'session_blocked' ? 'permission_requested' : type)
 }
 
 export async function createDeviceRegistry(options: JsonRegistryOptions): Promise<DeviceRegistry> {

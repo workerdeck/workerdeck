@@ -44,7 +44,7 @@ enum PushEvent: String, Codable, CaseIterable, Sendable {
 
   var label: String {
     switch self {
-    case .permissionRequested: "Approvals and questions"
+    case .permissionRequested: "Approvals, questions, blocked"
     case .turnCompleted: "Turn finished"
     case .sessionError: "Errors"
     case .sessionClosed: "Session ended"

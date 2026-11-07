@@ -2587,8 +2587,8 @@ hand-rolled APNs client (`node:http2` + ES256 JWT, zero deps), a device registry
 forwarder hooked to `notifications.onNotification` in-process. It lives here and not in
 `server` so the OSS gateway stays credential-free; absent an `apns` config the routes 404 and
 the forwarder does not exist. Environment is per device token, never a flag, and so is the
-`notify` event allowlist that decides which of the four notification types the forwarder sends
-that device (`DEFAULT_NOTIFY` = everything but `session_closed`) - `docs/GOTCHAS.md` §APNs.
+`notify` event allowlist that decides which notification types the forwarder sends
+that device (`DEFAULT_NOTIFY` = everything but `session_closed`; `session_blocked` follows `permission_requested`) - `docs/GOTCHAS.md` §APNs.
 ## `crates/` (Rust, native clients only)
 
 One Rust core for the native apps: iOS and Android over the same UniFFI bindings, so Kotlin never

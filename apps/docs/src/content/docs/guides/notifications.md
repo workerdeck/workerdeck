@@ -1,6 +1,6 @@
 ---
 title: Notifications
-description: Reach a person who isn't watching - permission requests, finished turns, errors and closes, POSTed to a webhook.
+description: Reach a person who isn't watching - permission requests, blocked agents, finished turns, errors and closes, POSTed to a webhook.
 order: 5
 ---
 
@@ -8,7 +8,7 @@ A session that needs an approval is useless if nobody is looking at it. The sess
 the live channel, but it only helps someone with a socket open - and a phone cannot hold one in
 the background. Session notifications are the way out: the server reaches *you*.
 
-Four moments, chosen because they are the ones a person acts on:
+Five moments, chosen because they are the ones a person acts on:
 
 | Type | When |
 | --- | --- |
@@ -16,6 +16,7 @@ Four moments, chosen because they are the ones a person acts on:
 | `turn_completed` | A turn finished; the session is idle and waiting. |
 | `session_error` | The session failed. |
 | `session_closed` | The session ended, whoever ended it. |
+| `session_blocked` | The agent set a status with `waitingOn: "human"`: it cannot continue without a person. `preview` is the status text. Sent once when the flag turns on, not again while it stays on. |
 
 This is a human-attention channel, not an event mirror. Everything else stays on the session WS
 - attach with `afterSeq` to catch up on what you missed.
@@ -29,7 +30,7 @@ const worker = createWorkerServer({
     webhook: {
       url: 'https://my-app.test/hooks/session',
       headers: { authorization: '…' },
-      events: ['permission_requested', 'session_error'], // default: all four
+      events: ['permission_requested', 'session_error'], // default: all five
     },
     // In-process seam, unfiltered - fires whether or not a webhook is configured.
     onNotification: (n) => console.log(n.type, n.sessionId, n.preview),

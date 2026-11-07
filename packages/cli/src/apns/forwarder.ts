@@ -47,6 +47,7 @@ const COLLAPSE_PREFIX: Record<SessionNotificationType, string> = {
   turn_completed: 't',
   session_error: 'e',
   session_closed: 'c',
+  session_blocked: 'b',
 }
 
 function titleFor(notification: SessionNotification, name: string): string {
@@ -62,6 +63,9 @@ function titleFor(notification: SessionNotification, name: string): string {
     }
     case 'session_closed': {
       return `Session ended - ${name}`
+    }
+    case 'session_blocked': {
+      return `Blocked on you - ${name}`
     }
     default: {
       return name
@@ -83,6 +87,9 @@ function bodyFor(notification: SessionNotification): string {
     }
     case 'session_closed': {
       return `Closed by the ${notification.reason ?? 'server'}.`
+    }
+    case 'session_blocked': {
+      return 'The agent cannot continue without you.'
     }
     default: {
       return 'Something needs your attention.'
@@ -123,7 +130,7 @@ export function buildPush(notification: SessionNotification, hostId: string | un
 
   return {
     payload,
-    priority: permission || notification.type === 'session_error' ? 10 : 5,
+    priority: permission || notification.type === 'session_error' || notification.type === 'session_blocked' ? 10 : 5,
     // Expire an approval push exactly when the server would have timed the request out; a dead approval on a lock screen is worse than none.
     expiration:
       permission && notification.request?.expiresAt !== undefined

@@ -3774,6 +3774,11 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   app built before the field ships doesn't erase it on every launch), `null`/absent-array clears
   it. **`[]` is a real answer** ("no alerts at all") and must not collapse with "field absent."
   Absent `notify` falls back to `DEFAULT_NOTIFY` (`devices.ts`): every type but `session_closed`.
+- **`session_blocked` is never a `notify` entry; it rides on `permission_requested`** (`wantsNotification`).
+  The iOS app always sends an explicit list, and a gateway older than the type answers 400 to a list
+  carrying an entry it does not know, so a new app naming it would lose push on every older gateway.
+  `SessionNotifier` sends it on the transition into `statusLabel.waitingOn: 'human'` only, seeded from
+  `info()` at watch time, so a wake or a hot reload of an already blocked session does not push again.
 - **Filtering is per device, in the forwarder, not the emitter.** `SessionNotifier` emits all four
   types; `deliver` in `forwarder.ts` drops them per `DeviceRecord`. Webhooks have their own
   `events` list. A device that wants nothing keeps its token registered, so turning notifications

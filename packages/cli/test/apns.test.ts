@@ -347,7 +347,7 @@ describe('buildPush', () => {
   })
 
   it('collapses every type per session, one key per kind', () => {
-    const types: SessionNotification['type'][] = ['permission_requested', 'turn_completed', 'session_error', 'session_closed']
+    const types: SessionNotification['type'][] = ['permission_requested', 'turn_completed', 'session_error', 'session_closed', 'session_blocked']
     const keys = types.map((type) => buildPush(notification({ type }), undefined).collapseId)
     // Each kind keeps its own banner: an arriving approval must not overwrite "Turn finished".
     expect(new Set(keys).size).toBe(types.length)
@@ -371,6 +371,15 @@ describe('buildPush', () => {
     expect(aps.alert.title).toBe('Session error - workerdeck')
     expect(aps.alert.body).toBe('boom')
   })
+
+  it('sends a blocked agent at high priority with its label as the body', () => {
+    const push = buildPush(notification({ type: 'session_blocked', preview: 'need the staging password' }), undefined)
+    const aps = (push.payload as { aps: { alert: { title: string; body: string }; category: string } }).aps
+    expect(aps.alert.title).toBe('Blocked on you - workerdeck')
+    expect(aps.alert.body).toBe('need the staging password')
+    expect(aps.category).toBe('SESSION_EVENT')
+    expect(push.priority).toBe(10)
+  })
 })
 
 describe('device registry', () => {
@@ -391,6 +400,13 @@ describe('device registry', () => {
     expect(wantsNotification({}, 'session_closed')).toBe(false)
     expect(wantsNotification({ notify: ['permission_requested'] }, 'turn_completed')).toBe(false)
     expect(wantsNotification({ notify: [] }, 'permission_requested')).toBe(false)
+  })
+
+  it('files a blocked agent under approvals', () => {
+    expect(wantsNotification({}, 'session_blocked')).toBe(true)
+    expect(wantsNotification({ notify: ['permission_requested'] }, 'session_blocked')).toBe(true)
+    expect(wantsNotification({ notify: ['turn_completed', 'session_error'] }, 'session_blocked')).toBe(false)
+    expect(wantsNotification({ notify: [] }, 'session_blocked')).toBe(false)
   })
 
   it('leaves notify alone when omitted and replaces it when given', async () => {
