@@ -912,11 +912,34 @@ fn a_resumed_session_draws_its_snapshot_at_once_and_asks_only_for_what_came_afte
     let mut host = resumed(snapshot);
     assert_eq!(host.opens, [15]);
     assert!(!host.live.view().rows().is_empty());
+    assert_eq!(host.live.replay_progress(), Some((15, 0)));
     host.open();
     attach_epoch(&mut host, 15, 15, 3);
     assert_eq!(host.opens, [15]);
     assert_eq!(host.live.state().last_seq, 15);
     assert!(!host.live.state().items.is_empty());
+    assert_eq!(host.live.replay_progress(), None);
+}
+
+#[test]
+fn a_resume_holds_what_came_after_behind_a_progress_bar_until_it_lands() {
+    let mut host = resumed(closed_snapshot());
+    host.open();
+    attach_epoch(&mut host, 15, 17, 3);
+    assert_eq!(host.live.replay_progress(), Some((15, 17)));
+    let more = |seq: i64| {
+        event_frame(
+            seq,
+            json!({"type": "user_message", "message": {"role": "user", "content": "more"}, "parentToolUseId": null, "uuid": format!("u{seq}")}),
+        )
+    };
+    let shown = host.live.state().items.len();
+    host.frame(more(16), 2.0);
+    assert_eq!(host.live.state().items.len(), shown);
+    host.frame(more(17), 2.0);
+    assert_eq!(host.live.replay_progress(), None);
+    assert_eq!(host.live.state().last_seq, 17);
+    assert!(host.live.state().items.len() > shown);
 }
 
 #[test]

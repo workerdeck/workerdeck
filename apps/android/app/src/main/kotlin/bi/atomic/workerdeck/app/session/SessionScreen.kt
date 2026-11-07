@@ -171,14 +171,18 @@ fun SessionScreen(
                 )
                 ui.error?.let { Text(it, color = Wd.colors.red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp)) }
                 ui.progress?.let { p ->
-                    val fraction = if (p.target > 0) (p.seq.toFloat() / p.target).coerceIn(0f, 1f) else 0f
-                    LinearProgressIndicator(
-                        progress = { fraction },
-                        modifier = Modifier.fillMaxWidth().height(2.dp),
-                        color = Wd.colors.accent,
-                        trackColor = Color.Transparent,
-                        drawStopIndicator = {},
-                    )
+                    val bar = Modifier.fillMaxWidth().height(2.dp)
+                    if (p.target > 0) {
+                        LinearProgressIndicator(
+                            progress = { (p.seq.toFloat() / p.target).coerceIn(0f, 1f) },
+                            modifier = bar,
+                            color = Wd.colors.accent,
+                            trackColor = Color.Transparent,
+                            drawStopIndicator = {},
+                        )
+                    } else {
+                        LinearProgressIndicator(modifier = bar, color = Wd.colors.accent, trackColor = Color.Transparent)
+                    }
                 }
                 ConversationBars(
                     archived = past.archived.takeIf { readOnly },

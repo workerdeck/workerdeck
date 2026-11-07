@@ -136,6 +136,8 @@ pub struct LiveSession {
     catalog_requested: bool,
     finished: bool,
     history: Option<i64>,
+    // Started from a snapshot and not attached yet: the first attach holds the catch-up like a replay from zero.
+    resumed: bool,
     undelivered: Vec<Undelivered>,
     effects: Vec<Effect>,
 }
@@ -181,6 +183,7 @@ impl LiveSession {
             catalog_requested: false,
             finished: false,
             history,
+            resumed: false,
             undelivered: Vec::new(),
             effects: Vec::new(),
         };
@@ -197,6 +200,9 @@ impl LiveSession {
         session.init_model = snapshot.init_model;
         session.dirty = true;
         session.changed.chrome = true;
+        session.resumed = true;
+        session.progress = Some((session.state.last_seq, 0));
+        session.changed.progress = true;
         session
     }
 
@@ -226,6 +232,7 @@ impl LiveSession {
         self.hold.is_some()
     }
 
+    // `(seq, target)`; a target of 0 is a resume still waiting for the gateway to say how far the log goes.
     pub fn replay_progress(&self) -> Option<(i64, i64)> {
         self.progress
     }
@@ -910,7 +917,10 @@ impl LiveSession {
         seed_from_session_info(&mut self.state, &frame.session);
         self.dirty = true;
         self.changed.chrome = true;
-        if let Some(target) = initial_replay_target(frame.replaying_from, frame.session.last_seq) {
+        let resumed = std::mem::take(&mut self.resumed);
+        let target = initial_replay_target(frame.replaying_from, frame.session.last_seq)
+            .or_else(|| (resumed && frame.session.last_seq > self.state.last_seq).then_some(frame.session.last_seq));
+        if let Some(target) = target {
             let hold = ReplayHold::new(target, self.state.last_seq, self.now);
             if !hold.landed() {
                 self.hold = Some(hold);
@@ -918,6 +928,9 @@ impl LiveSession {
                 self.progress_published_at = self.now;
                 self.changed.progress = true;
             }
+        }
+        if self.hold.is_none() && self.progress.take().is_some() {
+            self.changed.progress = true;
         }
         if !self.catalog_requested
             && let Some(profile) = frame.session.profile.clone()

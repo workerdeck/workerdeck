@@ -440,7 +440,11 @@ private struct CoreStatusLine: View {
         if let usage = ui.usage { CoreUsageHud(usage: usage, open: openMeter) }
       }
       if let progress = ui.progress {
-        ProgressView(value: Double(progress.seq), total: Double(max(progress.target, 1)))
+        if progress.target > 0 {
+          ProgressView(value: Double(progress.seq), total: Double(progress.target))
+        } else {
+          ProgressView().progressViewStyle(.linear)
+        }
       }
       if showsBreakdown, let breakdown = ui.openBreakdown {
         Text(breakdown).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled)
