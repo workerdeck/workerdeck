@@ -16,6 +16,9 @@ public final class SessionWorker: @unchecked Sendable {
   private var drainQueued = false
   private var isClosed = false
   private var wake: DispatchWorkItem?
+  // Seconds spent in the core's frame calls and in the host's effect handling; read on the session queue only.
+  public private(set) var coreSeconds = 0.0
+  public private(set) var hostSeconds = 0.0
 
   public init(
     session: Session,
@@ -78,7 +81,10 @@ public final class SessionWorker: @unchecked Sendable {
     for frame in frames {
       if frame.contains("\n") {
         flush(&batch)
-        deliver(session.received(text: frame, now: clock()))
+        let started = ProcessInfo.processInfo.systemUptime
+        let effects = session.received(text: frame, now: clock())
+        coreSeconds += ProcessInfo.processInfo.systemUptime - started
+        deliver(effects)
       } else {
         batch.append(frame)
       }
@@ -88,8 +94,11 @@ public final class SessionWorker: @unchecked Sendable {
 
   private func flush(_ batch: inout [String]) {
     guard !batch.isEmpty, !closedNow() else { return }
-    deliver(session.receivedBatch(frames: batch.joined(separator: "\n"), now: clock()))
+    let started = ProcessInfo.processInfo.systemUptime
+    let effects = session.receivedBatch(frames: batch.joined(separator: "\n"), now: clock())
+    coreSeconds += ProcessInfo.processInfo.systemUptime - started
     batch.removeAll()
+    deliver(effects)
   }
 
   private func deliver(_ effects: [Effect]) {
@@ -102,7 +111,10 @@ public final class SessionWorker: @unchecked Sendable {
         rest.append(effect)
       }
     }
-    if !rest.isEmpty { onEffects(rest) }
+    guard !rest.isEmpty else { return }
+    let started = ProcessInfo.processInfo.systemUptime
+    onEffects(rest)
+    hostSeconds += ProcessInfo.processInfo.systemUptime - started
   }
 
   private func schedule(_ at: Double) {

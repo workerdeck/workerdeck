@@ -52,6 +52,7 @@ struct CoreSessionUi: @unchecked Sendable {
   var prompt: Prompt?
   var planLines: [TranscriptLine] = []
   var openSeconds: Double?
+  var openBreakdown: String?
   var canRunShell = false
   var shell: CoreShellState?
   var frame: CoreFrameState?
@@ -134,6 +135,8 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private let lock = NSLock()
   private var generation = 0
   private var usagePoll: Task<Void, Never>?
+  // The first open's wire timing, under `lock`: socket open, first and last frame (uptime), bytes and frames received.
+  private var wire = (opened: 0.0, first: 0.0, last: 0.0, bytes: 0, frames: 0)
 
   init(
     sessionId: String, baseURL: String, authKey: String?, composer: Composer, metrics: Metrics, hideThinking: Bool,
@@ -457,6 +460,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private func receive(_ task: URLSessionWebSocketTask) {
     task.receive { [weak self] result in
       guard let self, self.current(task) else { return }
+      if case .success(let message) = result { self.count(message) }
       switch result {
       case .success(.string(let text)):
         self.deliver(text)
@@ -476,6 +480,34 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     worker.received(text)
   }
 
+  private func count(_ message: URLSessionWebSocketTask.Message) {
+    let now = ProcessInfo.processInfo.systemUptime
+    let size: Int
+    switch message {
+    case .string(let text): size = text.utf8.count
+    case .data(let data): size = data.count
+    @unknown default: size = 0
+    }
+    lock.lock()
+    if wire.first == 0 { wire.first = now }
+    wire.last = now
+    wire.bytes += size
+    wire.frames += 1
+    lock.unlock()
+  }
+
+  // Seconds since the screen opened: socket open, first and last frame, then where the time went on the device.
+  private func breakdown(total: Double) -> String {
+    lock.lock()
+    let w = wire
+    lock.unlock()
+    let at = { (t: Double) in t == 0 ? "-" : String(format: "%.2f", t - self.startedAt) }
+    let megabytes = Double(w.bytes) / 1_048_576
+    return String(
+      format: "%.2f s: socket %@, first frame %@, last frame %@, %.2f MB in %d frames, core %.2f s, ui %.2f s",
+      total, at(w.opened), at(w.first), at(w.last), megabytes, w.frames, worker.coreSeconds, worker.hostSeconds)
+  }
+
   private func lost(_ task: URLSessionTask) {
     worker.act { [self] session in
       guard socket === task else { return [] }
@@ -488,6 +520,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     _ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?
   ) {
     guard current(webSocketTask) else { return }
+    lock.lock()
+    if wire.opened == 0 { wire.opened = ProcessInfo.processInfo.systemUptime }
+    lock.unlock()
     worker.opened()
   }
 
@@ -602,7 +637,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     if ui.openSeconds == nil, ui.connection == .live, ui.progress == nil, !ui.main.rows.isEmpty {
       let seconds = ProcessInfo.processInfo.systemUptime - startedAt
       ui.openSeconds = seconds
-      Self.log.notice("session open: \(seconds, format: .fixed(precision: 3)) s, \(self.ui.main.rows.count) rows")
+      let breakdown = breakdown(total: seconds)
+      ui.openBreakdown = breakdown
+      Self.log.notice("session open: \(breakdown, privacy: .public), \(self.ui.main.rows.count) rows")
     }
     if ui.connection == .live, ui.progress == nil {
       // A cut between the notification's read and this attach shows a later conversation: the entry goes to the

@@ -414,6 +414,7 @@ private struct CoreStatusLine: View {
   let ui: CoreSessionUi
   let reconnect: () -> Void
   var openMeter: (CoreMeterSheet) -> Void = { _ in }
+  @State private var showsBreakdown = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
@@ -428,7 +429,10 @@ private struct CoreStatusLine: View {
         }
         Spacer(minLength: 0)
         if let seconds = ui.openSeconds {
-          Text("core \(seconds, format: .number.precision(.fractionLength(2))) s").foregroundStyle(.tertiary)
+          Button { showsBreakdown.toggle() } label: {
+            Text("core \(seconds, format: .number.precision(.fractionLength(2))) s").foregroundStyle(.tertiary)
+          }
+          .buttonStyle(.plain)
         }
         if ui.connection == .offline || ui.connection == .unreachable {
           Button("Retry", action: reconnect).buttonStyle(.borderless)
@@ -437,6 +441,9 @@ private struct CoreStatusLine: View {
       }
       if let progress = ui.progress {
         ProgressView(value: Double(progress.seq), total: Double(max(progress.target, 1)))
+      }
+      if showsBreakdown, let breakdown = ui.openBreakdown {
+        Text(breakdown).foregroundStyle(.secondary).lineLimit(3).textSelection(.enabled)
       }
     }
     .font(.caption)
