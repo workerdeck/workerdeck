@@ -268,6 +268,20 @@ pub struct TrayMember {
     pub face: Option<FaceSpec>,
 }
 
+// A row of a lead's fleet strip: a Member that needs a person now. `text` reads the first reason; `retry` is the
+// generation Retry start names, set only for a conversation that never started.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct FleetMember {
+    pub key: String,
+    pub host_id: String,
+    pub session_id: String,
+    pub name: String,
+    pub face: Option<FaceSpec>,
+    pub reasons: Vec<ReasonChip>,
+    pub text: String,
+    pub retry: Option<u32>,
+}
+
 // The tray draws this many pictures; past it, one slot gives way to a `+n` count.
 const TRAY_MAX: usize = 4;
 
@@ -1058,6 +1072,37 @@ impl SessionList {
                     agent_id: agent.id.clone(),
                     name: agent.name.clone(),
                     owner: lead.info.owner.clone(),
+                })
+            })
+            .collect()
+    }
+
+    // The lead's fleet strip, recomputed from the current rows on every call; empty for anything but a lead.
+    pub fn fleet(&self, host_id: String, session_id: String) -> Vec<FleetMember> {
+        let state = self.state();
+        let rows = state.rows();
+        let Some(lead) = state.row(&host_id, &session_id) else { return Vec::new() };
+        vm::lead_fleet(&lead, &rows)
+            .into_iter()
+            .filter_map(|entry| {
+                let row = rows.iter().find(|r| r.host_id == host_id && r.info.id == entry.id)?;
+                Some(FleetMember {
+                    key: entry.key,
+                    host_id: host_id.clone(),
+                    session_id: entry.id,
+                    name: entry.name,
+                    face: face_spec(row),
+                    reasons: entry
+                        .reasons
+                        .into_iter()
+                        .map(|reason| ReasonChip {
+                            label: vm::attention_label(reason).to_owned(),
+                            title: vm::attention_title(reason, &row.info),
+                            danger: reason == vm::AttentionReason::Failed,
+                        })
+                        .collect(),
+                    text: entry.text,
+                    retry: entry.retry,
                 })
             })
             .collect()

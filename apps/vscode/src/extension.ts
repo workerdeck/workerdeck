@@ -206,7 +206,7 @@ export function activate(context: vscode.ExtensionContext): void {
       void model.refresh().then(() => markSeen(surface, true))
     },
     focused: (surface) => registry.setFocused(surface),
-    goToCurrent: (surface, sessionId) => {
+    openSession: (surface, sessionId) => {
       const shown = surface.session
       if (shown) {
         void selectSession(shown.host.id, sessionId)

@@ -40,7 +40,7 @@ export type SurfaceDelegate = {
   visibilityChanged: (surface: AnySurface) => void
   focused: (surface: AnySurface) => void
   peerRows: (hostId: string) => Record<string, SessionRow>
-  goToCurrent: (surface: AnySurface, sessionId: string) => void
+  openSession: (surface: AnySurface, sessionId: string) => void
 }
 
 
@@ -307,8 +307,9 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
       case 'wd-focus-held': {
         return
       }
-      case 'wd-go-to-current': {
-        this.delegate.goToCurrent(this, msg.sessionId)
+      case 'wd-go-to-current':
+      case 'wd-open-session': {
+        this.delegate.openSession(this, msg.sessionId)
         return
       }
     }

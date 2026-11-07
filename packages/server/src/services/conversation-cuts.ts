@@ -782,7 +782,7 @@ export class ConversationCuts {
     this.#failedStarts.add(id)
     // Drained first: a runtime save already queued for the failed attempt would otherwise clear the failure after it lands.
     await ctx.parking.fence(id)
-    const failure = { message: error, at: Date.now(), conversation: to }
+    const failure = { message: error, at: Date.now(), conversation: to, start: true as const }
     return await this.#owned(id, to, (current) => {
       const prompt = current!.pendingPrompt
       return {

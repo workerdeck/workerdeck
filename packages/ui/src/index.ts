@@ -212,6 +212,7 @@ export {
   type SubagentToggleProps,
 } from './components/agent/SubagentToggle.tsx'
 export { SubagentStrip } from './components/agent/SubagentStrip.tsx'
+export { FleetStrip, type FleetStripProps } from './components/agent/FleetStrip.tsx'
 export { ShellStrip, type ShellStripProps } from './components/agent/ShellStrip.tsx'
 export { useShellFrame, type ShellFrame, type ShellFrameOptions } from './components/agent/use-shell-frame.ts'
 export { ShellActionsProvider, useShellActions, type ShellActions } from './components/agent/shell-actions.tsx'

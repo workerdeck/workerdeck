@@ -129,6 +129,7 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
         client={client}
         sessionId={sessionId}
         peerRows={peerRows}
+        onOpenSession={(member) => void navigate({ to: '/sessions/$hostId/$sessionId', params: { hostId, sessionId: member } })}
         transcriptVariant={variant}
         transcriptFont={font}
         hideThinking={thinking === 'hide'}

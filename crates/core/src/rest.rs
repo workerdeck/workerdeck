@@ -673,6 +673,8 @@ pub struct SessionFailure {
     pub at: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

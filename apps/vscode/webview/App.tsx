@@ -199,6 +199,7 @@ export function App({
         focusComposerOnClick
         unseen={catchUp ? shown.unseen : undefined}
         onGoToCurrent={() => bridge.post({ kind: 'wd-go-to-current', sessionId: shown.sessionId })}
+        onOpenSession={(sessionId) => bridge.post({ kind: 'wd-open-session', sessionId })}
         onControls={(c) => {
           controls.current = c
           tryFocus()

@@ -549,6 +549,24 @@ const SESSION_LIST: VmCase[] = [
   },
   {
     module: 'session-list',
+    name: 'lead-fleet',
+    fn: 'leadFleet',
+    calls: [
+      [BY_ID.get('s-lead-0001'), [...ROWS, ...TEAM.members!.slice(2)]],
+      [
+        BY_ID.get('s-lead-0001'),
+        [
+          quiet('s-start', 2, { status: 'closed', failure: { message: 'could not start', at: T0, conversation: 3, start: true } }),
+          { ...quiet('s-other-host', 1, { pendingPermissionCount: 1 }), hostId: 'box' },
+          quiet('s-both', 1, { pendingPermissionCount: 2, statusLabel: { text: 'Need the key', waitingOn: 'human', setAt: T0 } }),
+        ],
+      ],
+      [TEAM.members![0], [...ROWS, ...TEAM.members!.slice(2)]],
+      [BY_ID.get('s-solo-0004'), [...ROWS, ...TEAM.members!.slice(2)]],
+    ],
+  },
+  {
+    module: 'session-list',
     name: 'list-state',
     fn: 'listState',
     calls: [...ROWS.map((r) => [r]), ...TEAM.members!.map((r) => [r])],

@@ -13,10 +13,12 @@ import type { WorkerDeckClient } from '@workerdeck/client'
 import {
   PROTOCOL_VERSION,
   catchUpItems,
+  leadFleet,
   mergeUsage,
   orderUsageWindows,
   sessionTasks,
   usageInfos,
+  type FleetRow,
   type ModelOption,
   type PermissionMode,
   type RateLimitInfo,
@@ -62,6 +64,7 @@ import { ModelSelect } from './ModelSelect.tsx'
 import { EffortSelect, effortChoices } from './EffortSelect.tsx'
 import { PermissionModeSelect, permissionModeChoices, type PermissionModeChoice } from './PermissionModeSelect.tsx'
 import { SubagentStrip } from './SubagentStrip.tsx'
+import { FleetStrip } from './FleetStrip.tsx'
 import { useSubagentFrame } from './use-subagent-frame.ts'
 import { ShellStrip } from './ShellStrip.tsx'
 import { ShellTerminal } from './ShellTerminal.tsx'
@@ -115,6 +118,8 @@ export interface SessionPanelProps {
   peerMentions?: boolean
   // The `#` rows' sessions, keyed by session id, for their faces.
   peerRows?: Readonly<Record<string, SessionRow>>
+  // A lead's fleet strip names its members that need a person; this opens one. Without it the names are plain text.
+  onOpenSession?: (sessionId: string) => void
   onToggleBookmark?: (itemId: string) => void
   // Where a file link in the transcript goes. Without it, such a link stays an ordinary anchor.
   onOpenFile?: FileLinkOpener
@@ -232,6 +237,7 @@ export function SessionPanel({
   bookmarks,
   peerMentions = true,
   peerRows,
+  onOpenSession,
   onToggleBookmark,
   reveal,
   subagents,
@@ -365,6 +371,18 @@ export function SessionPanel({
         : toolHost,
   )
   const terminal = transcriptVariant === 'terminal'
+  const leadRow = sessionId === undefined ? undefined : peerRows?.[sessionId]
+  const fleet = useMemo(() => (leadRow && peerRows ? leadFleet(leadRow, Object.values(peerRows)) : []), [leadRow, peerRows])
+  const retryStart = useCallback(
+    async (row: FleetRow) => {
+      try {
+        await client.retryConversationStart(row.id, row.retry!)
+      } catch (error) {
+        setProtocolError(`Could not start ${row.name}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    },
+    [client],
+  )
 
   const capabilities = state.capabilities
 
@@ -687,6 +705,9 @@ export function SessionPanel({
             <Notice level="error" onDismiss={() => setProtocolError(undefined)}>
               {protocolError}
             </Notice>
+          ) : null}
+          {framedShellId === undefined && subagentId === undefined && !readOnly ? (
+            <FleetStrip fleet={fleet} peerRows={peerRows} onOpen={onOpenSession} onRetry={retryStart} terminal={terminal} {...cell} />
           ) : null}
           {framedShellId !== undefined ? (
             <ShellStrip

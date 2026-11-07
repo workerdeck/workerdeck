@@ -22,6 +22,7 @@ export interface SessionWorkspaceProps {
   scrubber?: SessionPanelProps['scrubber']
   bookmarks?: SessionPanelProps['bookmarks']
   peerRows?: SessionPanelProps['peerRows']
+  onOpenSession?: SessionPanelProps['onOpenSession']
   onToggleBookmark?: SessionPanelProps['onToggleBookmark']
   stickyPrompt?: SessionPanelProps['stickyPrompt']
   hideThinking?: SessionPanelProps['hideThinking']
@@ -64,6 +65,7 @@ export function SessionWorkspace({
   scrubber,
   bookmarks,
   peerRows,
+  onOpenSession,
   onToggleBookmark,
   stickyPrompt,
   hideThinking,
@@ -232,6 +234,7 @@ export function SessionWorkspace({
             scrubber={scrubber}
             bookmarks={bookmarks}
             peerRows={peerRows}
+            onOpenSession={onOpenSession}
             onToggleBookmark={onToggleBookmark}
             stickyPrompt={stickyPrompt}
             hideThinking={hideThinking}

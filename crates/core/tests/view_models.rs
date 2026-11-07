@@ -165,6 +165,7 @@ fn session_list(fn_name: &str, a: &Args) -> Value {
         "teamSummaryText" => out(sl::team_summary_text(&a.get(0))),
         "listState" => out(sl::list_state(&a.get(0))),
         "attentionTitle" => out(sl::attention_title(a.get(0), &a.info(1))),
+        "leadFleet" => out(sl::lead_fleet(&a.get(0), &a.get::<Vec<SessionRow>>(1))),
         "customGroupColor" => out(sl::custom_group_color(&a.get(0))),
         "customGroupScript" => {
             let groups: Vec<CustomGroup> = a.get(0);

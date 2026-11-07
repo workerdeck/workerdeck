@@ -65,6 +65,11 @@ need you. The rest sit as avatars on the lead's own line ("2 need you · 3 worki
 member you open stays drawn, and expanding the team shows everyone. The *Needs attention* filter and
 group use the same rule, for lone agents too.
 
+The lead's own panel lists the same members in a strip above its transcript: name, reason and what
+it is about (how many approvals wait, the failure, or the status the member is blocked on). Click a
+name to open that member. A member whose new conversation failed to start gets a *Retry* button.
+A row leaves the strip as soon as its reason clears.
+
 Teams also scope peer messaging: a member reaches only its lead and teammates, and nobody outside
 the team reaches a member. With a [relay](/workerdeck/docs/guides/cross-gateway-peers/) a team can
 span gateways, and agents of different owners meet only in a team or as two shared agents (see

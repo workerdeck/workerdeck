@@ -439,8 +439,11 @@ blocked session (lone agents and plain sessions too) sits under Needs attention 
 dot) still says what it is doing. `sessionState` itself is unchanged: the gateway's drain sorts by it. `teamSummary`
 counts each Member once (`attention`, then `working` and `idle` from the rest, adding up to `members`) and
 `teamSummaryText` is the lead's tray line ("2 need you · 3 working · 1 idle"). `ATTENTION_LABELS` and
-`attentionTitle(reason, info)` are the reason chip's word and tooltip. The Rust core mirrors all of these in
-`vm/session_list.rs` with goldens.
+`attentionTitle(reason, info)` are the reason chip's word and tooltip. `leadFleet(lead, rows)` is the lead's fleet
+strip: its same-gateway Members with a reason, in team order, `text` = `attentionTitle` of the first reason, `retry` =
+`failure.conversation` only when `failure.start` (a conversation that never started, so Retry start applies). A
+projection of whatever rows the caller passes, recomputed every render, never retained; it ignores filters by taking
+the unfiltered rows. The Rust core mirrors all of these in `vm/session_list.rs` with goldens.
 
 A `ProjectIcon` is either a named glyph - looked up in the client's own icon set, with an unknown
 name drawing the no-project fallback - or an image **address, never bytes**, fetched from

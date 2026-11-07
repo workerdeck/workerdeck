@@ -959,7 +959,8 @@ export type SessionInfo = {
   transcript?: 'unavailable'
 }
 
-export type SessionFailure = { message: string; at: number; conversation?: number }
+// `start`: the conversation never started, so Retry start (`POST /sessions/:id/conversations/retry`) applies to it.
+export type SessionFailure = { message: string; at: number; conversation?: number; start?: true }
 
 export function contextReading(body: SessionEventBody): ContextReading | undefined {
   if (body.type !== 'context_usage') {

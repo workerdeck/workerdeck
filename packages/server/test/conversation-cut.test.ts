@@ -210,7 +210,7 @@ describe('conversation cut under a stable id', () => {
     expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 2 })).status).toBe(409)
     expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 1, prompt: 'p' })).status).toBe(502)
     expect((await call(base, `/sessions/${id}/conversations`)).body).toMatchObject({ conversation: 2, startFailed: { n: 2 } })
-    const failed = { failure: { message: expect.stringContaining('start'), conversation: 2 } }
+    const failed = { failure: { message: expect.stringContaining('start'), conversation: 2, start: true } }
     expect(((await call(base, '/sessions')).body.sessions as SessionInfo[]).find((info) => info.id === id)).toMatchObject(failed)
     expect((await call(base, `/sessions/${id}`)).body.session).toMatchObject(failed)
     expect((await call(base, `/sessions/${id}/conversations`, 'POST', { expectedGeneration: 2 })).status).toBe(409)

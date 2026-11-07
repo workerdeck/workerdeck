@@ -1436,7 +1436,9 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
   Claude (engine death, `requireApiKey`) calls `fail()`; codex respawns and provider fails per turn. Parking's
   `session_closed` arm with `'error'` passes it (stamped with the conversation) to `store.delete(..., failure)`, which
   writes `SessionRecord.failure` instead of dropping the record: a failed first conversation is no longer
-  `disposable()`. `#failStart` writes it beside `startFailed`.
+  `disposable()`. `#failStart` writes it beside `startFailed`, with `start: true`: the only failure Retry start
+  (`POST /sessions/:id/conversations/retry`, expectedGeneration = `failure.conversation`) can answer. The fleet strip
+  offers Retry only on those; an engine death has no retry route (the next message or open wakes it).
 - **Not set**: a crash `#retireCrashed` keeps dormant (asleep, the next open resumes it), a clean `'server'` end, an
   interrupt or a park. `absentStatus`'s `failed` for a record without runtime is a status, not attention.
 - **One home: the record.** Gateway-side failures (`#failStart`: a start that did not take, a conversation that could

@@ -171,6 +171,33 @@ fn auto_shows_members_that_need_a_person_and_the_selected_one_and_trays_the_rest
 }
 
 #[test]
+fn a_leads_fleet_lists_members_that_need_a_person_whatever_the_filters() {
+    let list = SessionList::new(None, None);
+    let member = |id: &str, order: u32| format!(r#","agent":{{"id":"{id}","name":"{id}","lead":"L","order":{order}}}"#);
+    let sessions = [
+        idle("lead", r#","agent":{"id":"L","name":"Lead","leads":true}"#),
+        session("busy", "running", &format!(r#","pendingPermissionCount":0{}"#, member("M1", 1))),
+        session(
+            "unstarted",
+            "closed",
+            &format!(
+                r#","pendingPermissionCount":0,"failure":{{"message":"could not start","at":1,"conversation":3,"start":true}}{}"#,
+                member("M2", 2)
+            ),
+        ),
+        idle("asking", &format!(r#","pendingPermissionCount":2{}"#, member("M3", 3))),
+    ];
+    list.set_host("h1".into(), "mac".into(), true, body(&sessions)).unwrap();
+    list.set_search("nothing matches this".into());
+    let fleet = list.fleet("h1".into(), "lead".into());
+    assert_eq!(fleet.iter().map(|m| m.session_id.as_str()).collect::<Vec<_>>(), ["unstarted", "asking"]);
+    assert_eq!((fleet[0].name.as_str(), fleet[0].text.as_str(), fleet[0].retry), ("M2", "could not start", Some(3)));
+    assert!(fleet[0].reasons[0].danger && fleet[0].face.is_some());
+    assert_eq!((fleet[1].text.as_str(), fleet[1].retry), ("2 approvals waiting", None));
+    assert!(list.fleet("h1".into(), "busy".into()).is_empty());
+}
+
+#[test]
 fn a_search_reports_the_subset_and_clearing_shows_all() {
     let list = SessionList::new(None, None);
     let sessions = [idle("s1", r#","title":"Alpha""#), idle("s2", r#","title":"Beta""#)];

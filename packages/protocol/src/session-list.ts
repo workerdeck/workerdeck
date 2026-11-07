@@ -750,6 +750,29 @@ export function teamSummaryText(lead: SessionRow): string | undefined {
   return parts.length ? parts.join(' · ') : undefined
 }
 
+// A lead's fleet strip row: a same-gateway member that needs a person now. `retry` is the generation Retry start names.
+export type FleetRow = { key: string; id: string; name: string; reasons: AttentionReason[]; text: string; retry?: number }
+
+// Recomputed from the rows the client holds on every render, never kept: a row leaves when its reason clears.
+export function leadFleet(lead: Pick<SessionRow, 'hostId' | 'info'>, rows: Iterable<SessionRow>): FleetRow[] {
+  const agent = lead.info.agent
+  if (!agent || agent.lead !== undefined) {
+    return []
+  }
+  const members = [...rows].filter(
+    (row) => row.hostId === lead.hostId && row.info.agent?.lead === agent.id && row.info.agent.leadGateway === undefined,
+  )
+  return members.sort(byTeamOrder).flatMap((row) => {
+    const { reasons } = attentionOf(row.info)
+    if (reasons.length === 0) {
+      return []
+    }
+    const failure = row.info.failure
+    const retry = failure?.start && failure.conversation !== undefined ? { retry: failure.conversation } : {}
+    return [{ key: sessionKey(row), id: row.info.id, name: row.info.agent!.name, reasons, text: attentionTitle(reasons[0]!, row.info), ...retry }]
+  })
+}
+
 function projectTarget(row: SessionRow): { hostId: string; cwd?: string } {
   const cwd = row.info.project?.root ?? row.info.cwd
   return cwd ? { hostId: row.hostId, cwd } : { hostId: row.hostId }

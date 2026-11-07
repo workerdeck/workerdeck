@@ -14,6 +14,9 @@ gateway and protocol it talks to.
   members sit in the lead's tray (the 5 second linger is gone). Cards carry an *Approval*, *Failed*
   or *Blocked* chip, the lead counts the members that need you, and the *Needs attention* filter and
   group include failed and blocked sessions. Same on iOS and Android.
+- **The lead's fleet strip.** A lead's panel lists its members that need you above the transcript
+  (reason chip, the approval count, failure or blocked status); a click opens the member, and a
+  member whose new conversation failed to start gets *Retry*. Same on iOS and Android.
 - **A blocked agent pushes.** Setting `waitingOn: "human"` sends a `session_blocked` notification
   (webhook and iOS push, high priority, the status text as its body), once per stretch. On iOS it
   follows the *Approvals* switch. Approvals and failures already pushed.

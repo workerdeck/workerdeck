@@ -1089,6 +1089,49 @@ pub fn team_summary_text(lead: &SessionRow) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join(" \u{00B7} "))
 }
 
+// A lead's fleet strip row: a same-gateway member that needs a person now. `retry` is the generation Retry start names.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FleetRow {
+    pub key: String,
+    pub id: String,
+    pub name: String,
+    pub reasons: Vec<AttentionReason>,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry: Option<u32>,
+}
+
+// Recomputed from the rows the client holds on every render, never kept: a row leaves when its reason clears.
+pub fn lead_fleet(lead: &SessionRow, rows: &[SessionRow]) -> Vec<FleetRow> {
+    let Some(agent) = lead.info.agent.as_ref().filter(|agent| agent.lead.is_none()) else {
+        return Vec::new();
+    };
+    let mut members: Vec<&SessionRow> = rows
+        .iter()
+        .filter(|row| {
+            row.host_id == lead.host_id
+                && row.info.agent.as_ref().is_some_and(|a| a.lead.as_deref() == Some(agent.id.as_str()) && a.lead_gateway.is_none())
+        })
+        .collect();
+    members.sort_by(|a, b| by_team_order(a, b));
+    members
+        .into_iter()
+        .filter_map(|row| {
+            let reasons = attention_of(&row.info).reasons;
+            let first = *reasons.first()?;
+            let retry = row.info.failure.as_ref().filter(|f| f.start == Some(true)).and_then(|f| f.conversation);
+            Some(FleetRow {
+                key: row_key(row),
+                id: row.info.id.clone(),
+                name: row.info.agent.as_ref().map(|a| a.name.clone()).unwrap_or_default(),
+                text: attention_title(first, &row.info),
+                reasons,
+                retry,
+            })
+        })
+        .collect()
+}
+
 fn custom_group_rows(sorted: Vec<SessionRow>, custom: &[CustomGroup]) -> Vec<SessionGroup> {
     let mut placed: HashSet<String> = HashSet::new();
     let mut groups: Vec<SessionGroup> = custom

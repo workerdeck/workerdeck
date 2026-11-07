@@ -31,6 +31,7 @@ import {
   subsetSummary,
   teamSummary,
   teamSummaryText,
+  leadFleet,
   listState,
   teamView,
   toggleTeamExpanded,
@@ -732,5 +733,34 @@ describe('facet group order', () => {
     expect(moved.groupOrder).toEqual({ state: ['working', 'idle', 'ended'], adapter: ['codex', 'claude'] })
     expect(resetGroupOrder(moved).groupOrder).toEqual({ adapter: ['codex', 'claude'] })
     expect(moveGroup({ ...moved, groupBy: 'custom' }, [g('a'), g('b')], 'a', 'b')).toEqual({ ...moved, groupBy: 'custom' })
+  })
+})
+
+describe('leadFleet', () => {
+  const member = (id: string, order: number, over: Partial<SessionInfo> = {}, host = 'mac') =>
+    row({ hostId: host, info: info({ id, agent: { id: `ag-${id}`, name: id.toUpperCase(), lead: 'A', order }, ...over }) })
+  const lead = row({ info: info({ id: 's-lead', agent: { id: 'A', name: 'Atlas', leads: true } }) })
+  const rows = [
+    lead,
+    member('s-busy', 1, { status: 'running' }),
+    member('s-blocked', 4, { statusLabel: { text: 'need a key', waitingOn: 'human', setAt: 1 } }),
+    member('s-crashed', 2, { status: 'closed', failure: { message: 'engine died', at: 1, conversation: 2 } }),
+    member('s-unstarted', 3, { status: 'closed', failure: { message: 'no start', at: 1, conversation: 5, start: true } }),
+    member('s-elsewhere', 0, { pendingPermissionCount: 1 }, 'box'),
+    row({ info: info({ id: 's-plain', pendingPermissionCount: 1 }) }),
+  ]
+
+  it('lists the members that need a person, in team order, each with its first reason as text', () => {
+    expect(leadFleet(lead, rows)).toEqual([
+      { key: 'mac:s-crashed', id: 's-crashed', name: 'S-CRASHED', reasons: ['failed'], text: 'engine died' },
+      { key: 'mac:s-unstarted', id: 's-unstarted', name: 'S-UNSTARTED', reasons: ['failed'], text: 'no start', retry: 5 },
+      { key: 'mac:s-blocked', id: 's-blocked', name: 'S-BLOCKED', reasons: ['blocked'], text: 'Waiting on you: need a key' },
+    ])
+  })
+
+  it('is empty for a member, a plain session, and once every reason clears', () => {
+    expect(leadFleet(rows[1]!, rows)).toEqual([])
+    expect(leadFleet(rows[6]!, rows)).toEqual([])
+    expect(leadFleet(lead, rows.slice(0, 2))).toEqual([])
   })
 })
