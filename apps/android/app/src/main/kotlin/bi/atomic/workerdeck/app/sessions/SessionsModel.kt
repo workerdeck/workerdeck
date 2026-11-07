@@ -8,6 +8,7 @@ import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.session.BookmarkStore
 import bi.atomic.workerdeck.core.ffi.ConversationItem
+import bi.atomic.workerdeck.core.ffi.FleetMember
 import bi.atomic.workerdeck.core.ffi.ListRow
 import bi.atomic.workerdeck.core.ffi.PastAgent
 import bi.atomic.workerdeck.core.ffi.CreateForm
@@ -226,6 +227,8 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun client(hostId: String): GatewayClient? = clients[hostId]
+
+    fun fleet(hostId: String, sessionId: String): List<FleetMember> = list.fleet(hostId, sessionId)
 
     // Nil seed until the gateway has said it runs agents.
     fun canCreateAgent(hostId: String): Boolean = list.agentSeed(hostId, null, null) != null

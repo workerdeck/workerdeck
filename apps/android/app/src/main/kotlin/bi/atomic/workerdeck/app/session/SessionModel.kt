@@ -290,6 +290,10 @@ class SessionModel(
         }
     }
 
+    fun retryMemberStart(memberId: String, n: Long, then: () -> Unit) {
+        act("Could not start the conversation") { calls.retryStart(memberId, n).map { then() } }
+    }
+
     fun goal(failure: String, call: HttpCall) = act(failure) { calls.send(call) }
 
     fun actionErrorShown() {

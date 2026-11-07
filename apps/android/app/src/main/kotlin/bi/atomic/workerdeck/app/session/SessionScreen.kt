@@ -90,6 +90,7 @@ fun SessionScreen(
     conversation: Long? = null,
     onGoToCurrent: (() -> Unit)? = null,
     onAgentDeleted: () -> Unit = {},
+    fleet: LeadFleet? = null,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -186,6 +187,7 @@ fun SessionScreen(
                     onSettle = { model.settle(it) },
                     onRetryStart = model::retryStart,
                 )
+                if (!readOnly) fleet?.let { lead -> FleetStrip(lead, onRetry = { member, n -> model.retryMemberStart(member.sessionId, n, lead.refresh) }) }
                 if (ui.rows.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         if (ui.progress == null && past.archived?.unavailable == true) {

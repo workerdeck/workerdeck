@@ -1624,6 +1624,9 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   `team_attention` and `team_summary` (the tray line); every row carries `needs_you` (the tint) and `reasons` (one
   chip each, `danger` for a failure). Auto has no clock: a Member draws only while it needs a person. A phone has no
   lasting highlight, so the Member opened last counts as selected (`SessionList.select`), as on iOS.
+  A lead's session screen draws the fleet strip (`session/FleetStrip.kt`, `SessionList.fleet`) under its header,
+  current conversation only: one line per Member that needs you, a tap opens it, Retry start on a failed start. The
+  list's poll lives in `SessionsModel` and never stops while a session is open, so the strip stays current.
 - **The sessions list draws the web's `SessionItem`** (`sessions/SessionCard.kt`, `SessionsList.kt`): 48 dp
   agent cards (4 padding, 40 face, two 20 lines, no time, no dividers, 4 dp apart; line one the name and the
   `ModelBadge` from `ListRow.model_badge`, line two `card_status`, fg-3 only when `card_status_is_label`), 28 dp

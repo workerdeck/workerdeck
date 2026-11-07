@@ -24,11 +24,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.gateway.GatewayStore
 import bi.atomic.workerdeck.app.session.Entry
+import bi.atomic.workerdeck.app.session.LeadFleet
 import bi.atomic.workerdeck.app.session.SessionScreen
 import bi.atomic.workerdeck.app.sessions.CreateScreen
 import bi.atomic.workerdeck.app.sessions.RecentCwds
@@ -136,6 +138,20 @@ private fun App(store: GatewayStore) {
         )
     } else {
         val conversation = target.getOrNull(3)?.toLongOrNull()
+        val list by sessions.ui.collectAsStateWithLifecycle()
+        val members = remember(list.groups, target[0], target[1], conversation) {
+            if (conversation == null) sessions.fleet(target[0], target[1]) else emptyList()
+        }
+        val fleet = LeadFleet(
+            members,
+            open = { member ->
+                sessions.markSeen(target[0], target[1])
+                sessions.select(member.hostId, member.sessionId)
+                sessions.open(member.hostId, member.sessionId)
+                open = listOf(member.hostId, member.sessionId, member.name, CURRENT)
+            },
+            refresh = sessions::pullRefresh,
+        )
         SessionScreen(
             client,
             target[1],
@@ -147,6 +163,7 @@ private fun App(store: GatewayStore) {
             conversation = conversation,
             onGoToCurrent = { open = listOf(target[0], target[1], target[2], CURRENT) },
             onAgentDeleted = { sessions.pastAgentsChanged(target[0]) },
+            fleet = fleet,
         ) {
             if (conversation == null) sessions.markSeen(target[0], target[1])
             open = null

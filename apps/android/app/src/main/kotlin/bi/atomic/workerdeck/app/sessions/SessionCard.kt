@@ -71,6 +71,7 @@ import bi.atomic.workerdeck.core.ffi.RowState
 import bi.atomic.workerdeck.core.ffi.StepFold
 import bi.atomic.workerdeck.core.ffi.StepKind
 import bi.atomic.workerdeck.core.ffi.StepState
+import bi.atomic.workerdeck.core.ffi.ReasonChip
 import bi.atomic.workerdeck.core.ffi.TrayMember
 
 // The session list's own tokens, the web theme's (`packages/ui/src/styles/theme.css`) for each scheme.
@@ -180,7 +181,7 @@ fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<S
                             if (agent) ModelBadge(row, tones, 13.sp)
                             if (row.shared) Icon(painterResource(R.drawable.globe), contentDescription = "Shared with other owners", tint = tones.fg4, modifier = Modifier.size(12.dp))
                         }
-                        Reasons(row, tones)
+                        ReasonChips(row.reasons, tones)
                         Unread(row, tones)
                         tray?.invoke()
                         if (!agent) ContextRing(row.contextPercent, tones)
@@ -202,7 +203,7 @@ fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<S
                         row.badge?.let { BadgeGlyph(it, size = 14.dp) } ?: StateGlyph(row.state)
                     }
                     Name(row, tones, BODY, Modifier.weight(1f))
-                    Reasons(row, tones)
+                    ReasonChips(row.reasons, tones)
                     Unread(row, tones)
                     ContextRing(row.contextPercent, tones)
                 }
@@ -239,7 +240,7 @@ fun MemberCard(row: ListRow, tones: ListTones, events: CardEvents) {
                         ModelBadge(row, tones, 12.sp)
                         CardStatus(row, tones, LABEL, Modifier.weight(1f, fill = false))
                     }
-                    Reasons(row, tones)
+                    ReasonChips(row.reasons, tones)
                     Unread(row, tones)
                     Chips(row, tones, events)
                 }
@@ -310,8 +311,8 @@ private fun CardStatus(row: ListRow, tones: ListTones, style: TextStyle, modifie
 // Grey while the turn still produces, accent once it stopped: the colour answers "is this waiting for me".
 // One chip per reason the session needs a person: "Approval", "Failed", "Blocked".
 @Composable
-private fun Reasons(row: ListRow, tones: ListTones) {
-    for (reason in row.reasons) {
+fun ReasonChips(reasons: List<ReasonChip>, tones: ListTones) {
+    for (reason in reasons) {
         Box(
             Modifier.height(16.dp).clip(RoundedCornerShape(3.dp)).background(if (reason.danger) tones.dangerBg else tones.warningBg)
                 .semantics { contentDescription = reason.title }.padding(horizontal = 4.dp),
