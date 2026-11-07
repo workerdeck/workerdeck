@@ -3342,6 +3342,15 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   `createdAt` at construction; `AiSdkRunner` restores it exactly when it restores the event array).
   Reachable even before any cache existed: a `SessionHandle` reconnect after a gateway restart
   re-attaches with its own advanced `#lastSeq` and freezes the same way.
+- **The native apps keep the same cache in the Rust core.** `crates/ffi` holds the last 4 closed sessions'
+  `TranscriptSnapshot`s (reduced state, seq index), keyed by the host's `cache_key` (gateway and session id; none for
+  a past conversation or a fixture). Hosts call `Session.park()` on close (Kotlin drops the object only at GC);
+  `Drop` is the fallback. A `Session` built with a cached key runs `LiveSession::resume`: the snapshot draws at once,
+  the socket opens at its `last_seq`, and the first attach still runs `stale` (last seq, epoch, createdAt), so a cut
+  or a dormant wake (both bump `epoch`) falls back to a replay from zero. A resume, unlike a reconnect, holds its
+  catch-up like a fresh attach (`resumed` flag), and shows progress target 0 (an indeterminate bar) until the attach
+  says how far the log goes. Measured on 5G + tailscale (100th session): a 2 MB replay took 13 s, the phone itself
+  0.16 s of it; a cached reopen is ~0.3 s.
 - **Recovering from a stale attach has three traps.** Unhook the event listener before resyncing (a
   rebuilt log advanced past the held seq must not compose new-log events into old-log state in the
   same tick); seed the reducer back to `initialTranscriptState` (`applyEvent`'s `seq <= lastSeq`
