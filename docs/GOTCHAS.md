@@ -3351,6 +3351,14 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   catch-up like a fresh attach (`resumed` flag), and shows progress target 0 (an indeterminate bar) until the attach
   says how far the log goes. Measured on 5G + tailscale (100th session): a 2 MB replay took 13 s, the phone itself
   0.16 s of it; a cached reopen is ~0.3 s. A snapshot of a 1.2-1.6 MB replay holds 0.8-1.1 MB of heap.
+- **The cache also lives on disk** once the host calls `set_transcript_store(dir, build)` at launch (iOS
+  `TranscriptStore.start()` into Caches, Android `MainActivity` into `cacheDir`): `crates/ffi/src/transcripts.rs`
+  writes every kept snapshot on one writer thread (`.partial` then rename, newest 16 files kept) and a memory miss
+  reads the file. A file is dropped unless its `SNAPSHOT_FORMAT`, `build` and key all match: **bump
+  `SNAPSHOT_FORMAT` (`controller/live.rs`) whenever `TranscriptState`, the item types or what they mean change.**
+  The host's `build` carries the install time (iOS executable date, Android `lastUpdateTime`), so every install
+  starts cold. `effort` / `goal` keep their `Some(None)` through `double_option_field`. A 0.9 MB file encodes in
+  ~1 ms and decodes in ~1.5 ms (Mac, release).
 - **The gateway's sockets negotiate `permessage-deflate`** (`perMessageDeflate: true` in `server.ts`, ws's 1 KB
   threshold, context takeover on) for first opens, where the cache cannot help: replay JSON compresses ~3x. Browsers,
   OkHttp and iOS `URLSessionWebSocketTask` all offer it; a client that does not gets plain frames. `bufferedAmount`

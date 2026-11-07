@@ -963,3 +963,35 @@ fn a_past_conversation_or_an_empty_log_leaves_no_snapshot() {
     attach_epoch(&mut empty, 0, 0, 1);
     assert!(empty.live.snapshot().is_none());
 }
+
+#[test]
+fn a_stored_snapshot_reads_back_as_the_same_transcript() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/conformance");
+    let mut corpora: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|entry| entry.ok()?.file_name().to_str()?.strip_suffix(".events.jsonl").map(str::to_owned))
+        .collect();
+    corpora.sort();
+    assert!(corpora.len() > 20);
+    for corpus in &corpora {
+        let mut host = Host::new();
+        host.open();
+        attach_epoch(&mut host, 0, 0, 3);
+        host.events(corpus, 1.0);
+        let Some(snapshot) = host.live.snapshot() else { continue };
+        let bytes = snapshot.encode("1.0 (7)", "gw s1");
+        let read = TranscriptSnapshot::decode(&bytes, "1.0 (7)", "gw s1").expect(corpus);
+        assert_eq!(read.encode("1.0 (7)", "gw s1"), bytes, "{corpus}");
+        let (before, after) = (resumed(snapshot), resumed(read));
+        assert_eq!(before.live.state().items, after.live.state().items, "{corpus}");
+        assert_eq!(before.live.view().rows().len(), after.live.view().rows().len(), "{corpus}");
+    }
+}
+
+#[test]
+fn a_stored_snapshot_from_another_build_or_session_reads_as_nothing() {
+    let bytes = closed_snapshot().encode("1.0 (7)", "gw s1");
+    assert!(TranscriptSnapshot::decode(&bytes, "1.0 (8)", "gw s1").is_none());
+    assert!(TranscriptSnapshot::decode(&bytes, "1.0 (7)", "gw s2").is_none());
+    assert!(TranscriptSnapshot::decode(b"{\"format\":0}", "1.0 (7)", "gw s1").is_none());
+}

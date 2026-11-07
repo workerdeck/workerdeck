@@ -927,7 +927,8 @@ static SPA.
 **Rust-only since 2026-10-16 (Tobias's call).** Every session opens on
 `CoreSessionView` over the Rust core (`WorkerDeckSession`, linked unconditionally); there is no
 toggle and no Swift fallback. A reopen resumes from the core's transcript cache (`cacheKey` = base URL and session
-id, `park()` in `CoreSessionDriver.close()`; docs/GOTCHAS.md § Attach replay). Tapping the status line's `core N s`
+id, `park()` in `CoreSessionDriver.close()`, kept across launches in Caches via `TranscriptStore.start()`;
+docs/GOTCHAS.md § Attach replay). Tapping the status line's `core N s`
 shows where the open went: socket, first and last frame, bytes and frames, core and ui seconds. The Swift session screen (`SessionView`, `TranscriptViewModel`, the cards renderer,
 the composer, the status bar, the sheets and the host file browser) is deleted, so paragraphs
 below that describe them (and the Swift files they name) are history until this section is rewritten. Deep links still land:
@@ -1534,7 +1535,7 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   single session that does not decode is skipped, never the whole list.
 - **A session lives as long as its screen.** `SessionModel` is a plain object the screen
   `remember`s and closes in `DisposableEffect` (its `close()` parks the core `Session`, so the next open resumes from the
-  transcript cache, keyed by `Transport.cacheScope` and the session id), not an Activity-scoped ViewModel (that kept every
+  transcript cache, keyed by `Transport.cacheScope` and the session id, on disk in `cacheDir` from `MainActivity`), not an Activity-scoped ViewModel (that kept every
   opened session streaming). `SessionWorker` is a no-op after `close()`: a late socket callback
   must never throw on OkHttp's thread. Socket callbacks are matched by a generation number, not by
   reference, because they can fire before the worker stores the socket. Only the parts a

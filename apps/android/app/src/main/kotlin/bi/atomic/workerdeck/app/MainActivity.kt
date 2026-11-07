@@ -39,11 +39,14 @@ import bi.atomic.workerdeck.app.sessions.SessionsScreen
 import bi.atomic.workerdeck.app.sessions.describe
 import bi.atomic.workerdeck.app.ui.WorkerDeckTheme
 import bi.atomic.workerdeck.core.ffi.cleartextRefusal
+import bi.atomic.workerdeck.core.ffi.setTranscriptStore
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        startTranscriptStore()
         val store = GatewayStore(applicationContext)
         if (BuildConfig.DEBUG) trackJank()
         setContent {
@@ -52,6 +55,13 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.semantics { testTagsAsResourceId = true }, color = MaterialTheme.colorScheme.background) { App(store) }
             }
         }
+    }
+
+    // Closed sessions' transcripts survive a relaunch; the install time joins the version, since a dev install keeps
+    // its version code.
+    private fun startTranscriptStore() {
+        val installed = runCatching { packageManager.getPackageInfo(packageName, 0).lastUpdateTime }.getOrDefault(0L)
+        setTranscriptStore(File(cacheDir, "transcripts").path, "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) $installed")
     }
 
     // Debug builds log every janky frame with the screen it happened on: `adb logcat -s JankStats`.

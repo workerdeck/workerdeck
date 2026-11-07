@@ -19,6 +19,7 @@ struct WorkerDeckApp: App {
   init() {
     // Debug-only, and silent unless InjectionNext is set up - see HotReload.swift.
     HotReload.start()
+    TranscriptStore.start()
   }
 
   var body: some Scene {

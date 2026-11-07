@@ -94,6 +94,19 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
+// `None` is left out, `Some(None)` is a null, `Some(Some(v))` is v: a plain `Option<Option<_>>` writes both as null.
+pub(crate) mod double_option_field {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer, T: Serialize>(value: &Option<Option<T>>, serializer: S) -> Result<S::Ok, S::Error> {
+        value.as_ref().and_then(Option::as_ref).serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserializer: D) -> Result<Option<Option<T>>, D::Error> {
+        Option::<T>::deserialize(deserializer).map(Some)
+    }
+}
+
 // A goal a newer gateway shapes differently reads as no goal: the session itself must still decode.
 fn lenient_failure<'de, D>(deserializer: D) -> Result<Option<SessionFailure>, D::Error>
 where

@@ -1,6 +1,7 @@
 use crate::protocol::{Body, ContentBlock, ContextUsage, Event, SessionStatus, ToolResultContent};
 use crate::rest::{EngineCapabilities, ProfileEngine, SessionGoal, SessionInfo};
 use crate::vm::goal::goal_notice_row;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -35,7 +36,7 @@ impl ItemKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToolCallStatus {
     Pending,
     Running,
@@ -44,7 +45,7 @@ pub enum ToolCallStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCallResult {
     pub text: Str,
     pub is_error: bool,
@@ -54,7 +55,7 @@ pub struct ToolCallResult {
     pub images: Option<Arc<Vec<ImageRef>>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImageRef {
     pub part_index: f64,
     pub media_type: Str,
@@ -62,7 +63,7 @@ pub struct ImageRef {
     pub source_seq: i64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCall {
     pub id: Str,
     pub name: Str,
@@ -79,7 +80,7 @@ pub struct ToolCall {
     pub logs: Option<Arc<Vec<String>>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompactionItem {
     pub id: Str,
     pub parent_tool_use_id: Option<Str>,
@@ -90,7 +91,7 @@ pub struct CompactionItem {
     pub error: Option<Str>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellItem {
     pub id: Str,
     pub shell: Arc<Value>,
@@ -100,13 +101,13 @@ pub struct ShellItem {
     pub missing: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NoticeLevel {
     Info,
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Item {
     User {
         id: Str,
@@ -193,20 +194,21 @@ impl Item {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProducedFile {
     pub file_id: String,
     pub media_type: Option<String>,
     pub bytes: Option<f64>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TranscriptState {
     pub status: Option<SessionStatus>,
     pub status_detail: Option<String>,
     pub engine_asleep: bool,
     pub model: Option<String>,
     // Outer `None` is "never said"; `Some(None)` is an effort explicitly cleared, which a seed must not overwrite.
+    #[serde(default, with = "crate::rest::double_option_field", skip_serializing_if = "Option::is_none")]
     pub effort: Option<Option<String>>,
     pub cwd: Option<String>,
     pub sdk_session_id: Option<String>,
@@ -215,6 +217,7 @@ pub struct TranscriptState {
     pub skills: Option<Arc<Value>>,
     pub checklist: Option<Vec<Value>>,
     // Outer `None` is "never said"; `Some(None)` is no goal, which a seed must not overwrite.
+    #[serde(default, with = "crate::rest::double_option_field", skip_serializing_if = "Option::is_none")]
     pub goal: Option<Option<SessionGoal>>,
     pub tool_titles: Vec<(String, String)>,
     pub produced_files: Vec<(String, ProducedFile)>,

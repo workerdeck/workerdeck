@@ -81,14 +81,45 @@ struct ReadMark {
 
 // A closed session's reduced transcript, kept by the host so the next open resumes after `state.last_seq` instead of
 // replaying the log. Only ever restored through `LiveSession::resume`, whose first attach still runs `stale`.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct TranscriptSnapshot {
     state: TranscriptState,
     seq_index: TranscriptSeqIndex,
     init_model: Option<String>,
 }
 
+// Bump on any change to what a snapshot holds or means (the reducer's item shapes included): a stored snapshot of
+// another format is dropped, never read.
+const SNAPSHOT_FORMAT: u32 = 1;
+
+#[derive(serde::Serialize)]
+struct StoredRef<'a> {
+    format: u32,
+    build: &'a str,
+    key: &'a str,
+    snapshot: &'a TranscriptSnapshot,
+}
+
+#[derive(serde::Deserialize)]
+struct Stored {
+    format: u32,
+    build: String,
+    key: String,
+    snapshot: TranscriptSnapshot,
+}
+
 impl TranscriptSnapshot {
+    // `build` names the app build that wrote it and `key` the session, so a file from another build or a hash
+    // collision reads as nothing.
+    pub fn encode(&self, build: &str, key: &str) -> Vec<u8> {
+        serde_json::to_vec(&StoredRef { format: SNAPSHOT_FORMAT, build, key, snapshot: self }).unwrap_or_default()
+    }
+
+    pub fn decode(bytes: &[u8], build: &str, key: &str) -> Option<Self> {
+        let stored: Stored = serde_json::from_slice(bytes).ok()?;
+        (stored.format == SNAPSHOT_FORMAT && stored.build == build && stored.key == key).then_some(stored.snapshot)
+    }
+
     pub fn last_seq(&self) -> i64 {
         self.state.last_seq
     }

@@ -178,7 +178,7 @@ pub struct Event {
     pub body: Body,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SessionStatus {
     Starting,
     Running,
@@ -216,7 +216,7 @@ impl SessionStatus {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ContextUsage {
     pub total_tokens: i64,
     pub max_tokens: i64,
