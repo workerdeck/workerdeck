@@ -30,14 +30,17 @@ struct CoreSessionView: View {
   private let composerServices: CoreComposerServices
   private var onGoToCurrent: (() -> Void)?
   private var onMisplaced: ((Int64) -> Void)?
+  private var fleet: LeadFleet?
 
   // `conversation`: a past conversation of the session, shown read-only; nil is the current one. `expect`: the
   // conversation a notification resolved as current; an attach showing another one calls `onMisplaced` with it.
   init(
     sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry? = nil, conversation: Int64? = nil,
-    expect: Int64? = nil, onGoToCurrent: (() -> Void)? = nil, onMisplaced: ((Int64) -> Void)? = nil
+    expect: Int64? = nil, onGoToCurrent: (() -> Void)? = nil, onMisplaced: ((Int64) -> Void)? = nil,
+    fleet: LeadFleet? = nil
   ) {
     self.hostId = hostId
+    self.fleet = fleet
     self.sessionId = sessionId
     self.client = client
     self.onGoToCurrent = onGoToCurrent
@@ -69,6 +72,7 @@ struct CoreSessionView: View {
       CoreConversationBars(
         archived: readOnly ? archived : nil, notice: readOnly ? nil : notice,
         goToCurrent: onGoToCurrent, settle: settlePrompt, retryStartNow: retryStart)
+      if !readOnly, let fleet { CoreFleetStrip(fleet: fleet, retry: retryMemberStart) }
       transcriptArea(ui)
       if !readOnly {
         if let prompt = ui.prompt {
@@ -321,6 +325,12 @@ struct CoreSessionView: View {
     }
   }
 
+  private func retryMemberStart(_ member: FleetMember, _ n: Int64) {
+    act("Could not start the conversation", retryConversationStartCall(id: member.sessionId, expectedGeneration: n)) { _ in
+      fleet?.refresh()
+    }
+  }
+
   private var rowActions: CoreRowActions {
     CoreRowActions(
       menu: CoreRowMenu.make(model: model, bookmarks: bookmarks, hostId: hostId, sessionId: sessionId),
@@ -570,18 +580,20 @@ struct CoreSessionRoute: View {
   let hostId: UUID
   let client: WorkerClient
   let entry: CoreEntry?
+  let fleet: LeadFleet?
   private let requested: Int64?
   @State private var entryFor: Int64?
   @State private var conversation: Int64?
 
   init(
     sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry?, conversation: Int64?,
-    requested: Int64? = nil
+    requested: Int64? = nil, fleet: LeadFleet? = nil
   ) {
     self.sessionId = sessionId
     self.hostId = hostId
     self.client = client
     self.entry = entry
+    self.fleet = fleet
     self.requested = conversation == nil ? requested : nil
     _entryFor = State(initialValue: conversation)
     _conversation = State(initialValue: conversation)
@@ -595,7 +607,8 @@ struct CoreSessionRoute: View {
       onMisplaced: { n in
         entryFor = n
         conversation = n
-      }
+      },
+      fleet: fleet
     )
     .id(conversation)
   }

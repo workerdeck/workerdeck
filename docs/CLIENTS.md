@@ -1459,7 +1459,9 @@ padding on chips and tray faces is layout-neutral (`hitPadding`) so a line stays
 and `AgentAvatarView`: an agent draws its face through `FaceView` (the core's draw ops in a `Canvas`, motions under a
 30 fps `TimelineView`, paused under Reduce Motion; the canvas keeps a 4-unit margin because the bubble, ring and chip reach
 past the 32-unit box), a plain session a dashed engine tile with the status badge. A card whose session or team needs an
-answer is tinted orange. Verbs follow the web menu (rename, status, avatar, make agent, add to
+answer is tinted orange. A lead's session screen draws the fleet strip (`CoreFleetStrip`, the core's `SessionList.fleet`) under
+its header: one line per Member that needs you, a tap opens it, Retry start on a failed start; the list's poll keeps running while a lead is on
+top of the stack so the strip stays current. Verbs follow the web menu (rename, status, avatar, make agent, add to
 team, leave, dissolve, sharing, new conversation, conversations, delete agent), from a long
 press and swipes (leading rename and new conversation). Make agent and a team join name the session in
 place (`name_session_call`, `PATCH /sessions/:id { agent }`). New agent reuses the New session form with an

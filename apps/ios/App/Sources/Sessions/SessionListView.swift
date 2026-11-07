@@ -62,7 +62,12 @@ struct SessionListView: View {
   }
 
   private var pollKey: PollKey {
-    PollKey(active: scenePhase == .active && path.isEmpty, hosts: hosts.hosts)
+    PollKey(active: scenePhase == .active && (path.isEmpty || leadOnTop), hosts: hosts.hosts)
+  }
+
+  private var leadOnTop: Bool {
+    guard case .session(let hostId, let sessionId, _, _, _, _, _, _, _) = path.last else { return false }
+    return model?.isLead(hostId: hostId, sessionId: sessionId) == true
   }
 
   var body: some View {
@@ -83,7 +88,7 @@ struct SessionListView: View {
       }
     }
     // One task owns both the model's existence and the poll. The poll runs only
-    // while the list itself is what's on screen (stack empty, app active): an
+    // while the list, or a lead's fleet strip, is what's on screen: any other
     // open session has its own socket, and a backgrounded app has no reader.
     .task(id: pollKey) {
       let live = model ?? SessionListModel(hosts: hosts, unread: unread, defaults: defaults)
@@ -183,7 +188,11 @@ struct SessionListView: View {
         CoreSessionRoute(
           sessionId: sessionId, hostId: hostId, client: context.client,
           entry: SessionRoute.entry(seq: seq, epoch: epoch, subagent: subagent, reveal: reveal, shell: shell),
-          conversation: conversation, requested: requested)
+          conversation: conversation, requested: requested,
+          fleet: LeadFleet(
+            members: { model.fleet(hostId: hostId.uuidString, sessionId: sessionId) },
+            open: { open(hostId: $0.hostId, sessionId: $0.sessionId, model: model) },
+            refresh: { Task { await model.refresh() } }))
       } else {
         missingHost
       }
@@ -490,7 +499,7 @@ struct SessionListView: View {
         tray: row.depth == 0 && (!row.tray.isEmpty || row.teamExpanded || row.teamAttention > 0)
           ? TeamTray(
             row: row,
-            select: { member in open(member, model: model) },
+            select: { open(hostId: $0.hostId, sessionId: $0.sessionId, model: model) },
             toggle: { model.toggleTeam(item) })
           : nil,
         hostName: showsHostNames(model) && model.filter.groupBy != .project ? row.hostName : nil,
@@ -516,11 +525,11 @@ struct SessionListView: View {
 
   private var clockMs: Double { Date().timeIntervalSince1970 * 1000 }
 
-  // A tray avatar opens its Member, which then counts as selected and so stays drawn under the lead.
-  private func open(_ member: TrayMember, model: SessionListModel) {
-    guard let hostId = UUID(uuidString: member.hostId) else { return }
-    model.select(hostId: member.hostId, sessionId: member.sessionId)
-    path.append(.session(hostId: hostId, sessionId: member.sessionId))
+  // A tray avatar or a fleet strip row opens its Member, which then counts as selected and so stays drawn under the lead.
+  private func open(hostId: String, sessionId: String, model: SessionListModel) {
+    guard let host = UUID(uuidString: hostId) else { return }
+    model.select(hostId: hostId, sessionId: sessionId)
+    path.append(.session(hostId: host, sessionId: sessionId))
   }
 
   private func earlierHeader(_ section: ListSection, model: SessionListModel) -> some View {

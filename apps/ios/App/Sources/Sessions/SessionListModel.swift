@@ -248,6 +248,13 @@ final class SessionListModel {
     return sections
   }
 
+  func fleet(hostId: String, sessionId: String) -> [FleetMember] {
+    _ = (revision, unread.revision)
+    return core.fleet(hostId: hostId, sessionId: sessionId)
+  }
+
+  func isLead(hostId: UUID, sessionId: String) -> Bool { row(hostId: hostId.uuidString, sessionId: sessionId)?.lead == true }
+
   // The Member opened last: a phone's stand-in for the dashboard's selected row.
   func select(hostId: String, sessionId: String) {
     core.select(hostId: hostId, sessionId: sessionId)
