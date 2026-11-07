@@ -153,7 +153,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     self.apiBase = WorkerDeckSession.apiBase(baseUrl: baseURL)
     self.authKey = authKey?.isEmpty == false ? authKey : nil
     self.publish = publish
-    session = Session(afterSeq: 0, reconnect: true, nonce: UUID().uuidString, metrics: metrics, history: history)
+    session = Session(
+      afterSeq: 0, reconnect: true, nonce: UUID().uuidString, metrics: metrics, history: history,
+      cacheKey: fixture == nil ? "\(baseURL) \(sessionId)" : nil)
     super.init()
     urlSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     worker = SessionWorker(session: session) { [weak self] effects in self?.handle(effects) }
@@ -397,6 +399,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     usagePoll = nil
     lock.unlock()
     worker.close()
+    session.park()
     urlSession.invalidateAndCancel()
   }
 

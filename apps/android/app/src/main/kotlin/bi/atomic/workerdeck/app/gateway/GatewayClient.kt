@@ -30,6 +30,9 @@ class GatewayException(message: String) : IOException(message)
 
 // What a session view needs from the network: its socket and the REST calls the core asks for. Tests fake it.
 interface Transport {
+    // Names the gateway in the core's transcript cache; null keeps nothing between opens.
+    val cacheScope: String? get() = null
+
     // `conversation` opens a past conversation's read-only socket; null attaches the current one.
     fun socket(sessionId: String, afterSeq: Long, conversation: Long?, listener: WebSocketListener): WebSocket
 
@@ -46,6 +49,8 @@ interface Transport {
 }
 
 class GatewayClient(val gateway: Gateway) : Transport {
+    override val cacheScope: String get() = gateway.id
+
     private val http = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .pingInterval(20, TimeUnit.SECONDS)

@@ -79,6 +79,25 @@ struct ReadMark {
     since_ms: Option<f64>,
 }
 
+// A closed session's reduced transcript, kept by the host so the next open resumes after `state.last_seq` instead of
+// replaying the log. Only ever restored through `LiveSession::resume`, whose first attach still runs `stale`.
+#[derive(Clone)]
+pub struct TranscriptSnapshot {
+    state: TranscriptState,
+    seq_index: TranscriptSeqIndex,
+    init_model: Option<String>,
+}
+
+impl TranscriptSnapshot {
+    pub fn last_seq(&self) -> i64 {
+        self.state.last_seq
+    }
+
+    pub fn items(&self) -> usize {
+        self.state.items.len()
+    }
+}
+
 pub struct LiveSession {
     conn: SessionConnection,
     state: TranscriptState,
@@ -167,6 +186,28 @@ impl LiveSession {
         };
         session.pump();
         session
+    }
+
+    // Opens after the snapshot's last seq with its transcript drawn at once. A log the gateway renumbered since (a cut,
+    // a dormant wake) fails `stale` on attach, which drops the snapshot and replays from zero.
+    pub fn resume(snapshot: TranscriptSnapshot, reconnect: bool, nonce: String, metrics: Metrics) -> Self {
+        let mut session = LiveSession::new(snapshot.state.last_seq, reconnect, nonce, metrics, None);
+        session.state = snapshot.state;
+        session.seq_index = snapshot.seq_index;
+        session.init_model = snapshot.init_model;
+        session.dirty = true;
+        session.changed.chrome = true;
+        session
+    }
+
+    // The newest consistent transcript (a replay's buffer while one is held), or None when there is nothing a resume
+    // could check: a past conversation, an empty log, or no session info to compare epochs with.
+    pub fn snapshot(&self) -> Option<TranscriptSnapshot> {
+        let state = self.buffer.as_ref().unwrap_or(&self.state);
+        if self.history.is_some() || state.last_seq == 0 || state.session.is_none() {
+            return None;
+        }
+        Some(TranscriptSnapshot { state: state.clone(), seq_index: self.seq_index.clone(), init_model: self.init_model.clone() })
     }
 
     pub fn state(&self) -> &TranscriptState {

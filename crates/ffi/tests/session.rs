@@ -2,7 +2,7 @@ use wdffi::{Effect, Metrics, PromptKind, Selection, Session, snapshot_version};
 
 #[test]
 fn a_session_opens_attaches_and_draws_through_the_ffi_surface() {
-    let session = Session::new(0, true, "n".into(), Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 }, None);
+    let session = Session::new(0, true, "n".into(), Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 }, None, None);
     assert!(session.take_effects().contains(&Effect::Open { after_seq: 0 }));
     session.opened();
     let attached = r#"{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"#;
@@ -17,14 +17,14 @@ fn a_session_opens_attaches_and_draws_through_the_ffi_surface() {
 
 #[test]
 fn an_attach_the_reader_cannot_follow_surfaces_as_a_protocol_error() {
-    let session = Session::new(0, true, "n".into(), Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 }, None);
+    let session = Session::new(0, true, "n".into(), Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 }, None, None);
     session.opened();
     session.received(r#"{"type":"attached","protocolVersion":2,"replayingFrom":0,"session":{"id":"s1"}}"#.into(), 0.0);
     assert!(session.take_protocol_error().is_some_and(|message| message.contains("attached")));
 }
 
 fn attached_with(events: &[&str]) -> std::sync::Arc<Session> {
-    let session = Session::new(0, true, "n".into(), Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 }, None);
+    let session = Session::new(0, true, "n".into(), Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 }, None, None);
     session.opened();
     let attached = r#"{"type":"attached","protocolVersion":2,"replayingFrom":0,"acks":true,"session":{"id":"s1","status":"awaiting_approval","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"#;
     let mut batch = format!("{attached}\n");
@@ -66,4 +66,25 @@ fn a_plan_prompt_lays_its_markdown_out_as_lines() {
     assert_eq!(bytes[0], snapshot_version());
     assert!(bytes.len() > 20);
     assert!(attached_with(&[]).prompt().is_none());
+}
+
+#[test]
+fn a_dropped_session_leaves_its_transcript_for_the_next_open_with_its_key() {
+    let metrics = || Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 };
+    let key = Some("gw:cached".to_owned());
+    let first = Session::new(0, true, "n".into(), metrics(), None, key.clone());
+    first.opened();
+    let attached = r#"{"type":"attached","protocolVersion":2,"replayingFrom":0,"session":{"id":"cached","status":"idle","cwd":"/r","createdAt":1,"lastSeq":1,"epoch":2,"pendingPermissionCount":0}}"#;
+    let event = r#"{"type":"event","event":{"type":"user_message","message":{"role":"user","content":"hi"},"parentToolUseId":null,"uuid":"u1","seq":1,"ts":1}}"#;
+    first.received_batch(format!("{attached}\n{event}\n"), 0.0);
+    first.park();
+
+    let again = Session::new(0, true, "n".into(), metrics(), None, key.clone());
+    assert!(again.take_effects().contains(&Effect::Open { after_seq: 1 }));
+    drop(again);
+
+    let past = Session::new(0, true, "n".into(), metrics(), Some(1), key.clone());
+    assert!(past.take_effects().contains(&Effect::Open { after_seq: 0 }));
+    let other = Session::new(0, true, "n".into(), metrics(), None, Some("gw:other".into()));
+    assert!(other.take_effects().contains(&Effect::Open { after_seq: 0 }));
 }

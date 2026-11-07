@@ -17,7 +17,7 @@ object Fixtures {
         """{"type":"shell_attached","shellId":"sh_1","cols":20,"rows":4,"scrollback":"hello\r\nworld","shell":{"id":"sh_1","sessionId":"s1","ordinal":2,"command":"bash","label":"bash","cwd":"/repo","owner":"user","status":"running","startedAt":1,"bytes":0,"cols":20,"rows":4}}"""
 
     fun session(): Session {
-        val session = Session(0, true, "n", Metrics(8.0, 16.0, 800.0, 13.0), null)
+        val session = Session(0, true, "n", Metrics(8.0, 16.0, 800.0, 13.0), null, null)
         session.opened()
         return session
     }

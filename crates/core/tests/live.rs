@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 use std::path::Path;
-use wd_native::controller::live::{Changed, ConnectionState, Effect, LiveSession};
+use wd_native::controller::live::{Changed, ConnectionState, Effect, LiveSession, TranscriptSnapshot};
 use wd_native::controller::replay::STALL_SECONDS;
 use wd_native::controller::shell::ShellPhase;
 use wd_native::controller::transcript::{Navigation, TranscriptView, Update};
@@ -879,4 +879,64 @@ fn a_kill_names_the_conversation_it_was_meant_for() {
         _ => None,
     });
     assert_eq!(generation, Some(Some(4)));
+}
+
+fn attach_epoch(host: &mut Host, replaying_from: i64, last_seq: i64, epoch: i64) {
+    host.frame(
+        json!({"type": "attached", "protocolVersion": 2, "replayingFrom": replaying_from,
+            "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": last_seq, "epoch": epoch,
+                "pendingPermissionCount": 0}}),
+        1.0,
+    );
+}
+
+fn closed_snapshot() -> TranscriptSnapshot {
+    let mut host = Host::new();
+    host.open();
+    attach_epoch(&mut host, 0, 15, 3);
+    host.events("basic-turn", 1.0);
+    host.live.snapshot().expect("a replayed session leaves a snapshot")
+}
+
+fn resumed(snapshot: TranscriptSnapshot) -> Host {
+    let mut host =
+        Host { live: LiveSession::resume(snapshot, true, "n".into(), METRICS), effects: Vec::new(), sent: Vec::new(), opens: Vec::new() };
+    host.drain();
+    host
+}
+
+#[test]
+fn a_resumed_session_draws_its_snapshot_at_once_and_asks_only_for_what_came_after() {
+    let snapshot = closed_snapshot();
+    assert_eq!(snapshot.last_seq(), 15);
+    let mut host = resumed(snapshot);
+    assert_eq!(host.opens, [15]);
+    assert!(!host.live.view().rows().is_empty());
+    host.open();
+    attach_epoch(&mut host, 15, 15, 3);
+    assert_eq!(host.opens, [15]);
+    assert_eq!(host.live.state().last_seq, 15);
+    assert!(!host.live.state().items.is_empty());
+}
+
+#[test]
+fn a_resume_into_a_renumbered_log_drops_the_snapshot_and_replays_from_zero() {
+    let mut host = resumed(closed_snapshot());
+    host.open();
+    attach_epoch(&mut host, 15, 20, 4);
+    assert_eq!(host.opens, [15, 0]);
+    assert!(host.live.state().items.is_empty());
+}
+
+#[test]
+fn a_past_conversation_or_an_empty_log_leaves_no_snapshot() {
+    let mut past = Host::showing(Some(1));
+    past.open();
+    attach_past(&mut past, 0, 15, 0.0);
+    past.events("basic-turn", 1.0);
+    assert!(past.live.snapshot().is_none());
+    let mut empty = Host::new();
+    empty.open();
+    attach_epoch(&mut empty, 0, 0, 1);
+    assert!(empty.live.snapshot().is_none());
 }

@@ -2,7 +2,7 @@
 // (`wd_native::snapshot`) for everything a renderer draws. The platform drives one `Session` from one thread; the
 // mutex only makes the object `Sync` for UniFFI.
 use std::sync::{Arc, Mutex, MutexGuard};
-use wd_native::controller::live::{self, LiveSession};
+use wd_native::controller::live::{self, LiveSession, TranscriptSnapshot};
 use wd_native::controller::transcript::Navigation;
 use wd_native::controller::viewport::Viewport;
 use wd_native::planner;
@@ -336,8 +336,32 @@ pub struct FrameStrip {
     pub failed: bool,
 }
 
+// The last few closed sessions' transcripts, newest last, shared by every Session in the process: reopening one resumes
+// after its last seq instead of replaying the whole log over a slow link.
+const CACHED_SESSIONS: usize = 4;
+static TRANSCRIPTS: Mutex<Vec<(String, TranscriptSnapshot)>> = Mutex::new(Vec::new());
+
+fn transcripts() -> MutexGuard<'static, Vec<(String, TranscriptSnapshot)>> {
+    TRANSCRIPTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn take_transcript(key: &str) -> Option<TranscriptSnapshot> {
+    let mut cache = transcripts();
+    let at = cache.iter().position(|(k, _)| k == key)?;
+    Some(cache.remove(at).1)
+}
+
+fn keep_transcript(key: String, snapshot: TranscriptSnapshot) {
+    let mut cache = transcripts();
+    cache.retain(|(k, _)| *k != key);
+    cache.push((key, snapshot));
+    let over = cache.len().saturating_sub(CACHED_SESSIONS);
+    cache.drain(..over);
+}
+
 #[derive(uniffi::Object)]
 pub struct Session {
+    cache_key: Mutex<Option<String>>,
     inner: Mutex<LiveSession>,
     viewport: Mutex<Viewport>,
     frame_viewport: Mutex<Viewport>,
@@ -361,13 +385,42 @@ fn parse<T: serde::de::DeserializeOwned>(json: Option<String>) -> Option<T> {
     serde_json::from_str(&json?).ok()
 }
 
+impl Session {
+    fn keep(&self) {
+        let Some(key) = self.cache_key.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take() else { return };
+        if let Some(snapshot) = self.live().snapshot() {
+            keep_transcript(key, snapshot);
+        }
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.keep();
+    }
+}
+
 #[uniffi::export]
 impl Session {
     #[uniffi::constructor]
     // `history`: a past conversation's n, shown read-only over `socket_url(.., Some(n))`; None is the current one.
-    pub fn new(after_seq: i64, reconnect: bool, nonce: String, metrics: Metrics, history: Option<i64>) -> Arc<Self> {
-        let live = LiveSession::new(after_seq, reconnect, nonce, metrics.into(), history);
+    // `cache_key` names the session across opens (gateway and session id): its transcript is kept when this Session is
+    // dropped, and a later Session with the same key starts from it.
+    pub fn new(
+        after_seq: i64,
+        reconnect: bool,
+        nonce: String,
+        metrics: Metrics,
+        history: Option<i64>,
+        cache_key: Option<String>,
+    ) -> Arc<Self> {
+        let cache_key = cache_key.filter(|_| history.is_none());
+        let live = match cache_key.as_deref().and_then(take_transcript) {
+            Some(snapshot) => LiveSession::resume(snapshot, reconnect, nonce, metrics.into()),
+            None => LiveSession::new(after_seq, reconnect, nonce, metrics.into(), history),
+        };
         Arc::new(Session {
+            cache_key: Mutex::new(cache_key),
             inner: Mutex::new(live),
             viewport: Mutex::new(Viewport::default()),
             frame_viewport: Mutex::new(Viewport::default()),
@@ -377,6 +430,11 @@ impl Session {
 
     pub fn take_effects(&self) -> Vec<Effect> {
         self.live().take_effects().into_iter().map(Effect::from).collect()
+    }
+
+    // The screen left: keeps the transcript for the next open now, not whenever the host's runtime drops this object.
+    pub fn park(&self) {
+        self.keep();
     }
 
     pub fn opened(&self) -> Vec<Effect> {

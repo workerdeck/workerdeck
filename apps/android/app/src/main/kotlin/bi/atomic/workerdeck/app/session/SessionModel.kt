@@ -138,7 +138,7 @@ class SessionModel(
     val history: Long? = null,
 ) : AutoCloseable, PromptActions {
     private var pending = entry
-    private val session = Session(0, true, UUID.randomUUID().toString(), metrics, history)
+    private val session = Session(0, true, UUID.randomUUID().toString(), metrics, history, client.cacheScope?.let { "$it:$sessionId" })
     private val state = MutableStateFlow(SessionUi())
     private val worker = SessionWorker(session, onFailure = ::failed, onEffects = ::handle)
     val ui: StateFlow<SessionUi> = state
@@ -455,6 +455,7 @@ class SessionModel(
             emptyList()
         }
         worker.close()
+        session.park()
         composer.close()
     }
 
