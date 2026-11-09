@@ -130,7 +130,6 @@ async function saveManaged(ctx: ServerContext, res: ServerResponse, incoming: Pr
   if (!saved.ok) {
     fail(saved.status, saved.error)
   }
-  ctx.profileModels.forget(saved.profile.name)
-  void ctx.profileModels.probe(saved.profile)
+  void ctx.profileModels.refresh(saved.profile)
   json(res, 200, { profile: saved.profile })
 }

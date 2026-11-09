@@ -462,7 +462,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     requireApiKey: options.requireApiKey,
     profiles,
     baseEnvFor: factory.baseSessionEnvFor,
-    onChange: (profile) => availability.probe(profile),
+    onChange: (profile) => {
+      void profileModels.refresh(profile)
+      return availability.probe(profile)
+    },
   })
 
   const auth = createAuthService({ options, registry })

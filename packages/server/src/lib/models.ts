@@ -22,16 +22,22 @@ function named(id: string | undefined): string | undefined {
 }
 
 // The static catalog plus the rows only this account reports (an access-gated model). A catalog row stays even when the
-// account no longer lists it; an added row goes ahead of its line's newest so the picker's short list shows it.
+// account no longer lists it; an added row keeps its place in the account's newest-first order within its line.
 export function withAccountModels(catalog: ModelOption[], live: readonly ModelOption[] | undefined): ModelOption[] {
-  const added = (live ?? []).filter((row) => row.value !== 'default' && !catalog.some((known) => sameModel(known, row)))
-  if (added.length === 0) {
+  const rows = live ?? []
+  const known = (row: ModelOption) => catalog.some((k) => sameModel(k, row))
+  if (rows.every((row) => row.value === 'default' || known(row))) {
     return catalog
   }
   const merged = [...catalog]
-  for (const row of added) {
-    const at = merged.findIndex((known) => modelLine(known) === modelLine(row))
-    merged.splice(at === -1 ? merged.length : at, 0, row)
+  for (const [index, row] of rows.entries()) {
+    if (row.value === 'default' || known(row)) {
+      continue
+    }
+    const line = modelLine(row)
+    const knownOfLine = (next: ModelOption) => modelLine(next) === line && known(next)
+    const anchor = rows.slice(index + 1).find(knownOfLine) ?? (rows.slice(0, index).some(knownOfLine) ? undefined : catalog.find(knownOfLine))
+    merged.splice(anchor ? merged.findIndex((m) => sameModel(m, anchor)) : afterLine(merged, line), 0, row)
   }
   const lines = new Set<string>()
   return merged.map(({ primary: _primary, ...row }) => {
@@ -40,6 +46,15 @@ export function withAccountModels(catalog: ModelOption[], live: readonly ModelOp
     lines.add(line)
     return first ? { ...row, primary: true } : row
   })
+}
+
+function afterLine(models: readonly ModelOption[], line: string): number {
+  for (let i = models.length - 1; i >= 0; i -= 1) {
+    if (modelLine(models[i]!) === line) {
+      return i + 1
+    }
+  }
+  return models.length
 }
 
 function sameModel(a: ModelOption, b: ModelOption): boolean {
