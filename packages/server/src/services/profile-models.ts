@@ -11,8 +11,10 @@ export type ProfileModelsOptions = {
 type Held = { models: ModelOption[]; ticket: number }
 
 // A producer takes a ticket when it starts and writes only while its profile's generation is the one it started under
-// and no later-started producer has written: a retarget fences out an older account's probe and sessions.
+// and no later-started producer has written: a retarget fences out an older account's probe and sessions. A runner
+// older than this manager (carried over by a hot reload) never teaches: its account may predate a retarget we never saw.
 export class ProfileModels {
+  readonly #since = Date.now()
   readonly #held = new Map<string, Held>()
   readonly #generations = new Map<string, number>()
   readonly #opts: ProfileModelsOptions
@@ -28,7 +30,7 @@ export class ProfileModels {
 
   watch(runner: Runner): () => void {
     const info = runner.info()
-    if (!info.profile || engineOf(info) !== 'claude') {
+    if (!info.profile || engineOf(info) !== 'claude' || info.createdAt < this.#since) {
       return () => {}
     }
     const profile = info.profile

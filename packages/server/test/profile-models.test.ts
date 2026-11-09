@@ -244,6 +244,19 @@ describe('ProfileModels producers', () => {
     expect(models.get('cyber')).toEqual(B)
   })
 
+  it('never learns from a runner older than the manager, as after a hot reload adopts it', async () => {
+    const runner = new ScriptedRunner('s1', { cwd: '/tmp', profile: 'cyber' }, { engine: 'claude' })
+    const before = new ProfileModels({ sessionEnvFor: () => ({}) })
+    before.watch(runner)
+    before.forget('cyber')
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const reloaded = new ProfileModels({ sessionEnvFor: () => ({}) })
+    reloaded.watch(runner)
+    runner.emitAt({ type: 'capabilities', models: [MYTHOS], commands: [] })
+    expect(before.get('cyber')).toBeUndefined()
+    expect(reloaded.get('cyber')).toBeUndefined()
+  })
+
   it("ignores a session started under the profile's previous account", () => {
     const { models } = deferredProbes()
     const runner = new ScriptedRunner('s1', { cwd: '/tmp', profile: 'cyber' }, { engine: 'claude' })

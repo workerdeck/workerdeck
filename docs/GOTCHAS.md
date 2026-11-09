@@ -111,8 +111,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   tokens, no MCP servers), run at `listen()`, after a profile save and on an account connect or
   disconnect, forgotten on delete. Each producer is fenced: `forget` bumps the profile's generation, so
   a probe or a session started under the old account never writes, and a write also needs a ticket
-  newer than the held one (a session reading beats a slower probe that started first). In memory
-  only: a restart probes again. A catalog row is never dropped because an account lacks it; an added
+  newer than the held one (a session reading beats a slower probe that started first). A runner created
+  before the manager (adopted by a hot reload) never teaches: the fresh manager cannot know whether its
+  account predates a retarget, so the startup probe fills the list. In memory only: a restart probes again. A catalog row is never dropped because an account lacks it; an added
   row goes ahead of its line so `modelMenu` shows it, and `primary` is recomputed per line. Never
   hard-code a gated model into the catalog: every other account would be offered a model it cannot run. `ProfileInfo.defaultModel` is static too: the profile's `defaults.model`, else
   the catalog's `defaultModel`, exact, from the first request. The live `capabilities.defaultModel`
