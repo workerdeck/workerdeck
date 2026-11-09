@@ -1773,7 +1773,8 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   server, team-box 332 tools). The prompt cache was checked on request bodies only (SWP reads `cacheReadTokens`).
   Bumped in a worktree (the gateway runs from the main checkout). The first tag's Publish failed before anything
   published (`transcript-cache.test.ts` attached its reader before the writer's prompts were logged, every CI run);
-  the test now waits for the items.
+  the test now waits for the items, and the tag moved to the fix. **Published** 2026-11-09: tag `v4.4.0` at
+  `60392d04`, npm 12/12 with `latest` 4.4.0 (four staged for about two minutes), Marketplace 4.4.0.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
