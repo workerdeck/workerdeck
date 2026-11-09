@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionInfo } from '@workerdeck/protocol'
 import { createFileSessionRecordStore, createWorkerServer } from '../src/index.ts'
-import WebSocket from 'ws'
+import { WebSocket } from 'ws'
 import { fakeHarness, frameCollector, gatewayFixture, listenOn, until } from './helpers.ts'
 
 const initMessage = {
