@@ -910,10 +910,11 @@ branch in a reference app is a branch a reader must hold that teaches nothing ab
 The one thing still deferred upstream is an express-free
 `mcpTransport` mount; express stays here purely as a mounting mechanism for `/mcp` and the
 static SPA.
-- **Action schemas must be zod v4 schemas.** Silkweave 6 (MCP v2 SDK, protocol 2026-07-28) refuses a classic
-  zod v3 schema at `start()` with `unsupported_schema` naming the action, so `src/wiki/actions.ts` imports
-  `zod/v4`. `@silkweave/mcp` brings the `@modelcontextprotocol/*` packages itself: never add the SDK here. Its
-  tool `inputSchema` declares JSON Schema draft 2020-12; OpenAI accepts it (checked 2026-11-09).
+- **Action schemas must be zod v4 schemas.** Silkweave 7 (MCP v2 SDK) refuses a classic zod v3 schema at
+  `start()` with `unsupported_schema` naming the action, so `src/wiki/actions.ts` imports `zod/v4`.
+  `@silkweave/mcp` brings the `@modelcontextprotocol/*` packages itself: never add the SDK here. Silkweave 7 serves
+  MCP 2026-07-28 only (2025-era clients get -32022 unless the adapter sets `legacy: true`); our `@ai-sdk/mcp`
+  client negotiates it, and OpenAI accepts its draft 2020-12 `inputSchema` (checked 2026-11-09).
 - **Every prefix the app server owns must be listed in `vite.config.ts`'s dev proxy, and a missing
   one does not fail loudly.** Vite answers the SPA's `index.html` with a **200**, so the caller gets
   HTML where it expected JSON and the feature quietly never loads. This happened for real when the

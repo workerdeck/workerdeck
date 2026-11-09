@@ -166,14 +166,14 @@ importers:
         specifier: ^0.31.0
         version: 0.31.0
       '@silkweave/core':
-        specifier: ^6.0.0
-        version: 6.0.0(zod@4.6.7)
+        specifier: ^7.0.0
+        version: 7.0.0(zod@4.6.7)
       '@silkweave/mcp':
-        specifier: ^6.0.0
-        version: 6.0.0(commander@14.0.3)(cors@2.8.6)(express@5.3.0)
+        specifier: ^7.0.0
+        version: 7.0.0(commander@14.0.3)(cors@2.8.6)(express@5.3.0)
       '@silkweave/trpc':
-        specifier: ^6.0.0
-        version: 6.0.0(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)
+        specifier: ^7.0.0
+        version: 7.0.0(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)
       '@tailwindcss/vite':
         specifier: ^4.3.4
         version: 4.3.4(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -3095,18 +3095,18 @@ packages:
   '@shikijs/vscode-textmate@10.1.0':
     resolution: {integrity: sha512-cVBuhDQjBZaNMTwBquYfPydrUP+E3hE6oYGasx8h6ZrODIM7/r+gxLDXdd66oszbrggZHEntdE6j+5gYIVyMWQ==}
 
-  '@silkweave/auth@6.0.0':
-    resolution: {integrity: sha512-aUy7VfqCEbN+8iVI32qOsArml8Ez9HzFZSrK5gy7B1b+QmBPSSOtSxe891rRlfxeAnrLANfdXF2HdI6ttKfO7w==}
+  '@silkweave/auth@7.0.0':
+    resolution: {integrity: sha512-IYEi+DKFK17VWZCh1jfKZ00Yx6eWOSuiY/C/0jmTK7yq1vV1WFW9ftxfE41atGyFtK3YbESJpSWmiViWaOGWgA==}
 
-  '@silkweave/core@6.0.0':
-    resolution: {integrity: sha512-O09JkZcshYoaXWQ4Hy0BhfE+Qm8zfVdAt7V55voYY5aFsQsPYRTXbbGCkijD6MFSTT6TGuefq8Hlu2f/7pHJ+w==}
+  '@silkweave/core@7.0.0':
+    resolution: {integrity: sha512-LUzVFFvQzewVNq7fQU5XpfF8o/rLroJWk+FijXySG+PYBUsd8s8BHwfIh6pJlJsoc0K8B84gc/smk+2Gp0OvwQ==}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
-  '@silkweave/mcp@6.0.0':
-    resolution: {integrity: sha512-+pDKQOm93XhXlgU7mGQI50PMgplcXzRWudRRb6uSASPD8R5/pBYE3nGofGcpSdUErBpNOUmqGWAjYv5wrNeX6w==}
+  '@silkweave/mcp@7.0.0':
+    resolution: {integrity: sha512-sgaXLoyxxNa4+635P2Yc7elw1phkZKiWiZ/IgjGQdrULd5OdcbDylq3JaUWctfYlKeNA/19j7zhKAXw0whXmKg==}
     peerDependencies:
-      '@silkweave/skills': ^6.0.0
+      '@silkweave/skills': ^7.0.0
       commander: ^13.1.0 || ^14.0.0 || ^15.0.0
       cors: ^2.8.5
       express: ^5.0.0
@@ -3120,8 +3120,8 @@ packages:
       express:
         optional: true
 
-  '@silkweave/trpc@6.0.0':
-    resolution: {integrity: sha512-CpK+n7hz7iODY5xQzQHTLmFXit30S8o0OPDKOmHvZszm6qCkCrZ26QLbBDnWVGHHJTraVQty+yUD30Hb390ngQ==}
+  '@silkweave/trpc@7.0.0':
+    resolution: {integrity: sha512-5jNZo4LWrVB+e3p1cRAO4ssQmXU4w6QevOzR63v1npoC3lfwTQPCM9D4dUe7T6btfBWa4yO2DwPOV5mbEf6zXA==}
 
   '@sindresorhus/merge-streams@2.3.0':
     resolution: {integrity: sha512-LtoMMhxAlorcGhmFYI+LhPgbPZCkgP6ra1YL604EeF6U98pLlQ3iWIGMdWSC+vWmPBWBNgmDBAhnAobLROJmwg==}
@@ -8357,25 +8357,25 @@ snapshots:
 
   '@shikijs/vscode-textmate@10.1.0': {}
 
-  '@silkweave/auth@6.0.0(zod@4.6.7)':
+  '@silkweave/auth@7.0.0(zod@4.6.7)':
     dependencies:
-      '@silkweave/core': 6.0.0(zod@4.6.7)
+      '@silkweave/core': 7.0.0(zod@4.6.7)
       jose: 6.2.15
     transitivePeerDependencies:
       - zod
 
-  '@silkweave/core@6.0.0(zod@4.6.7)':
+  '@silkweave/core@7.0.0(zod@4.6.7)':
     dependencies:
       zod: 4.6.7
 
-  '@silkweave/mcp@6.0.0(commander@14.0.3)(cors@2.8.6)(express@5.3.0)':
+  '@silkweave/mcp@7.0.0(commander@14.0.3)(cors@2.8.6)(express@5.3.0)':
     dependencies:
       '@modelcontextprotocol/client': 2.4.0
       '@modelcontextprotocol/express': 2.0.2(@modelcontextprotocol/server@2.4.0)(express@5.3.0)
       '@modelcontextprotocol/node': 2.1.2(@modelcontextprotocol/server@2.4.0)
       '@modelcontextprotocol/server': 2.4.0
-      '@silkweave/auth': 6.0.0(zod@4.6.7)
-      '@silkweave/core': 6.0.0(zod@4.6.7)
+      '@silkweave/auth': 7.0.0(zod@4.6.7)
+      '@silkweave/core': 7.0.0(zod@4.6.7)
       change-case: 5.4.4
       zod: 4.6.7
     optionalDependencies:
@@ -8383,10 +8383,10 @@ snapshots:
       cors: 2.8.6
       express: 5.3.0
 
-  '@silkweave/trpc@6.0.0(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)':
+  '@silkweave/trpc@7.0.0(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)':
     dependencies:
-      '@silkweave/auth': 6.0.0(zod@4.6.7)
-      '@silkweave/core': 6.0.0(zod@4.6.7)
+      '@silkweave/auth': 7.0.0(zod@4.6.7)
+      '@silkweave/core': 7.0.0(zod@4.6.7)
       '@trpc/server': 11.24.0(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)
       change-case: 5.4.4
       cors: 2.8.6
