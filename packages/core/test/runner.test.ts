@@ -411,6 +411,43 @@ describe('SessionRunner', () => {
     expect((usage as { usage: { categories: Array<Record<string, unknown>> } }).usage.categories[0]!.isDeferred).toBeUndefined()
   })
 
+  it('estimates context from each top-level assistant message mid-turn, and the turn-end reading replaces it', async () => {
+    const exact = {
+      categories: [{ name: 'Messages', tokens: 60_500, color: '#0aa' }],
+      totalTokens: 60_500,
+      maxTokens: 200_000,
+      percentage: 30.25,
+      model: 'claude-test-1',
+    }
+    const capabilities: HarnessCapabilities = { contextUsage: { ...exact, totalTokens: 42_000, percentage: 21 } }
+    const { harness, runner, events } = makeRunner({}, capabilities)
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+    await tick()
+
+    const withUsage = (uuid: string, usage: Record<string, number>, parent: string | null = null) =>
+      ({
+        ...(assistantMessage as object),
+        uuid,
+        parent_tool_use_id: parent,
+        message: { ...(assistantMessage as { message: object }).message, id: uuid, usage },
+      }) as unknown as SDKMessage
+    harness.emit(withUsage('a1', { input_tokens: 10, cache_read_input_tokens: 50_000, cache_creation_input_tokens: 2000, output_tokens: 500 }))
+    harness.emit(withUsage('a2', { input_tokens: 1, cache_read_input_tokens: 90_000, output_tokens: 10 }, 'task-1'))
+    await tick()
+
+    const readings = () => events.filter((e) => e.type === 'context_usage').map((e) => (e as { usage: { totalTokens: number } }).usage)
+    expect(readings().at(-1)).toEqual({ categories: [], totalTokens: 52_510, maxTokens: 200_000, percentage: 26.255, model: 'claude-test-1' })
+
+    capabilities.contextUsage = exact
+    harness.emit(resultMessage)
+    await tick()
+    await tick()
+
+    expect(readings().at(-1)).toMatchObject({ totalTokens: 60_500, categories: [{ name: 'Messages', tokens: 60_500 }] })
+  })
+
   it('promotes rate_limit_event messages to first-class rate_limit events', async () => {
     const { harness, runner, events } = makeRunner()
     void runner.start()

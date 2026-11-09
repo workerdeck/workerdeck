@@ -104,6 +104,13 @@ export type SessionInfoFn = (sdkSessionId: string, options: { dir?: string }) =>
 
 type EffortLevel = NonNullable<Options['effort']>
 
+type AssistantUsage = {
+  input_tokens?: number | null
+  output_tokens?: number | null
+  cache_creation_input_tokens?: number | null
+  cache_read_input_tokens?: number | null
+}
+
 // Every `/goal` the CLI was handed, host or typed, in delivery order: the CLI runs local commands in order.
 type GoalCommand = {
   kind: 'set' | 'clear' | 'status'
@@ -165,6 +172,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #defaultModel: string | undefined
   #subscriptionType: string | undefined
   #engineTitle: string | undefined
+  #contextWindow: { maxTokens: number; model?: string } | undefined
+  #contextEstimate: number | undefined
+  #contextEstimates = 0
   #lastRateLimitPoll = 0
   #lastMcpHeal = 0
   #mcpReloadPending = false
@@ -1053,6 +1063,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (msg.type === 'assistant' && msg.parent_tool_use_id === null && this.#onGoalReply(msg)) {
       return
     }
+    if (msg.type === 'assistant' && msg.parent_tool_use_id === null) {
+      this.#estimateContext(msg.message.usage)
+    }
     const sdkBody = normalizeSdkMessage(msg)
     const normalized = sdkBody && this.#addressed.stamp(msg.type === 'assistant' ? apiMessageId(msg.message) : undefined, sdkBody)
     const body = normalized?.type === 'conversation_reset' ? { ...normalized, ...this.#takeAgentReset() } : normalized
@@ -1222,11 +1235,13 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (typeof query?.getContextUsage !== 'function') {
       return undefined
     }
+    const estimatesBefore = this.#contextEstimates
     try {
       const raw = await query.getContextUsage()
       if (this.core.closed) {
         return undefined
       }
+      this.#contextWindow = { maxTokens: raw.maxTokens, model: raw.model }
       const usage: ContextUsage = {
         categories: raw.categories.map((c) => ({
           name: c.name,
@@ -1238,11 +1253,39 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
         percentage: raw.percentage,
         model: raw.model,
       }
-      this.core.emit({ type: 'context_usage', usage })
+      // An estimate taken while this read was in flight is newer than the reading it answers with.
+      if (this.#contextEstimates === estimatesBefore) {
+        this.#contextEstimate = undefined
+        this.core.emit({ type: 'context_usage', usage })
+      }
       return usage
     } catch {
       return undefined
     }
+  }
+
+  #estimateContext(usage: AssistantUsage | undefined): void {
+    const window = this.#contextWindow
+    if (!usage || !window || window.maxTokens <= 0) {
+      return
+    }
+    const totalTokens =
+      (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.output_tokens ?? 0)
+    if (totalTokens <= 0 || totalTokens === this.#contextEstimate) {
+      return
+    }
+    this.#contextEstimate = totalTokens
+    this.#contextEstimates += 1
+    this.core.emit({
+      type: 'context_usage',
+      usage: {
+        categories: [],
+        totalTokens,
+        maxTokens: window.maxTokens,
+        percentage: Math.min(100, (totalTokens / window.maxTokens) * 100),
+        ...(window.model ? { model: window.model } : {}),
+      },
+    })
   }
 
   protected async reportFacts(): Promise<SessionReportFacts> {

@@ -1403,6 +1403,13 @@ carry wrong.
   last reading (`measured: 'last_turn'`), so a CLI that cannot answer mid-call costs five seconds,
   never the tool. The live read also emits `context_usage`, so asking moves every client's meter.
   Confirmed by hand on a real claude session (2026-10-06); no smoke asserts the live reading.
+- **Claude's meter moves mid-turn on an estimate, not a reading.** `getContextUsage()` runs only at
+  turn start, turn end, a compaction and a reset, so a long turn used to show its opening number
+  throughout. Every top-level assistant message now emits a `context_usage` estimate (input +
+  cache read + cache creation + output from its `usage`, `categories: []`, window and model from
+  the last exact reading; none before the first). Subagent messages are skipped: their context is
+  not the session's. The turn-end exact read replaces the estimate, and an exact read that an
+  estimate overtook while in flight is not emitted, so a stale reading never overwrites a newer estimate.
 - **Codex reads the active turn** (`contextTokens`/`contextWindow` from the latest
   `thread/tokenUsage/updated`) before falling back to the log. Rate limits on both engines come from
   the session's own `rate_limit` events, latest per window; `logCoalesceKey` already keeps only
