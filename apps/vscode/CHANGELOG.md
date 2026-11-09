@@ -9,6 +9,8 @@ gateway and protocol it talks to.
 
 ### Changed
 
+- **Codex sessions speak MCP 2026-07-28.** WorkerDeck starts codex with `features.mcp_2026_07_28`, so
+  MCP servers that accept only the 2026-07-28 protocol (Silkweave 7) keep their tools in Codex sessions.
 - **Teams surface members only when they need you.** A member draws under its lead while an
   approval waits, it failed, or it set a status with `waitingOn: "human"`; working, unread and idle
   members sit in the lead's tray (the 5 second linger is gone). Cards carry an *Approval*, *Failed*

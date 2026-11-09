@@ -344,6 +344,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   without it, so an older codex that knows neither gate still starts. The receiving half was already
   wired (`item/tool/requestUserInput` -> the `AskUserQuestion` convention, `questionBehavior`
   policy-resolving it unattended).
+- **Codex speaks MCP 2026-07-28 only behind `features.mcp_2026_07_28`** (off by default through
+  0.167; without it codex opens with a 2025-06-18 `initialize`). Silkweave 7 servers are
+  2026-07-28 only, so without the flag a codex session silently loses their tools. It is a third `-c`
+  in `APP_SERVER_ARGS`, so every codex home WorkerDeck runs gets it regardless of `config.toml`.
+  Fallback if the flag breaks something: `legacy: true` on the affected Silkweave server.
 - **`availableDecisions` is per-request, experimental, and gates the accept side only.** The runner
   sends plain `accept` only when offered; an allow the request doesn't offer plain accept for is
   answered with denial, never silently widened into `acceptForSession` or a persistent execpolicy

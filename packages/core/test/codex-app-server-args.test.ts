@@ -38,6 +38,11 @@ describe('connectAppServer: the app-server gates', () => {
     }
   })
 
+  it('turns on MCP 2026-07-28, so a modern-only MCP server keeps its tools', () => {
+    connectAppServer({ executable: 'codex', env: {} })
+    expect(spawn.mock.calls[0]![1]).toContain('features.mcp_2026_07_28=true')
+  })
+
   it('never passes --strict-config, so an older codex that knows neither gate still starts', () => {
     connectAppServer({ executable: 'codex', env: {} })
     expect(spawn.mock.calls[0]![1]).not.toContain('--strict-config')

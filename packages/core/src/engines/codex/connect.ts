@@ -31,6 +31,9 @@ export const APP_SERVER_ARGS = [
   'tools.experimental_request_user_input.enabled=true',
   '-c',
   'features.default_mode_request_user_input=true',
+  // Silkweave 7 servers accept only MCP 2026-07-28; codex speaks it only behind this flag (off by default in 0.167).
+  '-c',
+  'features.mcp_2026_07_28=true',
 ] as const
 
 // `experimentalApi` gates the granular approval policy and there is no non-experimental fallback, so it is not per-call-site.
