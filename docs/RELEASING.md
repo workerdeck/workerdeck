@@ -1771,7 +1771,9 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   Silkweave 7. **Verified**: `pnpm lint`, typecheck, `turbo run test --force --concurrency=1` 13/13, fixtures golden/vm/
   frames `--check`, `cargo fmt`/clippy/test, gatekeeper; codex app-server smokes with the flag (minimal Silkweave 7
   server, team-box 332 tools). The prompt cache was checked on request bodies only (SWP reads `cacheReadTokens`).
-  Bumped in a worktree (the gateway runs from the main checkout).
+  Bumped in a worktree (the gateway runs from the main checkout). The first tag's Publish failed before anything
+  published (`transcript-cache.test.ts` attached its reader before the writer's prompts were logged, every CI run);
+  the test now waits for the items.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

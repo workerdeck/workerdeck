@@ -205,10 +205,10 @@ describe('warm attach over the wire', () => {
     await eventually(() => {
       expect(first.frames.length).toBe(1)
       expect(first.state().lastSeq).toBeGreaterThanOrEqual(first.frames[0].session.lastSeq)
+      expect(first.state().items.length).toBeGreaterThanOrEqual(2)
     })
     first.handle.detach()
     const cached = first.state()
-    expect(cached.items.length).toBeGreaterThanOrEqual(2)
 
     writer.send('three')
     writer.send('four')
