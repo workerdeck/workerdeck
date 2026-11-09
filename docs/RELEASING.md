@@ -1759,6 +1759,19 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   runs from, deleting the old SDK, codex and node-pty directories under the live process (Node's resolver caches
   the old paths): new Claude engines and new shells failed until the old directories were restored and the
   gateway restarted. Bump in a worktree, or with the gateway stopped.
+  **4.4.0** - a **minor**, protocol stays **2**. Goals: codex and Claude goal tools, routes and agent tools (P1-P2),
+  web and VS Code menus, dialog and notice rows (P3), native iOS and Android over the Rust core (P4). Lead attention:
+  `attentionOf` (approval, failed, blocked), persisted `SessionInfo.failure`, `set_status` `waitingOn: 'human'` (a
+  person's message drops it), members drawn only when they need you, the lead's fleet strip with inline Retry, and
+  `session_blocked` push. `SessionInfo.engineVersion`, Claude `session_writes_lost` notices. Transport: gateway
+  `perMessageDeflate` (~3x on replays), native transcript cache (16 sessions, memory + disk, resume from `last_seq`).
+  Embedding (SWP requests): Anthropic prompt cache breakpoints by default in provider sessions (`promptCache`), queued
+  user messages + `input_consumed` (provider engine marks them; react `queuedMessages`). Codex starts with
+  `features.mcp_2026_07_28` (Silkweave 7 servers; verified against 2025-era team-box too), `apps/embedded` on
+  Silkweave 7. **Verified**: `pnpm lint`, typecheck, `turbo run test --force --concurrency=1` 13/13, fixtures golden/vm/
+  frames `--check`, `cargo fmt`/clippy/test, gatekeeper; codex app-server smokes with the flag (minimal Silkweave 7
+  server, team-box 332 tools). The prompt cache was checked on request bodies only (SWP reads `cacheReadTokens`).
+  Bumped in a worktree (the gateway runs from the main checkout).
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

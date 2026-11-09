@@ -5,7 +5,7 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
-## [Unreleased]
+## [4.4.0] - 2026-11-09
 
 ### Changed
 
@@ -28,6 +28,9 @@ gateway and protocol it talks to.
 
 ### Added
 
+- **Smaller session opens.** The gateway compresses WebSocket frames (permessage-deflate), about 3x
+  less data when a session replays; the iOS and Android apps also keep the last 16 transcripts
+  cached in memory and on disk, so reopening one is near instant.
 - **Session goals.** Give a Claude or Codex session a condition to work toward across turns: *Set
   goal…*, *Clear goal* and (Codex) *Pause goal* / *Resume goal* in the card menu, a token budget for
   Codex goals, a transcript line per step (set, not met yet, met, failed, paused, cleared), the goal on
