@@ -47,6 +47,13 @@ async function beacon(name: string, word: string, port: number, armed: boolean):
         res.writeHead(202).end()
         return
       }
+      // A 2025-06-18 server: codex's 2026-07-28 `server/discover` must get -32601 so it falls back to `initialize`.
+      if (!['initialize', 'tools/list', 'tools/call', 'ping'].includes(msg.method ?? '')) {
+        res
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: `Method not found: ${msg.method}` } }))
+        return
+      }
       const result =
         msg.method === 'initialize'
           ? { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name, version: '1.0.0' } }
