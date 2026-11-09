@@ -1416,7 +1416,7 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
   parked one answers 409, because its snapshot log replays on wake and its last `status_label`
   would win over the record.
 - **No expiry and no auto-clear on turns** (Tobias, 2026-10-06): the agent owns it through the tool;
-  only a reset or an explicit clear removes it. `set_status` is offered on every engine, like
+  only a reset or an explicit clear removes it (a person's message drops only `waitingOn`, below). `set_status` is offered on every engine, like
   `session_info`, and goes through the normal permission path. `Runner.setStatusLabel` is optional
   so test fakes need not grow it; the route answers 501 without it.
 - **Agents are told to use it.** The tool description alone left it mostly unused, so the session
@@ -1427,6 +1427,9 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
   anything else is refused by `readStatusLabelInput` and the tool schema. A label replaces the whole label, so a new
   status without the flag clears it; reset, cut (`requestedConfig` strips the label) and an empty text clear it; park and
   wake keep it; the session going `running` does not. `attentionOf` reads it as `blocked`.
+- **A person's message drops the flag** (Tobias, 2026-11-09): the gateway's WS `user_message` path (the only human
+  send) re-sets the label with its text and emoji but no `waitingOn` (`answerWaiting`, `routes/ws.ts`), so an answered
+  agent stops reading as blocked before it calls `set_status` again. Peer, lead, reset and cut prompts never clear it.
 
 ## Session failure (`SessionInfo.failure`, `attentionOf`)
 

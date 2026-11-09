@@ -268,6 +268,15 @@ async function clearWithAck(
   }
 }
 
+// A person answered, so the agent no longer waits on one: the label keeps its text and loses the flag.
+function answerWaiting(runner: Runner): void {
+  const label = runner.info().statusLabel
+  if (label?.waitingOn !== 'human' || !runner.setStatusLabel) {
+    return
+  }
+  runner.setStatusLabel({ text: label.text, ...(label.emoji ? { emoji: label.emoji } : {}) })
+}
+
 function outcomeAck(clientId: string, outcome: PromptOutcome): ServerFrame {
   return outcome === 'executed' ? { type: 'ack', clientId } : { type: 'ack', clientId, notDelivered: true }
 }
@@ -309,6 +318,7 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
       const options = mentions.length > 0 ? { mentions } : undefined
       if (!frame.attachmentIds?.length) {
         runner.sendMessage(frame.text, undefined, options)
+        answerWaiting(runner)
         return
       }
       const resolved = attachmentStore.resolve(runner.id, frame.attachmentIds)
@@ -316,6 +326,7 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
         throw new NotDelivered(`unknown attachment(s): ${resolved.missing.join(', ')}`)
       }
       runner.sendMessage(frame.text, resolved.attachments, options)
+      answerWaiting(runner)
       return
     }
     case 'permission_decision': {

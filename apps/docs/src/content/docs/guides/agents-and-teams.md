@@ -59,7 +59,8 @@ A team is a lead and the agents that name it as their lead, **one level deep**: 
 another team, and nobody can join a member. Drag a card onto another agent to join its team, drop
 it between members to place it, and drag a member out to leave; the card menus offer the same
 moves. In the list, a team draws a member under its lead only while that member needs you: an
-approval waits, it failed, or it said it is blocked on you (`set_status` with `waitingOn: "human"`).
+approval waits, it failed, or it said it is blocked on you (`set_status` with `waitingOn: "human"`;
+your next message to it clears that).
 Each such card carries a chip (*Approval*, *Failed*, *Blocked*), and the lead shows how many members
 need you. The rest sit as avatars on the lead's own line ("2 need you · 3 working · 1 idle"); the
 member you open stays drawn, and expanding the team shows everyone. The *Needs attention* filter and

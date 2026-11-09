@@ -22,6 +22,9 @@ gateway and protocol it talks to.
 - **A blocked agent pushes.** Setting `waitingOn: "human"` sends a `session_blocked` notification
   (webhook and iOS push, high priority, the status text as its body), once per stretch. On iOS it
   follows the *Approvals* switch. Approvals and failures already pushed.
+- **Answering a blocked agent unblocks it.** Your next message to an agent that set `waitingOn: "human"`
+  drops the flag (the status text stays), so it no longer reads as *Blocked* while it works on your
+  answer. Messages from other agents do not.
 
 ### Added
 

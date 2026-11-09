@@ -10,7 +10,7 @@ export const SET_STATUS_GUIDANCE =
   'Keep your session-list status current with the `set_status` tool: set it when you start a task, when you are blocked ' +
   'or waiting on someone, and when you finish. The human reads it at a glance to know what you are doing. Pass ' +
   "`waitingOn: 'human'` only when you cannot continue without a person (a decision, access, a credential); it flags " +
-  'you as needing attention. Set a new status without it as soon as you continue.'
+  'you as needing attention until the person messages you. Set a new status without it as soon as you continue.'
 
 const SET_STATUS_TOOL_SHAPES = {
   [SET_STATUS_TOOL]: {
@@ -26,7 +26,7 @@ const SET_STATUS_TOOL_SHAPES = {
       waitingOn: z
         .enum(['human'])
         .optional()
-        .describe("'human' only when you cannot continue without a person; a status set without it clears the flag"),
+        .describe("'human' only when you cannot continue without a person; a message from the person or a status set without it clears the flag"),
     },
   },
 } as const

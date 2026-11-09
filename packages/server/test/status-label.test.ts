@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionInfo } from '@workerdeck/protocol'
 import { createFileSessionRecordStore, createWorkerServer } from '../src/index.ts'
-import { fakeHarness, gatewayFixture, listenOn, until } from './helpers.ts'
+import WebSocket from 'ws'
+import { fakeHarness, frameCollector, gatewayFixture, listenOn, until } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -37,8 +38,8 @@ async function startGateway(dir: string) {
     buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
   })
   servers.push(server)
-  const { base } = await listenOn(server)
-  return { server, harness, base }
+  const { base, wsBase } = await listenOn(server)
+  return { server, harness, base, wsBase }
 }
 
 async function call<T>(base: string, path: string, method = 'GET', body?: unknown): Promise<{ status: number; body: T }> {
@@ -77,5 +78,24 @@ describe('status label', () => {
     const cleared = await call<{ session: SessionInfo }>(second.base, `/sessions/${id}`, 'PATCH', { statusLabel: null })
     expect(cleared.status).toBe(200)
     expect(cleared.body.session.statusLabel).toBeUndefined()
+  })
+  it('drops waitingOn when a person sends a message, keeping the text and emoji', async () => {
+    const gateway = await startGateway(await stateDir())
+    const created = await call<{ session: SessionInfo }>(gateway.base, '/sessions', 'POST', { cwd: '/tmp' })
+    const id = created.body.session.id
+    gateway.harness.emit(initMessage)
+    await until(async () => (await call<{ session: SessionInfo }>(gateway.base, `/sessions/${id}`)).body.session.sdkSessionId === 'sdk-1', 'the engine to name its session')
+    await call(gateway.base, `/sessions/${id}`, 'PATCH', { statusLabel: { text: 'awaiting commit go', emoji: '✅', waitingOn: 'human' } })
+
+    const ws = new WebSocket(`${gateway.wsBase}/sessions/${id}/ws`)
+    const collector = frameCollector(ws)
+    await collector.waitFor((f) => f.type === 'attached')
+    ws.send(JSON.stringify({ generation: 1, type: 'user_message', text: 'go ahead', clientId: 'c.1' }))
+    await collector.waitFor((f) => f.type === 'ack' && f.clientId === 'c.1')
+    ws.close()
+
+    const label = (await call<{ session: SessionInfo }>(gateway.base, `/sessions/${id}`)).body.session.statusLabel
+    expect(label).toMatchObject({ text: 'awaiting commit go', emoji: '✅' })
+    expect(label?.waitingOn).toBeUndefined()
   })
 })
