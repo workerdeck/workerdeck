@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { modelFor } from '../lib/models.ts'
+import { modelFor, withAccountModels } from '../lib/models.ts'
 import { isOwnerName, isSharing, supportsPermissionMode, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '@workerdeck/core'
 import type { Refusal } from '../lib/http.ts'
@@ -21,6 +21,7 @@ export type ProfileServiceOptions = {
     usage: (name: string) => ProfileInfo['usage'] | undefined
     spend?: (name: string) => ProfileInfo['spend'] | undefined
     account?: (profile: ProfileInfo) => ProfileInfo['account'] | undefined
+    models?: (name: string) => ProfileInfo['models'] | undefined
   }
 }
 
@@ -119,8 +120,9 @@ export class ProfileService {
       ...this.withManagedFlag(p),
       capabilities: adapter.capabilities,
     }
-    if (adapter.catalog.models.length > 0) {
-      base.models = adapter.catalog.models
+    const models = withAccountModels(adapter.catalog.models, decorate.models?.(p.name))
+    if (models.length > 0) {
+      base.models = models
     }
     const defaultModel = modelFor(adapter, p, undefined)
     if (defaultModel) {

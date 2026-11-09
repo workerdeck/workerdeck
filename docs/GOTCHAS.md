@@ -89,7 +89,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   and an unset model left the engine's own config to choose, so two agents asked for "the same" model
   could run different ones and no card could name either. Nothing converts old records on load; stores
   written before this were migrated once by hand (2026-10-29).
-- Model availability is purely a function of the pinned SDK version. Since 0.3.284
+- Model availability is mostly a function of the pinned SDK version. Since 0.3.284
   `supportedModels()` also lists the older versions (back to Opus 4.6 and Sonnet 4.6), so
   `core/src/engines/claude/catalog.ts` is its shaped output, whole, with no hand-kept rows; the
   catalog test replays the raw extraction to hold that. Taking a new SDK release is the only way a
@@ -101,7 +101,17 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   truth for the model switcher (also the only carrier of slash commands and the profile default's
   resolution). The static catalog (`core/src/engines/*/catalog.ts`, served on `ProfileInfo.models`)
   is the create-form truth: it fixes the cold-start free-text picker and may list models the CLI no
-  longer reports. `ProfileInfo.defaultModel` is static too: the profile's `defaults.model`, else
+  longer reports.
+- **A Claude profile's create-form list is the catalog plus what its account adds** (`withAccountModels`,
+  `server/src/lib/models.ts`). Some models are gated per account, not per SDK: Mythos 5.1
+  (`claude-mythos-5-1`, 0.3.318) is listed by `supportedModels()` only for accounts in the Cyber
+  Verification Program. `ProfileModels` (`server/src/services/profile-models.ts`) holds each Claude
+  profile's live list, learned from every session's `capabilities` and from `probeModels` (core
+  `probeClaudeModels`: a query whose prompt never yields, `supportedModels()`, close; ~0.5 to 4 s, no
+  tokens, no MCP servers), run at `listen()` and after a profile save, forgotten on delete. In memory
+  only: a restart probes again. A catalog row is never dropped because an account lacks it; an added
+  row goes ahead of its line so `modelMenu` shows it, and `primary` is recomputed per line. Never
+  hard-code a gated model into the catalog: every other account would be offered a model it cannot run. `ProfileInfo.defaultModel` is static too: the profile's `defaults.model`, else
   the catalog's `defaultModel`, exact, from the first request. The live `capabilities.defaultModel`
   stays the session's own reading.
 - `supportedModels()` reports per-model reasoning efforts (`supportedEffortLevels`, 0.3.221+),

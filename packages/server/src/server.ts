@@ -29,7 +29,7 @@ import {
 import type { ServerContext } from './context.ts'
 import { createServerLifecycle } from './lifecycle.ts'
 import { HttpError, httpErrorStatus, json } from './lib/http.ts'
-import { modelFor } from './lib/models.ts'
+import { modelFor, withAccountModels } from './lib/models.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
@@ -57,6 +57,7 @@ import { SessionParkManager } from './services/parking.ts'
 import { ProducedFileStore } from './services/produced-files.ts'
 import { ProfileService, isEffortMap } from './services/profiles.ts'
 import { AccountService } from './services/accounts.ts'
+import { ProfileModels } from './services/profile-models.ts'
 import { ProfileUsageTracker } from './services/profile-usage.ts'
 import { SpendLedger } from './services/spend-ledger.ts'
 import { createRelayLink } from './services/peer-relay.ts'
@@ -113,6 +114,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   }
 
   const profileUsage = new ProfileUsageTracker()
+  const profileModels = new ProfileModels({
+    probe: options.probeModels,
+    sessionEnvFor: (profile) => factory.sessionEnvFor(profile),
+    onError: (error) => diagnose(error, 'models-probe'),
+  })
   const spendLedger = new SpendLedger({
     pricing: pricing.pricing,
     store: options.spend?.store,
@@ -140,6 +146,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       },
       spend: (name) => spendLedger.spend(name),
       account: (profile) => accounts.status(profile),
+      models: (name) => profileModels.get(name),
     },
   })
   for (const p of options.profiles ?? []) {
@@ -190,8 +197,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const withModelName = (info: SessionInfo): SessionInfo => {
     const adapter = adapterFor(info.engine)
     const id = modelFor(adapter, info.profile === undefined ? undefined : profiles.get(info.profile), info.model)
-    const name =
-      id === undefined ? undefined : adapter.catalog.models.find((m) => m.value !== 'default' && modelMatches(m, id))?.displayName
+    const models = withAccountModels(adapter.catalog.models, info.profile === undefined ? undefined : profileModels.get(info.profile))
+    const name = id === undefined ? undefined : models.find((m) => m.value !== 'default' && modelMatches(m, id))?.displayName
     return name === undefined || name === info.modelName ? info : { ...info, modelName: name }
   }
   const projects = new ProjectInfoService({
@@ -271,6 +278,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         notifier.watch(runner),
         producedFiles.watch(runner),
         profileUsage.watch(runner),
+        profileModels.watch(runner),
         spendLedger.watch(runner),
         shells?.watch(runner),
         peers?.watch(runner),
@@ -493,6 +501,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     profiles,
     accounts,
     availability,
+    profileModels,
     auth,
     factory,
     agents,
@@ -624,6 +633,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         server.once('error', reject)
         server.listen(port, host, () => {
           availability.preflight(profiles.all())
+          profileModels.preflight(profiles.all())
           accounts.watchExpiry(() => profiles.all())
           const address = server.address()
           resolve({ port: typeof address === 'object' && address ? address.port : port })

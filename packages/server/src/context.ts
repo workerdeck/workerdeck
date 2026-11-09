@@ -10,6 +10,7 @@ import type { TeamLinks } from './services/team-links.ts'
 import type { AttachmentStore } from './services/attachments.ts'
 import type { AuthService } from './services/auth.ts'
 import type { AvailabilityTracker } from './services/availability.ts'
+import type { ProfileModels } from './services/profile-models.ts'
 import type { BridgeHub } from './services/bridge.ts'
 import type { EngineSleepTimers } from './services/engine-sleep.ts'
 import type { GoalService } from './services/goals.ts'
@@ -37,6 +38,7 @@ export type ServerContext = {
   profiles: ProfileService
   accounts: AccountService
   availability: AvailabilityTracker
+  profileModels: ProfileModels
   auth: AuthService
   factory: SessionFactory
   agents: AgentService

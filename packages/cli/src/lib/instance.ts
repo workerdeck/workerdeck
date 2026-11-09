@@ -223,6 +223,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
     agentStore,
     // On by default here, off in the library: a mispointed config dir should say so at startup.
     checkCredentials: config.options.checkCredentials ?? true,
+    probeModels: config.options.probeModels ?? true,
     sessions: sessionRecords,
     shell,
     spend,

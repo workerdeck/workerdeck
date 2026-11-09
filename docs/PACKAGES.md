@@ -889,10 +889,12 @@ the old runner. An agent may replace or clear a human goal only once it is met o
 § Session goals.
 
 HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
-profiles served with their engine's **capability record, static model catalog, and
+profiles served with their engine's **capability record, model catalog, and
 availability verdict** from the first request (`forResponse`; probes are adapter-run, gated on
-`checkCredentials`, ~60s TTL, display-only - only the *default* model is still learned from
-sessions, because it is the operator's CLI config; `GET /profiles/:name` serves the **same**
+`checkCredentials`, ~60s TTL, display-only - the *default* model is still learned from
+sessions, because it is the operator's CLI config; a Claude profile's models are the static catalog
+plus the rows its own account adds, from `probeModels` and session `capabilities`, see
+`docs/GOTCHAS.md` § Claude engine; `GET /profiles/:name` serves the **same**
 decoration as the list, having once served the bare record, which made the detail route answer
 *less* about a profile than the list it was opened from - a client could reach the usage state
 only by listing),

@@ -9,7 +9,6 @@ import type {
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import { readProfileConfig } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
-import type { ProfileService } from '../services/profiles.ts'
 import type { ServerContext } from '../context.ts'
 
 export async function handleProfiles(
@@ -40,7 +39,7 @@ export async function handleProfiles(
     if (profiles.get(body.name)) {
       fail(409, `profile already exists: ${body.name}`)
     }
-    await saveManaged(profiles, res, body)
+    await saveManaged(ctx, res, body)
     return
   }
   const [encoded = '', ...sub] = rest.split('/')
@@ -68,11 +67,12 @@ export async function handleProfiles(
   if (req.method === 'DELETE') {
     await ctx.options.profileStore!.delete(profile.name)
     await profiles.refreshStored()
+    ctx.profileModels.forget(profile.name)
     res.writeHead(204).end()
     return
   }
   const patch = (await readJsonBody(req, ctx.maxBodyBytes)) as UpdateProfileRequest
-  await saveManaged(profiles, res, { ...profile, ...patch, name: profile.name })
+  await saveManaged(ctx, res, { ...profile, ...patch, name: profile.name })
 }
 
 async function handleAccount(
@@ -125,10 +125,12 @@ function refuseWith(refused: { status: number; error: string } | null): void {
   }
 }
 
-async function saveManaged(profiles: ProfileService, res: ServerResponse, incoming: ProfileInfo): Promise<void> {
-  const saved = await profiles.saveManaged(incoming)
+async function saveManaged(ctx: ServerContext, res: ServerResponse, incoming: ProfileInfo): Promise<void> {
+  const saved = await ctx.profiles.saveManaged(incoming)
   if (!saved.ok) {
     fail(saved.status, saved.error)
   }
+  ctx.profileModels.forget(saved.profile.name)
+  void ctx.profileModels.probe(saved.profile)
   json(res, 200, { profile: saved.profile })
 }

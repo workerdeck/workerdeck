@@ -5,6 +5,15 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [Unreleased]
+
+### Added
+
+- **Models your account unlocks show in the create forms.** The gateway asks each Claude profile's
+  account for its model list at startup and on a profile save (no prompt, no tokens) and learns it
+  from every session, so a model only some accounts hold (Mythos 5.1, behind the Cyber Verification
+  Program) is offered in *New Agent* for exactly those profiles. The shipped catalog stays the base.
+
 ## [4.4.0] - 2026-11-09
 
 ### Changed

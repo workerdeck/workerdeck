@@ -1,6 +1,6 @@
 import type { HistoryReader } from './services/history-reader.ts'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
-import type { ClaudeAuthProbe, EngineAdapter, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
+import type { ClaudeAuthProbe, ClaudeModelsProbe, EngineAdapter, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import type { JobQueue, QueueAdapter } from '@workerdeck/queue'
 import type {
   CreateSessionRequest,
@@ -89,6 +89,8 @@ export type WorkerServerOptions = {
   approvalTimeoutMs?: number | null
   requireApiKey?: boolean
   checkCredentials?: boolean | { probe?: ClaudeAuthProbe; timeoutMs?: number }
+  // Asks each Claude profile's account for its model list at startup and on a profile save, without sending a prompt.
+  probeModels?: boolean | { probe?: ClaudeModelsProbe; timeoutMs?: number }
   requireAvailableProfile?: boolean
   listSdkSessions?: SdkSessionLister
   queue?: QueueServerOptions
