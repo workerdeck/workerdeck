@@ -623,6 +623,15 @@ with what the host actually assembled - an empty list, never a 501, which is why
 without its teardown (one shared private builder - the gate refuses a turn in flight and pending
 *in-process* calls, and allows the idle case `park()` exists to refuse), which is what lets a
 provider session survive a restart at all, having no engine-side store to resume from.
+**Anthropic prompt caching is on by default** (`prompt-cache.ts`, `AiSdkRunnerConfig.promptCache`, forwarded by
+`createProviderRunner`'s `promptCache`): every call the runner makes to a model whose `provider` id has an
+`anthropic` segment (`anthropic.messages`, Vertex's Anthropic) goes through a `transformParams` middleware that sets
+`providerOptions.anthropic.cacheControl` on the last system message (tools render before system, so tools and
+instructions) and on the last message (a rolling mark each tool-loop step and the next turn read). It merges into a
+message's own options, copies the prompt, counts the caller's marks on tools, parts and messages against Anthropic's
+4, and leaves the rolling mark to a request-level `cacheControl`. `false` turns it off, `{ ttl: '1h' }` picks the
+TTL. A gateway id string (no provider object) passes through; Bedrock (`cachePoint`) is not covered. Instructions
+must stay byte-stable: anything time- or id-dependent in them makes every prefix unique.
 `start()`'s restore branch schedules **nothing**, and that is load-bearing rather than tidy: an
 interrupted turn leaves the history ending on the *user* - the catch path flushes a partial
 `assistant_message` for the transcript but never pushes the model's response messages - so a

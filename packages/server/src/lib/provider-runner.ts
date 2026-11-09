@@ -5,6 +5,7 @@ import {
   type HostToolDefinition,
   type LanguageModel,
   type McpConnection,
+  type PromptCacheOption,
   type SessionInstructions,
   type Runner,
   type ToolExecutionCall,
@@ -25,6 +26,8 @@ export type ProviderRunnerOptions = {
   seedVfs?: Record<string, string>
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
   approvalTimeoutMs?: number | null
+  // Anthropic prompt caching (tools + instructions, and a rolling mark on the conversation), on unless `false`.
+  promptCache?: PromptCacheOption
   // Runs on park as well as close: parking releases the same per-session resources.
   onClose?: () => void | Promise<void>
 }
@@ -48,6 +51,7 @@ export async function createProviderRunner(ctx: EngineRunnerContext, options: Pr
       ...(typeof options.model === 'function' && { resolveModel: options.model }),
       restore,
       onClose: options.onClose,
+      ...(options.promptCache !== undefined && { promptCache: options.promptCache }),
     },
     id,
     profile,

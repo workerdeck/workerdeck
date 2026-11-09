@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { ToolLoopAgent, generateText, isStepCount, type LanguageModel, type ModelMessage, type ToolCallPart, type ToolSet } from 'ai'
+import { withPromptCache, type PromptCacheOption } from './prompt-cache.ts'
 import {
   ENGINE_CAPABILITIES,
   snapshotRetains,
@@ -56,6 +57,8 @@ export type AiSdkRunnerConfig = EngineRunnerConfig & {
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
   resolveModel?: (modelId: string | undefined) => LanguageModel
   contextWindow?: ProviderContextWindow
+  // Anthropic prompt caching, on unless `false`.
+  promptCache?: PromptCacheOption
   reportMcpServers?: () => Promise<McpServerStatusInfo[] | undefined>
   onClose?: () => void | Promise<void>
   restore?: RunnerSnapshot
@@ -357,7 +360,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
 
   async generateDigest(prompt: string): Promise<string> {
     const result = await generateText({
-      model: this.#model,
+      model: withPromptCache(this.#model, this.config.promptCache),
       prompt,
       abortSignal: this.#abort?.signal,
     })
@@ -650,7 +653,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
     }
     this.core.setStatus('running')
     const agent = new ToolLoopAgent({
-      model: this.#model,
+      model: withPromptCache(this.#model, this.config.promptCache),
       tools: this.config.tools ?? {},
       instructions: this.#instructions,
       stopWhen: isStepCount(this.config.maxSteps ?? 20),

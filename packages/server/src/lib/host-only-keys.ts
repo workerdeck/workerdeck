@@ -51,6 +51,7 @@ const HOST_ONLY_KEY_TABLE: Record<HostOnlyKey, 'durable' | 'transient'> = {
   shouldApprove: 'transient',
   resolveModel: 'transient',
   contextWindow: 'transient',
+  promptCache: 'transient',
   reportMcpServers: 'transient',
   onClose: 'transient',
   restore: 'transient',
