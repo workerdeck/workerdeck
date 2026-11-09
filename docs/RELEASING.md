@@ -1792,7 +1792,10 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   `turbo run test --force --concurrency=1` 13/13, fixtures golden/vm/frames `--check`, `cargo fmt`/clippy/test,
   build, `.vsix` package, gatekeeper; smokes on the new engines: `smoke:codex` 39/39 + canary 11/11,
   `smoke:mcp-reconnect` claude 12/12 + codex 4/4, `smoke:shell-write` 33/33, `smoke:cut claude` 21/21. Bumped in
-  a worktree (the gateway runs from the main checkout).
+  a worktree (the gateway runs from the main checkout). Publish `dry_run` green on master. CI's `android` job is red and has been since
+  before 4.4.0 (`SessionCardTest` still expects a running member on its lead's card; not in the Publish gate).
+  **Published** 2026-11-10: tag `v4.5.0` at `fc5e7a0e`, Publish green first try (run 42723750733), npm 12/12 with
+  `latest` 4.5.0 (seven staged for a few minutes), Marketplace 4.5.0.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
