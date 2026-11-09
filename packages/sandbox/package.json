@@ -30,8 +30,8 @@
     "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.31.0",
     "@types/node": "^26.6.6",
     "rimraf": "^6.1.4",
-    "tsdown": "^0.22.14",
-    "vitest": "^4.1.12"
+    "tsdown": "^0.23.7",
+    "vitest": "^5.1.0"
   },
   "author": "Tobias Strebitzer",
   "repository": {

@@ -32,7 +32,7 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@jitl/quickjs-singlefile-browser-release-asyncify": "^0.31.0",
-    "@tailwindcss/vite": "^4.3.4",
+    "@tailwindcss/vite": "^4.3.5",
     "@tanstack/react-router": "^1.170.46",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
@@ -44,13 +44,13 @@
     "@workerdeck/ui": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "lucide-react": "^1.69.0",
-    "monaco-editor": "^0.56.0",
+    "lucide-react": "^1.70.0",
+    "monaco-editor": "^0.57.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "rimraf": "^6.1.4",
-    "tailwindcss": "^4.3.4",
-    "vite": "^8.3.6"
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.7"
   },
   "author": "Tobias Strebitzer",
   "repository": {

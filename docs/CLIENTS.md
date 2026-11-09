@@ -24,7 +24,7 @@ multi-step flow (gateways, profiles, sessions) uses `quick-input.ts`'s one `show
 and its `BACK`/`CANCEL` symbols, and both polled models refresh through `refreshPerHost`
 (`src/gateway.ts`), one snapshot per gateway with the removed ones pruned.
 
-**`@types/vscode` is pinned with a tilde to the `engines.vscode` floor (`~1.106.0`), and a
+**`@types/vscode` is pinned with a tilde to the `engines.vscode` floor (`~1.145.0`), and a
 dependency sweep must not carrot it up.** The types version *is* the API surface you compile
 against, so types newer than the declared floor let a call to an API that does not exist in the
 oldest VS Code we claim to support typecheck cleanly and then throw at runtime, on exactly the
@@ -483,7 +483,8 @@ section with nothing to say says it the only two ways that exist - the header's
 The Context and MCP bodies are `packages/ui`'s `ContextPanel` and `McpPanel` (the dialogs' own
 bodies, so the dashboard and the extension cannot drift), Usage is `UsageMeters`, and Session Info
 stays drawn here because it reads the polled REST record rather than a transcript.
-`viewsContainers.secondarySidebar` is what sets `engines.vscode` to **`^1.106.0`**:
+`viewsContainers.secondarySidebar` is what first set `engines.vscode` to `^1.106.0`
+(raised to **`^1.145.0`** on 2026-11-10, since Cursor and Windsurf are not supported targets):
 it was proposed-only in 1.104/1.105 and finalized in 1.106, and the schema is
 `additionalProperties: false`, so on an older build the key is dropped and the six views do
 not exist at all. That floor is the whole cost of the layout, and it is what would keep the

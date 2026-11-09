@@ -14,7 +14,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.4",
+    "@tailwindcss/vite": "^4.3.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react-swc": "^4.3.3",
@@ -24,12 +24,12 @@
     "@workerdeck/ui": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "lucide-react": "^1.69.0",
+    "lucide-react": "^1.70.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "rimraf": "^6.1.4",
-    "tailwindcss": "^4.3.4",
-    "vite": "^8.3.6",
-    "vitest": "^4.1.12"
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0"
   }
 }

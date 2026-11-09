@@ -16,9 +16,9 @@
     "@workerdeck/ui": "workspace:*"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.4",
-    "astro": "^7.4.7",
+    "@tailwindcss/vite": "^4.3.5",
+    "astro": "^7.4.8",
     "rimraf": "^6.1.4",
-    "tailwindcss": "^4.3.4"
+    "tailwindcss": "^4.3.5"
   }
 }

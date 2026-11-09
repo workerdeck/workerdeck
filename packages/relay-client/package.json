@@ -25,14 +25,14 @@
   },
   "dependencies": {
     "@workerdeck/protocol": "workspace:*",
-    "ws": "^8.22.1"
+    "ws": "^8.22.2"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
     "rimraf": "^6.1.4",
-    "tsdown": "^0.22.14",
-    "vitest": "^4.1.12"
+    "tsdown": "^0.23.7",
+    "vitest": "^5.1.0"
   },
   "author": "Tobias Strebitzer",
   "repository": {

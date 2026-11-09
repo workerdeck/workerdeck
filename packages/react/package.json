@@ -47,9 +47,9 @@
     "@workerdeck/server": "workspace:*",
     "react": "^19.3.1",
     "rimraf": "^6.1.4",
-    "tsdown": "^0.22.14",
-    "vitest": "^4.1.12",
-    "ws": "^8.22.1"
+    "tsdown": "^0.23.7",
+    "vitest": "^5.1.0",
+    "ws": "^8.22.2"
   },
   "author": "Tobias Strebitzer",
   "repository": {

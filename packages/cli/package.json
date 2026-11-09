@@ -28,22 +28,22 @@
     "dev": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register src/cli.ts"
   },
   "dependencies": {
-    "@openai/codex": "~0.166.0",
+    "@openai/codex": "~0.167.0",
     "@workerdeck/relay": "workspace:*",
     "@workerdeck/server": "workspace:*",
     "@workerdeck/web": "workspace:*"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.318",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.321",
     "@swc-node/register": "^1.12.1",
     "@swc/core": "^1.16.22",
     "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
     "@workerdeck/protocol": "workspace:*",
     "rimraf": "^6.1.4",
-    "tsdown": "^0.22.14",
-    "vitest": "^4.1.12",
-    "ws": "^8.22.1"
+    "tsdown": "^0.23.7",
+    "vitest": "^5.1.0",
+    "ws": "^8.22.2"
   },
   "author": "Tobias Strebitzer",
   "repository": {

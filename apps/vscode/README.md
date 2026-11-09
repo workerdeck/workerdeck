@@ -57,7 +57,7 @@ and auth key.
 directory and an engine, and type a prompt. The Agent panel opens at the bottom, beside
 Terminal.
 
-**Requirements:** VS Code 1.106 or newer, Node 22 or newer, and a logged-in
+**Requirements:** VS Code 1.145 or newer, Node 22 or newer, and a logged-in
 [Claude Code](https://claude.ai/code) or [Codex](https://developers.openai.com/codex/cli) CLI.
 
 ## ✨ What you get
