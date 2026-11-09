@@ -99,6 +99,35 @@ describe('AiSdkRunner', () => {
     ])
   })
 
+  it('marks a message sent during a turn queued and names it in input_consumed when the next turn takes it', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    let calls = 0
+    const model = new MockLanguageModelV3({
+      modelId: 'mock-1',
+      doStream: async () => {
+        calls++
+        if (calls === 1) {
+          await gate
+        }
+        return streamText(`reply ${calls}`)
+      },
+    })
+    const { runner, events, eventsOf } = makeRunner({ languageModel: model })
+    runner.sendMessage('A')
+    await waitFor(() => calls === 1)
+    runner.sendMessage('B')
+    const [first, second] = eventsOf('user_message') as Array<{ uuid: string; queued?: true }>
+    expect(first?.queued).toBeUndefined()
+    expect(second?.queued).toBe(true)
+    expect(eventsOf('input_consumed')).toHaveLength(0)
+    release()
+    await waitFor(() => eventsOf('turn_result').length === 2)
+    expect(eventsOf('input_consumed')).toEqual([expect.objectContaining({ uuids: [second?.uuid] })])
+    const consumedAt = events.findIndex((e) => e.type === 'input_consumed')
+    expect(events.findIndex((e) => e.type === 'turn_result')).toBeLessThan(consumedAt)
+  })
+
   it('executes local tools inside the loop and emits tool_use + synthetic tool_result', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',

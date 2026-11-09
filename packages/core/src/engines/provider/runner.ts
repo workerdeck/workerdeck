@@ -84,6 +84,7 @@ export type AiSdkSessionState = {
   lastActivityAt?: number
   parkedAt?: number
   pendingLocalCommands?: string[]
+  queuedInput?: string[]
 }
 
 export type ToolCallOutput = { type: 'text'; value: string } | { type: 'json'; value: unknown }
@@ -94,6 +95,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
   #permissionMode: PermissionMode
   #messages: ModelMessage[] = []
   #unsent = 0
+  #queuedInput: string[] = []
   #pendingToolCalls = new Map<string, PendingToolCall>()
   #dispatched = new Set<string>()
   #turnChain: Promise<void> = Promise.resolve()
@@ -128,6 +130,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
     }
     this.core.log.restore(snapshot.events, snapshot.seq, state.lastActivityAt)
     this.#messages = [...state.messages]
+    this.#queuedInput = [...(state.queuedInput ?? [])]
     this.localCommands.restore(state.pendingLocalCommands ?? [])
     for (const call of state.pendingToolCalls) {
       this.#pendingToolCalls.set(call.toolCallId, call)
@@ -240,6 +243,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
       lastActivityAt: this.core.log.lastActivityAt,
       parkedAt: Date.now(),
       ...(pendingLocalCommands.length ? { pendingLocalCommands } : {}),
+      ...(this.#queuedInput.length ? { queuedInput: [...this.#queuedInput] } : {}),
     }
     return {
       engine: 'provider',
@@ -273,7 +277,11 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
         : modelText
     this.#messages.push({ role: 'user', content })
     this.#unsent++
-    this.echoUser(text, attachments, options)
+    const queued = this.#abort !== undefined || this.#pendingToolCalls.size > 0
+    const uuid = this.echoUser(text, attachments, options, queued)
+    if (queued) {
+      this.#queuedInput.push(uuid)
+    }
     this.#scheduleTurn()
   }
 
@@ -385,6 +393,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
       }
       this.#messages = []
       this.#unsent = 0
+      this.#queuedInput = []
       this.#contextTokens = undefined
       this.localCommands.clear()
       this.core.emit({ type: 'conversation_reset', ...agentResetFields(options) })
@@ -670,6 +679,10 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
     })
     try {
       this.#unsent = 0
+      if (this.#queuedInput.length > 0) {
+        this.core.emit({ type: 'input_consumed', uuids: this.#queuedInput })
+        this.#queuedInput = []
+      }
       const sent = this.#messages.length
       const result = await agent.stream({ messages: [...this.#messages], abortSignal: abort.signal })
       for await (const part of result.fullStream) {

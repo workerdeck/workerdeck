@@ -38,6 +38,8 @@ export type TranscriptItem =
       origin?: MessageOrigin
       // Optional, not `string | null` like the other kinds: there forgetting to stamp it must not typecheck; here almost every prompt has no parent.
       parentToolUseId?: string
+      // Sent while a turn ran and not yet taken by the engine; cleared by `input_consumed`.
+      queued?: true
     }
   | {
       kind: 'assistant_text'
@@ -334,6 +336,19 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
   }
 }
 
+type UserItem = Extract<TranscriptItem, { kind: 'user' }>
+
+function withoutQueued(item: UserItem): UserItem {
+  const { queued, ...rest } = item
+  void queued
+  return rest
+}
+
+// The user's messages the engine still holds, oldest first.
+export function queuedMessages(state: Pick<TranscriptState, 'items'>): UserItem[] {
+  return state.items.filter((item): item is UserItem => item.kind === 'user' && item.queued === true)
+}
+
 export function rateLimitWindows(state: Pick<TranscriptState, 'rateLimits' | 'rateLimitsUpdatedAt'>): UsageWindowRow[] {
   return orderUsageWindows(mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined))
 }
@@ -399,6 +414,14 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
 
     case 'engine_sleep': {
       return { ...base, engineAsleep: event.asleep || undefined }
+    }
+
+    case 'input_consumed': {
+      const taken = new Set(event.uuids)
+      return {
+        ...base,
+        items: base.items.map((item) => (item.kind === 'user' && item.queued && taken.has(item.id) ? withoutQueued(item) : item)),
+      }
     }
 
     case 'capabilities': {
@@ -573,6 +596,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
               ...(event.parentToolUseId != null && {
                 parentToolUseId: event.parentToolUseId,
               }),
+              ...(event.queued && event.uuid && { queued: true as const }),
             })
           }
         }

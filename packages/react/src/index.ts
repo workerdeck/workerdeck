@@ -65,6 +65,7 @@ export {
   hydrateShellRow,
   hydrateToolResult,
   initialTranscriptState,
+  queuedMessages,
   rateLimitWindows,
   seedFromSessionInfo,
   shellRowText,

@@ -536,7 +536,9 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     }
     const input = this.#buildInput(withPeerContext(text, options), attachments ?? [])
     this.#wake()
-    const echo = (): void => this.echoUser(text, attachments, options)
+    const echo = (): void => {
+      this.echoUser(text, attachments, options)
+    }
     if (this.#backfillPending) {
       this.#turnChain = this.#turnChain.then(echo)
     } else {

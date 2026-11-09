@@ -18,7 +18,9 @@ function cacheOf(message: unknown): unknown {
 }
 
 const system = { role: 'system', content: 'You are terse.' }
-const user = (text: string) => ({ role: 'user', content: [{ type: 'text', text }] })
+function user(text: string) {
+  return { role: 'user', content: [{ type: 'text', text }] }
+}
 
 describe('markPrompt', () => {
   it('marks the last system message and the last message, leaving the caller prompt alone', () => {

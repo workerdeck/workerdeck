@@ -285,7 +285,11 @@ export type SessionEventBody =
       uuid?: string
       origin?: MessageOrigin
       shell?: ShellInfo
+      // Sent while a turn ran: the engine holds it until an `input_consumed` names this `uuid`.
+      queued?: true
     }
+  // Queued `user_message`s, by `uuid`, that the engine has now taken into a model request.
+  | { type: 'input_consumed'; uuids: string[] }
   | {
       type: 'stream_delta'
       event: { type: string; [key: string]: unknown }

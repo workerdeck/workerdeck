@@ -141,15 +141,24 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
     }
   }
 
-  protected echoUser(text: string, attachments: readonly AttachmentInput[] | undefined, options: SendMessageOptions | undefined): void {
+  // `queued`: the send waits behind a running turn; the engine names its uuid in `input_consumed` once a request takes it.
+  protected echoUser(
+    text: string,
+    attachments: readonly AttachmentInput[] | undefined,
+    options: SendMessageOptions | undefined,
+    queued = false,
+  ): string {
+    const uuid = randomUUID()
     this.core.emit({
       type: 'user_message',
       message: { role: 'user', content: text },
       parentToolUseId: null,
       attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
-      uuid: randomUUID(),
+      uuid,
       ...(options?.origin ? { origin: options.origin } : {}),
+      ...(queued ? { queued: true as const } : {}),
     })
+    return uuid
   }
 
   protected approvalDeadline(): ApprovalDeadline {

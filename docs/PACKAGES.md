@@ -1314,6 +1314,13 @@ gateway expects its own owner and refuses the join; `plan.crossOwner` carries th
 confirmation on one gateway. `teamMoveMessage` is the sentence both hosts show.
 ## `packages/react`
 
+**Queued messages.** A `user_message` echo with `queued: true` (sent behind a running turn) draws a user item with
+`queued: true` until an `input_consumed { uuids }` names its uuid; `queuedMessages(state)` lists the held ones. Both
+events replay unchanged (no coalesce key), so an attach mid-hold rebuilds the same state. Only the provider engine
+marks sends so far: it queues a send while a turn streams or tool calls are parked, names them when the next turn's
+request is built, keeps them across park and restore (`queuedInput`) and drops them on a clear. Claude and Codex echo
+plain sends; the native core ignores both fields.
+
 headless: `useClaudeSession`, the pure transcript reducer
 (`src/lib/transcript.ts`, framework-free, unit-tested - keep rendering out). Three reducer rules
 are not readable off the types. **Streaming is per agent, not per session**: the in-flight ids
