@@ -7,12 +7,23 @@ gateway and protocol it talks to.
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-11-10
+
 ### Added
 
+- **Fable 5.2.** The *fable* model now means Fable 5.2, with Fable 5.1 kept under *More models*.
+  Fable 5.2 and Mythos 5.2 are priced in the cost and usage meters.
 - **Models your account unlocks show in the create forms.** The gateway asks each Claude profile's
   account for its model list at startup and on a profile save (no prompt, no tokens) and learns it
   from every session, so a model only some accounts hold (Mythos 5.1, behind the Cyber Verification
   Program) is offered in *New Agent* for exactly those profiles. The shipped catalog stays the base.
+- **The Claude context meter moves during a turn.** It updates from each reply's usage instead of
+  holding its opening number until the turn ends; the exact reading still lands at turn end.
+
+### Changed
+
+- **Requires VS Code 1.145 or newer.**
+- Claude sessions run on Claude Code 2.1.321 (agent SDK 0.3.321), Codex sessions on codex 0.167.
 
 ## [4.4.0] - 2026-11-09
 

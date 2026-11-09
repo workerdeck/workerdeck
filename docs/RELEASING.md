@@ -1775,6 +1775,24 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   published (`transcript-cache.test.ts` attached its reader before the writer's prompts were logged, every CI run);
   the test now waits for the items, and the tag moved to the fix. **Published** 2026-11-09: tag `v4.4.0` at
   `60392d04`, npm 12/12 with `latest` 4.4.0 (four staged for about two minutes), Marketplace 4.4.0.
+  **4.5.0** - a **minor**, protocol stays **2**. Models: Fable 5.2 (the claude catalog regenerated from
+  `supportedModels()` of agent SDK 0.3.321, `fable` now `claude-fable-5-2`), Fable 5.2 and Mythos 5.2 priced at
+  8/40/0.20 per MTok (`PRICING_AS_OF` 2026-11-10), a Claude profile's create forms add the models its own account
+  holds (`ProfileModels`, `withAccountModels`), and the Claude context meter moves mid-turn on a usage estimate.
+  Engines: claude-agent-sdk 0.3.321 (Claude Code 2.1.321), `@openai/codex ~0.167.0` (core's optional peer now
+  `>=0.149.0 <0.168.0`). Every dependency at latest: vitest 5, tsdown 0.23, oxfmt 0.78, monaco 0.57, vsce 4, and
+  `@types/vscode ~1.145.0` with **`engines.vscode ^1.145.0`** (Cursor and Windsurf are not supported targets).
+  **Held**: quickjs stays on 0.31, since 0.32.0's async module drops the runtime before freeing host refs and every
+  asyncified host function throws on teardown (justjake/quickjs-emscripten#261, open, no fixed release). Mythos 5.2
+  is known to the CLI (`/model claude-mythos-5-2` sets it) but `supportedModels()` does not list it for our
+  account, so no picker offers it. `smoke:mcp-reconnect codex` had been failing 2/4 since 4.4.0 on codex 0.166 and
+  0.167 alike: with `features.mcp_2026_07_28` codex opens with `server/discover`, and the fake server answered
+  unknown methods with an empty result, so codex never fell back to `initialize`; it now returns -32601 like a
+  real 2025-06-18 server. **Verified**: `pnpm lint` (119 warnings, unchanged), typecheck,
+  `turbo run test --force --concurrency=1` 13/13, fixtures golden/vm/frames `--check`, `cargo fmt`/clippy/test,
+  build, `.vsix` package, gatekeeper; smokes on the new engines: `smoke:codex` 39/39 + canary 11/11,
+  `smoke:mcp-reconnect` claude 12/12 + codex 4/4, `smoke:shell-write` 33/33, `smoke:cut claude` 21/21. Bumped in
+  a worktree (the gateway runs from the main checkout).
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
