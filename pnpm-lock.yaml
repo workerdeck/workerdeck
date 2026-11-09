@@ -165,18 +165,15 @@ importers:
       '@jitl/quickjs-ng-wasmfile-release-asyncify':
         specifier: ^0.31.0
         version: 0.31.0
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.32.2
-        version: 1.32.2(zod@4.6.7)
       '@silkweave/core':
-        specifier: ^5.2.2
-        version: 5.2.2(zod@4.6.7)
+        specifier: ^6.0.0
+        version: 6.0.0(zod@4.6.7)
       '@silkweave/mcp':
-        specifier: ^5.2.2
-        version: 5.2.2(commander@14.0.3)(cors@2.8.6)(express@5.3.0)
+        specifier: ^6.0.0
+        version: 6.0.0(commander@14.0.3)(cors@2.8.6)(express@5.3.0)
       '@silkweave/trpc':
-        specifier: ^5.2.2
-        version: 5.2.2(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)
+        specifier: ^6.0.0
+        version: 6.0.0(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)
       '@tailwindcss/vite':
         specifier: ^4.3.4
         version: 4.3.4(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -1790,6 +1787,27 @@ packages:
   '@lydell/node-pty@1.2.0-beta.18':
     resolution: {integrity: sha512-ryy4liRcw6QBBKWDIbJgTW7Pw8NI2xjri/5s/LZg/jJ8ZVg8MgA1xI/vjpT5qTvDvPjUpU5NybJBrKRgK/QvlA==}
 
+  '@modelcontextprotocol/client@2.4.0':
+    resolution: {integrity: sha512-LgrD2OphHuG12vfKFKz6SOnq7bKHQmhGJIAYdD+MZBn2npHEyry6uD8zvktodtl5CQM85MO0anUyD9JwmUmxww==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/core@2.4.0':
+    resolution: {integrity: sha512-z8QBKqdfXLPzkLQuG4xp8hrVEMm1PZ1IgxMN2sMbJiFiAKOWXnAzogXn2W4aqIBlP1ea6U5yiqVquvUNM1Cj6Q==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/express@2.0.2':
+    resolution: {integrity: sha512-lUvfV7gT/tgP8nLRs0ajUtgL+MlMNWWHAls5c9cf4PyBexq3EgmhWWrS4irQOC9OoKuUsHHcNjUw9urhHz542g==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@modelcontextprotocol/server': ^2.3.0
+      express: ^4.18.0 || ^5.0.0
+
+  '@modelcontextprotocol/node@2.1.2':
+    resolution: {integrity: sha512-IIcIqBpr6NCQQs5DgJTgvbSOAw+3iaR/uquqg+e0nXCdudfjPg/80x0TseUnQx14AUAtE4fsJCEpJKPyb6WPVA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@modelcontextprotocol/server': ^2.4.0
+
   '@modelcontextprotocol/sdk@1.32.2':
     resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
     engines: {node: '>=18'}
@@ -1799,6 +1817,10 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
+
+  '@modelcontextprotocol/server@2.4.0':
+    resolution: {integrity: sha512-rgR9yxSaAJ+bcsi/XroT/S2AfPiIWloXAnrdfYSCms9ivVju0ishu/wW0J21Ho6+ZOR1r7RyeRbjiRuF87ix5Q==}
+    engines: {node: '>=20'}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
@@ -3073,18 +3095,18 @@ packages:
   '@shikijs/vscode-textmate@10.1.0':
     resolution: {integrity: sha512-cVBuhDQjBZaNMTwBquYfPydrUP+E3hE6oYGasx8h6ZrODIM7/r+gxLDXdd66oszbrggZHEntdE6j+5gYIVyMWQ==}
 
-  '@silkweave/auth@5.2.2':
-    resolution: {integrity: sha512-AGhUi0iHbW+7V9fa3sRELzPPQK8e+rGW6ytH3APKj44RaUnVxjUW17ev4VL4lkkAqllX9ohVcVqa2YeXSGXv+A==}
+  '@silkweave/auth@6.0.0':
+    resolution: {integrity: sha512-aUy7VfqCEbN+8iVI32qOsArml8Ez9HzFZSrK5gy7B1b+QmBPSSOtSxe891rRlfxeAnrLANfdXF2HdI6ttKfO7w==}
 
-  '@silkweave/core@5.2.2':
-    resolution: {integrity: sha512-SdopzuavwTljR3+u3kd91rD4D+aVIUdj4RAeHFxY99kanuVE9iSG2YEAKlC021NBwNSGqR+3zrpbLngl/wI6Pg==}
+  '@silkweave/core@6.0.0':
+    resolution: {integrity: sha512-O09JkZcshYoaXWQ4Hy0BhfE+Qm8zfVdAt7V55voYY5aFsQsPYRTXbbGCkijD6MFSTT6TGuefq8Hlu2f/7pHJ+w==}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
-  '@silkweave/mcp@5.2.2':
-    resolution: {integrity: sha512-pYL7Eh8aITMjSuOrP2BqlLM5lvU1msrBQjlIM+g6aIxUTdTtZzQjSAVHk2JV6XMrvtHEGt1l1DNLubLIZsCXDQ==}
+  '@silkweave/mcp@6.0.0':
+    resolution: {integrity: sha512-+pDKQOm93XhXlgU7mGQI50PMgplcXzRWudRRb6uSASPD8R5/pBYE3nGofGcpSdUErBpNOUmqGWAjYv5wrNeX6w==}
     peerDependencies:
-      '@silkweave/skills': ^5.2.2
+      '@silkweave/skills': ^6.0.0
       commander: ^13.1.0 || ^14.0.0 || ^15.0.0
       cors: ^2.8.5
       express: ^5.0.0
@@ -3098,8 +3120,8 @@ packages:
       express:
         optional: true
 
-  '@silkweave/trpc@5.2.2':
-    resolution: {integrity: sha512-QNRLxTU/9G0O2uDBNiLsYaMTW2Fhb35wPm4PEutcW/17MBDYZwZurGXXf74mYF2mo0uXCV0Zr9pfz5rxuRkrmA==}
+  '@silkweave/trpc@6.0.0':
+    resolution: {integrity: sha512-CpK+n7hz7iODY5xQzQHTLmFXit30S8o0OPDKOmHvZszm6qCkCrZ26QLbBDnWVGHHJTraVQty+yUD30Hb390ngQ==}
 
   '@sindresorhus/merge-streams@2.3.0':
     resolution: {integrity: sha512-LtoMMhxAlorcGhmFYI+LhPgbPZCkgP6ra1YL604EeF6U98pLlQ3iWIGMdWSC+vWmPBWBNgmDBAhnAobLROJmwg==}
@@ -7476,6 +7498,32 @@ snapshots:
       '@lydell/node-pty-win32-x64': 1.2.0-beta.18
     optional: true
 
+  '@modelcontextprotocol/client@2.4.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.4.0
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.1
+      jose: 6.2.15
+      pkce-challenge: 5.0.1
+      zod: 4.6.7
+
+  '@modelcontextprotocol/core@2.4.0':
+    dependencies:
+      zod: 4.6.7
+
+  '@modelcontextprotocol/express@2.0.2(@modelcontextprotocol/server@2.4.0)(express@5.3.0)':
+    dependencies:
+      '@modelcontextprotocol/server': 2.4.0
+      cors: 2.8.6
+      express: 5.3.0
+
+  '@modelcontextprotocol/node@2.1.2(@modelcontextprotocol/server@2.4.0)':
+    dependencies:
+      '@hono/node-server': 2.1.6(hono@4.13.16)
+      '@modelcontextprotocol/server': 2.4.0
+      hono: 4.13.16
+
   '@modelcontextprotocol/sdk@1.32.2(zod@4.6.7)':
     dependencies:
       '@hono/node-server': 2.1.6(hono@4.13.16)
@@ -7497,6 +7545,11 @@ snapshots:
       zod-to-json-schema: 3.25.2(zod@4.6.7)
     transitivePeerDependencies:
       - supports-color
+
+  '@modelcontextprotocol/server@2.4.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.4.0
+      zod: 4.6.7
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
@@ -8304,36 +8357,36 @@ snapshots:
 
   '@shikijs/vscode-textmate@10.1.0': {}
 
-  '@silkweave/auth@5.2.2(zod@4.6.7)':
+  '@silkweave/auth@6.0.0(zod@4.6.7)':
     dependencies:
-      '@silkweave/core': 5.2.2(zod@4.6.7)
+      '@silkweave/core': 6.0.0(zod@4.6.7)
       jose: 6.2.15
     transitivePeerDependencies:
       - zod
 
-  '@silkweave/core@5.2.2(zod@4.6.7)':
+  '@silkweave/core@6.0.0(zod@4.6.7)':
     dependencies:
       zod: 4.6.7
 
-  '@silkweave/mcp@5.2.2(commander@14.0.3)(cors@2.8.6)(express@5.3.0)':
+  '@silkweave/mcp@6.0.0(commander@14.0.3)(cors@2.8.6)(express@5.3.0)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.32.2(zod@4.6.7)
-      '@silkweave/auth': 5.2.2(zod@4.6.7)
-      '@silkweave/core': 5.2.2(zod@4.6.7)
+      '@modelcontextprotocol/client': 2.4.0
+      '@modelcontextprotocol/express': 2.0.2(@modelcontextprotocol/server@2.4.0)(express@5.3.0)
+      '@modelcontextprotocol/node': 2.1.2(@modelcontextprotocol/server@2.4.0)
+      '@modelcontextprotocol/server': 2.4.0
+      '@silkweave/auth': 6.0.0(zod@4.6.7)
+      '@silkweave/core': 6.0.0(zod@4.6.7)
       change-case: 5.4.4
       zod: 4.6.7
     optionalDependencies:
       commander: 14.0.3
       cors: 2.8.6
       express: 5.3.0
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - supports-color
 
-  '@silkweave/trpc@5.2.2(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)':
+  '@silkweave/trpc@6.0.0(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)':
     dependencies:
-      '@silkweave/auth': 5.2.2(zod@4.6.7)
-      '@silkweave/core': 5.2.2(zod@4.6.7)
+      '@silkweave/auth': 6.0.0(zod@4.6.7)
+      '@silkweave/core': 6.0.0(zod@4.6.7)
       '@trpc/server': 11.24.0(@types/express@5.0.6)(@types/ws@8.18.2)(typescript@6.0.3)
       change-case: 5.4.4
       cors: 2.8.6
