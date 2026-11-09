@@ -94,14 +94,14 @@ describe('model catalogs', () => {
     }
   })
 
-  // The raw `supportedModels()` extraction the claude catalog was generated from (2026-10-08,
-  // SDK 0.3.293), replayed through the live shaping rules.
+  // The raw `supportedModels()` extraction the claude catalog was generated from (2026-11-10,
+  // SDK 0.3.321), replayed through the live shaping rules.
   const RAW_CLAUDE: SdkModelInfo[] = [
     {
       value: 'default',
-      resolvedModel: 'claude-fable-5',
+      resolvedModel: 'claude-opus-5-5',
       displayName: 'Default (recommended)',
-      description: 'Fable 5',
+      description: 'Opus 5.5 · Best for everyday, complex tasks',
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
@@ -113,8 +113,8 @@ describe('model catalogs', () => {
     },
     {
       value: 'fable',
-      resolvedModel: 'claude-fable-5-1',
-      displayName: 'Fable 5.1',
+      resolvedModel: 'claude-fable-5-2',
+      displayName: 'Fable 5.2',
       description: 'For your toughest challenges',
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
@@ -130,6 +130,13 @@ describe('model catalogs', () => {
       resolvedModel: 'claude-haiku-5-5',
       displayName: 'Haiku 5.5',
       description: 'Fastest for quick answers',
+      supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    },
+    {
+      value: 'claude-fable-5-1',
+      resolvedModel: 'claude-fable-5-1',
+      displayName: 'Fable 5.1',
+      description: 'Most capable for your hardest and longest-running tasks',
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
@@ -196,7 +203,7 @@ describe('model catalogs', () => {
 
   it('claude catalog marks exactly one primary row per family', () => {
     const primaries = CLAUDE_CATALOG.models.filter((m) => m.primary)
-    expect(primaries.map((m) => m.displayName)).toEqual(['Fable 5.1', 'Opus 5.5', 'Sonnet 5.5', 'Haiku 5.5'])
+    expect(primaries.map((m) => m.displayName)).toEqual(['Fable 5.2', 'Opus 5.5', 'Sonnet 5.5', 'Haiku 5.5'])
   })
 
   it('codex catalog drops the internal auto-review row and keeps efforts open', () => {
@@ -209,7 +216,17 @@ describe('model catalogs', () => {
 
   it('codex catalog primary split mirrors the binary’s own picker visibility', () => {
     const primary = CODEX_CATALOG.models.filter((m) => m.primary).map((m) => m.value)
-    expect(primary).toEqual(['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-6.1-terra', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5'])
+    expect(primary).toEqual([
+      'gpt-6.1-sol',
+      'gpt-6-astra',
+      'gpt-6-sol',
+      'gpt-6-luna',
+      'gpt-5.6-sol',
+      'gpt-6.1-terra',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+    ])
   })
 
   it('provider pseudo-adapter ships an empty catalog and a hook-refusing factory', () => {

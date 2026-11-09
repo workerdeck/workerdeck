@@ -94,7 +94,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `core/src/engines/claude/catalog.ts` is its shaped output, whole, with no hand-kept rows; the
   catalog test replays the raw extraction to hold that. Taking a new SDK release is the only way a
   new model reaches us (0.3.293 brought Haiku 5.5 as `haiku`, Haiku 4.5 moved to its dated id,
-  and Fable 5.1 to the alias `fable`). An absent `supportsEffort` with no levels means no effort (0.3.284 reports
+  and Fable 5.1 to the alias `fable`; 0.3.321 moved `fable` to Fable 5.2). An absent `supportsEffort` with no levels means no effort (0.3.284 reports
   Haiku that way), not the engine default. `pnpm-workspace.yaml` sets `minimumReleaseAge: 0` (confirmed) since pnpm's exclude
   list can't express codex's platform binaries.
 - **Two model-list truths coexist; keep both.** The live `capabilities` event is the in-session

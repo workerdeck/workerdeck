@@ -70,6 +70,13 @@
   "output": [
     {
       "pricing": {
+        "claude-fable-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
+        },
         "claude-fable-5-1": {
           "input": 10,
           "output": 50,
@@ -83,6 +90,13 @@
           "cacheWrite5m": 12.5,
           "cacheWrite1h": 20,
           "cacheRead": 1
+        },
+        "claude-mythos-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
         },
         "claude-mythos-5-1": {
           "input": 10,
@@ -287,6 +301,13 @@
     },
     {
       "pricing": {
+        "claude-fable-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
+        },
         "claude-fable-5-1": {
           "input": 10,
           "output": 50,
@@ -300,6 +321,13 @@
           "cacheWrite5m": 12.5,
           "cacheWrite1h": 20,
           "cacheRead": 1
+        },
+        "claude-mythos-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
         },
         "claude-mythos-5-1": {
           "input": 10,
@@ -518,6 +546,13 @@
     },
     {
       "pricing": {
+        "claude-fable-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
+        },
         "claude-fable-5-1": {
           "input": 10,
           "output": 50,
@@ -531,6 +566,13 @@
           "cacheWrite5m": 12.5,
           "cacheWrite1h": 20,
           "cacheRead": 1
+        },
+        "claude-mythos-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
         },
         "claude-mythos-5-1": {
           "input": 10,
@@ -732,6 +774,13 @@
     },
     {
       "pricing": {
+        "claude-fable-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
+        },
         "claude-fable-5-1": {
           "input": 10,
           "output": 50,
@@ -745,6 +794,13 @@
           "cacheWrite5m": 12.5,
           "cacheWrite1h": 20,
           "cacheRead": 1
+        },
+        "claude-mythos-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
         },
         "claude-mythos-5-1": {
           "input": 10,
@@ -941,6 +997,13 @@
     },
     {
       "pricing": {
+        "claude-fable-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
+        },
         "claude-fable-5-1": {
           "input": 10,
           "output": 50,
@@ -954,6 +1017,13 @@
           "cacheWrite5m": 12.5,
           "cacheWrite1h": 20,
           "cacheRead": 1
+        },
+        "claude-mythos-5-2": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 10,
+          "cacheWrite1h": 16,
+          "cacheRead": 0.2
         },
         "claude-mythos-5-1": {
           "input": 10,

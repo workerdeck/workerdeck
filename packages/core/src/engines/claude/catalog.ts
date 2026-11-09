@@ -1,16 +1,23 @@
 import type { ModelCatalog } from '../adapter.ts'
 
 export const CLAUDE_CATALOG: ModelCatalog = {
-  provenance: 'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.293 (Claude Code CLI), extracted 2026-10-08',
+  provenance: 'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.321 (Claude Code CLI), extracted 2026-11-10',
   defaultModel: 'claude-opus-5-5',
   models: [
     {
       value: 'fable',
-      resolvedModel: 'claude-fable-5-1',
-      displayName: 'Fable 5.1',
+      resolvedModel: 'claude-fable-5-2',
+      displayName: 'Fable 5.2',
       description: 'For your toughest challenges',
       reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
       primary: true,
+    },
+    {
+      value: 'claude-fable-5-1',
+      resolvedModel: 'claude-fable-5-1',
+      displayName: 'Fable 5.1',
+      description: 'Most capable for your hardest and longest-running tasks',
+      reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
       value: 'claude-fable-5',
