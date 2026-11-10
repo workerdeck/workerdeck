@@ -325,6 +325,10 @@ export function createRelayLink(
       const names: TeamNames = { nameOf: (id) => localName(id), leads: new Set() }
       return remotePeek(target.gateway, answer, names)
     },
+    reset: async (from, sessionId, resetOptions) =>
+      remoteTarget(sessionId)
+        ? { scheduled: false, reason: 'a session on another gateway can only be reset by a lead on its own gateway' }
+        : peers.reset(from, sessionId, resetOptions),
     send: async (from, sessionId, text, sendOptions): Promise<PeerSendResult> => {
       const target = remoteTarget(sessionId)
       if (!target) {

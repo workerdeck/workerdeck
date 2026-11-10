@@ -7,6 +7,13 @@ gateway and protocol it talks to.
 
 ## [Unreleased]
 
+### Added
+
+- **A team lead can reset a member's context.** `peers_reset` clears one of the lead's own members
+  at the end of its current turn and can hand it a first message, which arrives as a message from
+  the lead, never as yours. It is refused while the member waits on an approval or on you, or has a
+  running shell, and it shares the member's own reset limits.
+
 ## [4.5.0] - 2026-11-10
 
 ### Added

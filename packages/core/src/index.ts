@@ -64,6 +64,7 @@ export type {
   PeerDirectory,
   PeerMention,
   PeerPeek,
+  PeerResetResult,
   PeerSendOptions,
   PeerSendResult,
   PeerSessionSummary,

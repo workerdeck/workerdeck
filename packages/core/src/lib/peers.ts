@@ -26,6 +26,8 @@ export type PeerPeek = PeerSessionSummary & {
 
 export type PeerSendResult = { delivered: true; sessionId: string; name?: string; queued: boolean } | { delivered: false; reason: string }
 
+export type PeerResetResult = { scheduled: true; sessionId: string; name?: string } | { scheduled: false; reason: string }
+
 export type PeerSendOptions = {
   hops?: string[]
 }
@@ -48,6 +50,7 @@ export interface PeerDirectory {
   list(from: string): Promise<PeerSessionSummary[]>
   peek(from: string, sessionId: string, options?: { recent?: number }): Promise<PeerPeek | undefined>
   send(from: string, sessionId: string, text: string, options?: PeerSendOptions): Promise<PeerSendResult>
+  reset?(from: string, sessionId: string, options?: { prompt?: string }): Promise<PeerResetResult>
   // A line `peers_list` appends after the rows, for a reach the directory knows it is missing (remote gateways down).
   notice?(from: string): Promise<string | undefined>
 }
@@ -94,6 +97,21 @@ export const PEER_TOOL_SHAPES = {
       text: z.string().min(1).describe('The message'),
     },
   },
+  peers_reset: {
+    description:
+      "Clear the context of one of your own team members (you must be its lead) and start it on a fresh conversation. The " +
+      'reset waits until its current turn ends. It is refused while the member waits on an approval or on the human, or has a ' +
+      'running shell. Your prompt, if any, arrives in the fresh conversation as a message from you, so make it self-contained.',
+    shape: {
+      sessionId: z.string().describe('The member session id from peers_list'),
+      prompt: z
+        .string()
+        .min(1)
+        .max(PEER_MESSAGE_MAX_CHARS)
+        .optional()
+        .describe('The first message of its fresh conversation; leave it out to leave the member idle'),
+    },
+  },
 } as const
 
 export type PeerToolName = keyof typeof PEER_TOOL_SHAPES
@@ -126,6 +144,22 @@ const PEER_TOOLS = defineToolFamily<typeof PEER_TOOL_SHAPES, PeerDirectory>(PEER
       text: result.queued
         ? `${head}; it is mid-turn and will read the message between tool calls. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`
         : `${head}; it was idle and has started a turn on your message. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`,
+      isError: false,
+    }
+  },
+  peers_reset: async (peers, from, input) => {
+    if (!peers.reset) {
+      return { text: 'not reset: this gateway cannot reset team members', isError: true }
+    }
+    const result = await peers.reset(from, input.sessionId, { prompt: input.prompt })
+    if (!result.scheduled) {
+      return { text: `not reset: ${result.reason}`, isError: true }
+    }
+    const who = result.name ? `${result.name} (${result.sessionId})` : result.sessionId
+    return {
+      text: `Reset scheduled for ${who}. It runs when its current turn ends${
+        input.prompt ? ', and your prompt then arrives as a message from you' : ''
+      }. A reset that cannot run (the turn fails, or it starts waiting on the human) is dropped.`,
       isError: false,
     }
   },
@@ -385,7 +419,7 @@ export function installedPeerDirectory(): PeerDirectory | undefined {
 
 export function peerDirectoryHandle(own?: () => PeerDirectory | undefined): PeerDirectory {
   return lateBoundDirectory<PeerDirectory>(
-    ['list', 'peek', 'send', 'notice'],
+    ['list', 'peek', 'send', 'reset', 'notice'],
     PEER_DIRECTORY_SLOT,
     own,
     'peer messaging is not available on this gateway',

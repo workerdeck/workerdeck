@@ -174,9 +174,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   engine, vendor and model, context usage (tokens used, window, percent left), turns, cost and
   the account rate-limit windows. An agent can check it before a big step and wrap up, summarise
   or ask for compaction instead of running into the wall.
-- **Sessions that can talk to each other.** Every session, on any engine, gets three tools:
+- **Sessions that can talk to each other.** Every session, on any engine, gets
   `peers_list`, `peers_peek` (status, checklist, the last few lines, without interrupting) and
-  `peers_send`. A message lands as a peer-stamped message that never cuts into a running turn, so a
+  `peers_send`, and a team lead gets `peers_reset` to start one of its members on a fresh context. A message lands as a peer-stamped message that never cuts into a running turn, so a
   Claude session in one repo can ask a Codex session in another to do something and read how far
   it got. Scope-bounded, rate-limited, and loop-guarded by a hop chain a human turn resets. With a
   `workerdeck relay` running on one always-on machine, sessions on your other gateways show up too,

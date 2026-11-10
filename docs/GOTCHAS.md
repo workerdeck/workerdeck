@@ -1566,8 +1566,9 @@ A goal is engine state (Claude `/goal`, codex thread goals) the runner normalize
   then `sendMessage(prompt)`; waiting for the event matters on claude, whose `clearContext` only
   queues `/clear`. Claude stamps the reason on the CLI's own reset (`#takeAgentReset`); a human
   `/clear` typed between the request and that event would carry the agent's reason.
-- **Self only.** There is no way to reset another session. Peer names are labels, not authority,
-  and wiping a teammate's context would need its own access model.
+- **Self, or a lead's own member.** `context_reset` resets only its caller. The one other door is
+  `peers_reset` (§ Peer messaging): a lead resets one of its own members, through the same service
+  (`requestMember`), so the member's rate limits count both kinds together.
 - **Verified on both engines.** `pnpm smoke:cut` checks that `context_reset` cuts under the same id
   and its prompt is answered; `pnpm smoke:context-reset` drives the standalone clear-then-prompt
   path on claude and codex (`turn_result` precedes the idle on both, the reason rides the
@@ -1575,7 +1576,7 @@ A goal is engine state (Claude `/goal`, codex thread goals) the runner normalize
   spends a `ToolSearch` before the deferred `mcp__workerdeck__*` tools, so a post-reset turn can
   take minutes; the smokes wait 240 s.
 
-## Peer messaging (`peers_list` / `peers_peek` / `peers_send`)
+## Peer messaging (`peers_list` / `peers_peek` / `peers_send` / `peers_reset`)
 
 Session-to-session messaging on one gateway: every engine gets the three tools, backed by one
 `PeerDirectory` the server installs (`services/peers.ts`). `docs/ARCHITECTURE.md` §Peer messaging
@@ -1656,6 +1657,26 @@ has the shape; these are the ways to get it wrong.
   live sessions list": the rule binds *substitution* - `peerSendTarget` drawing a name where an id
   was - and here the characters on screen are `#Astra` either way. Never render a resolved title
   in place of a typed token.
+- **`peers_reset` is the lead's, for its own members, within one owner.** `peerOps(...).reset` is
+  true only when the target's `agent.lead` is the sender's agent id and both share an owner (the
+  `ALL_OPS` branch); a cross-owner team, a teammate, a shared card and anything relayed get
+  `false`, and `peer-relay.ts` refuses every `gateway:session` id outright. It needs no grant on the
+  member (`agentContextReset` is the member's permission to reset *itself*), but it is gone when
+  the gateway turns agent resets off (`agentContextReset: false`), since it runs on that service.
+- **A reset never takes what the human is waiting on.** It is refused while the member has a
+  pending approval, a `waitingOn: 'human'` status, or a running shell. The same check, plus "its
+  lead still exists", is the `guard`: asked when the turn ends and again inside the cut's lifecycle
+  lock (`clearOnIdle` carries it into `cut(id, request, guard)`), because a cut that waits on
+  unanswered input can sit through a whole further turn. A refusal drops the reset (`onError`);
+  the lead is not told. It waits for idle like every cut (reason `peer_reset`); the notice opening
+  the new conversation names the lead and its session id.
+- **The lead's prompt is a peer message, never the cut's first prompt.** A cut's `pendingPrompt`
+  is sent as a plain `user_message`, which the member would read as its human. So the cut carries
+  no prompt, and `done` hands the prompt over through `deliver` with the lead's `origin` once the
+  cut ran, re-reading both sides (the cut built a new runner). The hop bound is checked when the
+  reset is scheduled, and the hand-over skips the per-minute limit (the reset has its own), so it
+  rarely refuses after the cut; when it does, or a crash falls between the commit and the
+  hand-over, the prompt is lost to `diagnose('peer-reset')` and the member sits idle.
 - **The loop guard is a hop chain reset by a human.** Each delivery carries `hops` (every session
   the exchange has passed through); the service remembers the last chain each session *received*
   and extends it when that session sends. A `user_message` with no `origin` clears it. Past

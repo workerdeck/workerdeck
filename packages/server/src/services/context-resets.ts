@@ -9,10 +9,19 @@ export type AgentContextResetOptions = {
   maxPerHour?: number
 }
 
+export type ResetKind = 'context_reset' | 'peer_reset'
+
+// A lead's reset of its member. `guard` is asked again when the turn ends, since the member may have started waiting on
+// the human meanwhile; `done` runs once the cut did, to hand the lead's prompt over as a peer message.
+export type MemberResetRequest = { reason: string; guard?: () => Promise<string | undefined>; done?: () => void }
+
+type PendingReset = ContextResetRequest & { kind: ResetKind; guard?: () => Promise<string | undefined>; done?: () => void }
+
 export type ContextResetServiceOptions = AgentContextResetOptions & {
   // A reset is a conversation cut under the same id (named or not), its prompt the first message of the next one. Settles
   // once the cut ran, and rejects when it did not; resolving on admission alone would count a reset that never happened.
-  cut?: (sessionId: string, prompt: string, reason: string) => Promise<void>
+  // `guard` is a member reset's refusal check, for the cut to ask again under its lock.
+  cut?: (sessionId: string, prompt: string, reason: string, kind: ResetKind, guard?: () => Promise<string | undefined>) => Promise<void>
   onError?: (error: unknown, sessionId: string) => void
   now?: () => number
   resetTimeoutMs?: number
@@ -32,7 +41,7 @@ export const CONTEXT_RESET_SCHEDULED =
 export class ContextResetService implements ContextResetDirectory {
   #options: ContextResetServiceOptions
   #runners = new Map<string, Runner>()
-  #pending = new Map<string, ContextResetRequest>()
+  #pending = new Map<string, PendingReset>()
   #running = new Set<string>()
   #history = new Map<string, number[]>()
   #turnFailed = new Set<string>()
@@ -66,6 +75,22 @@ export class ContextResetService implements ContextResetDirectory {
     if (this.#closed || !runner || runner.info().agentContextReset !== true) {
       throw new Error('context reset is not enabled for this session')
     }
+    this.#schedule(runner, { prompt: request.prompt, reason: request.reason, kind: 'context_reset' }, 'keep working')
+    return CONTEXT_RESET_SCHEDULED
+  }
+
+  // No `agentContextReset` grant on the member: the authority is its lead's, checked by the caller. The rate limits are the
+  // member's own, shared with its self-resets. Throws the refusal.
+  requestMember(sessionId: string, request: MemberResetRequest): void {
+    const runner = this.#runners.get(sessionId)
+    if (this.#closed || !runner) {
+      throw new Error('the member is not running on this gateway')
+    }
+    this.#schedule(runner, { prompt: '', reason: request.reason, kind: 'peer_reset', guard: request.guard, done: request.done }, 'try later')
+  }
+
+  #schedule(runner: Runner, request: PendingReset, onRate: string): void {
+    const sessionId = runner.id
     if (isJobRun(runner.info())) {
       throw new Error('a job run cannot reset its conversation')
     }
@@ -78,17 +103,16 @@ export class ContextResetService implements ContextResetDirectory {
     if (this.#pending.has(sessionId) || this.#running.has(sessionId)) {
       throw new Error('a reset is already scheduled for this session')
     }
-    const refused = this.#rateRefusal(sessionId)
+    const refused = this.#rateRefusal(sessionId, onRate)
     if (refused) {
       throw new Error(refused)
     }
-    this.#pending.set(sessionId, { prompt: request.prompt, reason: request.reason })
+    this.#pending.set(sessionId, request)
     this.#turnFailed.delete(sessionId)
     // Asked from outside a turn, the idle it waits for has already happened; the reply still goes out first.
     if (runner.info().status === 'idle') {
       setTimeout(() => this.#settle(runner), 0).unref?.()
     }
-    return CONTEXT_RESET_SCHEDULED
   }
 
   close(): void {
@@ -97,17 +121,17 @@ export class ContextResetService implements ContextResetDirectory {
     this.#runners.clear()
   }
 
-  #rateRefusal(key: string): string | null {
+  #rateRefusal(key: string, onRate: string): string | null {
     const now = this.#now()
     const minInterval = this.#options.minIntervalMs ?? CONTEXT_RESET_MIN_INTERVAL_MS
     const maxPerHour = this.#options.maxPerHour ?? CONTEXT_RESET_MAX_PER_HOUR
     const recent = (this.#history.get(key) ?? []).filter((at) => now - at < HOUR_MS)
     const last = recent.at(-1)
     if (last !== undefined && now - last < minInterval) {
-      return `refused: the last reset was ${minutes(now - last)} ago and resets need ${minutes(minInterval)} between them; keep working`
+      return `refused: the last reset was ${minutes(now - last)} ago and resets need ${minutes(minInterval)} between them; ${onRate}`
     }
     if (maxPerHour <= 0 || recent.length >= maxPerHour) {
-      return `refused: this session already reset ${recent.length} time(s) in the last hour (limit ${maxPerHour}); keep working`
+      return `refused: this session already reset ${recent.length} time(s) in the last hour (limit ${maxPerHour}); ${onRate}`
     }
     return null
   }
@@ -141,12 +165,17 @@ export class ContextResetService implements ContextResetDirectory {
     void this.#run(runner, request)
   }
 
-  async #run(runner: Runner, request: ContextResetRequest): Promise<void> {
+  async #run(runner: Runner, request: PendingReset): Promise<void> {
     this.#running.add(runner.id)
     try {
+      const refused = await request.guard?.()
+      if (refused) {
+        throw new Error(`the reset was dropped: ${refused}`)
+      }
       if (this.#options.cut) {
-        await this.#options.cut(runner.id, request.prompt, request.reason)
+        await this.#options.cut(runner.id, request.prompt, request.reason, request.kind, request.guard)
         this.#record(runner.id)
+        request.done?.()
         return
       }
       if (!runner.clearContext) {
@@ -160,7 +189,10 @@ export class ContextResetService implements ContextResetDirectory {
         reset.cancel()
       }
       this.#record(runner.id)
-      runner.sendMessage(request.prompt)
+      if (request.prompt) {
+        runner.sendMessage(request.prompt)
+      }
+      request.done?.()
     } catch (error) {
       this.#options.onError?.(error, runner.id)
     } finally {

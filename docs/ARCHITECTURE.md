@@ -508,10 +508,12 @@ more cheaply. Nothing is pushed to the model; it only learns any of this by aski
 ## Peer messaging
 
 A session can list, read and message the other sessions on its gateway, whatever engine either
-side runs. The surface is three tools the gateway puts in front of every model: `peers_list` (id,
+side runs. The surface is four tools the gateway puts in front of every model: `peers_list` (id,
 engine, project, status, title of every session the caller may see), `peers_peek` (status,
-checklist, pending approvals, the last few transcript lines: a look, never an interruption) and
-`peers_send` (a message delivered as a `user_message` stamped `origin: { kind: 'peer', ... }`).
+checklist, pending approvals, the last few transcript lines: a look, never an interruption),
+`peers_send` (a message delivered as a `user_message` stamped `origin: { kind: 'peer', ... }`) and
+`peers_reset` (a lead clears one of its own members' context at its next idle, optionally handing
+it a first message from the lead).
 
 One `PeerDirectory` (`packages/core/src/lib/peers.ts` for the contract and the pure parts,
 `packages/server/src/services/peers.ts` for the one the server installs) serves every engine, and

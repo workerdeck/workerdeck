@@ -62,11 +62,12 @@ describe('peerOps across owners', () => {
       list: true,
       send: true,
       peek: false,
+      reset: false,
     })
   })
 
   it('needs both sides shared, top-level and owned', () => {
-    const none = { list: false, send: false, peek: false }
+    const none = { list: false, send: false, peek: false, reset: false }
     expect(peerOps({ owner: 'tobias', agent: ref('A') }, { owner: 'silkweave', agent: shared('B') }, true)).toEqual(none)
     expect(peerOps({ owner: 'tobias' }, { owner: 'silkweave', agent: shared('B') }, true)).toEqual(none)
     expect(
@@ -78,16 +79,27 @@ describe('peerOps across owners', () => {
   it('keeps a team across owners whatever the sharing, and sends nothing to a session without prompts', () => {
     const lead = { owner: 'silkweave', agent: ref('L') }
     const member = { owner: 'ruli', agent: ref('M', { lead: 'L' }) }
-    expect(peerOps(lead, member, true)).toEqual({ list: true, send: true, peek: true })
-    expect(peerOps(lead, { ...member, permissionMode: 'bypassPermissions' }, true)).toEqual({ list: true, send: false, peek: true })
+    expect(peerOps(lead, member, true)).toEqual({ list: true, send: true, peek: true, reset: false })
+    expect(peerOps(lead, { ...member, permissionMode: 'bypassPermissions' }, true)).toEqual({ list: true, send: false, peek: true, reset: false })
     expect(
       peerOps({ owner: 'tobias', agent: shared('A') }, { owner: 'silkweave', agent: shared('B'), permissionMode: 'dontAsk' }, true),
     ).toEqual({
       list: false,
       send: false,
       peek: false,
+      reset: false,
     })
     expect(peerOps({ owner: 'tobias' }, { owner: 'tobias', permissionMode: 'bypassPermissions' }, true).send).toBe(true)
+  })
+
+  it('lets a lead reset only its own members, and only within one owner', () => {
+    const lead = { owner: 'tobias', agent: ref('L', { leads: true }) }
+    const member = { owner: 'tobias', agent: ref('M', { lead: 'L' }) }
+    expect(peerOps(lead, member, true).reset).toBe(true)
+    expect(peerOps(member, lead, true).reset).toBe(false)
+    expect(peerOps({ owner: 'tobias', agent: ref('M2', { lead: 'L' }) }, member, true).reset).toBe(false)
+    expect(peerOps({ owner: 'tobias', agent: ref('X', { leads: true }) }, member, true).reset).toBe(false)
+    expect(peerOps({ ...lead, owner: 'silkweave' }, member, true).reset).toBe(false)
   })
 })
 

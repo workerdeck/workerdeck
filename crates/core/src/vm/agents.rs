@@ -39,10 +39,10 @@ pub struct PeerOps {
     pub list: bool,
     pub send: bool,
     pub peek: bool,
+    pub reset: bool,
 }
 
-const NO_OPS: PeerOps = PeerOps { list: false, send: false, peek: false };
-const ALL_OPS: PeerOps = PeerOps { list: true, send: true, peek: true };
+const NO_OPS: PeerOps = PeerOps { list: false, send: false, peek: false, reset: false };
 
 pub fn is_sharing(value: &str) -> bool {
     value == "private" || value == "shared"
@@ -105,19 +105,23 @@ fn unprompted(party: &PeerParty) -> bool {
     matches!(party.permission_mode.as_deref(), Some("bypassPermissions") | Some("dontAsk"))
 }
 
+fn leads_member(from: Option<&AgentRef>, to: Option<&AgentRef>) -> bool {
+    matches!((from, to.and_then(|to| to.lead.as_ref())), (Some(from), Some(lead)) if *lead == from.id)
+}
+
 pub fn peer_ops(from: &PeerParty, to: &PeerParty, multi_owner: bool) -> PeerOps {
     if !team_reaches(from.agent.as_ref(), to.agent.as_ref()) {
         return NO_OPS;
     }
     if from.owner == to.owner && (from.owner.is_some() || !multi_owner) {
-        return ALL_OPS;
+        return PeerOps { list: true, send: true, peek: true, reset: leads_member(from.agent.as_ref(), to.agent.as_ref()) };
     }
     if team_related(from.agent.as_ref(), to.agent.as_ref()) {
-        return PeerOps { list: true, send: !unprompted(to), peek: true };
+        return PeerOps { list: true, send: !unprompted(to), peek: true, reset: false };
     }
     let owned = from.owner.is_some() && to.owner.is_some();
     if owned && shared_lead(from.agent.as_ref()) && shared_lead(to.agent.as_ref()) && !unprompted(to) {
-        return PeerOps { list: true, send: true, peek: false };
+        return PeerOps { list: true, send: true, peek: false, reset: false };
     }
     NO_OPS
 }

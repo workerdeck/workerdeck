@@ -122,7 +122,8 @@ describe('ContextResetService', () => {
     const service = new ContextResetService({
       minIntervalMs: 5 * 60_000,
       now: () => now,
-      cut: async (sessionId, prompt) => {
+      cut: async (sessionId, prompt, _reason, kind) => {
+        expect(kind).toBe('context_reset')
         cuts.push([sessionId, prompt])
       },
     })
@@ -186,6 +187,46 @@ describe('ContextResetService', () => {
     await expect(service.request('s1', REQUEST)).rejects.toThrow(/2 time\(s\) in the last hour \(limit 2\)/)
     now += 60 * 60_000
     await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
+  })
+
+  it("runs a lead's reset of a member without the member's grant, as a peer_reset cut with no prompt, then hands over", async () => {
+    const cuts: Array<[string, string, string, string]> = []
+    const guards: Array<(() => Promise<string | undefined>) | undefined> = []
+    const service = new ContextResetService({
+      cut: async (sessionId, prompt, reason, kind, guard) => {
+        cuts.push([sessionId, prompt, reason, kind])
+        guards.push(guard)
+      },
+    })
+    const runner = scriptedRunner('m1', false)
+    service.watch(runner)
+    await expect(service.request('m1', REQUEST)).rejects.toThrow(/not enabled/)
+    let handed = 0
+    const guard = async () => undefined
+    service.requestMember('m1', { reason: 'reset by its lead Lead (l1)', guard, done: () => handed++ })
+    expect(() => service.requestMember('m1', { reason: 'again' })).toThrow(/already scheduled/)
+    runner.emit({ type: 'status_changed', status: 'idle' })
+    await eventually(() => expect(cuts).toEqual([['m1', '', 'reset by its lead Lead (l1)', 'peer_reset']]))
+    expect(handed).toBe(1)
+    expect(guards).toEqual([guard])
+    expect(() => service.requestMember('m1', { reason: 'too soon' })).toThrow(/minutes between them; try later/)
+  })
+
+  it("drops a member's reset whose guard refuses when the turn ends, and never hands over", async () => {
+    const errors: unknown[] = []
+    const cuts: string[] = []
+    const service = new ContextResetService({ cut: async (sessionId) => void cuts.push(sessionId), onError: (error) => errors.push(error) })
+    const runner = scriptedRunner('m1', false)
+    service.watch(runner)
+    let waiting = false
+    let handed = 0
+    service.requestMember('m1', { reason: 'r', guard: async () => (waiting ? 'it is waiting on the human' : undefined), done: () => handed++ })
+    waiting = true
+    runner.emit({ type: 'status_changed', status: 'idle' })
+    await eventually(() => expect(errors).toHaveLength(1))
+    expect(String(errors[0])).toMatch(/dropped: it is waiting on the human/)
+    expect(cuts).toEqual([])
+    expect(handed).toBe(0)
   })
 
   it('drops the scheduled reset when the session closes or the watcher detaches', async () => {

@@ -84,6 +84,7 @@ describe('SessionRunner: shell tools', () => {
       'mcp_reload',
       'peers_list',
       'peers_peek',
+      'peers_reset',
       'peers_send',
       'session_info',
       'set_status',

@@ -40,9 +40,11 @@ function event(body: SessionEventBody, seq: number): SessionEvent {
 }
 
 describe('peer tool specs', () => {
-  it('describes the three tools with JSON schemas an engine can declare', () => {
+  it('describes the four tools with JSON schemas an engine can declare', () => {
     const specs = peerToolSpecs()
-    expect(specs.map((s) => s.name)).toEqual(['peers_list', 'peers_peek', 'peers_send'])
+    expect(specs.map((s) => s.name)).toEqual(['peers_list', 'peers_peek', 'peers_send', 'peers_reset'])
+    const reset = specs.find((s) => s.name === 'peers_reset')!
+    expect(reset.inputSchema).toMatchObject({ type: 'object', required: ['sessionId'] })
     const send = specs.find((s) => s.name === 'peers_send')!
     expect(send.inputSchema).toMatchObject({ type: 'object', required: ['sessionId', 'text'] })
     expect((send.inputSchema.properties as Record<string, unknown>).text).toMatchObject({ type: 'string' })

@@ -188,13 +188,16 @@ export function teamRelated(a: AgentRef | undefined, b: AgentRef | undefined): b
 
 export type PeerParty = { owner?: string; agent?: AgentRef; permissionMode?: string }
 
-export type PeerOps = { list: boolean; send: boolean; peek: boolean }
+export type PeerOps = { list: boolean; send: boolean; peek: boolean; reset: boolean }
 
-const NO_OPS: PeerOps = { list: false, send: false, peek: false }
-const ALL_OPS: PeerOps = { list: true, send: true, peek: true }
+const NO_OPS: PeerOps = { list: false, send: false, peek: false, reset: false }
 
 function sharedLead(agent: AgentRef | undefined): boolean {
   return agent?.shared === true && agent.lead === undefined
+}
+
+function leadsMember(from: AgentRef | undefined, to: AgentRef | undefined): boolean {
+  return from !== undefined && to?.lead !== undefined && to.lead === from.id
 }
 
 // A session that runs tools without asking takes nothing from another owner's agents.
@@ -211,14 +214,14 @@ export function peerOps(from: PeerParty, to: PeerParty, multiOwner: boolean): Pe
     return NO_OPS
   }
   if (from.owner === to.owner && (from.owner !== undefined || !multiOwner)) {
-    return ALL_OPS
+    return { list: true, send: true, peek: true, reset: leadsMember(from.agent, to.agent) }
   }
   if (teamRelated(from.agent, to.agent)) {
-    return { list: true, send: !unprompted(to), peek: true }
+    return { list: true, send: !unprompted(to), peek: true, reset: false }
   }
   const owned = from.owner !== undefined && to.owner !== undefined
   if (owned && sharedLead(from.agent) && sharedLead(to.agent) && !unprompted(to)) {
-    return { list: true, send: true, peek: false }
+    return { list: true, send: true, peek: false, reset: false }
   }
   return NO_OPS
 }

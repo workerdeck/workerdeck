@@ -414,6 +414,7 @@ pub fn tool_title(name: &str) -> Option<Str> {
         "peers_list" | "mcp__workerdeck__peers_list" => "Listing peer sessions",
         "peers_peek" | "mcp__workerdeck__peers_peek" => "Peeking at a peer session",
         "peers_send" | "mcp__workerdeck__peers_send" => "Messaging a peer session",
+        "peers_reset" | "mcp__workerdeck__peers_reset" => "Resetting a team member",
         "session_info" | "mcp__workerdeck__session_info" => "Checking session info",
         _ => return None,
     };

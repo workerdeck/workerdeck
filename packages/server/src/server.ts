@@ -28,7 +28,7 @@ import {
 } from '@workerdeck/protocol'
 import type { ServerContext } from './context.ts'
 import { createServerLifecycle } from './lifecycle.ts'
-import { HttpError, httpErrorStatus, json } from './lib/http.ts'
+import { HttpError, fail, httpErrorStatus, json } from './lib/http.ts'
 import { modelFor, withAccountModels } from './lib/models.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
@@ -227,7 +227,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       ? undefined
       : new ContextResetService({
           ...options.agentContextReset,
-          cut: (sessionId, prompt, reason) =>
+          cut: (sessionId, prompt, reason, kind, guard) =>
             new Promise<void>((resolve, reject) => {
               const runner = registry.get(sessionId)
               if (!runner) {
@@ -236,7 +236,15 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
               }
               const outcome = (cut: boolean, why?: string): void =>
                 cut ? resolve() : reject(new Error(`the reset did not run: ${why ?? 'the session ended first'}`))
-              cuts.clearOnIdle(runner, 'context_reset', prompt, outcome, reason).then((result) => result && resolve(), reject)
+              const refuse = guard
+                ? async () => {
+                    const refused = await guard()
+                    if (refused) {
+                      fail(409, refused)
+                    }
+                  }
+                : undefined
+              cuts.clearOnIdle(runner, kind, prompt, outcome, reason, refuse).then((result) => result && resolve(), reject)
             }),
           onError: (error) => diagnose(error, 'context-reset'),
         })
@@ -322,6 +330,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       : createPeerService({
           refuse: (sessionId) => (locks.gated(sessionId) ? CUT_IN_PROGRESS : undefined),
           hidden: (sessionId) => agents.tombstone(sessionId) !== undefined,
+          resets: contextResets,
+          liveShell: (sessionId) => shells?.list(sessionId).some((shell) => shell.status === 'running') === true,
+          onError: (error) => diagnose(error, 'peer-reset'),
           refs: { registry, parking },
           projects,
           teams: {

@@ -5,7 +5,7 @@ pub const TOOL_TITLE_MAX_CHARS: usize = 64;
 
 pub const PEER_SEND_TOOLS: [&str; 2] = ["peers_send", "mcp__workerdeck__peers_send"];
 
-pub const BUILTIN_TOOL_TITLES: [(&str, &str); 29] = [
+pub const BUILTIN_TOOL_TITLES: [(&str, &str); 31] = [
     ("fs_read", "Reading a file"),
     ("fs_write", "Writing a file"),
     ("fs_list", "Listing files"),
@@ -22,9 +22,11 @@ pub const BUILTIN_TOOL_TITLES: [(&str, &str); 29] = [
     ("peers_list", "Listing peer sessions"),
     ("peers_peek", "Peeking at a peer session"),
     ("peers_send", "Messaging a peer session"),
+    ("peers_reset", "Resetting a team member"),
     ("mcp__workerdeck__peers_list", "Listing peer sessions"),
     ("mcp__workerdeck__peers_peek", "Peeking at a peer session"),
     ("mcp__workerdeck__peers_send", "Messaging a peer session"),
+    ("mcp__workerdeck__peers_reset", "Resetting a team member"),
     ("session_info", "Checking session info"),
     ("mcp__workerdeck__session_info", "Checking session info"),
     ("set_status", "Setting status"),

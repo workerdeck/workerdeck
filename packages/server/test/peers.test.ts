@@ -6,6 +6,7 @@ import { SessionRegistry } from '../src/services/registry.ts'
 import { createPeerService, mentionsFor, resolvePeerMentions } from '../src/services/peers.ts'
 import type { LateBoundRefs } from '../src/options.ts'
 import { PeerRunner } from './peer-runner.ts'
+import { eventually } from './helpers.ts'
 
 function rig(options?: { perMinute?: number; maxHops?: number; maxMessageChars?: number }) {
   const registry = new SessionRegistry()
@@ -389,5 +390,110 @@ describe('peer service: a job running in bypass', () => {
     registry.register(job)
     expect(await service.send('a', 'j', 'hi')).toMatchObject({ delivered: false, reason: expect.stringContaining('takes no input') })
     expect(job.sent).toEqual([])
+  })
+})
+
+describe('peer service: reset', () => {
+  const refs: Record<string, AgentRef> = {
+    lead: { id: 'A', name: 'Atlas', leads: true },
+    m1: { id: 'P', name: 'Pip', lead: 'A', team: 'Atlas' },
+    m2: { id: 'J', name: 'Juno', lead: 'A', team: 'Atlas' },
+    otherLead: { id: 'O', name: 'Orbit', leads: true },
+  }
+
+  function resetRig(opts: { blocked?: string[]; shells?: string[]; resets?: boolean; perMinute?: number } = {}) {
+    const registry = new SessionRegistry()
+    const errors: string[] = []
+    const requests: Array<{ sessionId: string; reason: string; guard?: () => Promise<string | undefined>; done?: () => void }> = []
+    const service = createPeerService({
+      refs: { registry },
+      projects: new ProjectInfoService({
+        decorate: (info) => ({
+          ...info,
+          ...(refs[info.id] ? { agent: refs[info.id] } : {}),
+          ...(opts.blocked?.includes(info.id) ? { statusLabel: { text: 'need a key', setAt: 1, waitingOn: 'human' as const } } : {}),
+        }),
+      }),
+      liveShell: (id) => opts.shells?.includes(id) === true,
+      onError: (error) => void errors.push(String(error)),
+      ...(opts.perMinute ? { options: { perMinute: opts.perMinute } } : {}),
+      ...(opts.resets === false ? {} : { resets: { requestMember: (sessionId, request) => void requests.push({ sessionId, ...request }) } }),
+    })
+    const runners = Object.fromEntries([...Object.keys(refs), 'plain'].map((id) => [id, new PeerRunner(id)]))
+    for (const runner of Object.values(runners)) {
+      registry.register(runner)
+    }
+    return { service, requests, runners, registry, errors }
+  }
+
+  it('schedules a lead\'s reset of its own member, and hands the prompt over as a peer message once the cut ran', async () => {
+    const { service, requests, runners } = resetRig()
+    expect(await service.reset('lead', 'm1', { prompt: 'start on @NEXT.md' })).toEqual({ scheduled: true, sessionId: 'm1', name: 'Pip' })
+    expect(requests).toMatchObject([{ sessionId: 'm1', reason: 'reset by its lead Atlas (lead)' }])
+    expect(runners.m1!.sent).toEqual([])
+    requests[0]!.done!()
+    await eventually(() => expect(runners.m1!.sent).toHaveLength(1))
+    expect(runners.m1!.sent[0]).toMatchObject({ text: 'start on @NEXT.md', options: { origin: { kind: 'peer', sessionId: 'lead', name: 'Atlas' } } })
+  })
+
+  it('refuses anyone but its own lead, and itself', async () => {
+    const { service, requests } = resetRig()
+    expect(await service.reset('m2', 'm1')).toEqual({ scheduled: false, reason: 'only its own team lead can reset m1' })
+    expect(await service.reset('m1', 'lead')).toEqual({ scheduled: false, reason: 'only its own team lead can reset lead' })
+    expect(await service.reset('otherLead', 'm1')).toEqual({ scheduled: false, reason: 'no such session: m1' })
+    expect(await service.reset('plain', 'otherLead')).toEqual({ scheduled: false, reason: 'only its own team lead can reset otherLead' })
+    expect((await service.reset('lead', 'lead')).scheduled).toBe(false)
+    expect(requests).toEqual([])
+  })
+
+  it('keeps a member for the human: a pending approval, waiting on the human, a running shell', async () => {
+    const { service, requests, runners } = resetRig({ blocked: ['m2'], shells: ['m1'] })
+    expect(await service.reset('lead', 'm1')).toMatchObject({ scheduled: false, reason: expect.stringMatching(/running shell/) })
+    expect(await service.reset('lead', 'm2')).toMatchObject({ scheduled: false, reason: expect.stringMatching(/waiting on the human/) })
+    runners.m2!.pendingApprovals = [{ requestId: 'r', toolName: 'Bash', input: {} } as never]
+    expect(await service.reset('lead', 'm2')).toMatchObject({ scheduled: false, reason: expect.stringMatching(/approval/) })
+    expect(requests).toEqual([])
+  })
+
+  it('hands the prompt over outside the per-minute limit, and reports a hand-over that fails', async () => {
+    const { service, requests, runners, errors } = resetRig({ perMinute: 1 })
+    await service.send('lead', 'm1', 'one message uses the minute')
+    await service.reset('lead', 'm1', { prompt: 'fresh start' })
+    requests[0]!.done!()
+    await eventually(() => expect(runners.m1!.sent.map((sent) => sent.text)).toEqual(['one message uses the minute', 'fresh start']))
+    await service.reset('lead', 'm2', { prompt: 'lost' })
+    runners.m2!.status = 'closed'
+    requests[1]!.done!()
+    await eventually(() => expect(errors).toEqual([expect.stringMatching(/reset of m2 was not delivered: session m2 is closed/)]))
+  })
+
+  it('drops the reset when its lead has ended or left the gateway by the time the turn ends', async () => {
+    const { service, requests, runners, registry } = resetRig()
+    await service.reset('lead', 'm1')
+    runners.lead!.status = 'closed'
+    await expect(requests[0]!.guard!()).resolves.toBe('its lead has ended')
+    runners.lead!.status = 'idle'
+    registry.evict('lead')
+    await expect(requests[0]!.guard!()).resolves.toBe('its lead has ended')
+  })
+
+  it('asks the same rules again when the turn ends', async () => {
+    const { service, requests, runners } = resetRig()
+    await service.reset('lead', 'm1')
+    await expect(requests[0]!.guard!()).resolves.toBeUndefined()
+    runners.m1!.pendingApprovals = [{ requestId: 'r', toolName: 'Bash', input: {} } as never]
+    await expect(requests[0]!.guard!()).resolves.toMatch(/approval/)
+  })
+
+  it('says so when resets are off, and the tool reports the scheduling in prose', async () => {
+    expect(await resetRig({ resets: false }).service.reset('lead', 'm1')).toEqual({
+      scheduled: false,
+      reason: 'agent context resets are turned off on this gateway',
+    })
+    const { service } = resetRig()
+    const out = await runPeerTool(service, 'lead', 'peers_reset', { sessionId: 'm1', prompt: 'go' })
+    expect(out).toMatchObject({ isError: false, text: expect.stringMatching(/^Reset scheduled for Pip \(m1\)/) })
+    const refused = await runPeerTool(service, 'm2', 'peers_reset', { sessionId: 'm1' })
+    expect(refused).toMatchObject({ isError: true, text: 'not reset: only its own team lead can reset m1' })
   })
 })

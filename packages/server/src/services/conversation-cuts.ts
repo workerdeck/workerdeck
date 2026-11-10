@@ -20,13 +20,13 @@ import { durableConfig, isDormant, type DormantSessionRecord, type StoredSession
 import { modelFor } from '../lib/models.ts'
 import { recordInfo } from './record-info.ts'
 
-export type CutReason = 'user' | 'clear' | 'context_reset'
+export type CutReason = 'user' | 'clear' | 'context_reset' | 'peer_reset'
 
 // `discard`: a person confirmed losing the input pending at `revision`; only a user cut carries it, never an automatic one.
 export type CutRequest = {
   expectedGeneration: number
   prompt?: string
-  // A `context_reset`'s own reason, shown as the notice opening the new conversation.
+  // A `context_reset`'s or `peer_reset`'s own reason, shown as the notice opening the new conversation.
   agentReason?: string
   reason: CutReason
   target?: ConversationTarget
@@ -200,6 +200,7 @@ export class ConversationCuts {
     prompt?: string,
     outcome?: CutOutcome,
     agentReason?: string,
+    guard?: CutGuard,
   ): Promise<CutResult | undefined> {
     const ctx = this.#ctx
     if (isJobRun(runner.info())) {
@@ -214,9 +215,13 @@ export class ConversationCuts {
       fail(409, `the session moved on to conversation ${now}`)
     }
     if (runner.info().status === 'idle' && !unanswered(runner)) {
-      return await this.cut(runner.id, { expectedGeneration: n, reason, ...(prompt ? { prompt } : {}), ...(agentReason ? { agentReason } : {}) })
+      return await this.cut(
+        runner.id,
+        { expectedGeneration: n, reason, ...(prompt ? { prompt } : {}), ...(agentReason ? { agentReason } : {}) },
+        guard,
+      )
     }
-    this.#queueOnIdle(runner, n, reason, prompt, outcome, agentReason)
+    this.#queueOnIdle(runner, n, reason, prompt, outcome, agentReason, guard)
     return undefined
   }
 
@@ -227,6 +232,7 @@ export class ConversationCuts {
     prompt: string | undefined,
     outcome: CutOutcome | undefined,
     agentReason?: string,
+    guard?: CutGuard,
   ): void {
     const ctx = this.#ctx
     const id = runner.id
@@ -267,7 +273,7 @@ export class ConversationCuts {
       }
       if (!unanswered(runner)) {
         const heard = leave()
-        this.cut(id, { expectedGeneration: from, reason, ...(prompt ? { prompt } : {}), ...(agentReason ? { agentReason } : {}) }).then(
+        this.cut(id, { expectedGeneration: from, reason, ...(prompt ? { prompt } : {}), ...(agentReason ? { agentReason } : {}) }, guard).then(
           () => tell(heard, true),
           (error: unknown) => {
             const cut = (ctx.records.conversationOf(id) ?? 1) > from

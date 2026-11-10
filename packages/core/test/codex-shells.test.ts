@@ -102,6 +102,7 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
       'peers_list',
       'peers_peek',
       'peers_send',
+      'peers_reset',
       'shell_list',
       'shell_read',
       'mcp_reload',

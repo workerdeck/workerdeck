@@ -661,7 +661,7 @@ handling of those events is last-write-wins: the WS attach is the single caller,
 everyone would silently skip a park. `src/lib/replay.ts` is the backwards scan behind it.
 
 `src/lib/peers.ts` is the engine-agnostic half of peer messaging: the `PeerDirectory` contract
-(caller id first on every method, since one directory serves every session), the three tool
+(caller id first on every method, since one directory serves every session), the four tool
 shapes as zod (`PEER_TOOL_SHAPES`, the one source both the SDK's `tool()` and codex's JSON-schema
 `dynamicTools` are derived from), `runPeerTool` (the dispatcher every engine calls, which answers
 errors as tool output and never throws), `peerMessageEnvelope` (what the model reads; the event
@@ -1195,7 +1195,9 @@ an oracle for whether the shell exists.
 sender's scope as principal, `list` over the registry plus dormant records, `peek` off a live
 runner's log (never a wake), `send` through `parking.ensureLive` then `runner.sendMessage(text,
 undefined, { origin })`, with a per-pair rate limit, a size cap and a hop chain that a human turn
-resets (watched through `onRegister`). On by default; `peers: { enabled: false }` removes the tools
+resets (watched through `onRegister`). `reset` (`peers_reset`) checks `peerOps(...).reset` and the
+keep-for-human refusals, then schedules on `ContextResetService.requestMember` (the `resets` dep)
+and hands the prompt over as a peer message once the cut ran. On by default; `peers: { enabled: false }` removes the tools
 from every session. `createSessionFactory` stamps `peers` into the config in `buildRunner`, the
 one chokepoint, so parked and dormant rebuilds get it too, and `session-store.ts` strips it from
 records. Invariants in `docs/GOTCHAS.md` §Peer messaging.

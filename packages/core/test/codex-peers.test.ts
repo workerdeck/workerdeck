@@ -23,7 +23,7 @@ function threadStart(peer: ReturnType<typeof scriptedPeer>) {
 }
 
 describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
-  it('declares the three tools when a directory is configured, and session_info alone otherwise', async () => {
+  it('declares the peer tools when a directory is configured, and session_info alone otherwise', async () => {
     const bare = scriptedPeer()
     scriptTurn(bare, () => {})
     const plain = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: bare.connectFn })
@@ -43,6 +43,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
       ['function', 'peers_list'],
       ['function', 'peers_peek'],
       ['function', 'peers_send'],
+      ['function', 'peers_reset'],
       ['function', 'mcp_reload'],
     ])
     expect(tools.find((t) => t.name === 'peers_send')!.inputSchema).toMatchObject({ type: 'object', required: ['sessionId', 'text'] })

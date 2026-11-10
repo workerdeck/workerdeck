@@ -7,6 +7,7 @@ import {
   recentLines,
   type PeerDirectory,
   type PeerPeek,
+  type PeerResetResult,
   type PeerSendOptions,
   type PeerSendResult,
   type PeerMention,
@@ -34,6 +35,7 @@ import {
 } from '@workerdeck/relay-client'
 import { scopeMatches } from '../lib/scope.ts'
 import type { LateBoundRefs } from '../options.ts'
+import type { MemberResetRequest } from './context-resets.ts'
 import type { ProjectInfoService } from './project-info.ts'
 import type { SessionRegistry } from './registry.ts'
 
@@ -69,6 +71,9 @@ export type PeerServiceDeps = {
   refuse?: (sessionId: string) => string | undefined
   // A session no peer may see or reach: a retired agent's whose close has not finished.
   hidden?: (sessionId: string) => boolean
+  resets?: { requestMember(sessionId: string, request: MemberResetRequest): void }
+  liveShell?: (sessionId: string) => boolean
+  onError?: (error: unknown, sessionId: string) => void
   options?: PeerServiceOptions
 }
 
@@ -76,7 +81,7 @@ const DEFAULT_PER_MINUTE = 10
 const DEFAULT_MAX_HOPS = 12
 const WINDOW_MS = 60_000
 
-const NO_OPS: PeerOps = { list: false, send: false, peek: false }
+const NO_OPS: PeerOps = { list: false, send: false, peek: false, reset: false }
 
 function opsBetween(from: SessionInfo, to: SessionInfo, multiOwner: boolean): PeerOps {
   return to.id !== from.id && scopeMatches(from.scope, to.scope) ? peerOps(from, to, multiOwner) : NO_OPS
@@ -126,6 +131,7 @@ function teamAdmits(
 }
 
 export type PeerService = PeerDirectory & {
+  reset: NonNullable<PeerDirectory['reset']>
   watch(runner: Runner): () => void
   // The `#Name` tokens in a message a person typed, resolved to the peers that session can see.
   // The relay half. `exposed` is the gateway ceiling's scope: a session outside it is never published and never
@@ -310,7 +316,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     target: SessionInfo,
     text: string,
     origin: MessageOrigin,
-    rateKey: string,
+    rateKey: string | undefined,
     allowed: (current: SessionInfo) => boolean,
   ): Promise<PeerSendResult> => {
     const sessionId = target.id
@@ -324,7 +330,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
         reason: `${hops.length} messages have passed between sessions without a person speaking; stop and ask your user before continuing.`,
       }
     }
-    if (!underRateLimit(rateKey, sessionId)) {
+    if (rateKey !== undefined && !underRateLimit(rateKey, sessionId)) {
       return { delivered: false, reason: `rate limit: at most ${perMinute} messages a minute to one session. Batch what you have to say.` }
     }
     const held = deps.refuse?.(sessionId)
@@ -359,6 +365,106 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       name: target.agent?.name ?? target.title,
       queued: before === 'running' || before === 'awaiting_approval',
     }
+  }
+
+  const keptForHuman = (info: SessionInfo, runner: Runner | undefined): string | undefined => {
+    if ((runner?.pendingApprovals.length ?? 0) > 0 || info.pendingPermissionCount > 0 || info.status === 'awaiting_approval') {
+      return 'it is waiting on an approval; leave it for the human'
+    }
+    if (info.statusLabel?.waitingOn === 'human') {
+      return 'it is waiting on the human; leave it for them'
+    }
+    if (deps.liveShell?.(info.id)) {
+      return 'it has a running shell; ask it to finish or stop the shell first'
+    }
+    return undefined
+  }
+
+  const reset = async (from: string, sessionId: string, options?: { prompt?: string }): Promise<PeerResetResult> => {
+    const me = await sender(from)
+    if (sessionId === from) {
+      return { scheduled: false, reason: 'that is this session; use context_reset for your own context' }
+    }
+    if (!deps.resets) {
+      return { scheduled: false, reason: 'agent context resets are turned off on this gateway' }
+    }
+    const prompt = options?.prompt
+    if (prompt !== undefined && prompt.length > maxChars) {
+      return { scheduled: false, reason: `the prompt is ${prompt.length} characters; the limit is ${maxChars}. Write it to a file and send the path.` }
+    }
+    const target = await infoOf(sessionId)
+    const ops = target ? opsBetween(me, target, multiOwner()) : NO_OPS
+    if (!target || !ops.reset) {
+      return { scheduled: false, reason: ops.list ? `only its own team lead can reset ${sessionId}` : `no such session: ${sessionId}` }
+    }
+    if (target.status === 'closed' || target.status === 'failed') {
+      return { scheduled: false, reason: `session ${sessionId} is ${target.status}` }
+    }
+    const kept = keptForHuman(target, registry().get(sessionId))
+    if (kept) {
+      return { scheduled: false, reason: kept }
+    }
+    const held = deps.refuse?.(sessionId)
+    if (held) {
+      return { scheduled: false, reason: held }
+    }
+    const runner = (await deps.refs.parking?.ensureLive(sessionId)) ?? registry().get(sessionId)
+    if (!runner) {
+      return { scheduled: false, reason: `session ${sessionId} could not be woken` }
+    }
+    const hops = [...(inbound.get(from) ?? []), from]
+    if (prompt !== undefined && hops.length > maxHops) {
+      return {
+        scheduled: false,
+        reason: `${hops.length} messages have passed between sessions without a person speaking; stop and ask your user before continuing.`,
+      }
+    }
+    const current = (): SessionInfo => deps.projects.withProject(runner.info())
+    const leadNow = async (): Promise<SessionInfo | undefined> => {
+      const info = await infoOf(from)
+      return info === undefined || info.status === 'closed' || info.status === 'failed' ? undefined : info
+    }
+    const refusal = async (): Promise<string | undefined> => {
+      const lead = await leadNow()
+      if (!lead) {
+        return 'its lead has ended'
+      }
+      return (
+        deps.refuse?.(sessionId) ??
+        (opsBetween(lead, current(), multiOwner()).reset ? keptForHuman(current(), runner) : `no such session: ${sessionId}`)
+      )
+    }
+    const now = await refusal()
+    if (now) {
+      return { scheduled: false, reason: now }
+    }
+    const name = me.agent?.name ?? me.title
+    // The cut built a new runner, so both sides are read afresh. The reset is already rate-limited, so the hand-over is not.
+    const handOver = (): void => {
+      if (prompt === undefined) {
+        return
+      }
+      const origin: MessageOrigin = { kind: 'peer', sessionId: from, name, engine: me.engine, hops }
+      const lost = (why: string): void => deps.onError?.(new Error(`the prompt for the reset of ${sessionId} was not delivered: ${why}`), from)
+      void Promise.all([infoOf(from), infoOf(sessionId)])
+        .then(async ([lead, fresh]) => {
+          if (!lead || lead.status === 'closed' || lead.status === 'failed' || !fresh) {
+            lost('its lead or the member has ended')
+            return
+          }
+          const result = await deliver(fresh, prompt, origin, undefined, (info) => opsBetween(lead, info, multiOwner()).send)
+          if (!result.delivered) {
+            lost(result.reason)
+          }
+        })
+        .catch((error: unknown) => lost(error instanceof Error ? error.message : String(error)))
+    }
+    try {
+      deps.resets.requestMember(sessionId, { reason: `reset by its lead ${name ?? from} (${from})`, guard: refusal, done: handOver })
+    } catch (error) {
+      return { scheduled: false, reason: error instanceof Error ? error.message : String(error) }
+    }
+    return { scheduled: true, sessionId, name: target.agent?.name ?? target.title }
   }
 
   const exposedInfo = async (
@@ -447,6 +553,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     list,
     peek,
     send,
+    reset,
     watch,
     relaySender: sender,
     relayChain: (from) => [...(inbound.get(from) ?? []), from],
