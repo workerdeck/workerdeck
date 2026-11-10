@@ -14,7 +14,8 @@ class SessionCardTest {
         val list = SessionList(null, null)
         val sessions = listOf(
             session("lead", "idle", ""","title":"Lead","agent":{"id":"L","name":"Lead","leads":true}"""),
-            session("m", "running", ""","title":"Worker","agent":{"id":"M","name":"Worker","lead":"L"}"""),
+            session("m", "awaiting_approval", ""","title":"Worker","agent":{"id":"M","name":"Worker","lead":"L"}"""),
+            session("busy", "running", ""","title":"Busy","agent":{"id":"B","name":"Busy","lead":"L"}"""),
             session("solo", "idle", ""","title":"Solo""""),
         )
         list.setHost("h1", "mac", true, """{"sessions":[${sessions.joinToString(",")}]}""")

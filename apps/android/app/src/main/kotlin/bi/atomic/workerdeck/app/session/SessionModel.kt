@@ -452,10 +452,10 @@ class SessionModel(
         worker.act {
             socket?.close(1000, null)
             socket = null
+            it.park()
             emptyList()
         }
         worker.close()
-        session.park()
         composer.close()
     }
 
