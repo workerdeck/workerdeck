@@ -12,6 +12,7 @@ import {
   type ShellStatus,
   errorMessage,
 } from '@workerdeck/protocol'
+import type { PermissionDecision } from '../runner-interface.ts'
 import {
   defineToolFamily,
   globalSlot,
@@ -37,6 +38,7 @@ export type ShellSummary = {
   capped?: boolean
   interactive?: boolean
   agentWrite?: boolean
+  proposed?: boolean
 }
 
 export type ShellView = 'lines' | 'screen'
@@ -61,6 +63,18 @@ export type ShellWriteOptions = { data?: string; keys?: string[]; waitFor?: stri
 
 export type ShellKillResult = { shell: ShellSummary; killed: boolean }
 
+export type ShellProposeOptions = { command: string; stdin?: string; timeoutMs?: number }
+
+export type ShellProposal = { command: string; description: string; secret?: boolean }
+
+export type ShellProposalVerdict = { allowed: true; command: string; stdin?: string } | { allowed: false; message?: string }
+
+// Raises the card for one proposal and settles with what the user decided. The card is the tool's own, never the
+// engine's permission check, so no engine mode or classifier can skip it or block it.
+export type ShellProposalGate = (proposal: ShellProposal, signal?: AbortSignal) => Promise<ShellProposalVerdict>
+
+export type ShellToolContext = { shells: ShellDirectory; gate?: ShellProposalGate }
+
 // How far the agent's hand reaches on this session: absent is read-only (the write tools are not offered), `gated`
 // raises a permission card before every write, `allow` runs them without one beyond what the engine's own mode does.
 export type ShellAgentWrite = 'gated' | 'allow'
@@ -77,6 +91,7 @@ export interface ShellDirectory {
   write(from: string, shellId: string, options: ShellWriteOptions): Promise<ShellReadResult | undefined>
   kill(from: string, shellId: string): Promise<ShellKillResult | undefined>
   grant(from: string, shellId: string): Promise<ShellSummary | undefined>
+  propose(from: string, options: ShellProposeOptions): Promise<ShellReadResult>
 }
 
 // The one string every refusal returns, so the surface cannot be read as an existence oracle.
@@ -85,6 +100,14 @@ export const SHELL_REFUSAL = 'shell commands are not available on this session'
 export const SHELL_WRITE_REFUSAL = 'the agent may not start, type into or kill shells on this session (shell.agentWrite is read-only)'
 
 export const SHELL_KEYS_MAX = 64
+
+export const SHELL_PROPOSE_TOOL = 'shell_propose'
+
+export const SHELL_PROPOSE_WAIT_DEFAULT_MS = 60_000
+
+export const SHELL_PROPOSE_DESCRIPTION_MAX = 1000
+
+export const SHELL_PROPOSE_STDIN_MAX = 65_536
 
 const SHELL_DIRECTORY_SLOT = globalSlot<ShellDirectory>('workerdeck.shells.directory')
 
@@ -261,6 +284,43 @@ export const SHELL_TOOL_SHAPES = {
       reason: z.string().min(1).max(500).describe('One sentence the user reads on the approval card: what you will type and why'),
     },
   },
+  shell_propose: {
+    description:
+      'Propose a shell command for the USER to run: they see it on a card with your description, may edit it, and run ' +
+      "it with one click in a visible shell in the session's working directory. This call waits for the command to " +
+      'finish (or timeoutMs) and returns the command as run, its exit code and the tail of its output. Use it for ' +
+      'commands you should not or cannot run yourself: production deploys, secret writes, cloud applies, anything your ' +
+      'own shell tool was refused for. If the command reads a secret on stdin (e.g. `gcloud secrets versions add NAME ' +
+      '--data-file=-`), set secret: the user types the value into a hidden field, it is piped to the command, and you ' +
+      'never see it. The user may also decline.',
+    shape: {
+      command: z
+        .string()
+        .min(1)
+        .max(SHELL_COMMAND_MAX)
+        .refine((command) => command.trim() !== '' && !command.includes('\0'), 'command must be non-empty text')
+        .describe("The command line, run by the user's login shell in the session's working directory"),
+      description: z
+        .string()
+        .min(1)
+        .max(SHELL_PROPOSE_DESCRIPTION_MAX)
+        .describe('What the command does and why it is needed, in a sentence or two the user reads before running it'),
+      secret: z
+        .boolean()
+        .optional()
+        .describe('The command reads a secret on stdin: ask the user for it in a hidden field. Never put a secret in command.'),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(0)
+        .max(SHELL_WAIT_MAX_MS)
+        .optional()
+        .describe(
+          `How long to wait for the command to finish once the user runs it (default ${SHELL_PROPOSE_WAIT_DEFAULT_MS}, at most ` +
+            `${SHELL_WAIT_MAX_MS}); a command still running after that is returned as running, and shell_read follows it`,
+        ),
+    },
+  },
 } as const
 
 export type ShellToolName = keyof typeof SHELL_TOOL_SHAPES
@@ -269,29 +329,31 @@ export const SHELL_READ_TOOL_NAMES: readonly ShellToolName[] = ['shell_list', 's
 
 export const SHELL_WRITE_TOOL_NAMES: readonly ShellToolName[] = ['shell_run', 'shell_write', 'shell_kill', 'shell_request_write']
 
+export const SHELL_PROPOSE_TOOL_NAMES: readonly ShellToolName[] = [SHELL_PROPOSE_TOOL]
+
 export type ShellToolSpec = GatewayToolSpec<ShellToolName>
 
 export type ShellToolOutput = GatewayToolOutput
 
-export type ShellToolOptions = { write?: boolean }
+export type ShellToolOptions = { write?: boolean; gate?: ShellProposalGate; signal?: AbortSignal }
 
-const SHELL_TOOLS = defineToolFamily<typeof SHELL_TOOL_SHAPES, ShellDirectory>(SHELL_TOOL_SHAPES, {
-  shell_list: async (shells, from) => {
+const SHELL_TOOLS = defineToolFamily<typeof SHELL_TOOL_SHAPES, ShellToolContext & { signal?: AbortSignal }>(SHELL_TOOL_SHAPES, {
+  shell_list: async ({ shells }, from) => {
     const rows = await shells.list(from)
     return { text: rows.length ? JSON.stringify(rows, null, 2) : 'No shell commands have run in this session.', isError: false }
   },
-  shell_read: async (shells, from, { shellId, view, tail, waitFor, timeoutMs }) => {
+  shell_read: async ({ shells }, from, { shellId, view, tail, waitFor, timeoutMs }) => {
     const result = await shells.read(from, shellId, { tail: clampShellTail(tail), view, waitFor: needles(waitFor), timeoutMs })
     if (!result) {
       return noSuchShell(shellId)
     }
     return { text: shellReadText(result), isError: false }
   },
-  shell_run: async (shells, from, { command, waitFor, timeoutMs }) => {
+  shell_run: async ({ shells }, from, { command, waitFor, timeoutMs }) => {
     const result = await shells.run(from, { command, waitFor: needles(waitFor), timeoutMs })
     return { text: shellReadText(result, 'started'), isError: false }
   },
-  shell_write: async (shells, from, { shellId, data, keys, waitFor, timeoutMs }) => {
+  shell_write: async ({ shells }, from, { shellId, data, keys, waitFor, timeoutMs }) => {
     if (!data && !keys) {
       return invalidArguments('shell_write', 'give data, keys or both')
     }
@@ -306,14 +368,14 @@ const SHELL_TOOLS = defineToolFamily<typeof SHELL_TOOL_SHAPES, ShellDirectory>(S
     }
     return { text: shellReadText(result, 'typed'), isError: false }
   },
-  shell_kill: async (shells, from, { shellId }) => {
+  shell_kill: async ({ shells }, from, { shellId }) => {
     const result = await shells.kill(from, shellId)
     if (!result) {
       return noSuchShell(shellId)
     }
     return { text: shellKillText(result), isError: false }
   },
-  shell_request_write: async (shells, from, { shellId }) => {
+  shell_request_write: async ({ shells }, from, { shellId }) => {
     const shell = await shells.grant(from, shellId)
     if (!shell) {
       return noSuchShell(shellId)
@@ -323,17 +385,37 @@ const SHELL_TOOLS = defineToolFamily<typeof SHELL_TOOL_SHAPES, ShellDirectory>(S
       isError: false,
     }
   },
+  shell_propose: async ({ shells, gate, signal }, from, { command, description, secret, timeoutMs }) => {
+    if (!gate) {
+      return { text: SHELL_REFUSAL, isError: true }
+    }
+    const verdict = await gate({ command, description, ...(secret ? { secret: true } : {}) }, signal)
+    if (!verdict.allowed) {
+      return { text: shellProposalDeclinedText(verdict.message), isError: false }
+    }
+    const result = await shells.propose(from, {
+      command: verdict.command,
+      stdin: verdict.stdin,
+      timeoutMs: timeoutMs ?? SHELL_PROPOSE_WAIT_DEFAULT_MS,
+    })
+    return { text: shellProposedText(result, command), isError: false }
+  },
 })
 
 export const SHELL_TOOL_NAMES = SHELL_TOOLS.names
 
-// The tools a session is offered: the two read tools always, the three write tools only where the agent may write.
-export function shellToolNames(write: boolean): ShellToolName[] {
-  return write ? [...SHELL_READ_TOOL_NAMES, ...SHELL_WRITE_TOOL_NAMES] : [...SHELL_READ_TOOL_NAMES]
+// The read pair always, the write tools only where the agent may write, and the proposal wherever its card can be raised:
+// the user runs a proposed command, so it needs no write grant.
+export function shellToolNames(write: boolean, propose = false): ShellToolName[] {
+  return [...SHELL_READ_TOOL_NAMES, ...(write ? SHELL_WRITE_TOOL_NAMES : []), ...(propose ? SHELL_PROPOSE_TOOL_NAMES : [])]
 }
 
-export function shellToolSpecs(write = false): ShellToolSpec[] {
-  return SHELL_TOOLS.specs(shellToolNames(write))
+export function shellToolSpecs(write = false, propose = false): ShellToolSpec[] {
+  return SHELL_TOOLS.specs(shellToolNames(write, propose))
+}
+
+export function isShellProposeToolName(toolName: string): boolean {
+  return shellToolOf(toolName) === SHELL_PROPOSE_TOOL
 }
 
 export function isShellToolName(name: string): name is ShellToolName {
@@ -379,6 +461,34 @@ export function agentMayWrite(shell: Pick<ShellInfo, 'sessionId' | 'owner' | 'ag
 
 export function shellOwnershipRefusal(shellId: string): string {
   return `shell ${shellId} was started by the user; the agent may only type into or kill shells it started, or one the user granted through shell_request_write`
+}
+
+// The card may hand back an edited command and the hidden stdin; anything else in the edit is ignored, and an edit that
+// is not a usable command keeps the proposal's own.
+export function shellProposalVerdict(proposal: ShellProposal, decision: PermissionDecision): ShellProposalVerdict {
+  if (decision.behavior !== 'allow') {
+    return { allowed: false, message: decision.message }
+  }
+  const edit = decision.updatedInput ?? {}
+  const edited = typeof edit.command === 'string' && edit.command.trim() !== '' && !edit.command.includes('\0') ? edit.command : undefined
+  if (edited !== undefined && edited.length > SHELL_COMMAND_MAX) {
+    return { allowed: false, message: `the edited command is longer than ${SHELL_COMMAND_MAX} characters` }
+  }
+  const stdin = typeof edit.stdin === 'string' && edit.stdin !== '' ? edit.stdin : undefined
+  if (stdin !== undefined && stdin.length > SHELL_PROPOSE_STDIN_MAX) {
+    return { allowed: false, message: `the secret input is longer than ${SHELL_PROPOSE_STDIN_MAX} characters` }
+  }
+  return { allowed: true, command: edited ?? proposal.command, ...(stdin !== undefined ? { stdin } : {}) }
+}
+
+export function shellProposalDeclinedText(message: string | undefined): string {
+  return `the user did not run the command${message ? `: ${message}` : ''}`
+}
+
+// The command as run leads when the user edited it, so the agent never reasons about a command that did not run.
+export function shellProposedText(result: ShellReadResult, proposed: string): string {
+  const edited = result.shell.command === proposed ? '' : `the user edited the command before running it; it ran as: ${result.shell.command}\n`
+  return `${edited}${shellReadText(result, 'run by the user')}`
 }
 
 export function shellWriteDeniedText(name: string, message: string | undefined): string {
@@ -442,6 +552,7 @@ export function shellSummary(info: ShellInfo): ShellSummary {
     capped: info.capped,
     interactive: info.interactive,
     agentWrite: info.agentWrite,
+    proposed: info.proposed,
   }
 }
 
@@ -469,7 +580,7 @@ export async function runShellTool(
   if (isShellWriteToolName(name) && options.write !== true) {
     return { text: SHELL_WRITE_REFUSAL, isError: true }
   }
-  return SHELL_TOOLS.run(shells, from, name, args)
+  return SHELL_TOOLS.run({ shells, gate: options.gate, signal: options.signal }, from, name, args)
 }
 
 function noSuchShell(shellId: string): ShellToolOutput {
@@ -483,7 +594,7 @@ function needles(waitFor: string | string[] | undefined): string[] | undefined {
   return typeof waitFor === 'string' ? [waitFor] : waitFor
 }
 
-export function shellReadText(result: ShellReadResult, verb?: 'started' | 'typed'): string {
+export function shellReadText(result: ShellReadResult, verb?: 'started' | 'typed' | 'run by the user'): string {
   const { shell } = result
   const scope =
     result.view === 'screen'
@@ -539,5 +650,5 @@ export function installedShellDirectory(): ShellDirectory | undefined {
 }
 
 export function shellDirectoryHandle(own?: () => ShellDirectory | undefined): ShellDirectory {
-  return lateBoundDirectory<ShellDirectory>(['list', 'read', 'run', 'write', 'kill', 'grant'], SHELL_DIRECTORY_SLOT, own, SHELL_REFUSAL)
+  return lateBoundDirectory<ShellDirectory>(['list', 'read', 'run', 'write', 'kill', 'grant', 'propose'], SHELL_DIRECTORY_SLOT, own, SHELL_REFUSAL)
 }

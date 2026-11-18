@@ -8,7 +8,7 @@ export type ShellSize = { cols: number; rows: number }
 
 export type ShellSink = { write: (data: string) => void; end: (reason: string) => void }
 
-export type ShellSpawnInput = { runner: Runner; command: string; owner: ShellOwner }
+export type ShellSpawnInput = { runner: Runner; command: string; owner: ShellOwner; proposed?: boolean; stdin?: string }
 
 export type ShellSpawned = { shell: ShellInfo; source: LocalShellSource }
 
@@ -94,6 +94,7 @@ export type ShellEntry = {
   tailTimer?: NodeJS.Timeout
   redrawCarry?: string
   screen?: ShellScreen
+  release?: () => void
 }
 
 export type SessionShells = {

@@ -65,7 +65,7 @@ import { assertEffort, effortDefaultFor } from '../../lib/effort.ts'
 import { mcpNeedsReconnect, reconnectAll } from '../../lib/mcp-tool.ts'
 import { sessionTools, type SessionToolSources } from '../../lib/session-tools.ts'
 import { agentResetFields } from '../../lib/context-reset.ts'
-import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
+import { SHELL_PROPOSE_TOOL, shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
 import { AddressedThinking, apiMessageId } from './addressed-thinking.ts'
 import { claudeHistoryEvent } from './history.ts'
 import { ancestorInstructionExcludes, foreignHomeExcludes, withInstructionExcludes } from './instruction-scope.ts'
@@ -897,7 +897,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     const options: Options = {
       cwd: this.#cwd,
       permissionMode: c.permissionMode,
-      allowedTools: c.allowedTools,
+      allowedTools: this.#allowedTools(),
       disallowedTools: c.disallowedTools,
       mcpServers: this.#mcpServersOption(),
       settingSources: c.settingSources,
@@ -928,11 +928,21 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     return options
   }
 
+  // The proposal raises its own card inside the tool, so the engine's permission step would only be a second gate that
+  // auto mode's classifier could close on a command the human was about to run.
+  #allowedTools(): string[] | undefined {
+    const allowed = this.config.allowedTools
+    if (!this.toolSources.propose) {
+      return allowed
+    }
+    return [...(allowed ?? []), `mcp__${PEER_MCP_SERVER}__${SHELL_PROPOSE_TOOL}`]
+  }
+
   #mcpServersOption(): Options['mcpServers'] {
     const declared = this.config.mcpServers as Options['mcpServers']
     const tools = sessionTools(this.toolSources, () => this.id).map((gatewayTool) =>
-      sdkTool(gatewayTool.name, gatewayTool.description, gatewayTool.shape, async (args) => {
-        const output = await gatewayTool.run(args)
+      sdkTool(gatewayTool.name, gatewayTool.description, gatewayTool.shape, async (args, extra) => {
+        const output = await gatewayTool.run(args, (extra as { signal?: AbortSignal } | undefined)?.signal)
         return { content: [{ type: 'text', text: output.text }], isError: output.isError }
       }),
     )

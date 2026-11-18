@@ -11,10 +11,11 @@ import type {
 } from '@workerdeck/protocol'
 import type { EngineRunnerConfig, PermissionDecision, SendMessageOptions, SessionEventListener } from '../runner-interface.ts'
 import { resolveApprovalTimeoutMs } from './approval-timeout.ts'
+import { SHELL_PROPOSE_TOOL, shellProposalVerdict, type ShellProposalGate } from './shells.ts'
 import { attachmentRef, type AttachmentInput } from './attachments.ts'
 import type { CostLedgerState } from './cost-ledger.ts'
 import { LocalCommandQueue, localCommandEvent, type LocalCommandResult, type LocalShellSource } from './local-command.ts'
-import { RunnerCore, type CloseReason, type RunnerCoreHooks, type RunnerCoreOptions } from './runner-core.ts'
+import { RunnerCore, approvalResolution, type CloseReason, type RunnerCoreHooks, type RunnerCoreOptions } from './runner-core.ts'
 import { buildSessionReport, type LiveContext, type SessionReport } from './session-report.ts'
 import type { SessionToolSources } from './session-tools.ts'
 import type { SubscribeOptions } from './subscribers.ts'
@@ -175,8 +176,41 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
       peers: this.config.peers,
       shells: this.config.shells,
       write: this.config.shellAgentWrite !== undefined,
+      propose: this.config.shells && this.config.shellPropose === true ? this.#proposeShell : undefined,
       goals: this.config.goals,
     }
+  }
+
+  // An ordinary approval in every respect but its origin: interrupt, close, clear and the deadline settle it as they
+  // settle any other, and the abort signal is the claude engine's MCP cancellation, which nothing else reaches.
+  #proposeShell: ShellProposalGate = (proposal, signal) => {
+    const id = randomUUID()
+    const { timeoutMs, expiresAt } = this.approvalDeadline()
+    const request: PermissionRequest = {
+      id,
+      toolName: SHELL_PROPOSE_TOOL,
+      input: { ...proposal },
+      toolUseId: id,
+      title: 'Run this command?',
+      description: proposal.description,
+      expiresAt,
+    }
+    return new Promise((resolve) => {
+      this.core.requestApproval(request, {
+        timeoutMs,
+        respond: (decision, resolvedBy) => {
+          resolve(shellProposalVerdict(proposal, decision))
+          return approvalResolution(decision, resolvedBy)
+        },
+        after: () => {
+          if (this.core.pendingCount === 0 && this.core.status === 'awaiting_approval') {
+            this.core.setStatus('running')
+          }
+        },
+      })
+      signal?.addEventListener('abort', () => this.core.resolveApproval(id, { behavior: 'deny', message: 'Turn aborted' }, 'policy'))
+      this.core.setStatus('awaiting_approval')
+    })
   }
 
   protected baseInfo(engineTitle?: string) {

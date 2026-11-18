@@ -40,4 +40,14 @@ describe('permissionPromptModel', () => {
     expect(choices.map((c) => c.option)).toEqual(['Yes', 'No, and tell the agent what to do differently', 'No, and stop the turn'])
     expect(choices.filter((c) => c.danger).map((c) => c.key)).toEqual(['stop'])
   })
+
+  it("turns a shell proposal into Run / Don't run, with the agent's description as the context line", () => {
+    const model = permissionPromptModel(
+      request({ toolName: 'shell_propose', input: { command: 'make deploy', description: 'ships prod', secret: true }, description: 'ignored' }),
+    )
+    expect(model.shell).toEqual({ kind: 'propose', command: 'make deploy', description: 'ships prod', secret: true })
+    expect(model.heading).toBe('Agent proposes a command for you to run')
+    expect(model.description).toBe('ships prod')
+    expect(model.choices.map((c) => c.button)).toEqual(['Run', "Don't run", "Don't run & stop"])
+  })
 })

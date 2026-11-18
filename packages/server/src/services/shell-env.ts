@@ -9,6 +9,7 @@ const TERM = 'xterm-256color'
 // macOS drops a session leader's unread pty output ~600ms after it exits unless its session opened /dev/tty; the
 // login shell execs under the same pid with the command as $1, so nothing is re-quoted.
 const CTTY_WRAPPER = 'true <>/dev/tty 2>/dev/null; exec "$0" -c "$1"'
+const CTTY_STDIN_WRAPPER = 'true <>/dev/tty 2>/dev/null; exec "$0" -c "$1" <"$2"'
 
 let ptyModule: PtyModule | null | undefined
 
@@ -111,12 +112,13 @@ export function loginShell(env: Record<string, string | undefined>): string {
   return shell && shell.startsWith('/') ? shell : '/bin/sh'
 }
 
-export function spawnShellChild(pty: PtyModule, cwd: string, command: string): PtyChild {
+export function spawnShellChild(pty: PtyModule, cwd: string, command: string, stdinPath?: string): PtyChild {
   const env = shellChildEnv(process.env)
   env.TERM = TERM
   env.COLORTERM = 'truecolor'
   env.PWD = cwd
-  return pty.spawn('/bin/sh', ['-c', CTTY_WRAPPER, loginShell(process.env), command], {
+  const args = stdinPath === undefined ? [CTTY_WRAPPER, loginShell(process.env), command] : [CTTY_STDIN_WRAPPER, loginShell(process.env), command, stdinPath]
+  return pty.spawn('/bin/sh', ['-c', ...args], {
     name: TERM,
     cols: SHELL_COLS,
     rows: SHELL_ROWS,

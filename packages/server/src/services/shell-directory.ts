@@ -21,7 +21,7 @@ export type ShellDirectoryDeps = { runnerFor?: (sessionId: string) => Runner | u
 
 export type LocalCommandRunner = Runner & Required<Pick<Runner, 'queueLocalCommand'>>
 
-type ShellSettleOptions = { view?: ShellView; tail?: number; waitFor?: string[]; timeoutMs?: number; since?: number }
+type ShellSettleOptions = { view?: ShellView; tail?: number; waitFor?: string[]; timeoutMs?: number; since?: number; untilExit?: boolean }
 
 type ShellTaken = { info: ShellInfo; read: Omit<ShellReadResult, 'shell' | 'wait'>; haystack: string }
 
@@ -69,7 +69,7 @@ export function createShellDirectory(registry: ShellRegistry, deps: ShellDirecto
         return undefined
       }
       const result: ShellReadResult = { shell: shellSummary(taken.info), ...taken.read }
-      if (needles.length === 0) {
+      if (needles.length === 0 && !options.untilExit) {
         return result
       }
       const ms = Date.now() - started
@@ -138,6 +138,18 @@ export function createShellDirectory(registry: ShellRegistry, deps: ShellDirecto
       }
       const killed = registry.kill(from, shellId, 'killed') ?? info
       return { shell: shellSummary(killed), killed: true }
+    },
+    propose: async (from, options) => {
+      const runner = deps.runnerFor?.(from)
+      if (!runner || !takesLocalCommands(runner)) {
+        throw new Error(SHELL_REFUSAL)
+      }
+      const shell = await startShell(registry, { runner, command: options.command, owner: 'user', proposed: true, stdin: options.stdin })
+      const result = await settle(from, shell.id, { untilExit: true, view: 'lines', timeoutMs: options.timeoutMs })
+      if (!result) {
+        throw new Error(`shell ${shell.id} vanished as it started`)
+      }
+      return result
     },
     grant: async (from, shellId) => {
       const info = registry.get(from, shellId)

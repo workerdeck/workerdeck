@@ -3,7 +3,10 @@ import type { PermissionRequest } from '@workerdeck/protocol'
 import { cn } from '../../lib/utils.ts'
 import { PermissionPrompt } from './PermissionPrompt.tsx'
 import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
+import { ShellProposalPrompt } from './ShellProposalPrompt.tsx'
 import { TerminalPermissionPrompt } from '../terminal/PermissionPrompt.tsx'
+import { TerminalShellProposalPrompt } from '../terminal/ShellProposalPrompt.tsx'
+import { shellProposalOf } from '../../lib/shell-request.ts'
 import { TerminalQuestionPrompt } from '../terminal/QuestionPrompt.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
 import type { TerminalAffordances } from '../terminal/affordances.tsx'
@@ -47,6 +50,13 @@ export function ApprovalPrompts({
           const HostPrompt = hostPrompts?.[request.toolName]
           if (HostPrompt) {
             return <HostPrompt key={request.id} request={request} onApprove={onApprove} onDeny={onDeny} />
+          }
+          if (shellProposalOf(request)) {
+            return terminal ? (
+              <TerminalShellProposalPrompt key={request.id} request={request} onApprove={onApprove} onDeny={onDeny} />
+            ) : (
+              <ShellProposalPrompt key={request.id} request={request} onApprove={onApprove} onDeny={onDeny} />
+            )
           }
           const isQuestion = request.toolName === 'AskUserQuestion' && parseUserQuestions(request.input).length > 0
           if (terminal) {

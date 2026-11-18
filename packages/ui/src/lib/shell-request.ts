@@ -5,6 +5,7 @@ export type ShellRequestPayload =
   | { kind: 'write'; shellId: string; data?: string; keys?: string[] }
   | { kind: 'kill'; shellId: string }
   | { kind: 'grant'; shellId: string; reason: string }
+  | { kind: 'propose'; command: string; description: string; secret: boolean }
 
 type RequestLike = { toolName?: unknown; input?: unknown }
 
@@ -16,9 +17,9 @@ const CONTROL_NAMES: Record<string, string> = {
   '\x7f': 'backspace',
 }
 
-type ShellWriteTool = 'shell_run' | 'shell_write' | 'shell_kill' | 'shell_request_write'
+type ShellWriteTool = 'shell_run' | 'shell_write' | 'shell_kill' | 'shell_request_write' | 'shell_propose'
 
-const SHELL_WRITE_TOOLS: readonly string[] = ['shell_run', 'shell_write', 'shell_kill', 'shell_request_write']
+const SHELL_WRITE_TOOLS: readonly string[] = ['shell_run', 'shell_write', 'shell_kill', 'shell_request_write', 'shell_propose']
 
 export function shellToolOf(toolName: unknown): ShellWriteTool | undefined {
   if (typeof toolName !== 'string') {
@@ -54,7 +55,32 @@ export function shellRequestPayload(request: RequestLike | null | undefined): Sh
     case 'shell_request_write': {
       return { kind: 'grant', shellId, reason: typeof input.reason === 'string' ? input.reason : '' }
     }
+    case 'shell_propose': {
+      return {
+        kind: 'propose',
+        command: typeof input.command === 'string' ? input.command : '',
+        description: typeof input.description === 'string' ? input.description : '',
+        secret: input.secret === true,
+      }
+    }
   }
+}
+
+export function shellProposalOf(request: RequestLike | null | undefined): Extract<ShellRequestPayload, { kind: 'propose' }> | undefined {
+  const payload = shellRequestPayload(request)
+  return payload?.kind === 'propose' ? payload : undefined
+}
+
+// What the card hands back on Run: the command only when the user changed it, the secret only when one was typed.
+export function shellProposalInput(proposed: string, command: string, stdin: string): Record<string, unknown> | undefined {
+  const input: Record<string, unknown> = {}
+  if (command.trim() !== '' && command !== proposed) {
+    input.command = command
+  }
+  if (stdin !== '') {
+    input.stdin = stdin
+  }
+  return Object.keys(input).length > 0 ? input : undefined
 }
 
 export function shellRequestTitle(payload: ShellRequestPayload): string {
@@ -70,6 +96,9 @@ export function shellRequestTitle(payload: ShellRequestPayload): string {
     }
     case 'grant': {
       return `Agent asks to type into your shell ${payload.shellId}`
+    }
+    case 'propose': {
+      return 'Agent proposes a command for you to run'
     }
   }
 }
@@ -96,6 +125,12 @@ export function shellRequestLines(payload: ShellRequestPayload): string[] {
     }
     case 'grant': {
       return [`why: ${visibleControls(payload.reason)}`, 'until the shell ends or you revoke it']
+    }
+    case 'propose': {
+      return [
+        ...payload.command.split('\n').map((line, index) => (index === 0 ? `$ ${line}` : `  ${line}`)),
+        ...(payload.secret ? ['reads a secret on stdin'] : []),
+      ]
     }
   }
 }

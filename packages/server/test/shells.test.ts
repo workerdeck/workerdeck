@@ -12,6 +12,7 @@ import {
   loadPty,
   loginShell,
   shellChildEnv,
+  proposalRefusal,
   shellPermitted,
   type ShellRegistry,
   type StoredShellIndex,
@@ -781,6 +782,17 @@ describe('shellPermitted', () => {
     expect(shellPermitted(shells, claude, false)).toBe(false)
     expect(shellPermitted(shells, provider, true)).toBe(false)
     expect(shellPermitted(shells, fakeRunner('anon', { cwd: '/tmp' }), true)).toBe(false)
+  })
+  it('lets only an operator allow a proposal card, lets anyone decline it, and leaves every other card alone', () => {
+    const shells = createShellRegistry({ generation: 'g', artifactDir: null })
+    const card = (toolName: string) => ({ id: 'p-1', toolName, input: {}, toolUseId: 'p-1' })
+    const proposing = { ...claude, pendingApprovals: [card('shell_propose')] }
+    expect(proposalRefusal(shells, proposing, 'p-1', 'allow', false)).toBe(true)
+    expect(proposalRefusal(shells, proposing, 'p-1', 'allow', true)).toBe(false)
+    expect(proposalRefusal(shells, proposing, 'p-1', 'deny', false)).toBe(false)
+    expect(proposalRefusal(null, proposing, 'p-1', 'allow', true)).toBe(true)
+    expect(proposalRefusal(shells, { ...claude, pendingApprovals: [card('Bash')] }, 'p-1', 'allow', false)).toBe(false)
+    expect(proposalRefusal(shells, proposing, 'p-2', 'allow', false)).toBe(false)
   })
 })
 

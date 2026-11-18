@@ -18,7 +18,7 @@ import { SET_STATUS_TOOL, SET_STATUS_TOOL_SHAPE, isSetStatusToolName, runSetStat
 import { MCP_TOOL_SHAPE, isMcpToolName, mcpToolNames, runMcpTool, type McpControl } from './mcp-tool.ts'
 import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, isPeerToolName, runPeerTool, type PeerDirectory } from './peers.ts'
 import { GOAL_TOOL_NAMES, GOAL_TOOL_SHAPE, isGoalToolName, runGoalTool, type GoalDirectory } from './goal-tool.ts'
-import { SHELL_TOOL_SHAPES, isShellToolName, runShellTool, shellToolNames, type ShellDirectory } from './shells.ts'
+import { SHELL_TOOL_SHAPES, isShellToolName, runShellTool, shellToolNames, type ShellDirectory, type ShellProposalGate } from './shells.ts'
 
 export type SessionToolSources = {
   report?: SessionReportSource
@@ -30,14 +30,15 @@ export type SessionToolSources = {
   mcp?: McpControl
   goals?: GoalDirectory
   write: boolean
+  propose?: ShellProposalGate
 }
 
-export type SessionTool = GatewayToolShape & { name: string; run(args: unknown): Promise<GatewayToolOutput> }
+export type SessionTool = GatewayToolShape & { name: string; run(args: unknown, signal?: AbortSignal): Promise<GatewayToolOutput> }
 
 // The gateway's own tools a session is offered, session_info, set_status, change_avatar, context_reset, peers, shells, mcp_reconnect, mcp_reload, goals: the order every engine
 // registers them in.
 export function sessionTools(sources: SessionToolSources, from: () => string): SessionTool[] {
-  const { report, status, avatar, reset, peers, shells, mcp, goals, write } = sources
+  const { report, status, avatar, reset, peers, shells, mcp, goals, write, propose } = sources
   return [
     ...(report ? [{ name: SESSION_INFO_TOOL, ...SESSION_INFO_TOOL_SHAPE, run: () => runSessionInfoTool(report, from()) }] : []),
     ...(status ? [{ name: SET_STATUS_TOOL, ...SET_STATUS_TOOL_SHAPE, run: (args: unknown) => runSetStatusTool(status, from(), args) }] : []),
@@ -51,10 +52,10 @@ export function sessionTools(sources: SessionToolSources, from: () => string): S
       ? PEER_TOOL_NAMES.map((name) => ({ name, ...PEER_TOOL_SHAPES[name], run: (args: unknown) => runPeerTool(peers, from(), name, args) }))
       : []),
     ...(shells
-      ? shellToolNames(write).map((name) => ({
+      ? shellToolNames(write, propose !== undefined).map((name) => ({
           name,
           ...SHELL_TOOL_SHAPES[name],
-          run: (args: unknown) => runShellTool(shells, from(), name, args, { write }),
+          run: (args: unknown, signal?: AbortSignal) => runShellTool(shells, from(), name, args, { write, gate: propose, signal }),
         }))
       : []),
     ...(mcp
@@ -76,6 +77,7 @@ export function runSessionTool(
   from: string,
   name: string,
   args: unknown,
+  signal?: AbortSignal,
 ): Promise<GatewayToolOutput> | undefined {
   if (sources.report && isSessionInfoToolName(name)) {
     return runSessionInfoTool(sources.report, from)
@@ -93,7 +95,7 @@ export function runSessionTool(
     return runPeerTool(sources.peers, from, name, args)
   }
   if (sources.shells && isShellToolName(name)) {
-    return runShellTool(sources.shells, from, name, args, { write: sources.write })
+    return runShellTool(sources.shells, from, name, args, { write: sources.write, gate: sources.propose, signal })
   }
   if (sources.mcp && isMcpToolName(name)) {
     return runMcpTool(sources.mcp, from, name, args)

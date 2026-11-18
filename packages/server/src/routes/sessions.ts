@@ -18,6 +18,7 @@ import { permissionDecision } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
 import { isDormant } from '../services/session-store.ts'
+import { proposalRefusal, SHELL_REFUSAL } from '../services/shells.ts'
 import type { ServerContext } from '../context.ts'
 import { CUT_IN_PROGRESS } from '../services/lifecycle-locks.ts'
 import { vetCreateRequest } from './create-vet.ts'
@@ -395,13 +396,16 @@ async function handleSleep({ ctx, req, res, runner, info }: SessionCall<'sleep'>
   json(res, 200, { session: ctx.projects.withProject(runner?.info() ?? info) })
 }
 
-async function handlePermission({ ctx, req, res, route, runner }: SessionCall<'permission'>): Promise<void> {
+async function handlePermission({ ctx, req, res, route, runner, auth }: SessionCall<'permission'>): Promise<void> {
   requireMethod(req, 'POST')
   const body = (await readJsonBody(req, ctx.maxBodyBytes)) as ResolvePermissionRequest
   if (body?.behavior !== 'allow' && body?.behavior !== 'deny') {
     fail(400, "behavior must be 'allow' or 'deny'")
   }
   const live = requireLive(runner, 'it has no pending permission requests')
+  if (proposalRefusal(ctx.shells, live, route.permissionId, body.behavior, ctx.auth.isOperator(auth))) {
+    fail(403, SHELL_REFUSAL)
+  }
   if (!live.resolvePermission(route.permissionId, permissionDecision(body))) {
     fail(404, 'permission request not found (already resolved or expired)')
   }

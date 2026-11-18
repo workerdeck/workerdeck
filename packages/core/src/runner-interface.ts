@@ -46,6 +46,8 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   agentResetReason?: string
   shells?: ShellDirectory
   shellAgentWrite?: ShellAgentWrite
+  // Stamped beside `shells` on a session an operator created: its presence is what offers `shell_propose`.
+  shellPropose?: boolean
   // Stamped by the gateway at create time from the principal that asked, and persisted with the record: the shell
   // write tools are offered only to a session an operator created.
   createdByOperator?: boolean

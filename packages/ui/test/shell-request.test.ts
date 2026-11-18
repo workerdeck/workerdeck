@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { shellRequestLines, shellRequestPayload, shellRequestTitle, shellToolOf, visibleControls } from '../src/lib/shell-request.ts'
+import {
+  shellProposalInput,
+  shellProposalOf,
+  shellRequestLines,
+  shellRequestPayload,
+  shellRequestTitle,
+  shellToolOf,
+  visibleControls,
+} from '../src/lib/shell-request.ts'
 
 describe('shellRequestPayload', () => {
   it('recognises the three write tools under their bare names and under the claude MCP prefix, nothing else', () => {
@@ -57,3 +65,20 @@ describe('shell_request_write on the card', () => {
     expect(shellRequestLines(payload!)).toEqual(['why: answer "y" to the[newline]prompt', 'until the shell ends or you revoke it'])
   })
 })
+
+describe('shell proposals', () => {
+  it('reads a proposal under either name and draws the command with the secret note', () => {
+    const proposal = shellProposalOf({ toolName: 'mcp__workerdeck__shell_propose', input: { command: 'a\nb', description: 'why', secret: true } })
+    expect(proposal).toEqual({ kind: 'propose', command: 'a\nb', description: 'why', secret: true })
+    expect(shellRequestLines(proposal!)).toEqual(['$ a', '  b', 'reads a secret on stdin'])
+    expect(shellProposalOf({ toolName: 'shell_run', input: { command: 'x' } })).toBeUndefined()
+  })
+
+  it('hands back only what the user changed or typed', () => {
+    expect(shellProposalInput('make deploy', 'make deploy', '')).toBeUndefined()
+    expect(shellProposalInput('make deploy', '   ', '')).toBeUndefined()
+    expect(shellProposalInput('make deploy', 'make ship', '')).toEqual({ command: 'make ship' })
+    expect(shellProposalInput('make deploy', 'make deploy', 'k3y')).toEqual({ stdin: 'k3y' })
+  })
+})
+

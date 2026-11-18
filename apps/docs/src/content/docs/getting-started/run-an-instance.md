@@ -145,6 +145,14 @@ request always raises a card, `allow` included. `allow` drops the card
 (the engine's own permission mode still applies); `read-only` is the default. A session created
 by a scoped principal is never offered the write tools, whatever the flag says.
 
+For commands the agent should not run itself (a production deploy, a secret write, a cloud apply,
+anything its own shell tool was refused for) it calls `shell_propose` with the command and a short
+reason. You get a card in every permission mode: edit the command if you like, run it with one
+click in a visible shell, or decline. The agent gets the exit code and the tail of the output. If
+the command reads a secret on stdin, the card asks for it in a hidden field and pipes it in; the
+value never reaches the agent, the transcript or the session record. It needs only `--shell`, no
+write flag, and only an operator can create a session that has it or press Run on its card.
+
 ## Options
 
 | Flag | Env | Default |

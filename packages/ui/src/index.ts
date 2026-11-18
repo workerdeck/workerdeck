@@ -69,6 +69,8 @@ export { TerminalSurface, type TerminalSurfaceProps } from './components/termina
 export { TerminalItemView } from './components/terminal/TerminalTranscript.tsx'
 export { TerminalStatusLine, type TerminalStatusLineProps } from './components/terminal/StatusLine.tsx'
 export { TerminalPermissionPrompt, type TerminalPermissionPromptProps } from './components/terminal/PermissionPrompt.tsx'
+export { TerminalShellProposalPrompt, type TerminalShellProposalPromptProps } from './components/terminal/ShellProposalPrompt.tsx'
+export { ShellProposalPrompt, type ShellProposalPromptProps } from './components/agent/ShellProposalPrompt.tsx'
 export { TerminalQuestionPrompt, type TerminalQuestionPromptProps } from './components/terminal/QuestionPrompt.tsx'
 export { TerminalDiff, previewPatch } from './components/terminal/diff.tsx'
 export { TerminalMarkdown, type TerminalMarkdownProps } from './components/terminal/markdown.tsx'

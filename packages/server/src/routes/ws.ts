@@ -23,7 +23,7 @@ import type { PromptOutcome } from '../services/prompt-acks.ts'
 import { shownEntryInfo } from './conversations.ts'
 import { sleepRunner } from './sleep.ts'
 import { takesLocalCommands } from '../services/shell-directory.ts'
-import { shellPermitted, SHELL_REFUSAL, startShell, type ShellRegistry, type ShellSink, type ShellSize } from '../services/shells.ts'
+import { proposalRefusal, shellPermitted, SHELL_REFUSAL, startShell, type ShellRegistry, type ShellSink, type ShellSize } from '../services/shells.ts'
 
 // What the upgrade established about the principal; computed once there so the attach never re-authenticates.
 export type AttachAccess = { operator: boolean }
@@ -330,6 +330,9 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
       return
     }
     case 'permission_decision': {
+      if (proposalRefusal(ctx.shells, runner, frame.requestId, frame.behavior, access.operator)) {
+        throw new Error(SHELL_REFUSAL)
+      }
       runner.resolvePermission(frame.requestId, permissionDecision(frame))
       return
     }

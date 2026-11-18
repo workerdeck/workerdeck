@@ -42,6 +42,21 @@ export function permissionPromptModel(request: PermissionRequestLike): Permissio
       denyPlaceholder: 'What should change? (optional) - the agent keeps planning and reads this',
     }
   }
+  if (shell?.kind === 'propose') {
+    return {
+      shell,
+      heading: shellRequestTitle(shell),
+      question: 'Run it in a visible shell? The agent gets the exit code and the output.',
+      description: shell.description,
+      decisionReason: request.decisionReason,
+      choices: [
+        { key: 'allow', button: 'Run', option: 'Yes, run it' },
+        { key: 'deny', button: "Don't run", option: "No, and tell the agent why" },
+        { key: 'stop', button: "Don't run & stop", option: 'No, and stop the turn', danger: true },
+      ],
+      denyPlaceholder: 'Reason (optional) - the agent reads this',
+    }
+  }
   return {
     shell,
     heading: shell ? shellRequestTitle(shell) : (request.title ?? request.displayName ?? 'Permission needed'),

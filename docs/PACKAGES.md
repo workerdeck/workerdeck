@@ -696,6 +696,9 @@ tools always. `shell_request_write` asks for a grant on a user's shell through `
 `shellToolNeedsCard(tool, mode)` is the one rule every engine gates on, and it cards a grant request
 under `allow` too. Every engine's `info()` reports `shellAgentWrite` when it holds the write tools.
 `LocalCommandQueue` draws an agent-owned shell's row but never flushes it into context.
+`shell_propose` (offered where the gateway stamps `shellPropose`) raises its own card through
+`SessionToolSources.propose`, never the engine's permission step, and runs the command through
+`ShellDirectory.propose` as a `proposed` user shell; `docs/GOTCHAS.md` § Shell sessions has the rules.
 
 `src/lib/instructions.ts` is the host-instruction seam: `SessionInstructions`
 (`string | ((context) => string)`), `resolveInstructions` and `composeInstructions`. All three

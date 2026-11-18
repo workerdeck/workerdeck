@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ENGINE_CAPABILITIES,
@@ -334,6 +336,46 @@ withPty('createShellDirectory over a real PTY', () => {
     expect(await directory.kill('s1', result.shell.id)).toMatchObject({ killed: false, shell: { status: 'exited' } })
     await expect(directory.write('s1', result.shell.id, { keys: ['q'] })).rejects.toThrow(/has already ended/)
   })
+
+  it('runs a proposed command as a user shell marked proposed, pipes the hidden stdin, and waits for it to exit', async () => {
+    const registry = makeRegistry()
+    const owner = agentRunner('s1')
+    const directory = agentDirectory(registry, owner)
+    const result = await directory.propose('s1', { command: 'echo start; wc -c | tr -d " "; exit 3', stdin: 's3cret-value', timeoutMs: 5000 })
+    expect(result.shell).toMatchObject({ owner: 'user', status: 'exited', exitCode: 3, command: 'echo start; wc -c | tr -d " "; exit 3' })
+    expect(result.wait).toMatchObject({ outcome: 'exited' })
+    expect(result.text).toContain('start')
+    expect(result.text).toContain('12')
+    expect(result.text).not.toContain('s3cret')
+    expect(registry.get('s1', result.shell.id)).toMatchObject({ proposed: true, owner: 'user' })
+    expect(owner.rows[0]!.info()).toMatchObject({ id: result.shell.id, proposed: true })
+    await expect(directory.write('s1', result.shell.id, { keys: ['q'] })).rejects.toThrow(/started by the user/)
+  })
+
+  it('returns a proposed command that outlives the wait as still running', async () => {
+    const registry = makeRegistry()
+    const directory = agentDirectory(registry, agentRunner('s1'))
+    const result = await directory.propose('s1', { command: 'echo up; sleep 30', timeoutMs: 300 })
+    expect(result.shell).toMatchObject({ status: 'running', proposed: true })
+    expect(result.wait).toMatchObject({ outcome: 'timeout' })
+  })
+
+  it('keeps the stdin file 0600 only until the shell ends, and never writes it into the record', async () => {
+    const registry = makeScripted()
+    const directory = agentDirectory(registry, agentRunner('s1'))
+    const pending = directory.propose('s1', { command: 'deploy', stdin: 'top-secret', timeoutMs: 5000 })
+    await vi.waitFor(() => expect(pty.children).toHaveLength(1))
+    const child = pty.last()
+    const path = child.args.at(-1)!
+    expect(child.args.at(-2)).toBe('deploy')
+    expect(readFileSync(path, 'utf8')).toBe('top-secret')
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+    expect(statSync(dirname(path)).mode & 0o777).toBe(0o700)
+    child.exit(0)
+    const result = await pending
+    expect(existsSync(dirname(path))).toBe(false)
+    expect(JSON.stringify(registry.get('s1', result.shell.id))).not.toContain('top-secret')
+  })
 })
 
 // A claude stand-in that names its engine session and goes idle, which is all dormancy needs to write a record.
@@ -426,6 +468,7 @@ describe('the gateway stamps the directory only where a shell of that session co
       'peers_reset',
       'shell_list',
       'shell_read',
+      'shell_propose',
       'mcp_reconnect',
       'mcp_reload',
       ...GOAL_TOOL_NAMES,
@@ -452,6 +495,7 @@ describe('the gateway stamps the directory only where a shell of that session co
       'shell_write',
       'shell_kill',
       'shell_request_write',
+      'shell_propose',
       'mcp_reconnect',
       'mcp_reload',
       ...GOAL_TOOL_NAMES,

@@ -175,8 +175,8 @@ export class LocalCommandQueue {
     this.#emit = emit
   }
 
-  // A shell the agent started gets the same transcript row, redrawn the same way, but never enters the next flush: the
-  // caveat says the user ran it, the agent already holds the tool result, and it reads more through shell_read.
+  // A shell the agent started, or one it proposed, gets the same transcript row, redrawn the same way, but never enters
+  // the next flush: the agent already holds the tool result, and it reads more through shell_read.
   push(input: LocalCommandResult | LocalShellSource): void {
     if (!isLocalShellSource(input)) {
       const text = localCommandTranscript(input)
@@ -189,7 +189,7 @@ export class LocalCommandQueue {
       const info = { ...input.info() }
       this.#emit(shellInlineText(info, input.text()), uuid, info)
     }
-    if (input.info().owner === 'agent') {
+    if (input.info().owner === 'agent' || input.info().proposed === true) {
       const settle = () => {
         if (input.info().status !== 'running') {
           unsubscribe()

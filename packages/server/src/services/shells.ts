@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SHELL_REFUSAL, type Runner } from '@workerdeck/core'
+import { SHELL_PROPOSE_TOOL, SHELL_REFUSAL, type Runner } from '@workerdeck/core'
 import {
   ENGINE_CAPABILITIES,
   SHELL_ARTIFACT_MAX_BYTES,
@@ -33,6 +33,7 @@ import {
   wireChild,
 } from './shell-entry.ts'
 import { clampSize, loadPty, spawnShellChild } from './shell-env.ts'
+import { writeStdinFile } from './shell-stdin.ts'
 import { ShellScreen } from './shell-screen.ts'
 import { indexedSessions, persistIndex, readIndex, runningIn } from './shell-index.ts'
 import type {
@@ -74,6 +75,16 @@ export function shellPermitted(shells: ShellRegistry | null, runner: Runner, ope
   const info = runner.info()
   const capabilities = info.capabilities ?? (info.engine ? ENGINE_CAPABILITIES[info.engine] : undefined)
   return capabilities?.hostCwd === true
+}
+
+// Running a proposed command is a `$` by another route, so allowing its card takes the same operator gate; anyone who
+// can see the card may still decline it.
+export function proposalRefusal(shells: ShellRegistry | null, runner: Runner, requestId: string, behavior: string, operator: boolean): boolean {
+  if (behavior !== 'allow') {
+    return false
+  }
+  const request = runner.pendingApprovals.find((pending) => pending.id === requestId)
+  return request?.toolName === SHELL_PROPOSE_TOOL && !shellPermitted(shells, runner, operator)
 }
 
 export function createShellRegistry(options: ShellRegistryOptions): ShellRegistry {
@@ -134,6 +145,8 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
       return
     }
     endEntry(entry, reason)
+    entry.release?.()
+    entry.release = undefined
     persist(state)
     fire(entry)
   }
@@ -176,18 +189,20 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     return { state, cwd, pty }
   }
 
-  const spawn = async ({ runner, command, owner }: ShellSpawnInput): Promise<ShellSpawned> => {
+  const spawn = async ({ runner, command, owner, proposed, stdin }: ShellSpawnInput): Promise<ShellSpawned> => {
     const { state, cwd, pty } = await admit(runner)
-    const info = newShellInfo(state, runner.id, command, cwd, owner)
+    const secret = stdin === undefined ? undefined : await writeStdinFile(stdin)
+    const info = newShellInfo(state, runner.id, command, cwd, owner, proposed)
     const artifact = new LiveArtifact(artifactPaths(base, info.sessionId, info.id), limits, (error) =>
       report(error, { op: 'artifact', sessionId: info.sessionId, shellId: info.id }),
     )
     const entry: ShellEntry = { info, generation, artifact, sinks: new Set(), listeners: new Set() }
     entry.screen = new ShellScreen(info.cols, info.rows)
+    entry.release = secret?.remove
     state.entries.set(info.id, entry)
     let child: PtyChild
     try {
-      child = spawnShellChild(pty, cwd, command)
+      child = spawnShellChild(pty, cwd, command, secret?.path)
     } catch (error) {
       settle(state, entry, 'spawn_failed')
       throw error instanceof Error ? error : new Error('failed to start the shell')

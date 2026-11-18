@@ -2820,6 +2820,38 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   one uuid like a `$`, but the source never joins the queue, because the flush wraps its text in
   a caveat that says the user ran it, the agent already holds the tool result, and it can
   `shell_read` for more.
+- **`shell_propose` is a `$` the agent writes and the human runs, so its card is the tool's own.**
+  The handler awaits `SessionToolSources.propose`, the base runner's `#proposeShell`, which raises an
+  ordinary `core.requestApproval` (bare `toolName: 'shell_propose'`, `toolUseId` = the request id,
+  since an MCP handler never learns its tool use id). It is never the engine's permission step: the
+  claude runner adds `mcp__workerdeck__shell_propose` to `allowedTools`, because auto mode's
+  classifier reads the command and would block exactly the deploys and secret writes the tool is
+  for, and `bypassPermissions` would drop the card. So it cards in **every** mode, bypass included,
+  on every engine. Interrupt, close, clear and the deadline settle it like any approval; on claude,
+  where an interrupt only cancels the MCP call, the handler's `extra.signal` denies it.
+- **Only an operator can make a proposal run.** `shellPropose` is stamped beside `shells` only on a
+  session an operator created (`createdByOperator`, re-read on every build, `transient`), so a
+  scoped principal's session never has the tool. Resolving the card is checked again:
+  `proposalRefusal` makes an **allow** of a `shell_propose` card need `shellPermitted` (operator,
+  shells on, host cwd) on both the WS `permission_decision` and the REST route; anyone who can see
+  the card may still decline it. A `$` takes the same three conditions, and a proposal is a `$`
+  by another route.
+- **The card can hand back an edited command and a hidden stdin, and nothing else.**
+  `shellProposalVerdict` reads `updatedInput.command` (blank keeps the proposal's) and
+  `updatedInput.stdin`; the tool result leads with the command as run when it differs, so the agent
+  never reasons about one that did not run. `permission_resolved` never carries `updatedInput`, so
+  the secret is in no event, log or snapshot. On the server it is written to a 0600 file in a fresh
+  0700 `mkdtemp` dir and redirected by the PTY wrapper (`<"$2"`, after the `/dev/tty` open), then
+  removed when the shell ends or after `STDIN_FILE_TTL_MS`, whichever is first; the redirect has
+  opened it long before. A gateway that dies inside that window leaves the file in the tmp dir.
+  The shell is `owner: 'user'` with `proposed: true`: the agent cannot type into or kill it without
+  a grant, and like an agent shell it skips the context flush, because the tool result already
+  carries the exit code and the tail (`shellProposedText`, `view: 'lines'`, waited `untilExit` up to
+  `timeoutMs`, default `SHELL_PROPOSE_WAIT_DEFAULT_MS`).
+- **The clients draw it as its own card.** `ApprovalPrompts` routes a `shell_propose` request to
+  `ShellProposalPrompt` / `TerminalShellProposalPrompt` (editable command, a password field when
+  `secret`). A host that draws the generic `PermissionPrompt` still gets the command verbatim, but
+  Allow runs it unedited and with no stdin; native clients are in that position until they port the card.
 - **`shell_write.waitFor` matches only bytes the process wrote after the keystrokes.** The
   directory marks `info.bytes` before it writes and searches `ttyText` of the raw bytes past that
   mark (`since`), so "press r, wait for reloaded" cannot be satisfied by the `reloaded` already on

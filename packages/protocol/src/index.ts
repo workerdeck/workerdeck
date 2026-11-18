@@ -376,6 +376,7 @@ export type ShellInfo = {
   rows: number
   agentWrite?: boolean
   interactive?: boolean
+  proposed?: boolean
 }
 
 export type SessionCommand =

@@ -29,7 +29,7 @@ const ID_CHARS = 12
 
 export type ChildHooks = { persist: () => void; notify: () => void; exit: () => void }
 
-export function newShellInfo(state: SessionShells, sessionId: string, command: string, cwd: string, owner: ShellOwner): ShellInfo {
+export function newShellInfo(state: SessionShells, sessionId: string, command: string, cwd: string, owner: ShellOwner, proposed = false): ShellInfo {
   return {
     id: mintShellId(),
     sessionId,
@@ -43,6 +43,7 @@ export function newShellInfo(state: SessionShells, sessionId: string, command: s
     bytes: 0,
     cols: SHELL_COLS,
     rows: SHELL_ROWS,
+    ...(proposed ? { proposed: true } : {}),
   }
 }
 

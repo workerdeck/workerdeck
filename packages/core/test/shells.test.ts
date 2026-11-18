@@ -15,6 +15,8 @@ import {
   shellToolNeedsCard,
   shellToolSpecs,
   shellWriteToolOf,
+  shellProposalVerdict,
+  SHELL_PROPOSE_STDIN_MAX,
   type ShellDirectory,
   type ShellReadResult,
 } from '../src/index.ts'
@@ -85,6 +87,10 @@ function directory(text = 'one\ntwo\nthree\n'): ShellDirectory & { calls: unknow
         return undefined
       }
       return shellSummary(info({ agentWrite: true }))
+    },
+    propose: async (from, options) => {
+      calls.push(['propose', from, options])
+      return readResult('deployed\n', SHELL_READ_DEFAULT_LINES, { id: 'sh_p', ordinal: 5, command: options.command, status: 'exited', exitCode: 0 })
     },
   }
 }
@@ -386,5 +392,46 @@ describe('shell_request_write', () => {
     expect((await runShellTool(shells, 'a', 'shell_request_write', { shellId: 'sh_a' }, { write: true })).text).toMatch(
       /^invalid arguments for shell_request_write: reason/,
     )
+  })
+})
+
+describe('shell_propose', () => {
+  const proposal = { command: 'make deploy', description: 'ships prod' }
+
+  it('is offered only with a gate, and never counts as a write tool', () => {
+    expect(shellToolNames(false, true)).toEqual(['shell_list', 'shell_read', 'shell_propose'])
+    expect(shellToolNames(true, false)).not.toContain('shell_propose')
+    expect(shellWriteToolOf('mcp__workerdeck__shell_propose')).toBeUndefined()
+    expect(shellToolNeedsCard('shell_propose', 'gated')).toBe(false)
+  })
+
+  it('refuses without a gate and runs nothing', async () => {
+    const shells = directory()
+    const output = await runShellTool(shells, 'a', 'shell_propose', proposal)
+    expect(output).toEqual({ text: 'shell commands are not available on this session', isError: true })
+    expect(shells.calls).toEqual([])
+  })
+
+  it('runs the command the gate returns and leads with the edit', async () => {
+    const shells = directory()
+    const gate = async () => ({ allowed: true as const, command: 'make deploy ENV=prod' })
+    const output = await runShellTool(shells, 'a', 'shell_propose', { ...proposal, timeoutMs: 5000 }, { gate })
+    expect(output.isError).toBe(false)
+    expect(output.text).toMatch(/^the user edited the command before running it; it ran as: make deploy ENV=prod\n\[shell #5 sh_p: \$ make deploy ENV=prod, run by the user, exited 0/)
+    expect(shells.calls).toEqual([['propose', 'a', { command: 'make deploy ENV=prod', stdin: undefined, timeoutMs: 5000 }]])
+  })
+
+  it('reads an edited command and the hidden stdin off the decision, and nothing else', () => {
+    expect(shellProposalVerdict(proposal, { behavior: 'allow' })).toEqual({ allowed: true, command: 'make deploy' })
+    expect(shellProposalVerdict(proposal, { behavior: 'allow', updatedInput: { command: '  ', stdin: '' } })).toEqual({ allowed: true, command: 'make deploy' })
+    expect(shellProposalVerdict(proposal, { behavior: 'allow', updatedInput: { command: 'make ship', stdin: 'k', extra: 1 } })).toEqual({
+      allowed: true,
+      command: 'make ship',
+      stdin: 'k',
+    })
+    expect(shellProposalVerdict(proposal, { behavior: 'allow', updatedInput: { stdin: 'x'.repeat(SHELL_PROPOSE_STDIN_MAX + 1) } })).toMatchObject({
+      allowed: false,
+    })
+    expect(shellProposalVerdict(proposal, { behavior: 'deny', message: 'no' })).toEqual({ allowed: false, message: 'no' })
   })
 })

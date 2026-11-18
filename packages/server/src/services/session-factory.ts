@@ -296,6 +296,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     delete config.avatar
     delete config.shells
     delete config.shellAgentWrite
+    delete config.shellPropose
     delete config.effortDefaults
     if (profile) {
       // Read on every build and never stored: `env` is transient, so a parked record cannot carry the token to disk.
@@ -320,6 +321,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
       const write = deps.shellAgentWrite ?? 'read-only'
       if (write !== 'read-only' && built.createdByOperator === true) {
         config.shellAgentWrite = write
+      }
+      if (built.createdByOperator === true) {
+        config.shellPropose = true
       }
     }
     const agent = options?.agent === true || deps.isAgent?.(id ?? restore?.id) === true

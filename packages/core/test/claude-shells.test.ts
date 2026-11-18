@@ -52,6 +52,10 @@ function shellDirectory(): ShellDirectory & { calls: unknown[][] } {
       calls.push(['grant', from, shellId])
       return { id: shellId, ...EXITED, owner: 'user', agentWrite: true }
     },
+    propose: async (from, options) => {
+      calls.push(['propose', from, options])
+      return { shell: { id: 'sh_prop', ...EXITED, command: options.command, proposed: true }, ...read }
+    },
   }
 }
 
@@ -212,5 +216,47 @@ describe('SessionRunner: shell tools', () => {
     const granted = await registered(harness).shell_request_write!.handler({ shellId: 'sh_a', reason: 'answer the prompt' }, {})
     expect(granted).toMatchObject({ isError: false, content: [{ type: 'text', text: expect.stringContaining('granted') }] })
     expect(shells.calls).toContainEqual(['grant', runner.id, 'sh_a'])
+  })
+
+  it('offers shell_propose wherever shells exist, pre-allows it, and gates it in the tool even under bypassPermissions', async () => {
+    const harness = fakeHarness()
+    const shells = shellDirectory()
+    const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, shells, shellPropose: true, permissionMode: 'bypassPermissions' })
+    const events: SessionEvent[] = []
+    runner.subscribe((e) => events.push(e))
+    void runner.start()
+    await eventually(() => expect(harness.captured.options).toBeDefined())
+    expect(harness.captured.options!.allowedTools).toEqual(['mcp__workerdeck__shell_propose'])
+    const pending = registered(harness).shell_propose!.handler({ command: 'make deploy', description: 'ships prod' }, {})
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
+    expect(runner.pendingApprovals[0]).toMatchObject({ toolName: 'shell_propose', input: { command: 'make deploy', description: 'ships prod' } })
+    expect(runner.info().status).toBe('awaiting_approval')
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
+    expect(await pending).toMatchObject({ isError: false, content: [{ text: expect.stringContaining('run by the user') }] })
+    expect(shells.calls).toEqual([['propose', runner.id, { command: 'make deploy', stdin: undefined, timeoutMs: 60_000 }]])
+    expect(events.filter((e) => e.type === 'permission_resolved')).toMatchObject([{ behavior: 'allow', resolvedBy: 'client' }])
+  })
+
+  it('denies a pending proposal when Claude Code cancels the tool call', async () => {
+    const harness = fakeHarness()
+    const shells = shellDirectory()
+    const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, shells, shellPropose: true })
+    void runner.start()
+    await eventually(() => expect(harness.captured.options).toBeDefined())
+    const abort = new AbortController()
+    const pending = registered(harness).shell_propose!.handler({ command: 'make deploy', description: 'ships prod' }, { signal: abort.signal })
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
+    abort.abort()
+    expect(await pending).toMatchObject({ content: [{ text: 'the user did not run the command: Turn aborted' }] })
+    expect(runner.pendingApprovals).toHaveLength(0)
+    expect(shells.calls).toEqual([])
+  })
+
+  it('keeps allowedTools untouched and offers no proposal unless the gateway stamped shellPropose', async () => {
+    const harness = fakeHarness()
+    void new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, shells: shellDirectory(), allowedTools: ['Read'] }).start()
+    await eventually(() => expect(harness.captured.options).toBeDefined())
+    expect(harness.captured.options!.allowedTools).toEqual(['Read'])
+    expect(registered(harness).shell_propose).toBeUndefined()
   })
 })

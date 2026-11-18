@@ -62,6 +62,10 @@ function shellDirectory(): ShellDirectory & { calls: unknown[][] } {
       calls.push(['grant', from, shellId])
       return { id: shellId, ...RUNNING, owner: 'user', agentWrite: true }
     },
+    propose: async (from, options) => {
+      calls.push(['propose', from, options])
+      return { shell: { id: 'sh_prop', ...RUNNING, status: 'exited' as const, exitCode: 0, command: options.command }, ...read }
+    },
   }
 }
 
@@ -71,7 +75,7 @@ function threadStart(peer: ReturnType<typeof scriptedPeer>) {
   }
 }
 
-async function started(config: { permissionMode?: PermissionMode; shellAgentWrite?: 'gated' | 'allow' }) {
+async function started(config: { permissionMode?: PermissionMode; shellAgentWrite?: 'gated' | 'allow'; shellPropose?: boolean }) {
   const peer = scriptedPeer()
   scriptTurn(peer, () => {})
   const shells = shellDirectory()
@@ -285,5 +289,38 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
     expect(answered.success).toBe(true)
     expect(answered.contentItems[0]!.text).toContain('granted')
     expect(shells.calls).toEqual([['grant', runner.id, 'sh_a']])
+  })
+
+  it('raises the proposal card in every mode, bypass included, and runs what the user edited with the hidden stdin', async () => {
+    for (const permissionMode of ['bypassPermissions', 'auto', 'default'] as const) {
+      const { shells, runner, events, call } = await started({ permissionMode, shellPropose: true })
+      const answer = call('shell_propose', { command: 'gcloud secrets versions add api-key --data-file=-', description: 'stores the key', secret: true })
+      await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
+      expect(runner.pendingApprovals[0]).toMatchObject({
+        toolName: 'shell_propose',
+        input: { command: 'gcloud secrets versions add api-key --data-file=-', description: 'stores the key', secret: true },
+      })
+      runner.resolvePermission(runner.pendingApprovals[0]!.id, {
+        behavior: 'allow',
+        updatedInput: { command: 'gcloud secrets versions add api-key2 --data-file=-', stdin: 's3cret' },
+      })
+      const answered = await answer
+      expect(answered.success).toBe(true)
+      expect(answered.contentItems[0]!.text).toContain('it ran as: gcloud secrets versions add api-key2 --data-file=-')
+      expect(answered.contentItems[0]!.text).not.toContain('s3cret')
+      expect(shells.calls).toEqual([
+        ['propose', runner.id, { command: 'gcloud secrets versions add api-key2 --data-file=-', stdin: 's3cret', timeoutMs: 60_000 }],
+      ])
+      expect(JSON.stringify(events)).not.toContain('s3cret')
+    }
+  })
+
+  it('answers a declined proposal as a successful call that says the user did not run it', async () => {
+    const { shells, runner, call } = await started({ shellPropose: true })
+    const answer = call('shell_propose', { command: 'terraform apply', description: 'applies the plan' })
+    await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny', message: 'not today' })
+    expect((await answer).contentItems[0]!.text).toBe('the user did not run the command: not today')
+    expect(shells.calls).toEqual([])
   })
 })
