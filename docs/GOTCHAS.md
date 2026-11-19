@@ -2848,6 +2848,22 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   a grant, and like an agent shell it skips the context flush, because the tool result already
   carries the exit code and the tail (`shellProposedText`, `view: 'lines'`, waited `untilExit` up to
   `timeoutMs`, default `SHELL_PROPOSE_WAIT_DEFAULT_MS`).
+- **A shell whose output goes back to the agent runs pagerless.** Proposed and agent-owned shells get
+  `PAGER`/`GIT_PAGER`/`GH_PAGER`/`MANPAGER=cat`, `AWS_PAGER=''`, `LESS=-FRX` (`spawnShellChild`
+  `pagerless`): a pager blocked the tool until the human pressed q and left its screen (`~`, `(END)`,
+  re-wrapped lines) in the tail. A `$` the operator types keeps their pager. `interactive: false` on
+  `shell_propose` redirects stdin from `/dev/null` (a secret's file wins), so a prompt reads EOF and
+  fails fast; the card says "takes no input". An untilExit wait with no needles reports
+  `outcome: 'finished'`, never `'exited'` (which means the needle never appeared); one that runs out of
+  time reports `'running'`.
+- **A shell the agent waited on wakes it when it ends; a `$` never does.** `shell_propose` `wait: 'exit'`
+  (default) and `shell_run` `wakeOnExit: true` subscribe to the shell when the call returns with it still
+  running; at exit the directory looks the runner up again (hot reload, dormancy) and sends
+  `shellExitedText` with `{ synthetic: true }`, a gateway-only `SendMessageOptions` flag: the echo is a
+  synthetic `user_message`, so no user row and no unread, and the `<shell-exited>` lead is in
+  `SYNTHETIC_USER_PREFIXES` so a resumed history (claude, and codex's replay) marks it synthetic again.
+  `wait: 'run'` returns once the shell starts and spawns it with `flush`, so the `LocalCommandQueue`
+  takes it into the next message like a `$` despite `proposed`. A wake on a closed session is dropped.
 - **The clients draw it as its own card.** `ApprovalPrompts` routes a `shell_propose` request to
   `ShellProposalPrompt` / `TerminalShellProposalPrompt` (editable command, a password field when
   `secret`). A host that draws the generic `PermissionPrompt` still gets the command verbatim, but

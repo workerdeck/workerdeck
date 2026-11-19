@@ -78,6 +78,9 @@ export function ShellProposalPrompt({ request, onApprove, onDeny, className }: S
               <div className="mt-0.5 text-label text-fg-4">Piped to the command's stdin; never shown to the agent or kept in the transcript.</div>
             </div>
           ) : null}
+          {proposal?.noInput ? (
+            <div className="mt-1 text-label text-fg-4">Takes no input: stdin is empty, so a prompt fails instead of waiting.</div>
+          ) : null}
           <div className="mt-1.5 text-label text-fg-4">{model.question}</div>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1.5">

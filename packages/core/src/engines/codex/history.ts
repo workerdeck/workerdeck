@@ -1,6 +1,7 @@
 import { errorMessage, type MessageOrigin, type SessionEventBody } from '@workerdeck/protocol'
 import { randomUUID } from 'node:crypto'
 import { withoutPeerContext } from '../../lib/peers.ts'
+import { isSyntheticUserText } from '../../lib/normalize.ts'
 import { historyUserText, itemCompleted, producedFileEvent, type ItemSink } from './items.ts'
 import { CodexAgentTracker } from './subagents.ts'
 import type { AppServerConnection, AppServerHistoryTurn, AppServerUserMessageItem } from './types.ts'
@@ -106,6 +107,7 @@ export function replayTurns(sink: HistorySink, turns: readonly AppServerHistoryT
             message: { role: 'user', content: text },
             parentToolUseId: null,
             ...(origin ? { origin } : {}),
+            ...(isSyntheticUserText({ role: 'user', content: text }) ? { synthetic: true } : {}),
             uuid: `${scope.nonce}:${item.id}`,
           })
         }

@@ -19,7 +19,9 @@ import {
   SHELL_PROPOSE_STDIN_MAX,
   type ShellDirectory,
   type ShellReadResult,
+  shellExitedText,
 } from '../src/index.ts'
+import { isSyntheticUserText } from '../src/lib/normalize.ts'
 
 function info(overrides: Partial<ShellInfo> = {}): ShellInfo {
   return {
@@ -419,6 +421,39 @@ describe('shell_propose', () => {
     expect(output.isError).toBe(false)
     expect(output.text).toMatch(/^the user edited the command before running it; it ran as: make deploy ENV=prod\n\[shell #5 sh_p: \$ make deploy ENV=prod, run by the user, exited 0/)
     expect(shells.calls).toEqual([['propose', 'a', { command: 'make deploy ENV=prod', stdin: undefined, timeoutMs: 5000 }]])
+  })
+
+  it('tells the agent how a command still running will reach it, by wait mode', async () => {
+    const shells = directory()
+    shells.propose = async (from, options) => (
+      shells.calls.push(['propose', from, options]),
+      readResult('up\n', SHELL_READ_DEFAULT_LINES, { id: 'sh_p', ordinal: 5, command: options.command, status: 'running' })
+    )
+    const gate = async () => ({ allowed: true as const, command: 'make deploy' })
+    const waited = await runShellTool(shells, 'a', 'shell_propose', proposal, { gate })
+    const detached = await runShellTool(shells, 'a', 'shell_propose', { ...proposal, wait: 'run' }, { gate })
+    expect(waited.text).toContain('in a new message')
+    expect(detached.text).toContain("with the user's next message")
+    expect(shells.calls[1]![2]).toMatchObject({ wait: 'run' })
+    expect(shells.calls[0]![2]).not.toHaveProperty('wait')
+  })
+
+  it('marks the wake text synthetic for a resumed history', () => {
+    const text = shellExitedText(readResult('done\n', SHELL_READ_DEFAULT_LINES, { status: 'exited', exitCode: 0 }))
+    expect(text.startsWith('<shell-exited>\n[shell #')).toBe(true)
+    expect(isSyntheticUserText({ role: 'user', content: text })).toBe(true)
+  })
+
+  it('passes interactive: false to the card and the shell, unless the command reads a secret', async () => {
+    const shells = directory()
+    const seen: unknown[] = []
+    const gate = async (p: unknown) => (seen.push(p), { allowed: true as const, command: 'make deploy' })
+    await runShellTool(shells, 'a', 'shell_propose', { ...proposal, interactive: false }, { gate })
+    await runShellTool(shells, 'a', 'shell_propose', { ...proposal, interactive: false, secret: true }, { gate })
+    expect(seen[0]).toMatchObject({ interactive: false })
+    expect(seen[1]).not.toHaveProperty('interactive')
+    expect(shells.calls[0]![2]).toMatchObject({ interactive: false })
+    expect(shells.calls[1]![2]).not.toHaveProperty('interactive')
   })
 
   it('reads an edited command and the hidden stdin off the decision, and nothing else', () => {

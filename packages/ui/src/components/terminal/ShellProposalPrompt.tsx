@@ -114,6 +114,7 @@ export function TerminalShellProposalPrompt({ request, onApprove, onDeny, classN
       ))}
       {command !== proposed ? <Row tone="yellow">edited by you</Row> : null}
       {proposal?.secret ? <Row tone="faint">reads a secret on stdin: you type it after choosing Yes</Row> : null}
+      {proposal?.noInput ? <Row tone="faint">takes no input: stdin is empty, so a prompt fails instead of waiting</Row> : null}
       <Blank />
       <Rule dashed />
       <Row>{model.question}</Row>

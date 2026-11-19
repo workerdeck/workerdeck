@@ -343,7 +343,7 @@ withPty('createShellDirectory over a real PTY', () => {
     const directory = agentDirectory(registry, owner)
     const result = await directory.propose('s1', { command: 'echo start; wc -c | tr -d " "; exit 3', stdin: 's3cret-value', timeoutMs: 5000 })
     expect(result.shell).toMatchObject({ owner: 'user', status: 'exited', exitCode: 3, command: 'echo start; wc -c | tr -d " "; exit 3' })
-    expect(result.wait).toMatchObject({ outcome: 'exited' })
+    expect(result.wait).toMatchObject({ outcome: 'finished' })
     expect(result.text).toContain('start')
     expect(result.text).toContain('12')
     expect(result.text).not.toContain('s3cret')
@@ -357,7 +357,7 @@ withPty('createShellDirectory over a real PTY', () => {
     const directory = agentDirectory(registry, agentRunner('s1'))
     const result = await directory.propose('s1', { command: 'echo up; sleep 30', timeoutMs: 300 })
     expect(result.shell).toMatchObject({ status: 'running', proposed: true })
-    expect(result.wait).toMatchObject({ outcome: 'timeout' })
+    expect(result.wait).toMatchObject({ outcome: 'running' })
   })
 
   it('keeps the stdin file 0600 only until the shell ends, and never writes it into the record', async () => {
@@ -375,6 +375,71 @@ withPty('createShellDirectory over a real PTY', () => {
     const result = await pending
     expect(existsSync(dirname(path))).toBe(false)
     expect(JSON.stringify(registry.get('s1', result.shell.id))).not.toContain('top-secret')
+  })
+
+  it('wakes the session with the result when a proposed command outlives the wait', async () => {
+    const registry = makeScripted()
+    const sent: Array<[string, unknown]> = []
+    const owner = { ...agentRunner('s1'), sendMessage: (text: string, _a: unknown, options: unknown) => void sent.push([text, options]) }
+    const directory = agentDirectory(registry, owner)
+    const pending = directory.propose('s1', { command: 'deploy', timeoutMs: 50 })
+    await vi.waitFor(() => expect(pty.children).toHaveLength(1))
+    const result = await pending
+    expect(result.shell.status).toBe('running')
+    expect(result.wait).toMatchObject({ outcome: 'running' })
+    expect(sent).toEqual([])
+    pty.last().emit('deployed\r\n')
+    pty.last().exit(0)
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]![0]).toMatch(/^<shell-exited>\n\[shell #1 .*exited 0/)
+    expect(sent[0]![0]).toContain('deployed')
+    expect(sent[0]![1]).toEqual({ synthetic: true })
+  })
+
+  it("returns a proposal with wait 'run' at once, flushes it like a $ and never wakes", async () => {
+    const registry = makeScripted()
+    const sent: string[] = []
+    const owner = { ...agentRunner('s1'), sendMessage: (text: string) => void sent.push(text) }
+    const directory = agentDirectory(registry, owner)
+    const result = await directory.propose('s1', { command: 'deploy', wait: 'run', timeoutMs: 5000 })
+    expect(result.shell.status).toBe('running')
+    expect(result.wait).toBeUndefined()
+    expect(owner.rows[0]!.flush).toBe(true)
+    pty.last().exit(0)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(sent).toEqual([])
+  })
+
+  it('wakes on the exit of an agent shell only when it asked to', async () => {
+    const registry = makeScripted()
+    const sent: string[] = []
+    const owner = { ...agentRunner('s1'), sendMessage: (text: string) => void sent.push(text) }
+    const directory = agentDirectory(registry, owner)
+    await directory.run('s1', { command: 'build' })
+    await directory.run('s1', { command: 'test', wakeOnExit: true })
+    expect(owner.rows.every((row) => row.flush !== true)).toBe(true)
+    pty.children[0]!.exit(0)
+    pty.children[1]!.exit(1)
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).toMatch(/\$ test, exited 1/)
+  })
+
+  it('runs a proposed command with no pager, and with empty stdin when it takes no input', async () => {
+    const registry = makeScripted()
+    const directory = agentDirectory(registry, agentRunner('s1'))
+    const pending = directory.propose('s1', { command: 'git log', interactive: false, timeoutMs: 5000 })
+    await vi.waitFor(() => expect(pty.children).toHaveLength(1))
+    const child = pty.last()
+    expect(child.args.slice(-2)).toEqual(['git log', '/dev/null'])
+    expect(child.options.env).toMatchObject({ PAGER: 'cat', GIT_PAGER: 'cat', AWS_PAGER: '' })
+    child.exit(0)
+    await pending
+
+    const typed = directory.propose('s1', { command: 'git log', timeoutMs: 5000 })
+    await vi.waitFor(() => expect(pty.children).toHaveLength(2))
+    expect(pty.last().args.at(-1)).toBe('git log')
+    pty.last().exit(0)
+    await typed
   })
 })
 

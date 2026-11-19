@@ -189,7 +189,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     return { state, cwd, pty }
   }
 
-  const spawn = async ({ runner, command, owner, proposed, stdin }: ShellSpawnInput): Promise<ShellSpawned> => {
+  const spawn = async ({ runner, command, owner, proposed, stdin, interactive, flush }: ShellSpawnInput): Promise<ShellSpawned> => {
     const { state, cwd, pty } = await admit(runner)
     const secret = stdin === undefined ? undefined : await writeStdinFile(stdin)
     const info = newShellInfo(state, runner.id, command, cwd, owner, proposed)
@@ -202,7 +202,8 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     state.entries.set(info.id, entry)
     let child: PtyChild
     try {
-      child = spawnShellChild(pty, cwd, command, secret?.path)
+      const stdinPath = secret?.path ?? (interactive === false ? '/dev/null' : undefined)
+      child = spawnShellChild(pty, cwd, command, { stdinPath, pagerless: owner === 'agent' || proposed === true })
     } catch (error) {
       settle(state, entry, 'spawn_failed')
       throw error instanceof Error ? error : new Error('failed to start the shell')
@@ -217,7 +218,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
       entry.clock.unref()
     }
     persist(state)
-    return { shell: { ...info }, source: sourceFor(entry, artifact) }
+    return { shell: { ...info }, source: sourceFor(entry, artifact, flush === true) }
   }
 
   const sweep = async (): Promise<void> => {

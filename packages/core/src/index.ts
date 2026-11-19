@@ -129,6 +129,7 @@ export {
   isShellProposeToolName,
   shellProposalVerdict,
   shellProposedText,
+  shellExitedText,
 } from './lib/shells.ts'
 export type {
   ShellAgentWrite,
@@ -137,6 +138,7 @@ export type {
   ShellKillResult,
   ShellProposal,
   ShellProposalGate,
+  ShellProposeWait,
   ShellProposalVerdict,
   ShellProposeOptions,
   ShellReadOptions,

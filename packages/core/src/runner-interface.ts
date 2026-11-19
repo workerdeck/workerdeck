@@ -97,6 +97,9 @@ export type SendMessageOptions = {
   // Set only for a message a person typed, and only by the gateway's own send path: `origin` means
   // a model wrote this text, `mentions` means a human did, and the two are mutually exclusive.
   mentions?: readonly PeerMention[]
+  // Gateway-only, never from a client frame: text the gateway wrote to wake the agent (a shell it waited on ended).
+  // The echo is a synthetic user message, so it scores no unread and draws no user row.
+  synthetic?: boolean
 }
 
 export type ClearContextOptions = { agentReason?: string }

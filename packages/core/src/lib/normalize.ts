@@ -36,6 +36,7 @@ function singleToolResult(message: ApiMessage): boolean {
 const SYNTHETIC_USER_PREFIXES = [
   '<task-notification>',
   '<local-command-caveat>',
+  '<shell-exited>',
   'Stop hook feedback:\n[',
   'A session-scoped Stop hook is now active with condition:',
 ]

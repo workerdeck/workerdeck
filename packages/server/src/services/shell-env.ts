@@ -112,8 +112,17 @@ export function loginShell(env: Record<string, string | undefined>): string {
   return shell && shell.startsWith('/') ? shell : '/bin/sh'
 }
 
-export function spawnShellChild(pty: PtyModule, cwd: string, command: string, stdinPath?: string): PtyChild {
+// A pager holds the shell open until someone presses q and leaves its screen in the output, so a shell whose output
+// goes back to the agent writes straight through.
+const PAGERLESS_ENV: Record<string, string> = { PAGER: 'cat', GIT_PAGER: 'cat', GH_PAGER: 'cat', MANPAGER: 'cat', AWS_PAGER: '', LESS: '-FRX' }
+
+export type ShellChildOptions = { stdinPath?: string; pagerless?: boolean }
+
+export function spawnShellChild(pty: PtyModule, cwd: string, command: string, { stdinPath, pagerless }: ShellChildOptions = {}): PtyChild {
   const env = shellChildEnv(process.env)
+  if (pagerless) {
+    Object.assign(env, PAGERLESS_ENV)
+  }
   env.TERM = TERM
   env.COLORTERM = 'truecolor'
   env.PWD = cwd

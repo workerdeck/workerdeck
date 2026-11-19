@@ -5,7 +5,7 @@ export type ShellRequestPayload =
   | { kind: 'write'; shellId: string; data?: string; keys?: string[] }
   | { kind: 'kill'; shellId: string }
   | { kind: 'grant'; shellId: string; reason: string }
-  | { kind: 'propose'; command: string; description: string; secret: boolean }
+  | { kind: 'propose'; command: string; description: string; secret: boolean; noInput: boolean }
 
 type RequestLike = { toolName?: unknown; input?: unknown }
 
@@ -61,6 +61,7 @@ export function shellRequestPayload(request: RequestLike | null | undefined): Sh
         command: typeof input.command === 'string' ? input.command : '',
         description: typeof input.description === 'string' ? input.description : '',
         secret: input.secret === true,
+        noInput: input.interactive === false && input.secret !== true,
       }
     }
   }
@@ -130,6 +131,7 @@ export function shellRequestLines(payload: ShellRequestPayload): string[] {
       return [
         ...payload.command.split('\n').map((line, index) => (index === 0 ? `$ ${line}` : `  ${line}`)),
         ...(payload.secret ? ['reads a secret on stdin'] : []),
+        ...(payload.noInput ? ['takes no input: stdin is empty'] : []),
       ]
     }
   }

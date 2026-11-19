@@ -157,6 +157,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
       attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
       uuid,
       ...(options?.origin ? { origin: options.origin } : {}),
+      ...(options?.synthetic ? { synthetic: true } : {}),
       ...(queued ? { queued: true as const } : {}),
     })
     return uuid

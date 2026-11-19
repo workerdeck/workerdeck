@@ -263,8 +263,9 @@ export function waitForChange(entry: ShellEntry | undefined, timeoutMs: number):
   })
 }
 
-export function sourceFor(entry: ShellEntry, artifact: LiveArtifact): LocalShellSource {
+export function sourceFor(entry: ShellEntry, artifact: LiveArtifact, flush = false): LocalShellSource {
   return {
+    ...(flush ? { flush: true } : {}),
     info: () => entry.info,
     text: () => artifact.text(),
     subscribe: (listener) => {

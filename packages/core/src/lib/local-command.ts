@@ -21,7 +21,9 @@ export type LocalCommandResult = {
   exitCode: number
 }
 
+// `flush`: a proposed shell the agent chose not to wait on (`wait: 'run'`) joins the next flush like a `$`.
 export type LocalShellSource = {
+  flush?: boolean
   info(): ShellInfo
   text(): string
   subscribe(listener: () => void): () => void
@@ -189,7 +191,7 @@ export class LocalCommandQueue {
       const info = { ...input.info() }
       this.#emit(shellInlineText(info, input.text()), uuid, info)
     }
-    if (input.info().owner === 'agent' || input.info().proposed === true) {
+    if ((input.info().owner === 'agent' || input.info().proposed === true) && input.flush !== true) {
       const settle = () => {
         if (input.info().status !== 'running') {
           unsubscribe()

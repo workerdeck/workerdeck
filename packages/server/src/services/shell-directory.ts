@@ -4,16 +4,18 @@ import {
   clampShellTail,
   encodeShellKeys,
   shellOwnershipRefusal,
+  shellExitedText,
   shellSummary,
   shellTail,
   ttyText,
+  type LocalShellSource,
   type Runner,
   type ShellDirectory,
   type ShellReadResult,
   type ShellView,
 } from '@workerdeck/core'
 import { SHELL_READ_MAX_LINES, SHELL_WAIT_DEFAULT_MS, SHELL_WAIT_MAX_MS, type ShellInfo } from '@workerdeck/protocol'
-import type { ShellRegistry, ShellSpawnInput } from './shell-types.ts'
+import type { ShellRegistry, ShellSpawnInput, ShellSpawned } from './shell-types.ts'
 
 // The directory reaches a live runner only to start a shell for it: the record needs the session's cwd and the runner
 // draws the transcript row, exactly as a `$` from the composer does.
@@ -78,13 +80,38 @@ export function createShellDirectory(registry: ShellRegistry, deps: ShellDirecto
         return { ...result, wait: { outcome: 'matched', match, ms } }
       }
       if (taken.info.status !== 'running') {
-        return { ...result, wait: { outcome: 'exited', ms } }
+        return { ...result, wait: { outcome: needles.length === 0 ? 'finished' : 'exited', ms } }
       }
       if (ms >= timeoutMs) {
-        return { ...result, wait: { outcome: 'timeout', ms } }
+        return { ...result, wait: { outcome: needles.length === 0 ? 'running' : 'timeout', ms } }
       }
       await registry.changed(from, shellId, timeoutMs - ms)
     }
+  }
+  // The runner is looked up again at exit: a hot reload or a wake from dormancy may have replaced the one that started it.
+  const wakeOnExit = (from: string, source: LocalShellSource): void => {
+    const shellId = source.info().id
+    let woken = false
+    const wake = (): void => {
+      if (woken || source.info().status === 'running') {
+        return
+      }
+      woken = true
+      unsubscribe()
+      void settle(from, shellId, { view: 'lines' }).then((result) => {
+        const runner = deps.runnerFor?.(from)
+        if (!result || !runner) {
+          return
+        }
+        try {
+          runner.sendMessage(shellExitedText(result), undefined, { synthetic: true })
+        } catch {
+          // A closed session has no one to wake; shell_read still has the result.
+        }
+      })
+    }
+    const unsubscribe = source.subscribe(wake)
+    wake()
   }
   const writable = (from: string, shellId: string): ShellInfo | undefined => {
     const info = registry.get(from, shellId)
@@ -104,10 +131,13 @@ export function createShellDirectory(registry: ShellRegistry, deps: ShellDirecto
       if (!runner || !takesLocalCommands(runner)) {
         throw new Error(SHELL_REFUSAL)
       }
-      const shell = await startShell(registry, { runner, command: options.command, owner: 'agent' })
+      const { shell, source } = await startShell(registry, { runner, command: options.command, owner: 'agent' })
       const result = await settle(from, shell.id, { waitFor: options.waitFor, timeoutMs: options.timeoutMs })
       if (!result) {
         throw new Error(`shell ${shell.id} vanished as it started`)
+      }
+      if (options.wakeOnExit) {
+        wakeOnExit(from, source)
       }
       return result
     },
@@ -144,10 +174,22 @@ export function createShellDirectory(registry: ShellRegistry, deps: ShellDirecto
       if (!runner || !takesLocalCommands(runner)) {
         throw new Error(SHELL_REFUSAL)
       }
-      const shell = await startShell(registry, { runner, command: options.command, owner: 'user', proposed: true, stdin: options.stdin })
-      const result = await settle(from, shell.id, { untilExit: true, view: 'lines', timeoutMs: options.timeoutMs })
+      const detached = options.wait === 'run'
+      const { shell, source } = await startShell(registry, {
+        runner,
+        command: options.command,
+        owner: 'user',
+        proposed: true,
+        stdin: options.stdin,
+        interactive: options.interactive,
+        ...(detached ? { flush: true } : {}),
+      })
+      const result = await settle(from, shell.id, detached ? { view: 'lines' } : { untilExit: true, view: 'lines', timeoutMs: options.timeoutMs })
       if (!result) {
         throw new Error(`shell ${shell.id} vanished as it started`)
+      }
+      if (!detached) {
+        wakeOnExit(from, source)
       }
       return result
     },
@@ -170,13 +212,14 @@ export function takesLocalCommands(runner: Runner): runner is LocalCommandRunner
 }
 
 // queueLocalCommand throws before it pushes, so without the kill the shell would run with no transcript row.
-export async function startShell(registry: ShellRegistry, input: ShellSpawnInput & { runner: LocalCommandRunner }): Promise<ShellInfo> {
-  const { shell, source } = await registry.spawn(input)
+export async function startShell(registry: ShellRegistry, input: ShellSpawnInput & { runner: LocalCommandRunner }): Promise<ShellSpawned> {
+  const spawned = await registry.spawn(input)
+  const { shell, source } = spawned
   try {
     input.runner.queueLocalCommand(source)
   } catch (error) {
     registry.kill(input.runner.id, shell.id)
     throw error
   }
-  return shell
+  return spawned
 }

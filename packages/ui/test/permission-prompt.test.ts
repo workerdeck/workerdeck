@@ -45,7 +45,7 @@ describe('permissionPromptModel', () => {
     const model = permissionPromptModel(
       request({ toolName: 'shell_propose', input: { command: 'make deploy', description: 'ships prod', secret: true }, description: 'ignored' }),
     )
-    expect(model.shell).toEqual({ kind: 'propose', command: 'make deploy', description: 'ships prod', secret: true })
+    expect(model.shell).toEqual({ kind: 'propose', command: 'make deploy', description: 'ships prod', secret: true, noInput: false })
     expect(model.heading).toBe('Agent proposes a command for you to run')
     expect(model.description).toBe('ships prod')
     expect(model.choices.map((c) => c.button)).toEqual(['Run', "Don't run", "Don't run & stop"])

@@ -43,7 +43,7 @@ export type ShellSummary = {
 
 export type ShellView = 'lines' | 'screen'
 
-export type ShellWait = { outcome: 'matched' | 'timeout' | 'exited'; match?: string; ms: number }
+export type ShellWait = { outcome: 'matched' | 'timeout' | 'exited' | 'finished' | 'running'; match?: string; ms: number }
 
 export type ShellReadResult = {
   shell: ShellSummary
@@ -57,15 +57,19 @@ export type ShellReadResult = {
 
 export type ShellReadOptions = { tail?: number; view?: ShellView; waitFor?: string[]; timeoutMs?: number }
 
-export type ShellRunOptions = { command: string; waitFor?: string[]; timeoutMs?: number }
+export type ShellRunOptions = { command: string; waitFor?: string[]; timeoutMs?: number; wakeOnExit?: boolean }
 
 export type ShellWriteOptions = { data?: string; keys?: string[]; waitFor?: string[]; timeoutMs?: number }
 
 export type ShellKillResult = { shell: ShellSummary; killed: boolean }
 
-export type ShellProposeOptions = { command: string; stdin?: string; timeoutMs?: number }
+// `wait: 'run'` returns once the shell starts and its output joins the user's next message, like a `$`; `'exit'` waits,
+// and a command that outlives the wait wakes the session with its result when it ends.
+export type ShellProposeWait = 'exit' | 'run'
 
-export type ShellProposal = { command: string; description: string; secret?: boolean }
+export type ShellProposeOptions = { command: string; stdin?: string; interactive?: boolean; timeoutMs?: number; wait?: ShellProposeWait }
+
+export type ShellProposal = { command: string; description: string; secret?: boolean; interactive?: boolean }
 
 export type ShellProposalVerdict = { allowed: true; command: string; stdin?: string } | { allowed: false; message?: string }
 
@@ -241,6 +245,13 @@ export const SHELL_TOOL_SHAPES = {
         .describe("The command line, run by the user's login shell in the session's working directory"),
       waitFor: waitForShape,
       timeoutMs: timeoutShape,
+      wakeOnExit: z
+        .boolean()
+        .optional()
+        .describe(
+          'Default false. True: when the command ends after this call has returned, you get its exit code and output ' +
+            'tail in a new message, even if your turn is over. For a build or a job you want to follow up on, not a dev server.',
+        ),
     },
   },
   shell_write: {
@@ -309,6 +320,22 @@ export const SHELL_TOOL_SHAPES = {
         .boolean()
         .optional()
         .describe('The command reads a secret on stdin: ask the user for it in a hidden field. Never put a secret in command.'),
+      wait: z
+        .enum(['exit', 'run'])
+        .optional()
+        .describe(
+          "Default 'exit': this call waits for the command to finish (up to timeoutMs); if it runs longer, you get its " +
+            "result in a new message when it ends. 'run': the call returns once the user starts it, and its output reaches " +
+            'you with their next message, like a command they ran themselves. Use run when you do not need to continue ' +
+            'from the result.',
+        ),
+      interactive: z
+        .boolean()
+        .optional()
+        .describe(
+          'Default true: the user can type into the shell while it runs (a y/N prompt, a login). Set false for a command ' +
+            'that needs no input: its stdin is empty, so a prompt fails fast instead of waiting. Ignored with secret.',
+        ),
       timeoutMs: z
         .number()
         .int()
@@ -349,9 +376,10 @@ const SHELL_TOOLS = defineToolFamily<typeof SHELL_TOOL_SHAPES, ShellToolContext 
     }
     return { text: shellReadText(result), isError: false }
   },
-  shell_run: async ({ shells }, from, { command, waitFor, timeoutMs }) => {
-    const result = await shells.run(from, { command, waitFor: needles(waitFor), timeoutMs })
-    return { text: shellReadText(result, 'started'), isError: false }
+  shell_run: async ({ shells }, from, { command, waitFor, timeoutMs, wakeOnExit }) => {
+    const result = await shells.run(from, { command, waitFor: needles(waitFor), timeoutMs, ...(wakeOnExit ? { wakeOnExit: true } : {}) })
+    const wake = wakeOnExit && result.shell.status === 'running' ? `\n${SHELL_WAKE_PROMISE}` : ''
+    return { text: `${shellReadText(result, 'started')}${wake}`, isError: false }
   },
   shell_write: async ({ shells }, from, { shellId, data, keys, waitFor, timeoutMs }) => {
     if (!data && !keys) {
@@ -385,20 +413,23 @@ const SHELL_TOOLS = defineToolFamily<typeof SHELL_TOOL_SHAPES, ShellToolContext 
       isError: false,
     }
   },
-  shell_propose: async ({ shells, gate, signal }, from, { command, description, secret, timeoutMs }) => {
+  shell_propose: async ({ shells, gate, signal }, from, { command, description, secret, interactive, timeoutMs, wait }) => {
     if (!gate) {
       return { text: SHELL_REFUSAL, isError: true }
     }
-    const verdict = await gate({ command, description, ...(secret ? { secret: true } : {}) }, signal)
+    const quiet = interactive === false && !secret
+    const verdict = await gate({ command, description, ...(secret ? { secret: true } : {}), ...(quiet ? { interactive: false } : {}) }, signal)
     if (!verdict.allowed) {
       return { text: shellProposalDeclinedText(verdict.message), isError: false }
     }
     const result = await shells.propose(from, {
       command: verdict.command,
       stdin: verdict.stdin,
+      ...(quiet ? { interactive: false } : {}),
+      ...(wait === 'run' ? { wait: 'run' as const } : {}),
       timeoutMs: timeoutMs ?? SHELL_PROPOSE_WAIT_DEFAULT_MS,
     })
-    return { text: shellProposedText(result, command), isError: false }
+    return { text: shellProposedText(result, command, wait ?? 'exit'), isError: false }
   },
 })
 
@@ -486,9 +517,22 @@ export function shellProposalDeclinedText(message: string | undefined): string {
 }
 
 // The command as run leads when the user edited it, so the agent never reasons about a command that did not run.
-export function shellProposedText(result: ShellReadResult, proposed: string): string {
+export function shellProposedText(result: ShellReadResult, proposed: string, wait: ShellProposeWait = 'exit'): string {
   const edited = result.shell.command === proposed ? '' : `the user edited the command before running it; it ran as: ${result.shell.command}\n`
-  return `${edited}${shellReadText(result, 'run by the user')}`
+  const running = result.shell.status === 'running'
+  const after = !running ? '' : wait === 'run' ? `\n${SHELL_RUN_PROMISE}` : `\n${SHELL_WAKE_PROMISE}`
+  return `${edited}${shellReadText(result, 'run by the user')}${after}`
+}
+
+export const SHELL_WAKE_PROMISE = 'When it ends you get its exit code and output tail in a new message; shell_read follows it meanwhile.'
+
+export const SHELL_RUN_PROMISE = "Its output reaches you with the user's next message; shell_read follows it meanwhile."
+
+// The tag leads the text so a resumed history reads the message as synthetic again (`SYNTHETIC_USER_PREFIXES`).
+export const SHELL_EXITED_TAG = 'shell-exited'
+
+export function shellExitedText(result: ShellReadResult): string {
+  return `<${SHELL_EXITED_TAG}>\n${shellReadText(result)}\n</${SHELL_EXITED_TAG}>\nA shell you were waiting on has ended; continue from its result.`
 }
 
 export function shellWriteDeniedText(name: string, message: string | undefined): string {
@@ -624,6 +668,12 @@ function waitText(wait: ShellWait): string {
     }
     case 'exited': {
       return `the shell ended before the text appeared (${seconds})`
+    }
+    case 'finished': {
+      return `finished in ${seconds}`
+    }
+    case 'running': {
+      return `still running after ${seconds}`
     }
     case 'timeout': {
       return `the text did not appear within ${seconds}`

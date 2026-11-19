@@ -69,8 +69,10 @@ describe('shell_request_write on the card', () => {
 describe('shell proposals', () => {
   it('reads a proposal under either name and draws the command with the secret note', () => {
     const proposal = shellProposalOf({ toolName: 'mcp__workerdeck__shell_propose', input: { command: 'a\nb', description: 'why', secret: true } })
-    expect(proposal).toEqual({ kind: 'propose', command: 'a\nb', description: 'why', secret: true })
+    expect(proposal).toEqual({ kind: 'propose', command: 'a\nb', description: 'why', secret: true, noInput: false })
     expect(shellRequestLines(proposal!)).toEqual(['$ a', '  b', 'reads a secret on stdin'])
+    const quiet = shellProposalOf({ toolName: 'shell_propose', input: { command: 'git log', description: 'why', interactive: false } })
+    expect(shellRequestLines(quiet!)).toEqual(['$ git log', 'takes no input: stdin is empty'])
     expect(shellProposalOf({ toolName: 'shell_run', input: { command: 'x' } })).toBeUndefined()
   })
 
