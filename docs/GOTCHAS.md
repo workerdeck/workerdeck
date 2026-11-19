@@ -3168,6 +3168,12 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   verbatim, routinely API tokens; this route must never become a way to read the operator's
   credentials off their own machine. `args` is forwarded (the operator's own client shows it), so
   keep secrets out of argv, not out of this response. A server test asserts both omissions.
+- **Claude gets its MCP servers over stdin, not argv (`mcpServersDelivery: 'initialize'`).** Set at
+  both `query()` sites (the runner and the `supportedModels` probe) so a stdio server's `env` and an
+  HTTP server's `headers` never land in `--mcp-config` where `ps` shows them. The cost: a host-set
+  `pathToClaudeCodeExecutable` older than the SDK's bundled Claude Code exits at startup or has its
+  session ended with an error naming the option; `extraOptions: { mcpServersDelivery: 'argv' }` is
+  the escape hatch.
 - **Tool parameters are engine-dependent, and both halves must be said.** The Agent SDK's status
   payload names and describes each tool with no input schema; codex's `mcpServerStatus/list`
   returns the full JSON Schema per tool. `McpServerToolInfo.inputSchema` is optional; the "not
