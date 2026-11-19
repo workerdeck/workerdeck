@@ -384,9 +384,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   store (file vs OS keyring) is chosen by config inside the home, not by whether `CODEX_HOME` is
   set, so pinning the default home stays harmless. No analogue of `claudeSessionEnv`'s skip exists.
   Whether a keyring login is scoped per-home or per-user is unverified.
-- `@openai/codex` is pinned to an exact minor (`~0.166.0`; pre-1.0, JSON-RPC schema regenerates per
-  release). It's an optional peer of core (`>=0.149.0 <0.167.0`: 0.149.0 is the oldest binary the runner
-  was verified against and the ceiling admits the `~0.166.0` the CLI ships and core develops
+- `@openai/codex` is pinned to an exact minor (`~0.170.0`; pre-1.0, JSON-RPC schema regenerates per
+  release). It's an optional peer of core (`>=0.149.0 <0.171.0`: 0.149.0 is the oldest binary the runner
+  was verified against and the ceiling admits the `~0.170.0` the CLI ships and core develops
   against; a `~` range there once excluded exactly that version; absent -> profiles report unavailable,
   creates throw the install message) and a real dependency of the CLI. The runner drives the binary
   directly with no SDK in between (`@openai/codex-sdk` is exec-only, no app-server client), resolved
@@ -3184,6 +3184,12 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   verbatim, routinely API tokens; this route must never become a way to read the operator's
   credentials off their own machine. `args` is forwarded (the operator's own client shows it), so
   keep secrets out of argv, not out of this response. A server test asserts both omissions.
+- **Claude gets its MCP servers over stdin, not argv (`mcpServersDelivery: 'initialize'`).** Set at
+  both `query()` sites (the runner and the `supportedModels` probe) so a stdio server's `env` and an
+  HTTP server's `headers` never land in `--mcp-config` where `ps` shows them. The cost: a host-set
+  `pathToClaudeCodeExecutable` older than the SDK's bundled Claude Code exits at startup or has its
+  session ended with an error naming the option; `extraOptions: { mcpServersDelivery: 'argv' }` is
+  the escape hatch.
 - **Tool parameters are engine-dependent, and both halves must be said.** The Agent SDK's status
   payload names and describes each tool with no input schema; codex's `mcpServerStatus/list`
   returns the full JSON Schema per tool. `McpServerToolInfo.inputSchema` is optional; the "not

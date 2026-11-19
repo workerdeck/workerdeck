@@ -24,12 +24,12 @@
     "@workerdeck/ui": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "lucide-react": "^1.70.0",
+    "lucide-react": "^1.75.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "rimraf": "^6.1.4",
     "tailwindcss": "^4.3.5",
-    "vite": "^8.3.7",
-    "vitest": "^5.1.0"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   }
 }

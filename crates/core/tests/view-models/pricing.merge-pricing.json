@@ -196,6 +196,20 @@
           "cacheWrite1h": 2,
           "cacheRead": 0.1
         },
+        "gpt-6.2-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
+        "gpt-6.2-astra": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 8,
+          "cacheWrite1h": 8,
+          "cacheRead": 0.4
+        },
         "gpt-6.1-sol": {
           "input": 2,
           "output": 10,
@@ -426,6 +440,20 @@
           "cacheWrite5m": 1.25,
           "cacheWrite1h": 2,
           "cacheRead": 0.1
+        },
+        "gpt-6.2-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
+        "gpt-6.2-astra": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 8,
+          "cacheWrite1h": 8,
+          "cacheRead": 0.4
         },
         "gpt-6.1-sol": {
           "input": 2,
@@ -671,6 +699,20 @@
           "cacheWrite5m": 1.25,
           "cacheWrite1h": 2,
           "cacheRead": 0.1
+        },
+        "gpt-6.2-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
+        "gpt-6.2-astra": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 8,
+          "cacheWrite1h": 8,
+          "cacheRead": 0.4
         },
         "gpt-6.1-sol": {
           "input": 2,
@@ -900,6 +942,20 @@
           "cacheWrite1h": 2,
           "cacheRead": 0.1
         },
+        "gpt-6.2-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
+        "gpt-6.2-astra": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 8,
+          "cacheWrite1h": 8,
+          "cacheRead": 0.4
+        },
         "gpt-6.1-sol": {
           "input": 2,
           "output": 10,
@@ -1122,6 +1178,20 @@
           "cacheWrite5m": 1.25,
           "cacheWrite1h": 2,
           "cacheRead": 0.1
+        },
+        "gpt-6.2-sol": {
+          "input": 2,
+          "output": 10,
+          "cacheWrite5m": 2,
+          "cacheWrite1h": 2,
+          "cacheRead": 0.1
+        },
+        "gpt-6.2-astra": {
+          "input": 8,
+          "output": 40,
+          "cacheWrite5m": 8,
+          "cacheWrite1h": 8,
+          "cacheRead": 0.4
         },
         "gpt-6.1-sol": {
           "input": 2,

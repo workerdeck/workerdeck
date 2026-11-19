@@ -94,8 +94,8 @@ describe('model catalogs', () => {
     }
   })
 
-  // The raw `supportedModels()` extraction the claude catalog was generated from (2026-11-10,
-  // SDK 0.3.321), replayed through the live shaping rules.
+  // The raw `supportedModels()` extraction the claude catalog was generated from (2026-11-19,
+  // SDK 0.3.328, account-gated Mythos rows left out), replayed through the live shaping rules.
   const RAW_CLAUDE: SdkModelInfo[] = [
     {
       value: 'default',
@@ -217,12 +217,14 @@ describe('model catalogs', () => {
   it('codex catalog primary split mirrors the binary’s own picker visibility', () => {
     const primary = CODEX_CATALOG.models.filter((m) => m.primary).map((m) => m.value)
     expect(primary).toEqual([
-      'gpt-6.1-sol',
+      'gpt-6.2-sol',
+      'gpt-6.2-astra',
       'gpt-6-astra',
+      'gpt-6.1-sol',
+      'gpt-6.1-terra',
       'gpt-6-sol',
       'gpt-6-luna',
       'gpt-5.6-sol',
-      'gpt-6.1-terra',
       'gpt-5.6-terra',
       'gpt-5.6-luna',
       'gpt-5.5',

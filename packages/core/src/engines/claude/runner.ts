@@ -900,6 +900,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       allowedTools: this.#allowedTools(),
       disallowedTools: c.disallowedTools,
       mcpServers: this.#mcpServersOption(),
+      mcpServersDelivery: 'initialize',
       settingSources: c.settingSources,
       model: c.model,
       maxTurns: c.maxTurns,

@@ -19,6 +19,7 @@ export async function probeClaudeModels(
       env: withoutGatewaySecrets(env),
       pathToClaudeCodeExecutable: options.executable,
       mcpServers: {},
+      mcpServersDelivery: 'initialize',
       strictMcpConfig: true,
       abortController: abort,
     },

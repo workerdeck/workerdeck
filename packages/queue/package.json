@@ -28,11 +28,11 @@
     "@workerdeck/protocol": "workspace:*"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.321",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.328",
     "@types/node": "^26.6.6",
     "rimraf": "^6.1.4",
     "tsdown": "^0.23.7",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   },
   "author": "Tobias Strebitzer",
   "repository": {

@@ -47,9 +47,9 @@
     "@workerdeck/react": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.70.0",
+    "lucide-react": "^1.75.0",
     "sonner": "^2.0.8",
-    "streamdown": "^2.7.1",
+    "streamdown": "^2.8.0",
     "tailwind-merge": "^3.7.0",
     "use-stick-to-bottom": "^1.1.6"
   },
@@ -74,7 +74,7 @@
   "devDependencies": {
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
-    "@storybook/react-vite": "^10.6.6",
+    "@storybook/react-vite": "^10.6.7",
     "@tailwindcss/postcss": "^4.3.5",
     "@tailwindcss/vite": "^4.3.5",
     "@types/node": "^26.6.6",
@@ -84,16 +84,16 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "monaco-editor": "^0.57.0",
-    "postcss": "^8.5.32",
-    "postcss-selector-parser": "^7.2.0",
+    "postcss": "^8.5.33",
+    "postcss-selector-parser": "^7.2.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "rimraf": "^6.1.4",
-    "storybook": "^10.6.6",
+    "storybook": "^10.6.7",
     "tailwindcss": "^4.3.5",
     "tsdown": "^0.23.7",
-    "vite": "^8.3.7",
-    "vitest": "^5.1.0"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   },
   "author": "Tobias Strebitzer",
   "repository": {
