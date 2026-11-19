@@ -2,7 +2,7 @@ use crate::rest::{ByModel, CostBasis, Entries, TokenUsage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PRICING_AS_OF: &str = "2026-11-10";
+pub const PRICING_AS_OF: &str = "2026-11-19";
 pub const PRICING_SOURCES: &str = "platform.claude.com and developers.openai.com list prices, bundled";
 pub const UNPRICED_WARN_SHARE: f64 = 0.005;
 pub const PRICING_STALE_DAYS: i64 = 90;
@@ -86,6 +86,8 @@ pub fn default_pricing() -> PricingTable {
         ("claude-sonnet-4-5", anthropic(3.0, 15.0, None)),
         ("claude-haiku-5-5", anthropic(0.1, 0.5, None)),
         ("claude-haiku-4-5", anthropic(1.0, 5.0, None)),
+        ("gpt-6.2-sol", openai(2.0, 10.0, 0.1)),
+        ("gpt-6.2-astra", openai(8.0, 40.0, 0.4)),
         ("gpt-6.1-sol", openai(2.0, 10.0, 0.1)),
         ("gpt-6.1-terra", openai(1.0, 5.0, 0.05)),
         ("gpt-6-astra", openai(10.0, 50.0, 1.0)),

@@ -13,6 +13,13 @@ gateway and protocol it talks to.
   at the end of its current turn and can hand it a first message, which arrives as a message from
   the lead, never as yours. It is refused while the member waits on an approval or on you, or has a
   running shell, and it shares the member's own reset limits.
+- **GPT-6.2 Sol and GPT-6.2 Astra.** Codex sessions offer both, with GPT-6.2 Sol as the new
+  default, and both are priced in the cost and usage meters.
+
+### Changed
+
+- **Requires VS Code 1.146 or newer.**
+- Claude sessions run on Claude Code 2.1.328 (agent SDK 0.3.328), Codex sessions on codex 0.170.
 
 ## [4.5.0] - 2026-11-10
 

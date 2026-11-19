@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",
-    "astro": "^7.4.8",
+    "astro": "^7.4.13",
     "rimraf": "^6.1.4",
     "tailwindcss": "^4.3.5"
   }

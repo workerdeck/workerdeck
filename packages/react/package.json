@@ -48,8 +48,8 @@
     "react": "^19.3.1",
     "rimraf": "^6.1.4",
     "tsdown": "^0.23.7",
-    "vitest": "^5.1.0",
-    "ws": "^8.22.2"
+    "vitest": "^5.1.1",
+    "ws": "^8.23.0"
   },
   "author": "Tobias Strebitzer",
   "repository": {

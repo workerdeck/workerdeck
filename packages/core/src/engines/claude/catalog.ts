@@ -1,7 +1,7 @@
 import type { ModelCatalog } from '../adapter.ts'
 
 export const CLAUDE_CATALOG: ModelCatalog = {
-  provenance: 'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.321 (Claude Code CLI), extracted 2026-11-10',
+  provenance: 'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.328 (Claude Code CLI), extracted 2026-11-19',
   defaultModel: 'claude-opus-5-5',
   models: [
     {
