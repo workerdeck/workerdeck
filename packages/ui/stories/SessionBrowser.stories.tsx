@@ -253,14 +253,13 @@ function applyMove(rows: SessionRow[], move: TeamMove): SessionRow[] {
   })
 }
 
-function DraggableTeams() {
+function DraggableTeams({ initial = { groupBy: 'none' } }: { initial?: Partial<ViewConfig> }) {
   const [rows, setRows] = useState(TEAM_ROWS)
   return (
     <Browser
       rows={rows}
-     
       showControls={false}
-      initial={{ groupBy: 'none' }}
+      initial={initial}
       onTeamMove={(move) => {
         if (move.row.info.id === 't5') {
           throw new Error('Marlow is busy; try again when the turn ends')
@@ -272,6 +271,25 @@ function DraggableTeams() {
 }
 
 export const TeamsDrag: Story = { render: () => <DraggableTeams /> }
+
+export const TeamsDragCustom: Story = {
+  render: () => (
+    <DraggableTeams
+      initial={{
+        groupBy: 'custom',
+        customGroups: [
+          { id: 'focus', name: 'Focus', members: ['local:t1', 'local:t5'] },
+          { id: 'later', name: 'Later', members: ['local:t8'] },
+          { id: 'empty', name: 'Empty', members: [] },
+        ],
+      }}
+    />
+  ),
+}
+
+export const ProjectsDrag: Story = {
+  render: () => <Browser rows={GATEWAY_ROWS} showControls={false} initial={{ groupBy: 'project' }} />,
+}
 
 export const Heading: Story = {
   render: () => (

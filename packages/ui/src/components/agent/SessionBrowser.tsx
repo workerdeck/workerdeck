@@ -1,6 +1,20 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { BedDouble, ChevronDown, ChevronRight, ChevronUp, FolderOpen, Layers, Pencil, Plus, RotateCcw, Search, SearchX, Trash2, X } from 'lucide-react'
+import {
+  BedDouble,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  FolderOpen,
+  Layers,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  SearchX,
+  Trash2,
+  X,
+} from 'lucide-react'
 import {
   clearFilters,
   filterRows,
@@ -17,7 +31,13 @@ import {
   toggleTeamExpanded,
   expandedStepsOf,
   isGroupCollapsed,
-  moveGroup,
+  addCustomGroup,
+  moveCustomGroup,
+  moveToCustomGroup,
+  newCustomGroupId,
+  removeCustomGroup,
+  renameCustomGroup,
+  styleCustomGroup,
   orderGroups,
   orderedGroupBy,
   toggleGroupCollapsed,
@@ -47,8 +67,10 @@ import { MemberCard } from './MemberCard.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionFilters } from './SessionFilters.tsx'
 import { SessionItem, type SelectModifiers } from './SessionItem.tsx'
-import { CustomGroupHeader, FacetGroupHeader, HeadingAction, NewGroupButton, useGroupDrag, type DropCue } from './SessionGroups.tsx'
-import type { TeamMove } from '../../lib/team-drop.ts'
+import { CustomGroupHeader, FacetGroupHeader, HeadingAction, NewGroupButton } from './SessionGroups.tsx'
+import { useListDrag, type DragCue, type DragItem } from './use-list-drag.tsx'
+import { joinDrop, memberDrop, type TeamMove } from '../../lib/team-drop.ts'
+import { groupSlot, placeGroup, sameSlot, sessionTarget, type DragTarget, type Slot } from '../../lib/row-drag.ts'
 import { cn } from '../../lib/utils.ts'
 
 export { SessionStatusIcon } from './SessionStatusIcon.tsx'
@@ -86,7 +108,7 @@ export interface SessionBrowserProps {
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
   // A "Conversations" link on an agent's hover card.
   onAgentConversations?: (row: SessionRow) => void
-  // Makes cards draggable onto each other: the middle of a card joins its team, a member dropped outside leaves.
+  // Makes cards draggable onto each other: the middle of an agent's card joins its team, a member dragged out of its team leaves.
   // Reject with an Error to draw its message under the card.
   onTeamMove?: (move: TeamMove) => Promise<void> | void
   // Each gateway's `GatewayMeta.relay` by host id: draws a member under a lead on another gateway, and allows the drop.
@@ -174,13 +196,131 @@ export function SessionBrowser({
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
   const byKey = useMemo(() => new Map(rows.map((row) => [sessionKey(row), row])), [rows])
   const ordered = orderedGroupBy(config.groupBy)
-  const drag = useGroupDrag(config.customGroups ?? [], (customGroups) => set({ customGroups }), {
-    custom,
-    team: onTeamMove ? { rowOf: (key) => byKey.get(key), onMove: onTeamMove, relays } : undefined,
-    order: ordered ? (key, onto) => onConfigChange(moveGroup(config, groups, key, onto)) : undefined,
+  const customGroups = config.customGroups ?? []
+  const setCustom = (next: ViewConfig['customGroups']) => set({ customGroups: next })
+  const groupByLane = new Map(groups.map((group) => [laneOf(group), group]))
+  const groupByDragKey = new Map(groups.map((group) => [groupDragKey(group), group]))
+
+  const move = (key: string, next: TeamMove) => {
+    drag.clearFailure()
+    void Promise.resolve()
+      .then(() => onTeamMove!(next))
+      .catch((err: unknown) => drag.fail(key, err))
+  }
+
+  const resolveSession = (
+    item: Extract<DragItem, { kind: 'session' }>,
+    rowsAt: Parameters<typeof sessionTarget>[0],
+    y: number,
+    current: DragTarget,
+    origin: Slot,
+    team?: { top: number; bottom: number },
+  ) => {
+    const dragged = byKey.get(item.key)
+    const joinable = (target: string) => {
+      const lead = byKey.get(target)
+      if (!onTeamMove || !dragged || !lead?.info.agent) {
+        return undefined
+      }
+      const result = joinDrop(dragged, lead, relays)
+      return typeof result === 'string' ? result : true
+    }
+    const leadLane = item.lead ? rowsAt.find((row) => row.key === item.lead)?.lane : undefined
+    return sessionTarget(rowsAt, y, current, {
+      dragged: item.key,
+      origin,
+      reorder: custom,
+      joinable,
+      team: item.lead && team && leadLane ? { lane: teamLane(item.lead), lead: item.lead, leadLane, ...team } : undefined,
+    })
+  }
+
+  const commitGroup = (key: string, slot: Slot) => {
+    const before = slot.before === undefined ? undefined : groupByDragKey.get(slot.before)
+    const moving = groupByDragKey.get(key)
+    if (!moving) {
+      return
+    }
+    if (custom) {
+      if (moving.custom !== undefined) {
+        setCustom(moveCustomGroup(customGroups, moving.custom, before?.custom))
+      }
+      return
+    }
+    onConfigChange(placeGroup(config, groups, moving.key, before && !before.earlier ? before.key : undefined))
+  }
+
+  const commitSession = (item: Extract<DragItem, { kind: 'session' }>, target: DragTarget, origin: Slot) => {
+    const dragged = byKey.get(item.key)
+    if (!dragged || target.refusal) {
+      return
+    }
+    if (target.join) {
+      const lead = byKey.get(target.join)
+      const result = lead && joinDrop(dragged, lead, relays)
+      if (result && typeof result !== 'string') {
+        move(target.join, result)
+      }
+      return
+    }
+    const group = groupByLane.get(target.slot.lane)
+    const place = () => group && setCustom(moveToCustomGroup(customGroups, item.key, group.custom, target.slot.before))
+    if (item.lead && target.leave) {
+      move(item.key, { row: dragged, lead: null })
+      if (custom) {
+        place()
+      }
+      return
+    }
+    if (sameSlot(target.slot, origin)) {
+      return
+    }
+    const lead = item.lead ? byKey.get(item.lead) : undefined
+    if (lead && target.slot.lane === teamLane(item.lead!)) {
+      const before = target.slot.before ? byKey.get(target.slot.before) : undefined
+      const result = memberDrop(dragged, lead, before ?? lead, 'before', relays)
+      if (typeof result === 'string') {
+        drag.fail(item.key, new Error(result))
+      } else {
+        move(item.key, result)
+      }
+      return
+    }
+    if (custom) {
+      place()
+    }
+  }
+
+  const drag = useListDrag({
+    resolve: (item, geometry, y, current, origin) =>
+      item.kind === 'group'
+        ? { slot: groupSlot(geometry.rows, y, current.slot, item.key) }
+        : resolveSession(item, geometry.rows, y, current, origin, geometry.team),
+    commit: (item, target, origin) => (item.kind === 'group' ? commitGroup(item.key, target.slot) : commitSession(item, target, origin)),
   })
-  const draggable = custom || ordered || onTeamMove !== undefined
-  const folded = (group: SessionGroup) => !group.earlier && config.groupBy !== 'none' && isGroupCollapsed(config, group)
+  const groupDrag = drag.active?.kind === 'group'
+  const sessionDrag = drag.active?.kind === 'session' ? drag.active : undefined
+  const groupDraggable = (group: SessionGroup) => (custom ? group.custom !== undefined : ordered && !group.earlier)
+  const folded = (group: SessionGroup) => groupDrag || (!group.earlier && config.groupBy !== 'none' && isGroupCollapsed(config, group))
+  const headingDrag = (group: SessionGroup): HTMLAttributes<HTMLElement> => {
+    if (sessionDrag) {
+      return custom ? drag.row(`head:${group.key}`, laneOf(group), 'heading') : {}
+    }
+    const pinned = group.earlier || (custom && group.custom === undefined)
+    return {
+      ...drag.row(groupDragKey(group), GROUPS_LANE, pinned ? 'pinned' : 'row'),
+      ...(groupDraggable(group) ? drag.grip({ kind: 'group', key: groupDragKey(group) }) : {}),
+    }
+  }
+  const viewOf = (row: SessionRow): TeamView => {
+    const members = row.members ?? []
+    if (sessionDrag) {
+      return sessionDrag.lead === sessionKey(row)
+        ? { expanded: true, shown: members, tray: [] }
+        : { expanded: false, shown: [], tray: members }
+    }
+    return views.get(sessionKey(row)) ?? { expanded: false, shown: members, tray: [] }
+  }
 
   const heading = (group: SessionGroup) => {
     if (custom) {
@@ -188,13 +328,14 @@ export function SessionBrowser({
         <CustomGroupHeader
           group={group}
           look={config.customGroups?.find((stored) => stored.id === group.custom)}
-          onStyle={(look) => group.custom && drag.style(group.custom, look)}
+          onStyle={(look) => group.custom && setCustom(styleCustomGroup(customGroups, group.custom, look))}
           editing={group.custom !== undefined && editingGroup === group.custom}
           onEditingChange={(editing) => setEditingGroup(editing ? group.custom : undefined)}
-          onRename={(name) => group.custom && drag.rename(group.custom, name)}
-          onRemove={() => group.custom && drag.remove(group.custom)}
-          dragProps={drag.header(group)}
-          collapsed={isGroupCollapsed(config, group)}
+          onRename={(name) => group.custom && setCustom(renameCustomGroup(customGroups, group.custom, name))}
+          onRemove={() => group.custom && setCustom(removeCustomGroup(customGroups, group.custom))}
+          dragProps={headingDrag(group)}
+          draggable={groupDraggable(group)}
+          collapsed={folded(group)}
           onToggleCollapsed={() => onConfigChange(toggleGroupCollapsed(config, group))}
         />
       )
@@ -203,6 +344,7 @@ export function SessionBrowser({
       return (
         <button
           type="button"
+          {...headingDrag(group)}
           aria-expanded={config.earlierOpen === true}
           onClick={() => set({ earlierOpen: !config.earlierOpen })}
           className="flex items-center gap-1 px-2 text-left text-label text-fg-4 hover:text-fg-2"
@@ -237,8 +379,9 @@ export function SessionBrowser({
             </HeadingAction>
           ) : undefined
         }
-        dragProps={drag.header(group)}
-        collapsed={isGroupCollapsed(config, group)}
+        dragProps={headingDrag(group)}
+        draggable={groupDraggable(group)}
+        collapsed={folded(group)}
         onToggleCollapsed={() => onConfigChange(toggleGroupCollapsed(config, group))}
       />
     )
@@ -290,94 +433,158 @@ export function SessionBrowser({
           <Empty icon={<Layers />} title="Nothing here" description="No session to show." />
         )
       ) : (
-        <div className="flex flex-col gap-2 px-1">
-          {groups.map((group) => (
-            <div
-              key={group.key}
-              {...(draggable ? drag.container(group) : {})}
-              className={cn('flex flex-col gap-1 rounded-md', draggable && drag.isOver(`group:${group.key}`) && 'bg-row-hover/50')}
-            >
-              {heading(group)}
-              {folded(group) ? null : custom && group.custom !== undefined && group.rows.length === 0 ? (
-                <div className="mx-1 rounded-md border border-dashed border-border px-2 py-2 text-center text-label text-fg-4">
-                  Drag sessions here
+        <div ref={drag.root} className={cn('relative flex flex-col gap-2 px-1', drag.active && 'pointer-events-none')}>
+          {groups.map((group) => {
+            const lane = laneOf(group)
+            const hidden = (group.earlier && !config.earlierOpen) || folded(group)
+            const item = (
+              member: SessionRow,
+              variant: 'card' | 'member',
+              lead: SessionRow | undefined,
+              extra: Partial<SessionRowItemProps> = {},
+            ) => {
+              const key = sessionKey(member)
+              const grabbable = onTeamMove !== undefined || (custom && variant === 'card')
+              const handles = grabbable
+                ? {
+                    ...(lead ? drag.box(key) : member.members?.length ? {} : drag.box(key)),
+                    ...drag.row(key, lead ? teamLane(sessionKey(lead)) : lane),
+                    ...drag.grip({ kind: 'session', key, lead: lead && sessionKey(lead) }),
+                  }
+                : undefined
+              return (
+                <SessionRowItem
+                  key={key}
+                  dragProps={handles}
+                  dropCue={drag.cue(key)}
+                  nameOf={(other) => {
+                    const row = byKey.get(other)
+                    return row ? (row.info.agent?.name ?? sessionLabel(row.info)) : other
+                  }}
+                  row={member}
+                  variant={variant}
+                  active={isActive(member)}
+                  activeSubagentId={activeSubagentId}
+                  activeShellId={activeShellId}
+                  actions={rowActions?.(member)}
+                  now={now}
+                  showTime={showTime}
+                  rootAttributes={rowAttributes?.(member)}
+                  showGateway={gateways > 1 && config.groupBy !== 'project'}
+                  showProject={config.groupBy !== 'project'}
+                  subagents={config.subagents}
+                  shells={config.shells}
+                  tasks={config.tasks}
+                  expandedSteps={expandedStepsOf(config, member)}
+                  onToggleSteps={(kind) => onConfigChange(toggleStepsExpanded(config, member, kind))}
+                  projectIcons={projectIcons}
+                  tile={tiles}
+                  onSelect={onSelect}
+                  onDelete={onDelete}
+                  onRename={member.info.agent ? onRenameAgent : onRename}
+                  onNewConversation={onNewConversation}
+                  onSleep={onSleep}
+                  onSelectSubagent={onSelectSubagent}
+                  onSelectTask={onSelectTask}
+                  onStopTask={onStopTask}
+                  onSelectShell={onSelectShell}
+                  onKillShell={onKillShell}
+                  onShellAgentWrite={onShellAgentWrite}
+                  {...extra}
+                />
+              )
+            }
+            const emptyBox =
+              !groupDrag &&
+              custom &&
+              group.custom !== undefined &&
+              group.rows.length === 0 &&
+              !hidden &&
+              drag.active?.target?.slot.lane !== lane
+            return (
+              <Fragment key={group.key}>
+                {drag.spacer(GROUPS_LANE, groupDragKey(group))}
+                <div {...drag.box(groupDragKey(group))} className={cn('flex flex-col gap-1 rounded-md', LIFTED)}>
+                  {heading(group)}
+                  {!emptyBox ? null : (
+                    <div
+                      {...(sessionDrag ? drag.row(`empty:${group.key}`, lane, 'empty') : {})}
+                      className="mx-1 rounded-md border border-dashed border-border px-2 py-2 text-center text-label text-fg-4"
+                    >
+                      Drag sessions here
+                    </div>
+                  )}
+                  {hidden
+                    ? null
+                    : group.rows.map((row) => {
+                        const key = sessionKey(row)
+                        if (!row.members?.length) {
+                          return (
+                            <Fragment key={key}>
+                              {drag.spacer(lane, key)}
+                              {item(row, 'card', undefined, { className: row.context ? 'opacity-50' : undefined })}
+                            </Fragment>
+                          )
+                        }
+                        const view = viewOf(row)
+                        const nested = view.shown.length > 0
+                        const leadActive = isActive(row)
+                        return (
+                          <Fragment key={key}>
+                            {drag.spacer(lane, key)}
+                            <TeamBlock
+                              lead={row}
+                              view={view}
+                              boxProps={onTeamMove || custom ? drag.box(key) : {}}
+                              spacer={(before) => drag.spacer(teamLane(key), before)}
+                              onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
+                              onSelectMember={(member) => onSelect?.(member, { meta: false, ctrl: false, alt: false })}
+                              onConversations={onAgentConversations}
+                              renderLead={(tray) =>
+                                item(row, 'card', undefined, {
+                                  className: cn(row.context && 'opacity-50', nested && !leadActive && 'hover:bg-transparent'),
+                                  teamTray: tray,
+                                })
+                              }
+                              renderMember={(member) => item(member, 'member', row)}
+                            />
+                          </Fragment>
+                        )
+                      })}
+                  {groupDrag ? null : drag.spacer(lane, undefined)}
                 </div>
-              ) : null}
-              {(group.earlier && !config.earlierOpen) || folded(group)
-                ? null
-                : group.rows.map((row) => {
-                    const item = (member: SessionRow, variant: 'card' | 'member', extra: Partial<SessionRowItemProps> = {}) => (
-                      <SessionRowItem
-                        key={sessionKey(member)}
-                        dragProps={
-                          onTeamMove || (custom && variant === 'card')
-                            ? drag.session(sessionKey(member), group, variant === 'member' ? { row: member, lead: row } : { row })
-                            : undefined
-                        }
-                        dropCue={draggable ? drag.cue(sessionKey(member)) : undefined}
-                        row={member}
-                        variant={variant}
-                        active={isActive(member)}
-                        activeSubagentId={activeSubagentId}
-                        activeShellId={activeShellId}
-                        actions={rowActions?.(member)}
-                        now={now}
-                        showTime={showTime}
-                        rootAttributes={rowAttributes?.(member)}
-                        showGateway={gateways > 1 && config.groupBy !== 'project'}
-                        showProject={config.groupBy !== 'project'}
-                        subagents={config.subagents}
-                        shells={config.shells}
-                        tasks={config.tasks}
-                        expandedSteps={expandedStepsOf(config, member)}
-                        onToggleSteps={(kind) => onConfigChange(toggleStepsExpanded(config, member, kind))}
-                        projectIcons={projectIcons}
-                        tile={tiles}
-                        onSelect={onSelect}
-                        onDelete={onDelete}
-                        onRename={member.info.agent ? onRenameAgent : onRename}
-                        onNewConversation={onNewConversation}
-                        onSleep={onSleep}
-                        onSelectSubagent={onSelectSubagent}
-                        onSelectTask={onSelectTask}
-                        onStopTask={onStopTask}
-                        onSelectShell={onSelectShell}
-                        onKillShell={onKillShell}
-                        onShellAgentWrite={onShellAgentWrite}
-                        {...extra}
-                      />
-                    )
-                    if (!row.members?.length) {
-                      return item(row, 'card', { className: row.context ? 'opacity-50' : undefined })
-                    }
-                    const view = views.get(sessionKey(row)) ?? { expanded: false, shown: row.members, tray: [] }
-                    const nested = view.shown.length > 0
-                    const leadActive = isActive(row)
-                    return (
-                      <TeamBlock
-                        key={sessionKey(row)}
-                        lead={row}
-                        view={view}
-                        onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
-                        onSelectMember={(member) => onSelect?.(member, { meta: false, ctrl: false, alt: false })}
-                        onConversations={onAgentConversations}
-                        renderLead={(tray) =>
-                          item(row, 'card', {
-                            className: cn(row.context && 'opacity-50', nested && !leadActive && 'hover:bg-transparent'),
-                            teamTray: tray,
-                          })
-                        }
-                        renderMember={(member) => item(member, 'member')}
-                      />
-                    )
-                  })}
-            </div>
-          ))}
-          {custom ? <NewGroupButton onClick={() => setEditingGroup(drag.create())} /> : null}
+              </Fragment>
+            )
+          })}
+          {drag.spacer(GROUPS_LANE, undefined)}
+          {custom ? (
+            <NewGroupButton
+              onClick={() => {
+                const id = newCustomGroupId()
+                setCustom(addCustomGroup(customGroups, 'New group', id))
+                setEditingGroup(id)
+              }}
+            />
+          ) : null}
         </div>
       )}
     </div>
   )
+}
+
+const GROUPS_LANE = 'groups'
+const LIFTED = 'data-[drag-lifted]:bg-surface data-[drag-lifted]:shadow-lg data-[drag-lifted]:ring-1 data-[drag-lifted]:ring-border'
+
+function laneOf(group: SessionGroup): string {
+  return `group:${group.key}`
+}
+
+function groupDragKey(group: SessionGroup): string {
+  return `group:${group.key}`
+}
+
+function teamLane(lead: string): string {
+  return `team:${lead}`
 }
 
 function iconSrcOf(row: SessionRow | undefined, icons: Record<string, string> | undefined): string | undefined {
@@ -391,8 +598,9 @@ interface SessionRowItemProps {
   teamTray?: ReactNode
   tile?: boolean
   className?: string
-  dragProps?: HTMLAttributes<HTMLDivElement>
-  dropCue?: DropCue
+  dragProps?: HTMLAttributes<HTMLElement>
+  dropCue?: DragCue
+  nameOf?: (key: string) => string
   active?: boolean
   actions?: ReactNode
   activeSubagentId?: string
@@ -429,6 +637,7 @@ function SessionRowItem({
   className,
   dragProps,
   dropCue,
+  nameOf,
   active,
   actions,
   activeSubagentId,
@@ -526,7 +735,8 @@ function SessionRowItem({
       }
     />
   )
-  if (!dragProps) {
+  const badge = dropCue?.badge
+  if (!dragProps && !dropCue?.zone && !badge) {
     return item
   }
   const zone = dropCue?.zone
@@ -536,13 +746,24 @@ function SessionRowItem({
       title={zone === 'refused' ? dropCue?.message : undefined}
       className={cn(
         'rounded-md',
-        zone === 'before' && 'shadow-[inset_0_2px_0_0_var(--color-accent)]',
-        zone === 'after' && 'shadow-[inset_0_-2px_0_0_var(--color-accent)]',
+        LIFTED,
         zone === 'join' && 'bg-accent/10 ring-1 ring-accent',
         zone === 'refused' && 'ring-1 ring-danger/60',
+        (badge?.join || badge?.message) && 'opacity-85',
       )}
     >
       {item}
+      {badge ? (
+        <span
+          role="status"
+          className={cn(
+            'pointer-events-none absolute -top-2 right-2 z-10 max-w-[calc(100%-1rem)] truncate rounded-sm px-1.5 text-label leading-4 shadow-sm',
+            badge.tone === 'danger' ? 'bg-danger text-white' : 'bg-accent text-accent-fg',
+          )}
+        >
+          {badge.message ?? (badge.join ? `Join ${nameOf?.(badge.join) ?? 'team'}` : 'Leave team')}
+        </span>
+      ) : null}
       {zone === 'refused' && dropCue?.message ? (
         <div role="status" className="px-3 pb-1 text-label text-danger">
           {dropCue.message}
@@ -560,6 +781,8 @@ const TRAY_MAX = 4
 function TeamBlock({
   lead,
   view,
+  boxProps,
+  spacer,
   onToggle,
   onSelectMember,
   onConversations,
@@ -568,6 +791,8 @@ function TeamBlock({
 }: {
   lead: SessionRow
   view: TeamView
+  boxProps: HTMLAttributes<HTMLElement>
+  spacer: (before: string | undefined) => ReactNode
   onToggle: () => void
   onSelectMember: (member: SessionRow) => void
   onConversations?: (member: SessionRow) => void
@@ -651,16 +876,22 @@ function TeamBlock({
   const nested = view.shown.length > 0
   return (
     <div
+      {...boxProps}
       data-slot="team"
+      data-drag-team={sessionKey(lead)}
       data-expanded={view.expanded || undefined}
-      className={cn('flex flex-col rounded-[8px]', nested && 'bg-row-nest')}
+      className={cn('flex flex-col rounded-[8px]', nested && 'bg-row-nest', LIFTED)}
     >
       {renderLead(tray)}
       {nested ? (
         <div className="flex flex-col gap-1 p-1">
           {view.shown.map((member) => (
-            <div key={sessionKey(member)}>{renderMember(member)}</div>
+            <Fragment key={sessionKey(member)}>
+              {spacer(sessionKey(member))}
+              {renderMember(member)}
+            </Fragment>
           ))}
+          {spacer(undefined)}
         </div>
       ) : null}
     </div>

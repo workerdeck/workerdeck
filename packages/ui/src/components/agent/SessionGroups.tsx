@@ -1,236 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
-import type { DragEvent, HTMLAttributes, ReactNode } from 'react'
+import { useRef, useState } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import { ChevronDown, ChevronRight, GripVertical, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
-import {
-  addCustomGroup,
-  moveCustomGroup,
-  moveToCustomGroup,
-  newCustomGroupId,
-  removeCustomGroup,
-  renameCustomGroup,
-  sessionKey,
-  styleCustomGroup,
-  customGroupColor,
-  groupFoldSummary,
-  PROJECT_ACCENTS,
-} from '@workerdeck/protocol'
-import type { CustomGroup, HostRelays, SessionGroup, SessionRow } from '@workerdeck/protocol'
-import { dropZone, joinDrop, memberDrop, type DropZone, type TeamMove } from '../../lib/team-drop.ts'
+import { customGroupColor, groupFoldSummary, PROJECT_ACCENTS } from '@workerdeck/protocol'
+import type { CustomGroup, SessionGroup } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover.tsx'
 import { cn } from '../../lib/utils.ts'
-
-type DragItem = { kind: 'session'; key: string } | { kind: 'group'; id: string }
-
-export type GroupDrag = ReturnType<typeof useGroupDrag>
-
-// Where a card sits: `lead` is set for a member, the team it is drawn under.
-export type DragPlace = { row: SessionRow; lead?: SessionRow }
-
-export type TeamDrag = {
-  rowOf: (key: string) => SessionRow | undefined
-  // A rejection's message is drawn under the card it was dropped on: a gateway 409 is user-facing copy.
-  onMove: (move: TeamMove) => Promise<void> | void
-  // Each gateway's relay identity by host id; without it a drop across gateways is refused.
-  relays?: HostRelays
-}
-
-type Over = { spot: string; refusal?: string }
-
-export type DropCue = { zone?: DropZone | 'refused'; message?: string }
-type Landing = Over & { run?: () => void }
-
-const ERROR_MS = 5000
-
-// The payload lives in state rather than `dataTransfer`, which is unreadable during `dragover`; `setData` is still
-// written because some engines refuse to start a drag without it. A card is split in three: the middle joins its
-// team, the edges reorder (custom groups) or leave a team.
-// `order` moves a facet group (state, engine, project) onto another one; custom groups reorder through `onChange`.
-export function useGroupDrag(
-  groups: readonly CustomGroup[],
-  onChange: (groups: CustomGroup[]) => void,
-  options: { custom: boolean; team?: TeamDrag; order?: (key: string, onto: string) => void },
-) {
-  const { custom, team, order } = options
-  const [item, setItem] = useState<DragItem>()
-  const [over, setOver] = useState<Over>()
-  const [failure, setFailure] = useState<{ key: string; message: string }>()
-  const failureTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  useEffect(() => () => clearTimeout(failureTimer.current), [])
-  const end = () => {
-    setItem(undefined)
-    setOver(undefined)
-  }
-  const start = (e: DragEvent, next: DragItem) => {
-    e.stopPropagation()
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', next.kind === 'session' ? next.key : next.id)
-    setItem(next)
-  }
-  const accept = (e: DragEvent, next: Over) => {
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = next.refusal ? 'none' : 'move'
-    if (over?.spot !== next.spot || over.refusal !== next.refusal) {
-      setOver(next)
-    }
-  }
-  const fail = (key: string, err: unknown) => {
-    clearTimeout(failureTimer.current)
-    setFailure({ key, message: err instanceof Error ? err.message : String(err) })
-    failureTimer.current = setTimeout(() => setFailure(undefined), ERROR_MS)
-  }
-  const move = (key: string, next: TeamMove) => () => {
-    setFailure(undefined)
-    void Promise.resolve()
-      .then(() => team!.onMove(next))
-      .catch((err: unknown) => fail(key, err))
-  }
-
-  function land(e: DragEvent<HTMLDivElement>, key: string, group: SessionGroup, place?: DragPlace): Landing | undefined {
-    if (item?.kind !== 'session' || item.key === key) {
-      return undefined
-    }
-    const reorder = custom
-      ? { spot: `row:${key}`, run: () => onChange(moveToCustomGroup(groups, item.key, group.custom, group.custom ? key : undefined)) }
-      : undefined
-    const dragged = team?.rowOf(item.key)
-    if (!team || !dragged || !place) {
-      return reorder
-    }
-    const rect = e.currentTarget.getBoundingClientRect()
-    const zone = dropZone(e.clientY - rect.top, rect.height)
-    if (place.lead) {
-      const result = memberDrop(dragged, place.lead, place.row, zone, team.relays)
-      return typeof result === 'string'
-        ? { spot: `refused:${key}`, refusal: result }
-        : { spot: `${zone === 'before' ? 'before' : 'after'}:${key}`, run: move(key, result) }
-    }
-    if (zone === 'join') {
-      const result = joinDrop(dragged, place.row, team.relays)
-      if (typeof result !== 'string') {
-        return { spot: `join:${key}`, run: move(key, result) }
-      }
-      return reorder ?? { spot: `refused:${key}`, refusal: result }
-    }
-    if (dragged.info.agent?.lead !== undefined) {
-      const leave = move(key, { row: dragged, lead: null })
-      return {
-        spot: `${zone}:${key}`,
-        run: () => {
-          leave()
-          reorder?.run()
-        },
-      }
-    }
-    return reorder ? { ...reorder, spot: `${zone}:${key}` } : undefined
-  }
-
-  function session(key: string, group: SessionGroup, place?: DragPlace): HTMLAttributes<HTMLDivElement> {
-    return {
-      draggable: true,
-      onDragStart: (e) => start(e, { kind: 'session', key }),
-      onDragEnd: end,
-      onDragOver: (e) => {
-        const landing = land(e, key, group, place)
-        if (landing) {
-          accept(e, landing)
-        }
-      },
-      onDrop: (e) => {
-        const landing = land(e, key, group, place)
-        if (!landing) {
-          return
-        }
-        e.preventDefault()
-        e.stopPropagation()
-        landing.run?.()
-        end()
-      },
-    }
-  }
-
-  function container(group: SessionGroup): HTMLAttributes<HTMLDivElement> {
-    const leaving = () => {
-      const dragged = item?.kind === 'session' ? team?.rowOf(item.key) : undefined
-      return dragged?.info.agent?.lead !== undefined ? dragged : undefined
-    }
-    const facetGroup = () => !custom && order !== undefined && item?.kind === 'group' && !group.earlier
-    return {
-      onDragOver: (e) => {
-        if (item && (custom || leaving() || facetGroup())) {
-          accept(e, { spot: `group:${group.key}` })
-        }
-      },
-      onDrop: (e) => {
-        e.preventDefault()
-        if (facetGroup() && item?.kind === 'group') {
-          order!(item.id, group.key)
-          end()
-          return
-        }
-        const member = leaving()
-        if (member) {
-          move(sessionKey(member), { row: member, lead: null })()
-        }
-        if (custom && item?.kind === 'session') {
-          onChange(moveToCustomGroup(groups, item.key, group.custom))
-        } else if (custom && item?.kind === 'group') {
-          onChange(moveCustomGroup(groups, item.id, group.custom))
-        }
-        end()
-      },
-    }
-  }
-
-  function header(group: SessionGroup): HTMLAttributes<HTMLDivElement> {
-    const id = custom ? group.custom : order && !group.earlier ? group.key : undefined
-    if (id === undefined) {
-      return {}
-    }
-    return { draggable: true, onDragStart: (e) => start(e, { kind: 'group', id }), onDragEnd: end }
-  }
-
-  // What to draw on a card while something hovers it, and a rejected drop's message for a while after.
-  function cue(key: string): DropCue {
-    if (failure?.key === key) {
-      return { zone: 'refused', message: failure.message }
-    }
-    const spot = over?.spot
-    if (!spot || spot.slice(spot.indexOf(':') + 1) !== key) {
-      return {}
-    }
-    const kind = spot.slice(0, spot.indexOf(':'))
-    if (kind === 'refused') {
-      return { zone: 'refused', message: over?.refusal }
-    }
-    return kind === 'row' || kind === 'before'
-      ? { zone: 'before' }
-      : kind === 'after'
-        ? { zone: 'after' }
-        : kind === 'join'
-          ? { zone: 'join' }
-          : {}
-  }
-
-  return {
-    dragging: item !== undefined,
-    isOver: (spot: string) => over?.spot === spot,
-    cue,
-    session,
-    container,
-    header,
-    create: (name = 'New group') => {
-      const id = newCustomGroupId()
-      onChange(addCustomGroup(groups, name, id))
-      return id
-    },
-    rename: (id: string, name: string) => onChange(renameCustomGroup(groups, id, name)),
-    style: (id: string, look: { color?: string | null; icon?: string | null }) => onChange(styleCustomGroup(groups, id, look)),
-    remove: (id: string) => onChange(removeCustomGroup(groups, id)),
-  }
-}
 
 export function CustomGroupHeader({
   group,
@@ -241,6 +17,7 @@ export function CustomGroupHeader({
   onRemove,
   onStyle,
   dragProps,
+  draggable = false,
   collapsed = false,
   onToggleCollapsed,
 }: {
@@ -252,7 +29,8 @@ export function CustomGroupHeader({
   onRename: (name: string) => void
   onRemove: () => void
   onStyle?: (look: { color?: string | null; icon?: string | null }) => void
-  dragProps: HTMLAttributes<HTMLDivElement>
+  dragProps: HTMLAttributes<HTMLElement>
+  draggable?: boolean
   collapsed?: boolean
   onToggleCollapsed?: () => void
 }) {
@@ -271,14 +49,14 @@ export function CustomGroupHeader({
         summary ? <span className={cn('truncate', summary.attention ? 'text-warning' : 'text-fg-4/70')}>{summary.text}</span> : undefined
       }
       caps={!custom}
-      className={cn('group/heading', custom && 'cursor-grab')}
+      className={cn('group/heading', draggable && 'cursor-grab')}
       onDoubleClick={custom ? () => onEditingChange(true) : undefined}
       leading={
         <>
           {onToggleCollapsed ? <FoldButton name={group.label ?? 'group'} collapsed={collapsed} onToggle={onToggleCollapsed} /> : null}
           {custom ? (
             <>
-              <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" />
+              {draggable ? <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" /> : null}
               {look ? <GroupBadge group={look} onStyle={onStyle} /> : null}
             </>
           ) : null}
@@ -328,6 +106,7 @@ export function FacetGroupHeader({
   title,
   actions,
   dragProps,
+  draggable,
   collapsed,
   onToggleCollapsed,
 }: {
@@ -338,7 +117,8 @@ export function FacetGroupHeader({
   badge?: string
   title?: string
   actions?: ReactNode
-  dragProps: HTMLAttributes<HTMLDivElement>
+  dragProps: HTMLAttributes<HTMLElement>
+  draggable: boolean
   collapsed: boolean
   onToggleCollapsed: () => void
 }) {
@@ -350,16 +130,18 @@ export function FacetGroupHeader({
       count={group.rows.length}
       title={title}
       caps={caps}
-      className={cn(dragProps.draggable && 'cursor-grab')}
+      className={cn(draggable && 'cursor-grab')}
       leading={
         <>
           <FoldButton name={label} collapsed={collapsed} onToggle={onToggleCollapsed} />
-          {dragProps.draggable ? <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" /> : null}
+          {draggable ? <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" /> : null}
           {icon}
         </>
       }
       badge={badge}
-      after={summary ? <span className={cn('truncate', summary.attention ? 'text-warning' : 'text-fg-4/70')}>{summary.text}</span> : undefined}
+      after={
+        summary ? <span className={cn('truncate', summary.attention ? 'text-warning' : 'text-fg-4/70')}>{summary.text}</span> : undefined
+      }
       actions={actions}
     />
   )
@@ -421,9 +203,7 @@ export function GroupHeading({
     <div {...rest} className={cn('group/heading flex min-h-5 items-center gap-2 px-2 text-label font-medium text-fg-4', className)}>
       {leading}
       <span className={cn('min-w-0 truncate', caps ? 'uppercase tracking-wide' : 'text-fg-3')}>{label}</span>
-      {badge ? (
-        <span className="shrink-0 rounded-sm border border-border px-1 leading-4 font-normal text-fg-4">{badge}</span>
-      ) : null}
+      {badge ? <span className="shrink-0 rounded-sm border border-border px-1 leading-4 font-normal text-fg-4">{badge}</span> : null}
       <span className="text-fg-4/70">{count}</span>
       {after}
       {actions ? (

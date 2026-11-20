@@ -414,8 +414,7 @@ group listing it; every unplaced session falls into a trailing "Ungrouped" bucke
 pruned, because a gateway that is merely unreachable must not empty a group. `clearFilters` keeps
 them. The pure edits (`addCustomGroup`, `renameCustomGroup`, `removeCustomGroup`,
 `moveToCustomGroup`, `moveCustomGroup`) are here; the drag and drop is `packages/ui`'s
-`SessionGroups.tsx`, HTML5 drag with the payload held in React state because `dataTransfer` is
-unreadable during `dragover`. iOS mirrors the gateway merge only, and does not draw custom groups yet.
+`use-list-drag.tsx` (see § ui, list drag). iOS mirrors the gateway merge only, and does not draw custom groups yet.
 
 **Agent teams in the list.** `groupRows` assembles team units before grouping: a lead row carries
 `members` (team order, then creation) and `teamState` (the most urgent `listState` across the team, which
@@ -2108,10 +2107,24 @@ badge, and tints as needing you by `listState`. An avatar selects that Member th
 approvals), not a native `title`, which VS Code webviews do not show;
 the trailing chevron or `+n` expands the team, and the knob atop an expanded tree returns it to Auto.
 The selected Member comes from `isActive`, so hosts pass nothing new. `onTeamMove` makes cards draggable onto each other (`lib/team-drop.ts`, pure): the
-middle of a card joins its team, a member's edges place the drop beside it, a member dropped on a
-top-level edge or empty space leaves. Joining renumbers the team densely (`TeamMove.siblings`).
-`teamDropRefusal` mirrors the gateway's `leadRefusal` wording so a refused hover says why; a
-rejected `onTeamMove` draws its message under the card for 5 s. Two owners are a question, not a
+middle half of an agent's card joins its team, a member reorders inside its expanded team, and a
+member dragged out of its team block (or onto its lead's top edge) leaves. Joining renumbers the
+team densely (`TeamMove.siblings`). `teamDropRefusal` mirrors the gateway's `leadRefusal` wording
+so a refused hover says why, on a badge riding the dragged row; a rejected `onTeamMove` draws its
+message under the card for 5 s.
+
+**List drag** (`use-list-drag.tsx` mechanics, `lib/row-drag.ts` pure resolution, tested). Pointer
+events, not HTML5 drag: the browser's drag image cannot be held to one axis, and the row itself
+should move. Mouse and pen only; touch scrolls. The lifted row follows the pointer vertically,
+its own slot collapses (negative margin) and a spacer marks where it lands while the rest slide
+(FLIP). While a session drags every team collapses to its lead, except the dragged member's own
+team, which expands fully; while a group drags every group folds. Both are render overrides, so
+the operator's fold state comes back on drop. Rules that bite: hit-testing reads layout offsets
+(`offsetTop`, which ignores transforms) relative to the list root, which must stay `relative`; a
+pointer over no row keeps the last answer, so moving the spacer can never flip its own decision
+back; a join leaves the spacer where it was for the same reason. Reordering exists only where an
+order is stored: custom groups (rows and groups), facet group order, and team order. Escape cancels;
+the click that ends a drag is swallowed. Two owners are a question, not a
 refusal: `crossOwnerDrop(dragged, lead, relays)` (owner from `info.owner`, else the row's relay
 `owner`, `rowOwner`) tells the host to confirm before it moves. A shared top-level agent
 (`AgentRef.shared`) draws a globe after its name; the owner shows only in the name's tooltip. `AgentHeading` is the panel title
