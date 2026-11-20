@@ -54,6 +54,7 @@ export class SessionParkManager {
   #renaming: Promise<void> | undefined
   #fencedIds = new Set<string>()
   #turned = new Set<string>()
+  #resumed = new Set<string>()
   #goalKeys = new Map<string, string>()
 
   constructor(options: SessionParkOptions) {
@@ -473,18 +474,21 @@ export class SessionParkManager {
     return { ...base, info: this.#stamped(base.info) }
   }
 
-  // An engine that died after a completed turn leaves its conversation resumable: the record stays dormant and the
-  // dead runner leaves the registry, so the next open wakes it. Never woken automatically (a crash on resume would
-  // loop). A death before any turn is a failed start or a policy refusal (`requireApiKey`) and is discarded as before.
+  // An engine that died after a completed turn, or while resuming a stored conversation, leaves that conversation
+  // resumable: the record stays dormant and the dead runner leaves the registry, so the next open wakes it. Never woken
+  // automatically (a crash on resume would loop). A resume that died before its first turn keeps the failure on the
+  // record (attention until a wake saves a runtime again); a fresh session that dies before any turn is a failed start
+  // or a policy refusal (`requireApiKey`) and is discarded as before.
   #retireCrashed(runner: Runner): boolean {
     const info = runner.info()
-    if (!this.#turned.has(runner.id) || info.sdkSessionId === undefined || isJobRun(info) || !(info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume) {
+    const turned = this.#turned.has(runner.id)
+    if ((!turned && !this.#resumed.has(runner.id)) || info.sdkSessionId === undefined || isJobRun(info) || !(info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume) {
       return false
     }
     if (!this.#ownedConfig(runner)) {
       return false
     }
-    void this.#rememberDormant(runner)
+    void this.#rememberDormant(runner, turned ? undefined : this.#stampedFailure(runner))
     this.dropExecutions(runner.id)
     this.#forgetSession(runner.id)
     this.#options.registry.evict(runner.id)
@@ -493,6 +497,12 @@ export class SessionParkManager {
 
   #failureOf(runner: Runner): SessionFailure {
     return runner.info().failure ?? { message: 'the engine stopped with an error', at: Date.now() }
+  }
+
+  #stampedFailure(runner: Runner): SessionFailure {
+    const failure = this.#failureOf(runner)
+    const conversation = this.#conversation(runner.id)
+    return conversation === undefined ? failure : { ...failure, conversation }
   }
 
   // The remembered config follows the goal, so a record keeps a cleared goal's `null` tombstone. True when the change is
@@ -515,6 +525,7 @@ export class SessionParkManager {
   #forgetSession(sessionId: string): void {
     this.#goalKeys.delete(sessionId)
     this.#turned.delete(sessionId)
+    this.#resumed.delete(sessionId)
     this.#watches.delete(sessionId)
     clearTimeout(this.#detachTimers.get(sessionId))
     this.#detachTimers.delete(sessionId)
@@ -529,7 +540,7 @@ export class SessionParkManager {
     return this.#configs.get(runner.id)
   }
 
-  async #rememberDormant(runner: Runner): Promise<void> {
+  async #rememberDormant(runner: Runner, failure?: SessionFailure): Promise<void> {
     if (this.#fencedIds.has(runner.id)) {
       return
     }
@@ -546,7 +557,7 @@ export class SessionParkManager {
       savedAt: Date.now(),
     }
     try {
-      await this.#queue(runner.id, () => this.#options.store.save(record))
+      await this.#queue(runner.id, () => this.#options.store.save(record, failure))
     } catch (error) {
       this.#options.onError?.(error, { sessionId: runner.id, phase: 'remember' })
     }
@@ -679,6 +690,7 @@ export class SessionParkManager {
     }
     runner.carryCost?.(record.cost ?? { byModel: record.info.usageByModel, reportedCostUsd: record.info.totalCostUsd })
     this.#options.registry.register(runner)
+    this.#resumed.add(id)
     // The config the runner was actually built with, not the one on the record: a dormant wake
     // bumps the epoch, and the next park must carry the new one rather than resurrect the old.
     this.remember(id, { ...record.config, epoch: runner.info().epoch })

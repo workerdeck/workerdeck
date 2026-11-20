@@ -6,6 +6,7 @@ import {
   query as sdkQuery,
   tool as sdkTool,
   type CanUseTool,
+  type HookCallbackMatcher,
   type Options,
   type PermissionResult,
   type Query,
@@ -897,7 +898,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     const options: Options = {
       cwd: this.#cwd,
       permissionMode: c.permissionMode,
-      allowedTools: this.#allowedTools(),
+      allowedTools: c.allowedTools,
       disallowedTools: c.disallowedTools,
       mcpServers: this.#mcpServersOption(),
       mcpServersDelivery: 'initialize',
@@ -916,6 +917,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       pathToClaudeCodeExecutable: c.pathToClaudeCodeExecutable,
       ...(c.permissionMode === 'bypassPermissions' || c.allowDangerouslySkipPermissions ? { allowDangerouslySkipPermissions: true } : {}),
       ...c.extraOptions,
+      ...this.#proposeHooks(c.extraOptions?.hooks),
       ...(this.#instructions === undefined
         ? {}
         : { systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: this.#instructions } }),
@@ -930,13 +932,21 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   }
 
   // The proposal raises its own card inside the tool, so the engine's permission step would only be a second gate that
-  // auto mode's classifier could close on a command the human was about to run.
-  #allowedTools(): string[] | undefined {
-    const allowed = this.config.allowedTools
+  // auto mode's classifier could close on a command the human was about to run. A PreToolUse allow, not a bare
+  // allowedTools entry: the SDK warns on every query that a bare entry shadows canUseTool.
+  #proposeHooks(hooks: Options['hooks']): Pick<Options, 'hooks'> {
     if (!this.toolSources.propose) {
-      return allowed
+      return hooks ? { hooks } : {}
     }
-    return [...(allowed ?? []), `mcp__${PEER_MCP_SERVER}__${SHELL_PROPOSE_TOOL}`]
+    const allow: HookCallbackMatcher = {
+      matcher: `^mcp__${PEER_MCP_SERVER}__${SHELL_PROPOSE_TOOL}$`,
+      hooks: [
+        async () => ({
+          hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'the proposal card is its own approval' },
+        }),
+      ],
+    }
+    return { hooks: { ...hooks, PreToolUse: [...(hooks?.PreToolUse ?? []), allow] } }
   }
 
   #mcpServersOption(): Options['mcpServers'] {

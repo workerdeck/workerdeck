@@ -337,6 +337,34 @@ describe('sessions that survive a restart', () => {
     expect((await list(restarted.base)).find((row) => row.id === session.id)?.failure).toBeUndefined()
   })
 
+  it('keeps a woken session resumable when its engine dies before the first turn, failed until the next wake', async () => {
+    const dir = await stateDir()
+    const first = await startGateway(fileRuntimeStore(dir))
+    const session = await create(first.base)
+    await eventually(async () => {
+      expect((await first.server.records.get(session.id))?.runtime?.kind).toBe('dormant')
+    })
+    first.built[0]!.completeTurn()
+    await first.server.close()
+    servers.splice(servers.indexOf(first.server), 1)
+
+    const second = await startGateway(fileRuntimeStore(dir))
+    await attachOnce(second, session.id)
+    second.built[0]!.die('Native CLI binary not found')
+    await eventually(async () => {
+      expect((await second.server.records.get(session.id))?.failure).toMatchObject({ message: 'Native CLI binary not found', conversation: 1 })
+    })
+    expect((await second.server.records.get(session.id))?.runtime).toMatchObject({ kind: 'dormant', sdkSessionId: 'engine-session-1' })
+    expect((await list(second.base)).find((row) => row.id === session.id)?.failure).toMatchObject({ message: 'Native CLI binary not found' })
+
+    await attachOnce(second, session.id)
+    expect(second.built).toHaveLength(2)
+    expect(second.built[1]!.config.resume).toBe('engine-session-1')
+    await eventually(async () => {
+      expect((await second.server.records.get(session.id))?.failure).toBeUndefined()
+    })
+  })
+
   it('records no failure for a crash it keeps resumable, nor for a clean end', async () => {
     const gateway = await startGateway(fileRuntimeStore(await stateDir()))
     const crashed = await create(gateway.base)

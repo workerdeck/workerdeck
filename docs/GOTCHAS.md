@@ -1038,9 +1038,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   - **An engine that dies with `'error'` after a completed turn is retired, not discarded**
     (`#retireCrashed`): the dormant record stays, the dead runner is evicted, and the list shows
     the session asleep; the next open resumes it. Gated on a `turn_result` seen by this manager,
-    because a death before any turn is a failed start (the cut's `startFailed` path reads it) or a
-    deliberate refusal (`requireApiKey` fails the runner at `system_init`), and both must still read
-    `failed`. Sockets on the dead runner are left alone, never forced to reattach: an automatic
+    **or on the runner being a wake of a stored record** (`#resumed`, set in `#rebuild`), because a
+    death before any turn of a *fresh* session is a failed start (the cut's `startFailed` path reads
+    it) or a deliberate refusal (`requireApiKey` fails the runner at `system_init`), and both must
+    still read `failed`. A woken session that dies before its first turn (2026-11-20: SWP-UI's resume
+    hit a `pnpm install` that had the native binary mid-swap, and the discard ended a good
+    conversation for good) stays dormant **and** keeps the failure on the record
+    (`SessionStore.save(record, failure)`), so it reads Failed until the next wake saves a runtime. Sockets on the dead runner are left alone, never forced to reattach: an automatic
     wake of an engine that crashes on resume would loop. A clean stream end closes with
     `'server'` and is still discarded.
   - **`close()` must close the session sockets, not just the queue ones.** `wss` is a `noServer`
@@ -1472,7 +1476,8 @@ in precedence order: `approval`, then `failed` (`info.failure` set), then `block
   (`POST /sessions/:id/conversations/retry`, expectedGeneration = `failure.conversation`) can answer. The fleet strip
   offers Retry only on those, and sends `failureAt` = the `failure.at` it shows: the gateway refuses (409) once a
   later attempt replaced that failure, so a stale strip never starts a third attempt. An engine death has no retry
-  route (the next message or open wakes it).
+  route: a woken session's death keeps its dormant runtime beside the failure, so the next message or open wakes it; a
+  fresh session's death before any turn has no runtime left, and only a new conversation runs it.
 - **Not set**: a crash `#retireCrashed` keeps dormant (asleep, the next open resumes it), a clean `'server'` end, an
   interrupt or a park. `absentStatus`'s `failed` for a record without runtime is a status, not attention.
 - **One home: the record.** Gateway-side failures (`#failStart`: a start that did not take, a conversation that could
@@ -2827,7 +2832,9 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   The handler awaits `SessionToolSources.propose`, the base runner's `#proposeShell`, which raises an
   ordinary `core.requestApproval` (bare `toolName: 'shell_propose'`, `toolUseId` = the request id,
   since an MCP handler never learns its tool use id). It is never the engine's permission step: the
-  claude runner adds `mcp__workerdeck__shell_propose` to `allowedTools`, because auto mode's
+  claude runner allows `mcp__workerdeck__shell_propose` through a `PreToolUse` hook (`#proposeHooks`,
+  merged with any `extraOptions.hooks`; a bare `allowedTools` entry made SDK 0.3.328 warn
+  `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` on every query), because auto mode's
   classifier reads the command and would block exactly the deploys and secret writes the tool is
   for, and `bypassPermissions` would drop the card. So it cards in **every** mode, bypass included,
   on every engine. Interrupt, close, clear and the deadline settle it like any approval; on claude,

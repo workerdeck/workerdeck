@@ -242,14 +242,14 @@ export class SessionRecords {
     })
   }
 
-  async saveRuntime(runtime: StoredSessionRecord, conversation: number | undefined): Promise<void> {
+  async saveRuntime(runtime: StoredSessionRecord, conversation: number | undefined, failure?: SessionFailure): Promise<void> {
     await this.transact(runtime.id, (current) => {
       checkConversation(runtime.id, current, conversation)
       if (current?.closedAt !== undefined) {
         return undefined
       }
       const { failure: _failure, ...base } = current ?? freshRecord(runtime.id)
-      return { ...base, runtime, running: durableConfig(runtime.config) }
+      return { ...base, runtime, running: durableConfig(runtime.config), ...(failure ? { failure } : {}) }
     })
   }
 
@@ -296,7 +296,7 @@ export class SessionRecords {
 
   runtimeStore(): SessionStore {
     return {
-      save: (record) => this.saveRuntime(record, conversationOf(record)),
+      save: (record, failure) => this.saveRuntime(record, conversationOf(record), failure),
       get: async (id) => runtimeOf(await this.get(id)),
       list: async () => (await this.list()).flatMap((record) => runtimeOf(record) ?? []),
       delete: (id, conversation, reason, failure) => this.clearRuntime(id, conversation, reason, failure),

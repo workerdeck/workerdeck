@@ -226,7 +226,12 @@ describe('SessionRunner: shell tools', () => {
     runner.subscribe((e) => events.push(e))
     void runner.start()
     await eventually(() => expect(harness.captured.options).toBeDefined())
-    expect(harness.captured.options!.allowedTools).toEqual(['mcp__workerdeck__shell_propose'])
+    expect(harness.captured.options!.allowedTools).toBeUndefined()
+    const [allow] = harness.captured.options!.hooks!.PreToolUse!
+    expect(allow!.matcher).toBe('^mcp__workerdeck__shell_propose$')
+    expect(await allow!.hooks[0]!({} as never, undefined, { signal: new AbortController().signal })).toMatchObject({
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' },
+    })
     const pending = registered(harness).shell_propose!.handler({ command: 'make deploy', description: 'ships prod' }, {})
     await eventually(() => expect(runner.pendingApprovals).toHaveLength(1))
     expect(runner.pendingApprovals[0]).toMatchObject({ toolName: 'shell_propose', input: { command: 'make deploy', description: 'ships prod' } })

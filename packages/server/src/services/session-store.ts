@@ -53,7 +53,8 @@ export function isDormant(record: StoredSessionRecord): record is DormantSession
 }
 
 export interface SessionStore {
-  save(record: StoredSessionRecord): Promise<void>
+  // `failure`: the runtime stays resumable, but the session ended on an error the record keeps until the next save.
+  save(record: StoredSessionRecord, failure?: SessionFailure): Promise<void>
   get(id: string): Promise<StoredSessionRecord | null>
   list(): Promise<StoredSessionRecord[]>
   delete(id: string, conversation?: number, reason?: RuntimeClear, failure?: SessionFailure): Promise<boolean>
