@@ -1811,7 +1811,9 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   unchanged), typecheck, `turbo run test --force --concurrency=1` 13/13, fixtures golden/vm/frames `--check`,
   `cargo fmt`/clippy/test (427), build, gatekeeper; smokes from the 109th session: `smoke:shell-propose` 21/21
   (claude bypass + auto, codex), `smoke:mcp-reconnect` 12/12 and `smoke:restart claude` 8/8 on SDK 0.3.328. Bumped in a
-  worktree (the gateway runs from the main checkout).
+  worktree (the gateway runs from the main checkout). **Published** 2026-11-20: tag `v4.6.0` at `36dae6b2`, Publish
+  green first try (run 44655175970), npm 12/12 with `latest` 4.6.0 (four staged for about three minutes), Marketplace
+  job green.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
