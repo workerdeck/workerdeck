@@ -98,4 +98,40 @@ describe('status label', () => {
     expect(label).toMatchObject({ text: 'awaiting commit go', emoji: '✅' })
     expect(label?.waitingOn).toBeUndefined()
   })
+
+  it('drops waitingOn when a person answers a card, over WS and over REST', async () => {
+    const gateway = await startGateway(await stateDir())
+    const created = await call<{ session: SessionInfo }>(gateway.base, '/sessions', 'POST', { cwd: '/tmp' })
+    const id = created.body.session.id
+    gateway.harness.emit(initMessage)
+    await until(async () => (await call<{ session: SessionInfo }>(gateway.base, `/sessions/${id}`)).body.session.sdkSessionId === 'sdk-1', 'the engine to name its session')
+    const ws = new WebSocket(`${gateway.wsBase}/sessions/${id}/ws`)
+    const collector = frameCollector(ws)
+    await collector.waitFor((f) => f.type === 'attached')
+    const ask = (toolUseID: string) =>
+      gateway.harness.captured.options!.canUseTool!('Bash', { command: 'ls' }, { signal: new AbortController().signal, requestId: toolUseID, toolUseID })
+    const label = async () => (await call<{ session: SessionInfo }>(gateway.base, `/sessions/${id}`)).body.session.statusLabel
+    const pendingId = async () => {
+      const pending = await collector.waitFor((f) => f.type === 'event' && f.event.type === 'permission_requested' && !seen.has(f.event.request.id))
+      const requestId = pending.type === 'event' && pending.event.type === 'permission_requested' ? pending.event.request.id : ''
+      seen.add(requestId)
+      return requestId
+    }
+    const seen = new Set<string>()
+
+    await call(gateway.base, `/sessions/${id}`, 'PATCH', { statusLabel: { text: 'pick one', waitingOn: 'human' } })
+    const viaWs = ask('tool-1')
+    ws.send(JSON.stringify({ generation: 1, type: 'permission_decision', requestId: await pendingId(), behavior: 'allow' }))
+    await viaWs
+    await until(async () => (await label())?.waitingOn === undefined, 'the WS answer to drop the flag')
+    expect(await label()).toMatchObject({ text: 'pick one' })
+
+    await call(gateway.base, `/sessions/${id}`, 'PATCH', { statusLabel: { text: 'pick again', waitingOn: 'human' } })
+    const viaRest = ask('tool-2')
+    const requestId = await pendingId()
+    expect((await call(gateway.base, `/sessions/${id}/permissions/${requestId}`, 'POST', { behavior: 'deny' })).status).toBe(200)
+    await viaRest
+    expect((await label())?.waitingOn).toBeUndefined()
+    ws.close()
+  })
 })

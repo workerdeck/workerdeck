@@ -303,17 +303,16 @@ pub struct Attention {
 }
 
 pub fn attention_of(info: &SessionInfo) -> Attention {
-    let mut reasons = Vec::new();
-    if info.pending_permission_count > 0 || info.status == SessionStatus::AwaitingApproval {
-        reasons.push(AttentionReason::Approval);
-    }
-    if info.failure.is_some() {
-        reasons.push(AttentionReason::Failed);
-    }
-    if info.status_label.as_ref().and_then(|label| label.waiting_on.as_deref()) == Some("human") {
-        reasons.push(AttentionReason::Blocked);
-    }
-    Attention { reasons }
+    let reason = if info.pending_permission_count > 0 || info.status == SessionStatus::AwaitingApproval {
+        Some(AttentionReason::Approval)
+    } else if info.failure.is_some() {
+        Some(AttentionReason::Failed)
+    } else if info.status_label.as_ref().and_then(|label| label.waiting_on.as_deref()) == Some("human") {
+        Some(AttentionReason::Blocked)
+    } else {
+        None
+    };
+    Attention { reasons: reason.into_iter().collect() }
 }
 
 pub fn attention_label(reason: AttentionReason) -> &'static str {

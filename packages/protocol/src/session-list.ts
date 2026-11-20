@@ -35,19 +35,19 @@ export type AttentionReason = 'approval' | 'failed' | 'blocked'
 export type Attention = { reasons: AttentionReason[] }
 
 // What a person must act on, from gateway truth only: an approval, a failure the record keeps, or an agent that said it
-// waits on the human. Unread prose is not attention.
+// waits on the human. Unread prose is not attention. At most one reason, the most actionable: an agent that asks on a
+// card usually also says it is blocked, and two chips for one question read as two things to do.
 export function attentionOf(info: SessionInfo): Attention {
-  const reasons: AttentionReason[] = []
   if (info.pendingPermissionCount > 0 || info.status === 'awaiting_approval') {
-    reasons.push('approval')
+    return { reasons: ['approval'] }
   }
   if (info.failure) {
-    reasons.push('failed')
+    return { reasons: ['failed'] }
   }
   if (info.statusLabel?.waitingOn === 'human') {
-    reasons.push('blocked')
+    return { reasons: ['blocked'] }
   }
-  return { reasons }
+  return { reasons: [] }
 }
 
 export const ATTENTION_LABELS: Record<AttentionReason, string> = { approval: 'Approval', failed: 'Failed', blocked: 'Blocked' }

@@ -1448,14 +1448,17 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
   anything else is refused by `readStatusLabelInput` and the tool schema. A label replaces the whole label, so a new
   status without the flag clears it; reset, cut (`requestedConfig` strips the label) and an empty text clear it; park and
   wake keep it; the session going `running` does not. `attentionOf` reads it as `blocked`.
-- **A person's message drops the flag** (Tobias, 2026-11-09): the gateway's WS `user_message` path (the only human
-  send) re-sets the label with its text and emoji but no `waitingOn` (`answerWaiting`, `routes/ws.ts`), so an answered
-  agent stops reading as blocked before it calls `set_status` again. Peer, lead, reset and cut prompts never clear it.
+- **A person's message or card answer drops the flag** (Tobias, 2026-11-09; cards 2026-11-20): the gateway's WS
+  `user_message` path (the only human send) and every resolved `permission_decision` (WS and REST) re-set the label
+  with its text and emoji but no `waitingOn` (`services/answer-waiting.ts`), so an answered agent stops reading as
+  blocked before it calls `set_status` again. Peer, lead, reset and cut prompts never clear it.
 
 ## Session failure (`SessionInfo.failure`, `attentionOf`)
 
-`attentionOf(info)` (protocol, ported to Rust with goldens) lists what a person must act on: `approval`, `failed`
-(`info.failure` set), `blocked` (`statusLabel.waitingOn === 'human'`). Unread is never attention.
+`attentionOf(info)` (protocol, ported to Rust with goldens) names what a person must act on, **at most one reason**
+in precedence order: `approval`, then `failed` (`info.failure` set), then `blocked` (`statusLabel.waitingOn ===
+'human'`). An agent asking on a card usually also set the flag, and two chips for one question read as two tasks
+(Tobias, 2026-11-20). `reasons` stays an array for the wire shape. Unread is never attention.
 
 - **Lists read it through `listState`, never `sessionState`.** The state filter, state grouping, `teamState`, team
   Auto and the summaries switch to attention; `sessionState` stays activity only, because the gateway's shutdown drain

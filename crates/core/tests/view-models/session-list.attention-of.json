@@ -569,9 +569,7 @@
     },
     {
       "reasons": [
-        "approval",
-        "failed",
-        "blocked"
+        "approval"
       ]
     }
   ]

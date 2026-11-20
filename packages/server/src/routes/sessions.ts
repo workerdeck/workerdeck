@@ -33,6 +33,7 @@ import { HUMAN_SETTER, type GoalChange } from '../services/goals.ts'
 import { handleShells } from './shells.ts'
 import { handleToolResult } from './tool-results.ts'
 import { sleepRunner } from './sleep.ts'
+import { answerWaiting } from '../services/answer-waiting.ts'
 
 type ItemKind = SessionItemRoute['kind']
 
@@ -409,6 +410,7 @@ async function handlePermission({ ctx, req, res, route, runner, auth }: SessionC
   if (!live.resolvePermission(route.permissionId, permissionDecision(body))) {
     fail(404, 'permission request not found (already resolved or expired)')
   }
+  answerWaiting(live)
   json(res, 200, { resolved: true })
 }
 

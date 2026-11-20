@@ -23,6 +23,7 @@ import type { PromptOutcome } from '../services/prompt-acks.ts'
 import { shownEntryInfo } from './conversations.ts'
 import { sleepRunner } from './sleep.ts'
 import { takesLocalCommands } from '../services/shell-directory.ts'
+import { answerWaiting } from '../services/answer-waiting.ts'
 import { proposalRefusal, shellPermitted, SHELL_REFUSAL, startShell, type ShellRegistry, type ShellSink, type ShellSize } from '../services/shells.ts'
 
 // What the upgrade established about the principal; computed once there so the attach never re-authenticates.
@@ -268,15 +269,6 @@ async function clearWithAck(
   }
 }
 
-// A person answered, so the agent no longer waits on one: the label keeps its text and loses the flag.
-function answerWaiting(runner: Runner): void {
-  const label = runner.info().statusLabel
-  if (label?.waitingOn !== 'human' || !runner.setStatusLabel) {
-    return
-  }
-  runner.setStatusLabel({ text: label.text, ...(label.emoji ? { emoji: label.emoji } : {}) })
-}
-
 function outcomeAck(clientId: string, outcome: PromptOutcome): ServerFrame {
   return outcome === 'executed' ? { type: 'ack', clientId } : { type: 'ack', clientId, notDelivered: true }
 }
@@ -333,7 +325,9 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, bound: Boun
       if (proposalRefusal(ctx.shells, runner, frame.requestId, frame.behavior, access.operator)) {
         throw new Error(SHELL_REFUSAL)
       }
-      runner.resolvePermission(frame.requestId, permissionDecision(frame))
+      if (runner.resolvePermission(frame.requestId, permissionDecision(frame))) {
+        answerWaiting(runner)
+      }
       return
     }
     case 'interrupt': {

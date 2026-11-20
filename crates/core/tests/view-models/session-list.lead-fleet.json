@@ -2097,8 +2097,7 @@
         "id": "s-both",
         "name": "s-both",
         "reasons": [
-          "approval",
-          "blocked"
+          "approval"
         ],
         "text": "2 approvals waiting"
       },
