@@ -18,7 +18,7 @@ use crate::vm::conversations::{
     ArchivedView, CurrentConversation, SessionAddress, archived_view, clear_context_offered, new_conversation_gate,
 };
 use crate::vm::pickers::{ModePicker, ModelPicker, PickerSource, mode_picker, model_picker};
-use crate::vm::prompt::{Prompt, PromptBody, Selection, answered_input, prompt_for};
+use crate::vm::prompt::{Prompt, PromptBody, Selection, ShellRequest, answered_input, prompt_for, shell_proposal_input, shell_proposal_of};
 use crate::vm::session_chrome::{SessionChrome, session_chrome};
 use crate::vm::session_list::subagent_label;
 use crate::vm::watermarks::catch_up_items;
@@ -697,6 +697,22 @@ impl LiveSession {
         };
         let updated = answered_input(request.get("input").unwrap_or(&Value::Null), &questions, selections);
         self.approve(request_id, Some(updated));
+    }
+
+    // Run on a shell_propose card: an emptied command runs nothing, an unchanged one rides on a bare allow.
+    pub fn run_proposal(&mut self, request_id: String, command: &str, stdin: &str) {
+        let Some(request) = self.state.pending_approvals.iter().find(|r| r.get("id").and_then(Value::as_str) == Some(request_id.as_str()))
+        else {
+            return;
+        };
+        let Some(ShellRequest::Propose { command: proposed, .. }) = shell_proposal_of(request) else {
+            return;
+        };
+        if command.trim().is_empty() {
+            return;
+        }
+        let updated = shell_proposal_input(&proposed, command, stdin);
+        self.approve(request_id, updated);
     }
 
     pub fn dismiss_question(&mut self, request_id: String) {

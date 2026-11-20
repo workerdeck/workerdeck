@@ -37,6 +37,24 @@
           "shellId": "s",
           "reason": "r\u001b"
         }
+      ],
+      [
+        {
+          "kind": "propose",
+          "command": "a\nb",
+          "description": "d",
+          "secret": true,
+          "noInput": false
+        }
+      ],
+      [
+        {
+          "kind": "propose",
+          "command": "c",
+          "description": "",
+          "secret": false,
+          "noInput": true
+        }
       ]
     ]
   },
@@ -56,6 +74,15 @@
     [
       "why: r[escape]",
       "until the shell ends or you revoke it"
+    ],
+    [
+      "$ a",
+      "  b",
+      "reads a secret on stdin"
+    ],
+    [
+      "$ c",
+      "takes no input: stdin is empty"
     ]
   ]
 }

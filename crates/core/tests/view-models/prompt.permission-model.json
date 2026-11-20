@@ -114,6 +114,46 @@
             "command": "x"
           }
         }
+      ],
+      [
+        {
+          "toolName": "mcp__workerdeck__shell_propose",
+          "input": {
+            "command": "gh auth login\n--web",
+            "description": "Sign in to GitHub"
+          },
+          "decisionReason": "ask"
+        }
+      ],
+      [
+        {
+          "toolName": "shell_propose",
+          "input": {
+            "command": "op read x",
+            "description": "Read the token",
+            "secret": true,
+            "interactive": false
+          }
+        }
+      ],
+      [
+        {
+          "toolName": "shell_propose",
+          "input": {
+            "command": "make",
+            "description": "",
+            "interactive": false
+          }
+        }
+      ],
+      [
+        {
+          "toolName": "shell_propose",
+          "input": {
+            "secret": "yes"
+          },
+          "description": "ignored"
+        }
       ]
     ]
   },
@@ -450,6 +490,131 @@
         }
       ],
       "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "shell": {
+        "kind": "propose",
+        "command": "gh auth login\n--web",
+        "description": "Sign in to GitHub",
+        "secret": false,
+        "noInput": false
+      },
+      "heading": "Agent proposes a command for you to run",
+      "question": "Run it in a visible shell? The agent gets the exit code and the output.",
+      "description": "Sign in to GitHub",
+      "decisionReason": "ask",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Run",
+          "option": "Yes, run it"
+        },
+        {
+          "key": "deny",
+          "button": "Don't run",
+          "option": "No, and tell the agent why"
+        },
+        {
+          "key": "stop",
+          "button": "Don't run & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this"
+    },
+    {
+      "shell": {
+        "kind": "propose",
+        "command": "op read x",
+        "description": "Read the token",
+        "secret": true,
+        "noInput": false
+      },
+      "heading": "Agent proposes a command for you to run",
+      "question": "Run it in a visible shell? The agent gets the exit code and the output.",
+      "description": "Read the token",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Run",
+          "option": "Yes, run it"
+        },
+        {
+          "key": "deny",
+          "button": "Don't run",
+          "option": "No, and tell the agent why"
+        },
+        {
+          "key": "stop",
+          "button": "Don't run & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this"
+    },
+    {
+      "shell": {
+        "kind": "propose",
+        "command": "make",
+        "description": "",
+        "secret": false,
+        "noInput": true
+      },
+      "heading": "Agent proposes a command for you to run",
+      "question": "Run it in a visible shell? The agent gets the exit code and the output.",
+      "description": "",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Run",
+          "option": "Yes, run it"
+        },
+        {
+          "key": "deny",
+          "button": "Don't run",
+          "option": "No, and tell the agent why"
+        },
+        {
+          "key": "stop",
+          "button": "Don't run & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this"
+    },
+    {
+      "shell": {
+        "kind": "propose",
+        "command": "",
+        "description": "",
+        "secret": false,
+        "noInput": false
+      },
+      "heading": "Agent proposes a command for you to run",
+      "question": "Run it in a visible shell? The agent gets the exit code and the output.",
+      "description": "",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Run",
+          "option": "Yes, run it"
+        },
+        {
+          "key": "deny",
+          "button": "Don't run",
+          "option": "No, and tell the agent why"
+        },
+        {
+          "key": "stop",
+          "button": "Don't run & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this"
     }
   ]
 }

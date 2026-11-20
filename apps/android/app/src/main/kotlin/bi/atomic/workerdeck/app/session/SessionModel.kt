@@ -440,6 +440,8 @@ class SessionModel(
 
     override fun dismiss(requestId: String) = worker.act { it.dismissQuestion(requestId) }
 
+    override fun runProposal(requestId: String, command: String, stdin: String) = worker.act { it.runProposal(requestId, command, stdin) }
+
     // The rows on screen; the core decides which lines to hold for them and answers only when that moved.
     fun visible(first: Int, last: Int) = worker.act {
         it.showRows(first.toUInt(), last.toUInt())?.let(::showLines)

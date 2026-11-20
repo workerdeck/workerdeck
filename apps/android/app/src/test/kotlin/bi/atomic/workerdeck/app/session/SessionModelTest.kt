@@ -10,6 +10,7 @@ import bi.atomic.workerdeck.core.ffi.HttpCall
 import bi.atomic.workerdeck.core.ffi.Outgoing
 import bi.atomic.workerdeck.core.ffi.Metrics
 import bi.atomic.workerdeck.core.ffi.PromptKind
+import bi.atomic.workerdeck.core.ffi.Proposal
 import bi.atomic.workerdeck.core.ffi.ReadMark
 import bi.atomic.workerdeck.core.ffi.Selection
 import bi.atomic.workerdeck.core.ffi.toggleLabel
@@ -392,6 +393,27 @@ class SessionModelTest {
     }
 
     @Test
+    fun aProposalRunsTheEditedCommandWithTheSecretOnStdin() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        listener.onMessage(socket, PROPOSAL)
+        eventually("the prompt") { model.ui.value.prompt != null }
+        val prompt = model.ui.value.prompt!!
+        assertEquals(PromptKind.PROPOSAL to Proposal("op read x", true, false), prompt.kind to prompt.proposal)
+        model.runProposal(prompt.requestId, "   ", "pw")
+        Thread.sleep(50)
+        assertTrue(socket.sent.none { "permission_decision" in it })
+        model.runProposal(prompt.requestId, "op read y", "pw")
+        eventually("the decision") { socket.sent.any { "permission_decision" in it } }
+        val decision = socket.sent.first { "permission_decision" in it }
+        assertTrue(decision, "\"command\":\"op read y\"" in decision && "\"stdin\":\"pw\"" in decision && "\"behavior\":\"allow\"" in decision)
+        model.close()
+    }
+
+    @Test
     fun aLongPressAsksTheCoreWhatTheRowOffers() {
         val transport = FakeTransport()
         val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
@@ -600,6 +622,9 @@ class SessionModelTest {
         const val QUESTION =
             """{"type":"event","event":{"type":"permission_requested","seq":1,"ts":1,"request":{"id":"r1","toolName":"AskUserQuestion","toolUseId":"t1","input":{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"a"},{"label":"b"}]}]}}}}"""
 
+
+        const val PROPOSAL =
+            """{"type":"event","event":{"type":"permission_requested","seq":1,"ts":1,"request":{"id":"r1","toolName":"mcp__workerdeck__shell_propose","toolUseId":"t1","input":{"command":"op read x","description":"Read it","secret":true}}}}"""
 
         const val RESOLVED = """{"type":"event","event":{"type":"permission_resolved","requestId":"r1","seq":2,"ts":1}}"""
 

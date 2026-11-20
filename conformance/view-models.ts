@@ -1342,6 +1342,10 @@ const PROMPT_REQUESTS = [
   { toolName: 'mcp__workerdeck__shell_request_write', input: { shellId: 'sh_3', reason: 'fix\nit' } },
   { toolName: 'mcp__other__shell_run', input: [] },
   { toolName: 'mcp_shell_run', input: { command: 'x' } },
+  { toolName: 'mcp__workerdeck__shell_propose', input: { command: 'gh auth login\n--web', description: 'Sign in to GitHub' }, decisionReason: 'ask' },
+  { toolName: 'shell_propose', input: { command: 'op read x', description: 'Read the token', secret: true, interactive: false } },
+  { toolName: 'shell_propose', input: { command: 'make', description: '', interactive: false } },
+  { toolName: 'shell_propose', input: { secret: 'yes' }, description: 'ignored' },
 ]
 
 const PROMPT: VmCase[] = [
@@ -1356,6 +1360,20 @@ const PROMPT: VmCase[] = [
       [{ kind: 'write', shellId: 's' }],
       [{ kind: 'kill', shellId: 's' }],
       [{ kind: 'grant', shellId: 's', reason: 'r\x1b' }],
+      [{ kind: 'propose', command: 'a\nb', description: 'd', secret: true, noInput: false }],
+      [{ kind: 'propose', command: 'c', description: '', secret: false, noInput: true }],
+    ],
+  },
+  {
+    module: 'prompt',
+    name: 'proposal-input',
+    fn: 'shellProposalInput',
+    calls: [
+      ['ls', 'ls', ''],
+      ['ls', 'ls -la', ''],
+      ['ls', '   ', 'pw'],
+      ['ls', 'ls', 'pw'],
+      ['ls', 'ls -a', ' '],
     ],
   },
   {

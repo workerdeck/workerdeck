@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +33,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -42,6 +46,7 @@ import bi.atomic.workerdeck.core.TranscriptLine
 import bi.atomic.workerdeck.core.ffi.ChoiceKey
 import bi.atomic.workerdeck.core.ffi.Prompt
 import bi.atomic.workerdeck.core.ffi.PromptKind
+import bi.atomic.workerdeck.core.ffi.Proposal
 import bi.atomic.workerdeck.core.ffi.Question
 import bi.atomic.workerdeck.core.ffi.Selection
 import bi.atomic.workerdeck.core.ffi.answerText
@@ -56,6 +61,8 @@ interface PromptActions {
     fun answer(requestId: String, selections: List<Selection>)
 
     fun dismiss(requestId: String)
+
+    fun runProposal(requestId: String, command: String, stdin: String)
 }
 
 private class PromptType(val style: TextStyle, val cell: Dp, val line: Dp, val palette: Palette) {
@@ -157,18 +164,51 @@ private fun PromptButton(type: PromptType, title: String, tone: String, prominen
 }
 
 @Composable
-private fun ReasonField(type: PromptType, value: String, placeholder: String, onValue: (String) -> Unit) {
-    PromptRow(type) {
+private fun ReasonField(
+    type: PromptType,
+    value: String,
+    placeholder: String,
+    glyph: String = " ",
+    tone: String = "fg",
+    secret: Boolean = false,
+    onValue: (String) -> Unit,
+) {
+    PromptRow(type, glyph, "faint") {
         Box(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
             if (value.isEmpty()) PromptText(type, placeholder, "faint")
             BasicTextField(
                 value = value,
                 onValueChange = onValue,
-                textStyle = type.style.copy(color = type.tone("fg")),
+                textStyle = type.style.copy(color = type.tone(tone)),
                 cursorBrush = SolidColor(Wd.colors.accent),
+                visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+                keyboardOptions =
+                    KeyboardOptions(autoCorrectEnabled = false, keyboardType = if (secret) KeyboardType.Password else KeyboardType.Ascii),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+}
+
+// A shell_propose card: the command stays editable until Run, and a secret typed here goes to stdin, never the agent.
+@Composable
+private fun ProposalFields(type: PromptType, proposal: Proposal, command: String, secret: String, onCommand: (String) -> Unit, onSecret: (String) -> Unit) {
+    ReasonField(type, command, "Command", glyph = "$", tone = "bright", onValue = onCommand)
+    if (command != proposal.command) {
+        PromptRow(type) {
+            Text(
+                "Edited by you - reset to the agent's command",
+                style = type.style.copy(color = type.tone("blue")),
+                modifier = Modifier.clickable { onCommand(proposal.command) },
+            )
+        }
+    }
+    if (proposal.secret) {
+        ReasonField(type, secret, "Secret for stdin (hidden)", glyph = "*", secret = true, onValue = onSecret)
+        PromptRow(type) { PromptText(type, "Piped to the command's stdin; never shown to the agent or kept in the transcript.", "faint") }
+    }
+    if (proposal.noInput) {
+        PromptRow(type) { PromptText(type, "Takes no input: stdin is empty, so a prompt fails instead of waiting.", "faint") }
     }
 }
 
@@ -176,8 +216,17 @@ private fun ReasonField(type: PromptType, value: String, placeholder: String, on
 private fun PermissionPrompt(prompt: Prompt, planLines: List<TranscriptLine>, type: PromptType, maxBodyHeight: Dp, actions: PromptActions) {
     var denying by remember(prompt.requestId) { mutableStateOf(false) }
     var reason by remember(prompt.requestId) { mutableStateOf("") }
+    var command by remember(prompt.requestId) { mutableStateOf(prompt.proposal?.command ?: "") }
+    var secret by remember(prompt.requestId) { mutableStateOf("") }
+    val runnable = prompt.proposal == null || command.isNotBlank()
     val choice = { key: ChoiceKey -> prompt.choices.first { it.key == key } }
     fun deny(interrupt: Boolean) = actions.deny(prompt.requestId, reason.trim().ifEmpty { null }, interrupt)
+    fun allow() {
+        when {
+            prompt.proposal == null -> actions.allow(prompt.requestId)
+            runnable -> actions.runProposal(prompt.requestId, command, secret)
+        }
+    }
 
     PromptSurface(
         tint = type.tone("yellow"),
@@ -187,6 +236,7 @@ private fun PermissionPrompt(prompt: Prompt, planLines: List<TranscriptLine>, ty
             when (prompt.kind) {
                 PromptKind.PLAN -> PlanLines(type, planLines)
                 PromptKind.SHELL -> prompt.shellLines.forEach { PromptRow(type) { PromptText(type, it, "bright", bold = true) } }
+                PromptKind.PROPOSAL -> prompt.proposal?.let { ProposalFields(type, it, command, secret, { command = it }, { secret = it }) }
                 else -> prompt.subject?.let { PromptRow(type) { PromptText(type, it, "dim") } }
             }
             prompt.description?.takeIf { it.isNotEmpty() }?.let { PromptRow(type) { PromptText(type, it, "dim") } }
@@ -196,7 +246,7 @@ private fun PermissionPrompt(prompt: Prompt, planLines: List<TranscriptLine>, ty
             prompt.choices.forEachIndexed { index, c ->
                 PromptChoice(type, "${index + 1}", c.option, selected = c.key == ChoiceKey.DENY && denying, danger = c.danger) {
                     when (c.key) {
-                        ChoiceKey.ALLOW -> actions.allow(prompt.requestId)
+                        ChoiceKey.ALLOW -> allow()
                         ChoiceKey.DENY -> denying = !denying
                         ChoiceKey.STOP -> deny(interrupt = true)
                     }
@@ -209,7 +259,7 @@ private fun PermissionPrompt(prompt: Prompt, planLines: List<TranscriptLine>, ty
                 PromptButton(type, choice(ChoiceKey.DENY).button, "yellow", prominent = true) { deny(interrupt = false) }
                 PromptButton(type, "Cancel", "dim") { denying = false }
             } else {
-                PromptButton(type, choice(ChoiceKey.ALLOW).button, "green", prominent = true) { actions.allow(prompt.requestId) }
+                PromptButton(type, choice(ChoiceKey.ALLOW).button, "green", prominent = true, enabled = runnable) { allow() }
                 PromptButton(type, choice(ChoiceKey.DENY).button, "yellow") { denying = true }
                 Spacer(Modifier.weight(1f))
                 PromptButton(type, choice(ChoiceKey.STOP).button, "red") { deny(interrupt = true) }

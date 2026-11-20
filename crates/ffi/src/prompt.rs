@@ -5,6 +5,7 @@ pub enum PromptKind {
     Permission,
     Plan,
     Shell,
+    Proposal,
     Question,
 }
 
@@ -53,6 +54,15 @@ pub struct Prompt {
     pub choices: Vec<PromptChoice>,
     pub deny_placeholder: String,
     pub questions: Vec<Question>,
+    pub proposal: Option<Proposal>,
+}
+
+// A shell_propose card: the command starts editable at `command`, a secret field shows when `secret`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Proposal {
+    pub command: String,
+    pub secret: bool,
+    pub no_input: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
@@ -105,11 +115,17 @@ impl From<core::Prompt> for Prompt {
             choices: Vec::new(),
             deny_placeholder: String::new(),
             questions: Vec::new(),
+            proposal: None,
         };
         match p.body {
             PromptBody::Permission { model, subject, shell_lines } => {
+                if let Some(core::ShellRequest::Propose { command, secret, no_input, .. }) = &model.shell {
+                    prompt.proposal = Some(Proposal { command: command.clone(), secret: *secret, no_input: *no_input });
+                }
                 prompt.kind = if model.plan.is_some() {
                     PromptKind::Plan
+                } else if prompt.proposal.is_some() {
+                    PromptKind::Proposal
                 } else if model.shell.is_some() {
                     PromptKind::Shell
                 } else {

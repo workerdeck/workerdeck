@@ -1,0 +1,48 @@
+{
+  "input": {
+    "fn": "shellProposalInput",
+    "calls": [
+      [
+        "ls",
+        "ls",
+        ""
+      ],
+      [
+        "ls",
+        "ls -la",
+        ""
+      ],
+      [
+        "ls",
+        "   ",
+        "pw"
+      ],
+      [
+        "ls",
+        "ls",
+        "pw"
+      ],
+      [
+        "ls",
+        "ls -a",
+        " "
+      ]
+    ]
+  },
+  "output": [
+    null,
+    {
+      "command": "ls -la"
+    },
+    {
+      "stdin": "pw"
+    },
+    {
+      "stdin": "pw"
+    },
+    {
+      "command": "ls -a",
+      "stdin": " "
+    }
+  ]
+}

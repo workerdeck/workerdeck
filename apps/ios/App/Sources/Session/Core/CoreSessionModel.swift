@@ -134,6 +134,11 @@ final class CoreSessionModel {
   }
 
   func answer(_ requestId: String, _ selections: [Selection]) { driver?.answer(requestId, selections) }
+
+  func runProposal(_ requestId: String, command: String, stdin: String) {
+    driver?.runProposal(requestId, command: command, stdin: stdin)
+  }
+
   func dismiss(_ requestId: String) { driver?.dismiss(requestId) }
 
   func send(_ text: String, attachmentIds: [String] = []) {

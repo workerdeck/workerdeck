@@ -17,7 +17,7 @@ import {
 import { goalBudgetChange } from '../packages/protocol/src/goal.ts'
 import { projectTranscript } from '../packages/react/src/lib/transcript-projection.ts'
 import { permissionPromptModel } from '../packages/ui/src/lib/permission-prompt.ts'
-import { shellRequestLines } from '../packages/ui/src/lib/shell-request.ts'
+import { shellProposalInput, shellRequestLines } from '../packages/ui/src/lib/shell-request.ts'
 import { faceStateOf, faceSvg, type FaceSvgOptions } from '../packages/ui/src/lib/face-svg.ts'
 import { answerFor, EMPTY_SELECTION, toggleLabel, toggleOther, type Selection } from '../packages/ui/src/lib/question-answers.ts'
 import { caseEvents } from './corpus.ts'
@@ -229,6 +229,7 @@ const FNS: Record<string, Fn> = {
   transcriptScript,
   permissionPromptModel,
   shellRequestLines,
+  shellProposalInput: (proposed: string, command: string, stdin: string) => shellProposalInput(proposed, command, stdin) ?? null,
   selectionScript,
   faceTree,
   faceStateOf,

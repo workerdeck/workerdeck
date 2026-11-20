@@ -496,6 +496,11 @@ impl Session {
         self.act(|live| live.answer(request_id, &selections))
     }
 
+    // Run on a shell_propose card with the command as the user left it and the secret typed for stdin ("" for none).
+    pub fn run_proposal(&self, request_id: String, command: String, stdin: String) -> Vec<Effect> {
+        self.act(|live| live.run_proposal(request_id, &command, &stdin))
+    }
+
     pub fn dismiss_question(&self, request_id: String) -> Vec<Effect> {
         self.act(|live| live.dismiss_question(request_id))
     }

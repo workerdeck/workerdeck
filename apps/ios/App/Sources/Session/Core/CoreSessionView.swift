@@ -483,6 +483,8 @@ struct CorePromptCard: View {
   @State private var reason = ""
   @State private var picked: [Int: Set<String>] = [:]
   @State private var other: [Int: String] = [:]
+  @State private var command = ""
+  @State private var secret = ""
 
   var body: some View {
     ScrollView {
@@ -493,8 +495,12 @@ struct CorePromptCard: View {
           if prompt.waiting > 1 { Text("+\(prompt.waiting - 1) waiting").font(.caption).foregroundStyle(.secondary) }
         }
         if let subject = prompt.subject { Text(subject).font(.subheadline.monospaced()) }
-        ForEach(Array(prompt.shellLines.enumerated()), id: \.offset) { _, line in
-          Text(line).font(.caption.monospaced())
+        if let proposal = prompt.proposal {
+          proposalFields(proposal)
+        } else {
+          ForEach(Array(prompt.shellLines.enumerated()), id: \.offset) { _, line in
+            Text(line).font(.caption.monospaced())
+          }
         }
         ForEach(Array(planLines.enumerated()), id: \.offset) { _, line in
           Text(line.gutter + line.text).font(.caption.monospaced())
@@ -507,6 +513,39 @@ struct CorePromptCard: View {
     }
     .frame(maxHeight: 320)
     .fixedSize(horizontal: false, vertical: true)
+    .onChange(of: prompt.requestId, initial: true) {
+      command = prompt.proposal?.command ?? ""
+      secret = ""
+    }
+  }
+
+  private func proposalFields(_ proposal: Proposal) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      TextField("Command", text: $command, axis: .vertical)
+        .font(.caption.monospaced())
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .lineLimit(1...8)
+        .textFieldStyle(.roundedBorder)
+      if command != proposal.command {
+        Button("Edited by you - reset to the agent's command") { command = proposal.command }
+          .font(.caption)
+          .buttonStyle(.borderless)
+      }
+      if proposal.secret {
+        SecureField("Secret for stdin (hidden)", text: $secret)
+          .textContentType(.password)
+          .textFieldStyle(.roundedBorder)
+        Text("Piped to the command's stdin; never shown to the agent or kept in the transcript.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+      if proposal.noInput {
+        Text("Takes no input: stdin is empty, so a prompt fails instead of waiting.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
   }
 
   private var decision: some View {
@@ -516,6 +555,7 @@ struct CorePromptCard: View {
         ForEach(Array(prompt.choices.enumerated()), id: \.offset) { _, choice in
           Button(choice.button, role: choice.danger ? .destructive : nil) { choose(choice.key) }
             .buttonStyle(.bordered)
+            .disabled(choice.key == .allow && prompt.proposal != nil && command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
       if denying {
@@ -527,7 +567,12 @@ struct CorePromptCard: View {
 
   private func choose(_ key: ChoiceKey) {
     switch key {
-    case .allow: model.allow(prompt.requestId)
+    case .allow:
+      if prompt.proposal != nil {
+        model.runProposal(prompt.requestId, command: command, stdin: secret)
+      } else {
+        model.allow(prompt.requestId)
+      }
     case .deny: denying.toggle()
     case .stop: deny(interrupt: true)
     }

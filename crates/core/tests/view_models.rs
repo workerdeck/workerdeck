@@ -367,9 +367,18 @@ fn prompt_fn(fn_name: &str, a: &Args) -> Value {
                     keys: raw.get("keys").map(|keys| serde_json::from_value(keys.clone()).unwrap()),
                 },
                 "kill" => ShellRequest::Kill { shell_id: field("shellId") },
+                "propose" => ShellRequest::Propose {
+                    command: field("command"),
+                    description: field("description"),
+                    secret: raw["secret"].as_bool().unwrap(),
+                    no_input: raw["noInput"].as_bool().unwrap(),
+                },
                 _ => ShellRequest::Grant { shell_id: field("shellId"), reason: field("reason") },
             };
             out(prompt::shell_request_lines(&payload))
+        }
+        "shellProposalInput" => {
+            out(prompt::shell_proposal_input(a.raw(0).as_str().unwrap(), a.raw(1).as_str().unwrap(), a.raw(2).as_str().unwrap()))
         }
         "parseUserQuestions" => out(prompt::parse_user_questions(a.raw(0))),
         "selectionScript" => {

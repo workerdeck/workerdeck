@@ -185,6 +185,10 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     worker.act { $0.deny(requestId: requestId, message: message, interrupt: interrupt ? true : nil) }
   }
 
+  func runProposal(_ requestId: String, command: String, stdin: String) {
+    worker.act { $0.runProposal(requestId: requestId, command: command, stdin: stdin) }
+  }
+
   func answer(_ requestId: String, _ selections: [Selection]) {
     worker.act { $0.answer(requestId: requestId, selections: selections) }
   }

@@ -24,6 +24,13 @@ pub enum ShellRequest {
         shell_id: String,
         reason: String,
     },
+    #[serde(rename_all = "camelCase")]
+    Propose {
+        command: String,
+        description: String,
+        secret: bool,
+        no_input: bool,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -102,7 +109,7 @@ pub fn plan_from_request(request: &Value) -> Option<String> {
     (!plan.trim().is_empty()).then(|| plan.to_owned())
 }
 
-const SHELL_WRITE_TOOLS: [&str; 4] = ["shell_run", "shell_write", "shell_kill", "shell_request_write"];
+const SHELL_WRITE_TOOLS: [&str; 5] = ["shell_run", "shell_write", "shell_kill", "shell_request_write", "shell_propose"];
 
 pub fn shell_tool_of(tool_name: &str) -> Option<&'static str> {
     let bare = match tool_name.strip_prefix("mcp__") {
@@ -124,6 +131,15 @@ pub fn shell_request_payload(request: &Value) -> Option<ShellRequest> {
             ShellRequest::Write { shell_id, data: owned(&input, "data"), keys: keys.filter(|keys| !keys.is_empty()) }
         }
         "shell_kill" => ShellRequest::Kill { shell_id },
+        "shell_propose" => {
+            let secret = input.get("secret") == Some(&Value::Bool(true));
+            ShellRequest::Propose {
+                command: owned(&input, "command").unwrap_or_default(),
+                description: owned(&input, "description").unwrap_or_default(),
+                secret,
+                no_input: input.get("interactive") == Some(&Value::Bool(false)) && !secret,
+            }
+        }
         _ => ShellRequest::Grant { shell_id, reason: owned(&input, "reason").unwrap_or_default() },
     })
 }
@@ -134,16 +150,17 @@ pub fn shell_request_title(payload: &ShellRequest) -> String {
         ShellRequest::Write { shell_id, .. } => format!("Agent wants to type into shell {shell_id}"),
         ShellRequest::Kill { shell_id } => format!("Agent wants to kill shell {shell_id}"),
         ShellRequest::Grant { shell_id, .. } => format!("Agent asks to type into your shell {shell_id}"),
+        ShellRequest::Propose { .. } => "Agent proposes a command for you to run".into(),
     }
+}
+
+fn command_lines(command: &str) -> impl Iterator<Item = String> + '_ {
+    command.split('\n').enumerate().map(|(index, line)| if index == 0 { format!("$ {line}") } else { format!("  {line}") })
 }
 
 pub fn shell_request_lines(payload: &ShellRequest) -> Vec<String> {
     match payload {
-        ShellRequest::Run { command } => command
-            .split('\n')
-            .enumerate()
-            .map(|(index, line)| if index == 0 { format!("$ {line}") } else { format!("  {line}") })
-            .collect(),
+        ShellRequest::Run { command } => command_lines(command).collect(),
         ShellRequest::Write { data, keys, .. } => {
             let mut lines = Vec::new();
             if let Some(data) = data {
@@ -158,7 +175,27 @@ pub fn shell_request_lines(payload: &ShellRequest) -> Vec<String> {
         ShellRequest::Grant { reason, .. } => {
             vec![format!("why: {}", visible_controls(reason)), "until the shell ends or you revoke it".into()]
         }
+        ShellRequest::Propose { command, secret, no_input, .. } => command_lines(command)
+            .chain(secret.then(|| "reads a secret on stdin".to_owned()))
+            .chain(no_input.then(|| "takes no input: stdin is empty".to_owned()))
+            .collect(),
     }
+}
+
+pub fn shell_proposal_of(request: &Value) -> Option<ShellRequest> {
+    shell_request_payload(request).filter(|payload| matches!(payload, ShellRequest::Propose { .. }))
+}
+
+// What the card hands back on Run: the command only when the user changed it, the secret only when one was typed.
+pub fn shell_proposal_input(proposed: &str, command: &str, stdin: &str) -> Option<Map<String, Value>> {
+    let mut input = Map::new();
+    if !command.trim().is_empty() && command != proposed {
+        input.insert("command".into(), Value::String(command.to_owned()));
+    }
+    if !stdin.is_empty() {
+        input.insert("stdin".into(), Value::String(stdin.to_owned()));
+    }
+    (!input.is_empty()).then_some(input)
 }
 
 pub fn visible_controls(text: &str) -> String {
@@ -205,6 +242,22 @@ pub fn permission_prompt_model(request: &Value) -> PermissionPromptModel {
         };
     }
     let shell = shell_request_payload(request);
+    if let Some(ShellRequest::Propose { description, .. }) = &shell {
+        return PermissionPromptModel {
+            description: Some(description.clone()),
+            heading: shell_request_title(shell.as_ref().unwrap()),
+            shell,
+            plan: None,
+            question: "Run it in a visible shell? The agent gets the exit code and the output.",
+            decision_reason,
+            choices: [
+                choice(ChoiceKey::Allow, "Run", "Yes, run it", false),
+                choice(ChoiceKey::Deny, "Don't run", "No, and tell the agent why", false),
+                choice(ChoiceKey::Stop, "Don't run & stop", "No, and stop the turn", true),
+            ],
+            deny_placeholder: "Reason (optional) - the agent reads this",
+        };
+    }
     let heading = match &shell {
         Some(shell) => shell_request_title(shell),
         None => owned(request, "title").or_else(|| owned(request, "displayName")).unwrap_or_else(|| "Permission needed".into()),
