@@ -698,7 +698,10 @@ under `allow` too. Every engine's `info()` reports `shellAgentWrite` when it hol
 `LocalCommandQueue` draws an agent-owned shell's row but never flushes it into context.
 `shell_propose` (offered where the gateway stamps `shellPropose`) raises its own card through
 `SessionToolSources.propose`, never the engine's permission step, and runs the command through
-`ShellDirectory.propose` as a `proposed` user shell; `docs/GOTCHAS.md` § Shell sessions has the rules.
+`ShellDirectory.propose` as a `proposed` user shell. `wait: 'exit'` (and `shell_run` `wakeOnExit`)
+wake the session with `shellExitedText` through a gateway-only `synthetic` send when the shell ends
+after the call returned; `wait: 'run'` flushes the shell like a `$`. `docs/GOTCHAS.md` § Shell
+sessions has the rules.
 
 `src/lib/instructions.ts` is the host-instruction seam: `SessionInstructions`
 (`string | ((context) => string)`), `resolveInstructions` and `composeInstructions`. All three

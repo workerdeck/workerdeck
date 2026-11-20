@@ -155,7 +155,8 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   you grant or revoke from the shell's row. For what it should not run itself (a prod deploy, a
   secret write) it proposes the command instead (`shell_propose`): you edit it if you like and run
   it with one click, a secret on stdin goes in a hidden field the agent never sees, and the agent
-  gets the exit code and output back.
+  gets the exit code and output back. A command that outlives the wait wakes the agent when it
+  ends; with `wait: 'run'` the output reaches it with your next message instead, like a `$`.
 - **A status line the agent writes.** Every session gets `set_status`: one short line (and an
   emoji) shown under its name in every client, like a chat status - "waiting on CI", "blocked:
   needs an API key". It stays until the agent changes it, clears when the conversation resets, and

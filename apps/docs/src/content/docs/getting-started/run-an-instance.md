@@ -148,7 +148,11 @@ by a scoped principal is never offered the write tools, whatever the flag says.
 For commands the agent should not run itself (a production deploy, a secret write, a cloud apply,
 anything its own shell tool was refused for) it calls `shell_propose` with the command and a short
 reason. You get a card in every permission mode: edit the command if you like, run it with one
-click in a visible shell, or decline. The agent gets the exit code and the tail of the output. If
+click in a visible shell, or decline. The agent gets the exit code and the tail of the output; a
+command that runs longer than the agent waits wakes it with the result when it ends, and with
+`wait: 'run'` the agent does not wait at all: the output reaches it with your next message, as
+if you had run it yourself. `interactive: false` gives the command empty stdin, so a prompt fails
+instead of waiting. If
 the command reads a secret on stdin, the card asks for it in a hidden field and pipes it in; the
 value never reaches the agent, the transcript or the session record. It needs only `--shell`, no
 write flag, and only an operator can create a session that has it or press Run on its card.
