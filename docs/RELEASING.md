@@ -1796,6 +1796,22 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   before 4.4.0 (`SessionCardTest` still expects a running member on its lead's card; not in the Publish gate).
   **Published** 2026-11-10: tag `v4.5.0` at `fc5e7a0e`, Publish green first try (run 42723750733), npm 12/12 with
   `latest` 4.5.0 (seven staged for a few minutes), Marketplace 4.5.0.
+  **4.6.0** - a **minor**, protocol stays **2** (every wire addition optional). Shells: `shell_propose` hands a
+  command to the human as a card they can edit, Allow or Decline, with wait modes (block, or return at once and wake
+  the agent on exit). It runs pagerless, `interactive: false` means no stdin, and it sits behind a PreToolUse hook,
+  so the SDK gives no shadowed-canUseTool warning. Peers: `peers_reset` lets a lead reset its own member's context
+  (a `peer_reset` cut; the lead's prompt follows as a peer message). Claude: `mcpServersDelivery: 'initialize'`
+  sends MCP servers over stdin. Fixes: one attention badge at a time and a card answer clears Blocked; a woken session
+  that dies before its first turn stays resumable; Android parks the session on its worker thread before close. Engines:
+  claude-agent-sdk 0.3.328 (Claude Code 2.1.328), `@openai/codex ~0.170.0` (core's optional peer now
+  `>=0.149.0 <0.171.0`), GPT-6.2 Sol (the new codex default) and Astra in the catalog and priced
+  (`PRICING_AS_OF` 2026-11-19), `engines.vscode ^1.146.0`. quickjs still held at 0.31. `smoke:restart codex clear`
+  was failing 2/13 (pre-existing, on codex 0.167 too): it expected the engine's `conversation_reset` and a deleted record, but behind a
+  gateway a `/clear` is a cut. It now asserts the cut and passes 15/15. **Verified**: `pnpm lint` (120 warnings,
+  unchanged), typecheck, `turbo run test --force --concurrency=1` 13/13, fixtures golden/vm/frames `--check`,
+  `cargo fmt`/clippy/test (427), build, gatekeeper; smokes from the 109th session: `smoke:shell-propose` 21/21
+  (claude bypass + auto, codex), `smoke:mcp-reconnect` 12/12 and `smoke:restart claude` 8/8 on SDK 0.3.328. Bumped in a
+  worktree (the gateway runs from the main checkout).
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
