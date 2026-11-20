@@ -12,7 +12,7 @@
 // turn recalls a word from the first. That last one is the only check that can tell a resumed thread apart from a
 // fresh one that merely inherited the id, which is why the word is asked for rather than assumed.
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync, unlinkSync, realpathSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync, readFileSync, unlinkSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import WebSocket from 'ws'
@@ -288,7 +288,7 @@ async function main(): Promise<void> {
   // otherwise, and a swept store leaves the session unusable, so `noprofile` has to precede `swept`.
   const rowKept = wants('clear') ? await clearNoChild(id) : true
   if (!rowKept && (wants('noprofile') || wants('swept'))) {
-    note('noprofile and swept skipped: the clear removed the row they would check; run them without clear')
+    note('noprofile and swept skipped: the row they would check is gone')
   }
   if (rowKept && wants('noprofile')) {
     await deletedProfile(id)
@@ -350,26 +350,29 @@ async function sweptStore(id: string): Promise<void> {
   )
 }
 
-// The one clear path with no eager `thread/start` to save it: with the child dead the engine session id is simply
-// dropped, so the record still naming the cleared conversation has to be deleted. Asserts on the record and the
-// restart, not a turn, and costs no model tokens.
+// Behind a gateway a `/clear` is a cut (GOTCHAS § Conversation cut), never the engine's own clear: the record stays,
+// moves to conversation n+1, and keeps the cleared thread only as history. With the child dead nothing can start a
+// thread eagerly, so this is the path where a stale engine id could survive into the new conversation. Asserts on the
+// record and the restart, not a turn, and costs no model tokens.
 async function clearNoChild(id: string): Promise<boolean> {
   step('5. A clear with no live child, across a restart')
   if (engine !== 'codex') {
     note("skipped: only codex can be cleared with its child dead (claude's reset comes back from the CLI, which needs one)")
     return true
   }
-  const recordPath = () => {
+  const record = () => {
     const dir = join(stateDir, 'sessions')
     const names = existsSync(dir) ? readdirSync(dir) : []
     const name = names.find((n) => n.startsWith(id) && n.endsWith('.json'))
-    return name ? join(dir, name) : undefined
+    return name ? (JSON.parse(readFileSync(join(dir, name), 'utf8')) as { record: StoredRecord }).record : undefined
   }
-  if (!recordPath()) {
-    fail('a dormant record to invalidate', 'none on disk - nothing for the clear to get wrong')
+  const before = record()
+  const oldThread = before?.runtime?.sdkSessionId
+  if (!before || !oldThread) {
+    fail('a dormant record to invalidate', 'none on disk naming a thread - nothing for the clear to get wrong')
     return true
   }
-  ok('a dormant record exists, naming the conversation about to be cleared')
+  ok('a dormant record exists, naming the conversation about to be cleared', `conversation ${before.conversation}`)
 
   // Matched by parent pid, never `pgrep -f codex`: that would also match whatever the operator is running in their
   // own terminal, and this smoke must never touch a session it did not create.
@@ -393,19 +396,26 @@ async function clearNoChild(id: string): Promise<boolean> {
   }
   await sleep(1_000)
 
-  const reset = await clearOverWs(id)
-  if (reset) {
-    ok('the clear landed with no child', 'conversation_reset emitted')
+  const started = await clearOverWs(id)
+  if (started === before.conversation + 1) {
+    ok('the clear landed with no child', `conversation ${started} started`)
   } else {
-    fail('the clear landed with no child', 'no conversation_reset within 20s')
+    fail('the clear landed with no child', started ? `conversation ${started} started` : 'no conversation_started within 20s')
   }
 
-  // Give the (asynchronous, queued) store delete a moment to land.
+  // The record write is queued behind the frame.
   await sleep(1_500)
-  if (!recordPath()) {
-    ok('the stale dormant record is gone', 'it named the cleared conversation')
+  const after = record()
+  const archived = after?.conversations?.find((c) => c.n === before.conversation)
+  if (after?.conversation === before.conversation + 1 && archived?.engineSessionId === oldThread) {
+    ok('the record moved on', `conversation ${after.conversation}, the cleared thread archived as history`)
   } else {
-    fail('the stale dormant record is gone', 'it survived, still naming the cleared thread')
+    fail('the record moved on', `conversation ${after?.conversation}, archived ${archived?.engineSessionId ?? 'nothing'}`)
+  }
+  if (after && after.runtime?.sdkSessionId !== oldThread && after.runtime?.info?.sdkSessionId !== oldThread) {
+    ok('the live record no longer resumes the cleared thread')
+  } else {
+    fail('the live record no longer resumes the cleared thread', `it still names ${oldThread}`)
   }
 
   await stopGateway()
@@ -413,35 +423,41 @@ async function clearNoChild(id: string): Promise<boolean> {
   const listed = await api<{ sessions: SessionInfo[] }>('/sessions')
   const row = listed.sessions.find((s) => s.id === id)
   if (!row) {
-    ok('the cleared session is NOT resurrected', 'the row is gone - for codex the dormant record is the way back, and the clear removed it')
+    fail('the cleared session is still listed', 'the row is gone - a cut keeps the session')
     return false
   }
-  note(`the row came back (status ${row.status}); checking it came back empty`)
-  const after = await attach(id, undefined, 8_000)
-  const priorPrompt = after.events.some((e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'))
+  ok('the cleared session is still listed', `status ${row.status}`)
+  const replay = await attach(id, undefined, 8_000)
+  const priorPrompt = replay.events.some((e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'))
   if (priorPrompt) {
-    fail('the cleared session is NOT resurrected', 'the pre-clear conversation replayed')
+    fail('it came back on the new conversation', 'the pre-clear conversation replayed')
   } else {
-    ok('the cleared session is NOT resurrected', 'it came back with none of the cleared history')
+    ok('it came back on the new conversation', 'none of the cleared history replayed')
   }
   return true
 }
 
+type StoredRecord = {
+  conversation: number
+  runtime?: { sdkSessionId?: string; info?: { sdkSessionId?: string } }
+  conversations?: { n: number; engineSessionId?: string }[]
+}
+
 // Not `attach()`: a clear produces no `turn_result`, so that helper would sit on its timeout. The typed `/clear`
-// rather than the `clear_context` command because both are the same call in the runner.
-async function clearOverWs(id: string): Promise<boolean> {
+// rather than the `clear_context` command because both are the same cut. Resolves the conversation that started.
+async function clearOverWs(id: string): Promise<number | undefined> {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
   const generation = conversationOf(ws)
-  let sawReset = false
+  let started: number | undefined
   const done = new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, 20_000)
     ws.on('error', () => resolve())
     ws.on('message', (data) => {
       const frame = JSON.parse(String(data)) as ServerFrame
-      if (frame.type !== 'event' || frame.event.type !== 'conversation_reset') {
+      if (frame.type !== 'conversation_started') {
         return
       }
-      sawReset = true
+      started = frame.conversation
       clearTimeout(timer)
       resolve()
     })
@@ -454,7 +470,7 @@ async function clearOverWs(id: string): Promise<boolean> {
   ws.send(JSON.stringify({ type: 'user_message', text: '/clear', generation: await generation }))
   await done
   ws.close()
-  return sawReset
+  return started
 }
 
 // `buildRunner` throws `unknown profile`, the row stays and the attach fails. No model tokens.
