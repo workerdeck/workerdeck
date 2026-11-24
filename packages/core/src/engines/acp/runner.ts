@@ -110,6 +110,10 @@ function stopError(stopReason: string | undefined): string | undefined {
   }
 }
 
+function select(optionId: string | undefined): AcpPermissionOutcome {
+  return optionId ? { outcome: { outcome: 'selected', optionId } } : { outcome: { outcome: 'cancelled' } }
+}
+
 export class AcpRunner extends EngineRunner<AcpRunnerConfig> implements Runner {
   readonly #cwd: string
   readonly #dialect: AcpDialect
@@ -730,8 +734,6 @@ export class AcpRunner extends EngineRunner<AcpRunnerConfig> implements Runner {
     const options = Array.isArray(params?.options) ? params.options : []
     const allow = options.find((option) => option.kind === 'allow_once')
     const reject = options.find((option) => option.kind === 'reject_once') ?? options.find((option) => option.kind === 'reject_always')
-    const select = (optionId: string | undefined): AcpPermissionOutcome =>
-      optionId ? { outcome: { outcome: 'selected', optionId } } : { outcome: { outcome: 'cancelled' } }
     if (this.#permissionMode === 'bypassPermissions' && allow) {
       return Promise.resolve(select(allow.optionId))
     }

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import type { ChecklistItem, SessionEventBody } from '@workerdeck/protocol'
+import type { ChecklistItem, ContentBlock, SessionEventBody } from '@workerdeck/protocol'
 import { AcpTranscript, type AcpSink } from '../src/engines/acp/updates.ts'
 import type { AcpSessionUpdate } from '../src/engines/acp/types.ts'
 import { filePatchFromTexts } from '../src/lib/patch.ts'
@@ -38,12 +38,18 @@ function fixtureUpdates(name: string): AcpSessionUpdate[] {
     .map((message) => message.params!.update!)
 }
 
+function blocks(content: string | ContentBlock[]): ContentBlock[] {
+  return typeof content === 'string' ? [{ type: 'text', text: content }] : content
+}
+
 function kinds(events: SessionEventBody[]): string[] {
   return events
     .filter((event) => event.type !== 'stream_delta')
     .map((event) => {
       if (event.type === 'assistant_message') {
-        return `assistant:${event.message.content.map((block) => block.type).join('+')}`
+        return `assistant:${blocks(event.message.content)
+          .map((block) => block.type)
+          .join('+')}`
       }
       if (event.type === 'user_message') {
         return Array.isArray(event.message.content) ? `user:${event.message.content.map((block) => block.type).join('+')}` : 'user:text'
@@ -71,7 +77,7 @@ describe('AcpTranscript', () => {
       'assistant:text',
     ])
     const uses = recorded.events
-      .flatMap((event) => (event.type === 'assistant_message' ? event.message.content : []))
+      .flatMap((event) => (event.type === 'assistant_message' ? blocks(event.message.content) : []))
       .filter((block) => block.type === 'tool_use')
     expect(uses.map((block) => (block as { name: string }).name)).toEqual(['write_file', 'run_command'])
     expect((uses[0] as { id: string }).id).toBe('turn-1:call_15413699212027215681')
