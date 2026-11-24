@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { Globe, Users } from 'lucide-react'
+import { CircleX, Globe, Hand, ShieldAlert, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import {
   ATTENTION_LABELS,
@@ -142,9 +142,24 @@ export function SessionItem({
 
   const model = info.modelName ?? friendlyModel(info.model)
   const status = statusLine(info.statusLabel)
-  // Its own reason to need a person, or (on a lead) a team member's: the one card that asks for an action.
-  const needsYou = listState(row) === 'attention' || row.teamState === 'attention' || badgeState === 'attention'
+  // Only its own reason to need a person: a member that needs one is always listed under its lead, so the lead stays plain.
+  const needsYou = listState(row) === 'attention'
   const reasons = <ReasonChips info={info} />
+  // Plain text in the reasons' slot, on a sub-agent only (a top-level agent is always relevant), and only once the turn
+  // has stopped: a reason already says act, and a count still being produced is not waiting for anyone yet.
+  const unreadCount =
+    variant === 'member' && row.unseen > 0 && row.state !== 'working' ? (
+      <span
+        title={`${row.unseen} new message${row.unseen === 1 ? '' : 's'}`}
+        className="flex h-4 min-w-4 shrink-0 items-center justify-center text-label font-semibold text-accent tabular-nums"
+      >
+        {row.unseen > 99 ? '99+' : row.unseen}
+      </span>
+    ) : null
+  // Nothing here for a person right now: the face greys out so the cards that do want attention stand out.
+  const shownState = badgeState ?? row.teamState ?? row.state
+  const quiet = !active && !needsYou && row.unseen === 0 && (shownState === 'idle' || shownState === 'ended')
+  const quietAvatar = quiet && 'opacity-50 grayscale'
   const parts: ReactNode[] = []
   if (model) {
     parts.push(
@@ -224,9 +239,9 @@ export function SessionItem({
         }
         title={agent ? agentTitle(info) : undefined}
         className={cn(
-          'min-w-0 shrink truncate text-body-sm font-medium tracking-[-0.005em]',
+          'text-body-sm font-medium tracking-[-0.005em]',
+          agent || tile ? 'shrink-0 whitespace-nowrap' : 'min-w-0 shrink truncate',
           active || !agent ? 'text-fg-1' : 'text-fg-name',
-          variant === 'member' && 'max-w-[60%] shrink-0',
         )}
       >
         {label}
@@ -275,90 +290,53 @@ export function SessionItem({
       }}
       className={cn(
         'group group/session flex w-full cursor-pointer flex-col p-1 text-left outline-none',
-        variant === 'member' ? 'rounded-[4px]' : 'rounded-[8px]',
-        'transition-colors focus-visible:ring-2 focus-visible:ring-ring',
+        'rounded-[6px]',
+        'transition-colors focus-visible:ring-2',
         needsYou
-          ? cn('bg-row-attention', active && 'ring-1 ring-accent ring-inset')
-          : holdsOpenStep
-            ? 'bg-row-selected-weak'
-            : active
-              ? 'bg-row-selected'
-              : 'hover:bg-row-hover',
+          ? cn('bg-row-attention focus-visible:ring-warning', active && 'ring-1 ring-warning ring-inset')
+          : cn('focus-visible:ring-ring', holdsOpenStep ? 'bg-row-selected-weak' : active ? 'bg-row-selected' : 'hover:bg-row-hover'),
         className,
       )}
     >
-      {agent && variant === 'member' ? (
-        <div className="flex h-5 items-center gap-2">
-          <AgentAvatar row={row} size={20} />
+      {agent || tile ? (
+        <div className="flex h-7 items-center gap-2">
+          <AgentAvatar
+            row={row}
+            size={28}
+            {...(variant === 'member' ? {} : { state: badgeState, context: true })}
+            className={cn(quietAvatar)}
+          />
           <div className={cn('flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden', info.engineAsleep && 'opacity-60')}>
             {nameLabel}
             {model ? <ModelBadge engine={engine} model={info.model} name={model} className="text-label" /> : null}
+            {agent?.shared ? (
+              <span title={SHARED_TITLE} aria-label={SHARED_TITLE} className="flex shrink-0 text-fg-4">
+                <Globe className="size-3" />
+              </span>
+            ) : null}
             {line ? (
               <span title={lineTitle} className={cn('min-w-0 truncate text-label tracking-[-0.005em]', lineTone)}>
                 {line.text}
               </span>
-            ) : null}
+            ) : agent ? null : (
+              <span className="min-w-0 truncate text-label tracking-[-0.005em] text-fg-4">
+                {[status, project, time].filter(Boolean).join(' · ')}
+              </span>
+            )}
             <span className="flex-1" />
-            {reasons}
-            {unread}
+            {attentionOf(info).reasons.length > 0 ? reasons : unreadCount}
+            {teamUnseen > 0 ? (
+              <span
+                title={`${teamUnseen} new message${teamUnseen === 1 ? '' : 's'} in the team`}
+                className="flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-accent px-1.5 text-[0.75rem] leading-none text-accent-fg tabular-nums"
+              >
+                <Users className="size-3" />
+                {teamUnseen}
+              </span>
+            ) : null}
+            {teamTray}
             {chips}
             {actions}
-          </div>
-        </div>
-      ) : agent || tile ? (
-        <div className="flex items-center gap-2">
-          <AgentAvatar row={row} size={40} state={badgeState} context={agent !== undefined} />
-          <div className={cn('flex min-w-0 flex-1 flex-col', info.engineAsleep && 'opacity-60')}>
-            <div className="flex h-5 items-center gap-1.5 overflow-hidden">
-              {nameLabel}
-              {agent && model ? <ModelBadge engine={engine} model={info.model} name={model} /> : null}
-              {agent?.shared ? (
-                <span title={SHARED_TITLE} aria-label={SHARED_TITLE} className="flex shrink-0 text-fg-4">
-                  <Globe className="size-3" />
-                </span>
-              ) : null}
-              <span className="flex-1" />
-              {reasons}
-              {unread}
-              {teamUnseen > 0 ? (
-                <span
-                  title={`${teamUnseen} new message${teamUnseen === 1 ? '' : 's'} in the team`}
-                  className="flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-accent px-1.5 text-[0.75rem] leading-none text-accent-fg tabular-nums"
-                >
-                  <Users className="size-3" />
-                  {teamUnseen}
-                </span>
-              ) : null}
-              {teamTray}
-              {agent ? null : <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />}
-            </div>
-            <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
-              {line ? (
-                <span title={lineTitle} className={cn('min-w-0 truncate', lineTone)}>
-                  {line.text}
-                </span>
-              ) : agent ? null : (
-                <>
-                  <span className="min-w-0 truncate text-fg-4">
-                    {parts.map((part, i) => (
-                      <Fragment key={i}>
-                        {i > 0 ? ' · ' : ''}
-                        {part}
-                      </Fragment>
-                    ))}
-                  </span>
-                  {time ? (
-                    <span className="shrink-0 text-fg-4">
-                      {parts.length > 0 ? '· ' : ''}
-                      {time}
-                    </span>
-                  ) : null}
-                </>
-              )}
-              <span className="min-w-0 flex-1" />
-              {chips}
-              {actions}
-            </div>
           </div>
         </div>
       ) : (
@@ -410,19 +388,23 @@ export function SessionItem({
   )
 }
 
+const REASON_ICONS = { approval: ShieldAlert, blocked: Hand, failed: CircleX } as const
+
 function ReasonChips({ info }: { info: SessionInfo }) {
-  return attentionOf(info).reasons.map((reason) => (
-    <span
-      key={reason}
-      title={attentionTitle(reason, info)}
-      className={cn(
-        'flex h-4 shrink-0 items-center rounded-[3px] px-1 text-micro leading-none',
-        reason === 'failed' ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning',
-      )}
-    >
-      {ATTENTION_LABELS[reason]}
-    </span>
-  ))
+  return attentionOf(info).reasons.map((reason) => {
+    const Icon = REASON_ICONS[reason]
+    return (
+      <span
+        key={reason}
+        role="img"
+        title={attentionTitle(reason, info)}
+        aria-label={ATTENTION_LABELS[reason]}
+        className={cn('flex size-4 shrink-0 items-center justify-center', reason === 'failed' ? 'text-danger' : 'text-warning')}
+      >
+        <Icon className="size-3.5" />
+      </span>
+    )
+  })
 }
 
 function Gutter({ children }: { children: ReactNode }) {
@@ -487,7 +469,7 @@ function NameEditor({
 }
 
 export function statusLine(label: SessionInfo['statusLabel']): string | undefined {
-  return label ? (label.emoji ? `${label.emoji} ${label.text}` : label.text) : undefined
+  return label?.text
 }
 
 function agentTitle(info: SessionInfo): string {

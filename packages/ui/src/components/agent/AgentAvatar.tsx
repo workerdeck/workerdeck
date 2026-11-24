@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import type { SessionRow, SessionState } from '@workerdeck/protocol'
-import { EngineIcon, vendorMarkClass } from './EngineIcon.tsx'
+import { EngineIcon, vendorColor, vendorMarkClass } from './EngineIcon.tsx'
 import { SessionStatusIcon } from './SessionStatusIcon.tsx'
 import { useMotionClock } from './motion-clock.ts'
 import { CONTEXT_WRAP_UP_DEFAULT, faceHtml, faceProjectOf, faceStateOf } from '../../lib/face-svg.ts'
@@ -19,13 +19,24 @@ export interface AgentAvatarProps {
   className?: string
 }
 
-export function AgentAvatar({ row, size = 32, state, context = false, wrapUp = CONTEXT_WRAP_UP_DEFAULT, badge = true, title, className }: AgentAvatarProps) {
+export function AgentAvatar({
+  row,
+  size = 32,
+  state,
+  context = false,
+  wrapUp = CONTEXT_WRAP_UP_DEFAULT,
+  badge = true,
+  title,
+  className,
+}: AgentAvatarProps) {
   const { info } = row
   const id = `wdf${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   useMotionClock()
   const agent = info.agent
   if (!agent) {
-    return <EngineTile row={row} size={size} state={state} badge={badge} title={title} className={className} />
+    return (
+      <EngineTile row={row} size={size} state={state} badge={badge} context={context} wrapUp={wrapUp} title={title} className={className} />
+    )
   }
   const usage = context ? info.contextUsage : undefined
   const markup = faceHtml({
@@ -49,19 +60,52 @@ export function AgentAvatar({ row, size = 32, state, context = false, wrapUp = C
   )
 }
 
-// A plain session drawn in the agent card's shape: its engine's mark, with the status badge a face would otherwise carry.
-function EngineTile({ row, size, state, badge, title, className }: Required<Pick<AgentAvatarProps, 'row' | 'size' | 'badge'>> & AgentAvatarProps) {
+// A plain session drawn in the agent card's shape: its engine's mark, with the status badge top right where a face draws
+// its state, leaving the bottom right to the card's unread count.
+function EngineTile({
+  row,
+  size,
+  state,
+  badge,
+  context,
+  wrapUp = CONTEXT_WRAP_UP_DEFAULT,
+  title,
+  className,
+}: Required<Pick<AgentAvatarProps, 'row' | 'size' | 'badge'>> & AgentAvatarProps) {
   const { info } = row
   const shown = state ?? row.state
   const engine = info.engine ?? 'claude'
   const badgeSize = size >= 28 ? 14 : 11
+  const usage = context ? info.contextUsage : undefined
+  const level = usage ? Math.min(100, Math.max(0, usage.percentage)) : 0
+  const warn = usage !== undefined && usage.percentage / 100 >= wrapUp
+  const vendor = vendorColor(engine, info.model)
+  const tint = (share: number) => `color-mix(in oklab, ${vendor ?? 'var(--fg-4)'} ${share}%, var(--bg))`
   return (
-    <span data-slot="agent-avatar" className={cn('relative inline-flex shrink-0', className)} style={{ width: size, height: size }} title={title}>
-      <span className="flex size-full items-center justify-center rounded-[4px] border border-dashed border-border">
-        <EngineIcon engine={engine} model={info.model} className={cn('size-1/2', vendorMarkClass(engine, info.model))} />
+    <span
+      data-slot="agent-avatar"
+      className={cn('relative inline-flex shrink-0', className)}
+      style={{ width: size, height: size }}
+      title={title}
+    >
+      <span className="relative flex size-full items-center justify-center overflow-hidden rounded-[4px]" style={{ background: tint(24) }}>
+        {level > 0 ? (
+          <span
+            aria-hidden
+            className="absolute inset-x-0 bottom-0"
+            style={{
+              height: `${level}%`,
+              background: warn ? 'color-mix(in oklab, var(--sw-amber-base) 45%, transparent)' : tint(48),
+            }}
+          />
+        ) : null}
+        <EngineIcon engine={engine} model={info.model} className={cn('relative size-1/2', vendorMarkClass(engine, info.model))} />
       </span>
       {badge && (shown !== 'idle' || info.engineAsleep) ? (
-        <span className="absolute -right-1 -bottom-1 flex items-center justify-center rounded-full bg-bg" style={{ width: badgeSize, height: badgeSize }}>
+        <span
+          className="absolute -top-1 -right-1 flex items-center justify-center rounded-full bg-bg"
+          style={{ width: badgeSize, height: badgeSize }}
+        >
           <SessionStatusIcon row={{ ...row, state: shown }} className="size-full p-px" />
         </span>
       ) : null}

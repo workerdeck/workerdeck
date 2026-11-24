@@ -4,6 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { DEFAULT_VIEW_CONFIG } from '@workerdeck/protocol'
 import type { SessionRow, ViewConfig } from '@workerdeck/protocol'
 import { SessionBrowser } from '../src/components/agent/SessionBrowser.tsx'
+import { MenuItem, MenuSeparator } from '../src/components/ui/Menu.tsx'
 import { AgentHeading } from '../src/components/agent/AgentAvatar.tsx'
 import type { TeamMove } from '../src/lib/team-drop.ts'
 import { AGENTS, makeRow } from './session-fixtures.ts'
@@ -79,6 +80,17 @@ function Browser({
       onRename={() => {}}
       onNewConversation={() => {}}
       onDelete={() => {}}
+      rowMenu={(row) => (
+        <>
+          <MenuItem>{row.info.agent ? 'Rename agent' : 'Rename session'}</MenuItem>
+          <MenuItem>Set status</MenuItem>
+          <MenuSeparator />
+          <MenuItem>New conversation</MenuItem>
+          <MenuItem>Sleep</MenuItem>
+          <MenuSeparator />
+          <MenuItem destructive>{row.info.agent ? 'Delete agent…' : 'Close session'}</MenuItem>
+        </>
+      )}
       {...props}
     />
   )
@@ -118,14 +130,15 @@ const TEAM_ROWS = [
     id: 't1',
     title: 'Agent Teams: protocol and list',
     status: 'idle',
-    statusLabel: { text: 'waiting on CI for #412', emoji: '⏳', setAt: 1 },
+    statusLabel: { text: 'Waiting on CI', setAt: 1 },
     agent: agent('atlas', 'Atlas', { leads: true }),
   } as never),
   makeRow(
     {
       id: 't2',
-      title: 'Needs approval: Bash pnpm test',
+      title: 'Test suite repair',
       status: 'awaiting_approval',
+      statusLabel: { text: 'Running Tests', setAt: 1 },
       pendingPermissionCount: 1,
       agent: agent('pip', 'Pip', { lead: 'atlas', team: 'Atlas', order: 0 }),
     } as never,
@@ -134,7 +147,7 @@ const TEAM_ROWS = [
   makeRow({
     id: 't3',
     title: 'peers.ts: team visibility',
-    statusLabel: { text: 'blocked: needs the relay key', setAt: 1 },
+    statusLabel: { text: 'Needs Relay Key', setAt: 1 },
     engine: 'codex',
     model: 'gpt-6-sol',
     agent: agent('juno', 'Juno', { lead: 'atlas', team: 'Atlas', order: 1 }),
@@ -146,6 +159,16 @@ const TEAM_ROWS = [
     engineAsleep: true,
     agent: agent('rook', 'Rook', { lead: 'atlas', team: 'Atlas', order: 2 }),
   } as never),
+  makeRow(
+    {
+      id: 't11',
+      title: 'Release notes',
+      status: 'idle',
+      statusLabel: { text: 'Drafted Notes', setAt: 1 },
+      agent: agent('wren', 'Wren', { lead: 'atlas', team: 'Atlas', order: 3 }),
+    } as never,
+    7,
+  ),
   makeRow({ id: 't5', title: 'Relay follow-ups', status: 'running', agent: agent('marlow', 'Marlow') } as never, 3),
   makeRow(
     {
@@ -170,6 +193,7 @@ const TEAM_ROWS = [
     1,
   ),
   makeRow({ id: 't8', title: 'Weekly dependency bump', status: 'idle' } as never),
+  makeRow({ id: 't12', title: 'Lockfile audit', status: 'idle', engine: 'codex', model: 'gpt-6-sol' } as never),
   makeRow({ id: 't9', title: 'One-off grep', status: 'closed' } as never),
   makeRow({ id: 't10', title: 'Old spike', status: 'failed' } as never),
 ]
@@ -178,7 +202,7 @@ export const Teams: Story = {
   render: () => (
     <Browser
       rows={TEAM_ROWS}
-     
+
       activeId="t3"
       showControls={false}
       onRenameAgent={() => {}}
@@ -208,7 +232,7 @@ const AUTO_ROWS = [
     title: 'iOS mirror review',
     status: 'idle',
     engineAsleep: true,
-    statusLabel: { text: 'needs the Apple team id', emoji: '🧭', setAt: 1, waitingOn: 'human' },
+    statusLabel: { text: 'Needs Team ID', setAt: 1, waitingOn: 'human' },
     checklist: [
       { text: 'Mirror teamView in the Rust core', status: 'completed' },
       { text: 'Check the build on a device', status: 'in_progress' },

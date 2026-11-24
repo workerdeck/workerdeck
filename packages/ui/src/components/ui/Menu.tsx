@@ -1,7 +1,15 @@
 import { type FunctionComponent } from 'react'
+import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu'
 import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import { cn } from '../../lib/utils.ts'
 import { PortalScope } from './PortalScope.tsx'
+
+const POPUP = cn(
+  'min-w-48 rounded-md border border-border bg-surface p-1 text-fg-1 shadow-(--shadow-lg) outline-none',
+  'transition-[opacity,transform] duration-(--motion-base)',
+  'data-starting-style:scale-95 data-starting-style:opacity-0',
+  'data-ending-style:scale-95 data-ending-style:opacity-0',
+)
 
 export const Menu = MenuPrimitive.Root
 export const MenuTrigger = MenuPrimitive.Trigger
@@ -12,17 +20,7 @@ export const MenuContent: FunctionComponent<
   <MenuPrimitive.Portal>
     <PortalScope>
       <MenuPrimitive.Positioner align={align} side={side} sideOffset={sideOffset} className="isolate z-80 outline-none">
-        <MenuPrimitive.Popup
-          data-slot="menu-content"
-          className={cn(
-            'min-w-48 rounded-md border border-border bg-surface p-1 text-fg-1 shadow-(--shadow-lg) outline-none',
-            'transition-[opacity,transform] duration-(--motion-base)',
-            'data-starting-style:scale-95 data-starting-style:opacity-0',
-            'data-ending-style:scale-95 data-ending-style:opacity-0',
-            className,
-          )}
-          {...props}
-        />
+        <MenuPrimitive.Popup data-slot="menu-content" className={cn(POPUP, className)} {...props} />
       </MenuPrimitive.Positioner>
     </PortalScope>
   </MenuPrimitive.Portal>
@@ -43,4 +41,18 @@ export const MenuItem: FunctionComponent<MenuPrimitive.Item.Props & { destructiv
 
 export const MenuSeparator: FunctionComponent<MenuPrimitive.Separator.Props> = ({ className, ...props }) => (
   <MenuPrimitive.Separator className={cn('my-1 h-px bg-border', className)} {...props} />
+)
+
+export const ContextMenu = ContextMenuPrimitive.Root
+export const ContextMenuTrigger = ContextMenuPrimitive.Trigger
+
+// Opens at the pointer on right click or a touch long press; `MenuItem` and `MenuSeparator` work inside it.
+export const ContextMenuContent: FunctionComponent<ContextMenuPrimitive.Popup.Props> = ({ className, ...props }) => (
+  <ContextMenuPrimitive.Portal>
+    <PortalScope>
+      <ContextMenuPrimitive.Positioner className="isolate z-80 outline-none">
+        <ContextMenuPrimitive.Popup data-slot="context-menu-content" className={cn(POPUP, className)} {...props} />
+      </ContextMenuPrimitive.Positioner>
+    </PortalScope>
+  </ContextMenuPrimitive.Portal>
 )

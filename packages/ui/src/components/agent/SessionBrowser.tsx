@@ -1,20 +1,6 @@
 import { Fragment, useMemo, useState } from 'react'
 import type { HTMLAttributes, ReactNode } from 'react'
-import {
-  BedDouble,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  FolderOpen,
-  Layers,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Search,
-  SearchX,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { ChevronDown, ChevronRight, FolderOpen, Layers, Plus, Search, SearchX, X } from 'lucide-react'
 import {
   clearFilters,
   filterRows,
@@ -25,7 +11,6 @@ import {
   sessionKey,
   sessionLabel,
   subsetSummary,
-  teamSummary,
   teamSummaryText,
   teamView,
   toggleTeamExpanded,
@@ -42,9 +27,6 @@ import {
   orderedGroupBy,
   toggleGroupCollapsed,
   toggleStepsExpanded,
-  clearContextOffered,
-  newConversationGate,
-  NEW_CONVERSATION_HINT,
 } from '@workerdeck/protocol'
 import type {
   FoldableStepKind,
@@ -58,18 +40,16 @@ import type {
   ViewConfig,
   WorkspaceScope,
 } from '@workerdeck/protocol'
-import { AgentAvatar } from './AgentAvatar.tsx'
-import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
-import { HoverCard } from '../ui/HoverCard.tsx'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '../ui/Menu.tsx'
 import { Input } from '../ui/Input.tsx'
-import { MemberCard } from './MemberCard.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionFilters } from './SessionFilters.tsx'
 import { SessionItem, type SelectModifiers } from './SessionItem.tsx'
 import { CustomGroupHeader, FacetGroupHeader, HeadingAction, NewGroupButton } from './SessionGroups.tsx'
 import { useListDrag, type DragCue, type DragItem } from './use-list-drag.tsx'
-import { joinDrop, memberDrop, type TeamMove } from '../../lib/team-drop.ts'
+import { crossOwnerDrop, joinDrop, memberDrop, type TeamMove } from '../../lib/team-drop.ts'
+import { teamMovePatches, useHeldEdits } from '../../lib/held-edits.ts'
 import { groupSlot, placeGroup, sameSlot, sessionTarget, type DragTarget, type Slot } from '../../lib/row-drag.ts'
 import { cn } from '../../lib/utils.ts'
 
@@ -90,6 +70,8 @@ export interface SessionBrowserProps {
   isActive?: (row: SessionRow) => boolean
   // Replaces the pencil / eraser / trash; rename then falls back to the card's own double-click.
   rowActions?: (row: SessionRow) => ReactNode
+  // A row's context menu items (right click, or a touch long press), mounted only while the menu is open.
+  rowMenu?: (row: SessionRow) => ReactNode
   // Overrides the count of gateways among `rows` when deciding whether a card names its gateway.
   gatewayCount?: number
   showSubset?: boolean
@@ -131,7 +113,7 @@ export function rowShapeClass(active: boolean): string {
 }
 
 export function SessionBrowser({
-  rows,
+  rows: incoming,
   config,
   onConfigChange,
   scope,
@@ -143,12 +125,13 @@ export function SessionBrowser({
   rowAttributes,
   isActive = (row) => row.info.id === activeId,
   rowActions,
+  rowMenu,
   gatewayCount,
   showSubset = true,
   onSelect,
   onDelete,
-  onRename,
-  onRenameAgent,
+  onRename: renameSession,
+  onRenameAgent: renameAgent,
   onNewConversation,
   onSleep,
   onSelectSubagent,
@@ -157,7 +140,6 @@ export function SessionBrowser({
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
-  onAgentConversations,
   onTeamMove,
   relays,
   onCreateInGroup,
@@ -168,6 +150,21 @@ export function SessionBrowser({
   projectIcons,
   className,
 }: SessionBrowserProps) {
+  const { rows, hold } = useHeldEdits(incoming)
+  const onRename =
+    renameSession &&
+    ((row: SessionRow, title: string) => {
+      hold([[sessionKey(row), { title: title.trim() || null }]])
+      renameSession(row, title)
+    })
+  const onRenameAgent =
+    renameAgent &&
+    ((row: SessionRow, name: string) => {
+      if (name.trim()) {
+        hold([[sessionKey(row), { name }]])
+      }
+      renameAgent(row, name)
+    })
   const rowGateways = useMemo(() => new Set(rows.map((row) => row.hostId)).size, [rows])
   const gateways = gatewayCount ?? rowGateways
   const visible = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
@@ -203,9 +200,14 @@ export function SessionBrowser({
 
   const move = (key: string, next: TeamMove) => {
     drag.clearFailure()
+    const patches = teamMovePatches(next, crossOwnerDrop(next.row, next.lead, relays))
+    const release = patches && hold(patches)
     void Promise.resolve()
       .then(() => onTeamMove!(next))
-      .catch((err: unknown) => drag.fail(key, err))
+      .catch((err: unknown) => {
+        release?.()
+        drag.fail(key, err)
+      })
   }
 
   const resolveSession = (
@@ -452,7 +454,7 @@ export function SessionBrowser({
                     ...drag.grip({ kind: 'session', key, lead: lead && sessionKey(lead) }),
                   }
                 : undefined
-              return (
+              const node = (
                 <SessionRowItem
                   key={key}
                   dragProps={handles}
@@ -493,6 +495,16 @@ export function SessionBrowser({
                   {...extra}
                 />
               )
+              return rowMenu ? (
+                <ContextMenu key={key}>
+                  <ContextMenuTrigger className="contents">{node}</ContextMenuTrigger>
+                  <ContextMenuContent onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                    {rowMenu(member)}
+                  </ContextMenuContent>
+                </ContextMenu>
+              ) : (
+                node
+              )
             }
             const emptyBox =
               !groupDrag &&
@@ -527,22 +539,21 @@ export function SessionBrowser({
                           )
                         }
                         const view = viewOf(row)
-                        const nested = view.shown.length > 0
                         const leadActive = isActive(row)
+                        const teamSelected = leadActive || view.shown.some(isActive)
                         return (
                           <Fragment key={key}>
                             {drag.spacer(lane, key)}
                             <TeamBlock
                               lead={row}
                               view={view}
+                              selected={teamSelected}
                               boxProps={onTeamMove || custom ? drag.box(key) : {}}
                               spacer={(before) => drag.spacer(teamLane(key), before)}
                               onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
-                              onSelectMember={(member) => onSelect?.(member, { meta: false, ctrl: false, alt: false })}
-                              onConversations={onAgentConversations}
                               renderLead={(tray) =>
                                 item(row, 'card', undefined, {
-                                  className: cn(row.context && 'opacity-50', nested && !leadActive && 'hover:bg-transparent'),
+                                  className: cn(row.context && 'opacity-50', teamSelected && !leadActive && 'hover:bg-transparent'),
                                   teamTray: tray,
                                 })
                               }
@@ -654,10 +665,7 @@ function SessionRowItem({
   onToggleSteps,
   projectIcons,
   onSelect,
-  onDelete,
   onRename,
-  onNewConversation,
-  onSleep,
   onSelectSubagent,
   onSelectTask,
   onStopTask,
@@ -665,9 +673,6 @@ function SessionRowItem({
   onKillShell,
   onShellAgentWrite,
 }: SessionRowItemProps) {
-  const { info } = row
-  const [editing, setEditing] = useState(false)
-
   const item = (
     <SessionItem
       row={row}
@@ -696,43 +701,7 @@ function SessionRowItem({
       onKillShell={onKillShell ? (id) => onKillShell(row, id) : undefined}
       onShellAgentWrite={onShellAgentWrite ? (id, enabled) => onShellAgentWrite(row, id, enabled) : undefined}
       onRename={onRename ? (title) => onRename(row, title) : undefined}
-      renameOn={actions === undefined ? 'external' : 'doubleClick'}
-      editing={actions === undefined ? editing : undefined}
-      onEditingChange={actions === undefined ? setEditing : undefined}
-      actions={
-        actions ?? (
-          <>
-            {onRename && !editing ? (
-              <RowAction label={info.agent ? 'Rename agent' : 'Rename session'} onClick={() => setEditing(true)}>
-                <Pencil className="size-3 text-fg-3" />
-              </RowAction>
-            ) : null}
-            {onNewConversation && clearContextOffered(info) && newConversationGate(info).enabled ? (
-              <RowAction
-                label="New conversation"
-                title={`New conversation: ${NEW_CONVERSATION_HINT.toLowerCase()}`}
-                onClick={() => onNewConversation(row)}
-              >
-                <RotateCcw className="size-3 text-fg-3" />
-              </RowAction>
-            ) : null}
-            {onSleep && info.capabilities?.engineSleep && info.status === 'idle' && !info.engineAsleep ? (
-              <RowAction
-                label="Sleep session"
-                title="Stop the engine process to free its memory - the session stays here and wakes on your next message"
-                onClick={() => onSleep(row)}
-              >
-                <BedDouble className="size-3 text-fg-3" />
-              </RowAction>
-            ) : null}
-            {onDelete ? (
-              <RowAction label="Close session" onClick={() => onDelete(row)}>
-                <Trash2 className="size-3 text-fg-3" />
-              </RowAction>
-            ) : null}
-          </>
-        )
-      }
+      actions={actions}
     />
   )
   const badge = dropCue?.badge
@@ -773,106 +742,60 @@ function SessionRowItem({
   )
 }
 
-const TRAY_MAX = 4
-
 // Auto draws the members `teamView` shows inside the team's card under the lead, and the rest as a tray on its first
 // line: a face selects that member, the trailing `+N` or chevron expands the team. Expanded, the lead's `^ N` chip returns
 // it to Auto. A leading count says how many members need a person.
+// An elbow under the lead avatar's left third (a 2 px trunk at 11 to 13 px; the avatar spans 4 to 32, the members
+// start at 20): the trunk runs from the lead avatar's bottom edge through the 4 px gap above each member and stops at
+// the last one's middle, the stub meets the avatar.
+const TREE_BRANCH = cn(
+  'relative',
+  'before:absolute before:left-[-9px] before:w-0.5 before:bg-border-strong',
+  'after:absolute after:top-[calc(50%-1px)] after:left-[-9px] after:z-10 after:h-0.5 after:w-[13px] after:bg-border-strong',
+)
+
 function TeamBlock({
   lead,
   view,
+  selected,
   boxProps,
   spacer,
   onToggle,
-  onSelectMember,
-  onConversations,
   renderLead,
   renderMember,
 }: {
   lead: SessionRow
   view: TeamView
+  selected: boolean
   boxProps: HTMLAttributes<HTMLElement>
   spacer: (before: string | undefined) => ReactNode
   onToggle: () => void
-  onSelectMember: (member: SessionRow) => void
-  onConversations?: (member: SessionRow) => void
   renderLead: (tray?: ReactNode) => ReactNode
   renderMember: (member: SessionRow) => ReactNode
 }) {
   const team = lead.info.agent?.name ?? 'team'
-  const overflow = view.tray.length > TRAY_MAX
-  const avatarsShown = view.tray.slice(0, overflow ? TRAY_MAX - 1 : TRAY_MAX)
   const summary = teamSummaryText(lead)
-  const needs = teamSummary(lead).attention
-  const members = view.tray.length ? (
-    <>
-      {avatarsShown.map((member) => {
-        const name = member.info.agent?.name ?? sessionLabel(member.info)
-        return (
-          <HoverCard
-            key={sessionKey(member)}
-            trigger={
-              <button
-                type="button"
-                aria-label={`Select ${name}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onSelectMember(member)
-                }}
-                className="flex shrink-0 rounded-[3px] hover:ring-1 hover:ring-border"
-              >
-                <AgentAvatar row={member} size={16} title="" />
-              </button>
-            }
-          >
-            <MemberCard member={member} onConversations={onConversations ? () => onConversations(member) : undefined} />
-          </HoverCard>
-        )
-      })}
-      <button
-        type="button"
-        aria-expanded={false}
-        aria-label={`Show all Team Members of ${team}`}
-        title={`${view.tray.length} more Member${view.tray.length === 1 ? '' : 's'}`}
-        onClick={(e) => {
-          e.stopPropagation()
-          onToggle()
-        }}
-        className="flex h-4 shrink-0 items-center rounded-[4px] px-0.5 text-label text-fg-4 tabular-nums hover:bg-row-hover hover:text-fg-1"
-      >
-        {overflow ? `+${view.tray.length - avatarsShown.length}` : <ChevronRight className="size-3" />}
-      </button>
-    </>
-  ) : view.expanded ? (
+  const open = view.expanded || view.tray.length === 0
+  const members = lead.members?.length ? (
     <button
       type="button"
-      aria-expanded
-      aria-label={`Show only active Team Members of ${team}`}
-      title="Show only active Members"
+      aria-expanded={open}
+      aria-label={open ? `Show only active Team Members of ${team}` : `Show all Team Members of ${team}`}
+      title={open ? 'Show only active Members' : 'Show all Members'}
       onClick={(e) => {
         e.stopPropagation()
         onToggle()
       }}
-      className="flex h-4 shrink-0 items-center gap-0.5 rounded-[4px] px-0.5 text-label text-fg-3 tabular-nums hover:bg-row-hover hover:text-fg-1"
+      className="mr-0.5 flex size-5 shrink-0 items-center justify-center rounded-[4px] text-fg-4 outline-none hover:bg-row-hover hover:text-fg-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
     >
-      <ChevronUp className="size-3" />
-      {lead.members?.length ?? view.shown.length}
+      {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
     </button>
   ) : undefined
-  const tray =
-    members || needs ? (
-      <span title={summary} className="flex shrink-0 items-center gap-1">
-        {needs ? (
-          <span
-            aria-label={summary}
-            className="flex h-4 shrink-0 items-center rounded-full bg-warning-bg px-1.5 text-[0.75rem] leading-none text-warning tabular-nums"
-          >
-            {needs}
-          </span>
-        ) : null}
-        {members}
-      </span>
-    ) : undefined
+  const tray = members ? (
+    <span title={summary} className="flex shrink-0 items-center">
+      {members}
+    </span>
+  ) : undefined
   const nested = view.shown.length > 0
   return (
     <div
@@ -880,39 +803,29 @@ function TeamBlock({
       data-slot="team"
       data-drag-team={sessionKey(lead)}
       data-expanded={view.expanded || undefined}
-      className={cn('flex flex-col rounded-[8px]', nested && 'bg-row-nest', LIFTED)}
+      className={cn('flex flex-col rounded-[6px]', selected && 'bg-row-nest', LIFTED)}
     >
       {renderLead(tray)}
       {nested ? (
-        <div className="flex flex-col gap-1 p-1">
-          {view.shown.map((member) => (
+        <div className="flex flex-col gap-1 py-1 pr-1 pl-5">
+          {view.shown.map((member, i) => (
             <Fragment key={sessionKey(member)}>
               {spacer(sessionKey(member))}
-              {renderMember(member)}
+              <div
+                className={cn(
+                  TREE_BRANCH,
+                  i === 0 ? 'before:-top-2' : 'before:-top-1',
+                  i === view.shown.length - 1 ? (i === 0 ? 'before:h-[calc(50%+9px)]' : 'before:h-[calc(50%+5px)]') : 'before:bottom-0',
+                )}
+              >
+                {renderMember(member)}
+              </div>
             </Fragment>
           ))}
           {spacer(undefined)}
         </div>
       ) : null}
     </div>
-  )
-}
-
-function RowAction({ label, title, onClick, children }: { label: string; title?: string; onClick: () => void; children: ReactNode }) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label={label}
-      title={title ?? label}
-      className="hidden size-5 shrink-0 group-focus-within:inline-flex group-hover:inline-flex"
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick()
-      }}
-    >
-      {children}
-    </Button>
   )
 }
 

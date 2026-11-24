@@ -21,7 +21,16 @@ export {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from './components/ui/AlertDialog.tsx'
-export { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './components/ui/Menu.tsx'
+export {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+} from './components/ui/Menu.tsx'
 export { Popover, PopoverContent, PopoverTrigger } from './components/ui/Popover.tsx'
 export { Dialog, DialogBody, DialogClose, DialogContent, DialogHeader, DialogRow, DialogTrigger } from './components/ui/Dialog.tsx'
 export { Tip, TooltipContent, TooltipProvider } from './components/ui/Tooltip.tsx'
@@ -180,21 +189,28 @@ export {
   type SessionFiltersProps,
 } from './components/agent/SessionFilters.tsx'
 export { SessionItem, type SelectModifiers, type SessionItemProps } from './components/agent/SessionItem.tsx'
+export { AgentAvatar, AgentHeading, LeadChip, type AgentAvatarProps, type AgentHeadingProps } from './components/agent/AgentAvatar.tsx'
 export {
-  AgentAvatar,
-  AgentHeading,
-  LeadChip,
-  type AgentAvatarProps,
-  type AgentHeadingProps,
-} from './components/agent/AgentAvatar.tsx'
-export { AvatarDialog, FaceView, type AvatarDialogAgent, type AvatarDialogProps, type FaceViewProps } from './components/agent/AvatarDialog.tsx'
+  AvatarDialog,
+  FaceView,
+  type AvatarDialogAgent,
+  type AvatarDialogProps,
+  type FaceViewProps,
+} from './components/agent/AvatarDialog.tsx'
 export {
   CONTEXT_WRAP_UP_DEFAULT,
   FACE_HUES,
   FACE_TONE_VALUES,
   faceOklch,
   faceProjectOf,
-  faceHtml, faceStateOf, faceSvg, faceThemeDeclarations, type FaceState, type FaceSvgOptions, type FaceTheme } from './lib/face-svg.ts'
+  faceHtml,
+  faceStateOf,
+  faceSvg,
+  faceThemeDeclarations,
+  type FaceState,
+  type FaceSvgOptions,
+  type FaceTheme,
+} from './lib/face-svg.ts'
 export { AccountConnectDialog, type AccountConnectDialogProps } from './components/agent/AccountConnectDialog.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'

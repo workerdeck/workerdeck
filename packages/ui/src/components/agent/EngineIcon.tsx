@@ -62,6 +62,16 @@ const VENDOR_TEXT: Record<string, string> = {
   claude: 'text-vendor-claude',
 }
 
+const VENDOR_COLOR: Record<string, string> = {
+  claude: 'var(--vendor-claude)',
+  codex: 'var(--vendor-openai)',
+}
+
+// The vendor's mark colour as a CSS value, for a tile's tinted ground; undefined for a vendor without one.
+export function vendorColor(engine: string, model?: string): string | undefined {
+  return VENDOR_COLOR[engineMark(engine, model) ?? '']
+}
+
 export function vendorMarkClass(engine: string, model?: string): string {
   return VENDOR_MARK[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
 }
@@ -103,7 +113,11 @@ export function ModelBadge({ engine, model, name, className }: { engine: string;
     <span
       data-slot="model-badge"
       title={name}
-      className={cn('inline-flex shrink-0 items-center gap-1 leading-none font-medium tracking-normal tabular-nums', vendorMarkClass(engine, model), className)}
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 leading-none font-medium tracking-normal tabular-nums',
+        vendorMarkClass(engine, model),
+        className,
+      )}
     >
       <EngineIcon engine={engine} model={model} className="size-[1em] text-inherit" />
       <span className="inline-flex items-start">

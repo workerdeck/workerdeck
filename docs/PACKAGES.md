@@ -2078,10 +2078,11 @@ Code's `list.inactiveSelectionBackground`, which is the same idea one surface ov
 matches `activeStepKey` against the card's *own* steps rather than trusting truthiness - every card
 in the list is handed the same key, and a bare check turned all of them grey at once. A filled card
 does **not** also answer hover; its steps still do, on `--row-active`, whose alpha is what lets one
-hover read correctly against all three grounds. The **unread badge takes its colour from the state,
-not the count**: `--accent` while the session is working or wants a human, the neutral `--badge`
-once it has settled, because a list where every finished session still shouted in blue is a list
-where the blue stopped meaning anything. `--row-selected`, `--row-selected-weak` and
+hover read correctly against all three grounds. The **unread count is plain accent text in the reasons'
+slot on the right** (no pill), on a sub-agent only (a top-level agent is always relevant), drawn only once the turn
+has stopped, since a count still being produced is not yet
+waiting for anyone, and never beside a reason icon, which already says act. An engine tile's status badge sits top
+right, where a face draws its state. `--row-selected`, `--row-selected-weak` and
 `--badge`/`--badge-fg` are new in `theme.css` for this, beside the flattened `--row-hover` and the
 11px `--text-micro`; the extension repoints the three fills and the badge pair at `--vscode-list-*`
 / `--vscode-badge-*`. `SessionStatusIcon` (16px) reads **`row.state`, not `info.status`**, and
@@ -2099,13 +2100,10 @@ there. `expanded`/`editing` are uncontrolled by default and `renameOn` chooses t
 the corner, busy strip played by CSS `steps()`, desaturated asleep), named by the agent, with the
 session title as its topic. Members are the one-row `variant="member"` under the lead on a tree
 line (`TeamBlock` in `SessionBrowser`). In Auto (see `teamView` in protocol) the tree shows only the
-Members `shown`; the rest are avatars on the lead's first line before the context ring (`teamTray`,
-at most four, then `+n`), led by a warning-coloured count of Members that need a person (`teamSummary.attention`),
-with `teamSummaryText` as the tray's tooltip. Every card draws one chip per `attentionOf` reason before its unread
-badge, and tints as needing you by `listState`. An avatar selects that Member through `onSelect`; hovering it opens `MemberCard` in a `HoverCard`
-(Base UI PreviewCard, portalled under `PortalScope`: avatar, state, status label, in-progress checklist item, unread and
-approvals), not a native `title`, which VS Code webviews do not show;
-the trailing chevron or `+n` expands the team, and the knob atop an expanded tree returns it to Auto.
+Members `shown`; the rest stay folded behind one caret on the lead's line (`teamTray`: no member avatars, no
+count, and no attention count, since a Member that needs a person is always shown), with `teamSummaryText` as its
+tooltip. Every card draws one icon per `attentionOf` reason (shield, hand, circled X), and tints as needing you by
+its own `listState` only. The caret expands the team and collapses it back to Auto.
 The selected Member comes from `isActive`, so hosts pass nothing new. `onTeamMove` makes cards draggable onto each other (`lib/team-drop.ts`, pure): the
 middle half of an agent's card joins its team, a member reorders inside its expanded team, and a
 member dragged out of its team block (or onto its lead's top edge) leaves. Joining renumbers the
@@ -2130,7 +2128,8 @@ refusal: `crossOwnerDrop(dragged, lead, relays)` (owner from `info.owner`, else 
 (`AgentRef.shared`) draws a globe after its name; the owner shows only in the name's tooltip. `AgentHeading` is the panel title
 for an agent (avatar, name, LEAD or team, `conversation n` from `AgentRef.conversation`, the
 record's current conversation, sent from the second on). A card whose own state is
-`attention`, or a lead whose team's is, fills with `--row-attention` (the warning hue at the
+`attention` fills with `--row-attention` (a lead never fills for its team: a member that needs a person is always
+listed under it) (the warning hue at the
 selection's weight; the VS Code webview mixes the theme's warning colour into the sidebar), so the
 card that asks for an action is the loudest one. Custom groups draw a badge (`GroupBadge`: the
 group's `icon`, else `customGroupColor`, a stable palette colour until one is picked) and keep the
@@ -2142,7 +2141,9 @@ backdrop to context use, which replaces the context ring there. The agent card i
 padding, a 40 px face, radius 8 around a radius 4 face): line one is the name and the `ModelBadge`
 (vendor mark, letter, superscript version from protocol's `modelBadge(modelName)`, in the model text's
 own font and size; it took the LEAD chip's place), line two the status. A member is one 28 px row (a
-20 px face, name, badge, status, the status truncating first). Agent cards draw no activity time,
+20 px face indented 20 px so its name lines up under the lead's, then name, badge, status, the status truncating
+first). A face greys out (grayscale, half opacity) while its card is idle or ended, unread-free, not asking for
+anything and not selected; a lead reads its team's state. Agent cards draw no activity time,
 and `SessionBrowser`'s default row actions take no width until hovered. Rows sit 4 px apart, and agent names sit on
 `--fg-name` until selected. A team showing members is one nested card (`--row-nest`; only the selected row
 takes the selection colour, and the nested card keeps `--row-nest` whichever row is selected; the lead's
@@ -2157,28 +2158,32 @@ the plain rows keep the icon in a tile-width box.
 
 `SessionBrowser` is the styled sessions list *around* the card built on protocol's view model -
 search, facets, grouping, the subset line - for a host that wants the dashboard's look without
-reimplementing the rules; its `SessionRowItem` is a thin wrapper that passes `renameOn='external'`
-and fills the `actions` slot. The VS Code sidebar is built on it too, through five seams that are
+reimplementing the rules; its `SessionRowItem` is a thin wrapper around the card. A card draws no hover
+icons: every verb lives in a context menu, the host's own (VS Code's native menu over `data-vscode-context`
+`rowAttributes`) or `rowMenu(row)`, whose items `SessionBrowser` mounts in a Base UI `ContextMenu` opened by
+right click or a touch long press (the dashboard's `SessionCardMenu`). Rename is the card's double-click.
+The VS Code sidebar is built on it too, through five seams that are
 the only differences between the two hosts: `isActive(row)` (host **and** session, since ids are
-unique only per gateway), `rowActions(row)` (replaces the pencil / eraser / trash, and rename then
-falls back to the card's own double-click), `onSelect(row, modifiers)` (the extension's Cmd/Alt
+unique only per gateway), `rowActions(row)` (an always-on marker slot, the extension's open-in-editor
+glyph), `onSelect(row, modifiers)` (the extension's Cmd/Alt
 targets), `gatewayCount` (the extension counts configured gateways, not gateways with rows) and
 `showSubset={false}` (the extension draws its subset line above the scroller). A list filtered to
 nothing by the workspace scope alone says "Nothing in this folder" with a "Show all folders" way
 out; the dashboard never scopes, so it never sees it.
-Its hover affordances are pencil / **new conversation** / trash (`RowAction`, hover-revealed, each stopping
-the click so an action cannot also select), which is the opposite of the extension's single
-always-on overflow glyph and the right call for each: there are three of them here and a sidebar
-card has room for one. New conversation is the one with
-two gates: the host must pass `onNewConversation`, and the row must be live (`clearContextOffered`) and cuttable
+A rename and a team move draw at once (`useHeldEdits`, `lib/held-edits.ts`): the browser holds the edited
+fields over the incoming `rows` until the list shows them, the row is gone, or 15 s pass, so a host's
+callback stays fire-and-forget and a failure surfaces as the host's own error plus a revert. A move holds
+only when it stays on one gateway and one owner, because a cross-owner confirmation can still refuse it.
+**New conversation** in a card menu has
+two gates: the row must be live (`clearContextOffered`) and cuttable
 now (`newConversationGate`). It is the one cut entry on a card: there is no separate Clear context. Hosts run it through `startNewConversation` with `useDiscardConfirmation` (or their own modal), which turns
 an `unconfirmed_input` refusal into a confirmed `discardAndCut` and asks again on `input_changed`.
 `SessionPanel`'s typed `/clear` stays a socket command (it queues for idle); a refusal there is plain protocol-error
 text, never inferred into a REST cut, because a `protocol_error` frame names no command and a guess could cut a
 later conversation.
-The **bed** (`onSleep`) is gated three ways: the host passes it, the row's
+**Sleep** in a card menu is gated by `canSleep`: the row's
 `capabilities.engineSleep` is true, and the session is `idle` and not already asleep. It is a REST
-call (`sleepSession`), so unlike the eraser it needs no borrowed socket. An asleep card
+call (`sleepSession`), so it needs no borrowed socket. An asleep card
 (`info.engineAsleep`) dims its two lines to 60% and carries the tooltip "Asleep, wakes on your next
 message"; the status glyph is untouched, because the session's state is still `idle`.
 
@@ -2511,16 +2516,16 @@ then `GatewayMeta.agents.sharing`) and is greyed when the gateway disallows shar
 chosen; joining a lead of another owner needs a ticked "Join across owners" (`crossOwner`).
 `useHostMeta` reads each gateway's `/meta` once a minute for both `relays` and `agentDefaults`. A blank name lets the
 gateway pick one. `CwdField` and `EffortField` are shared with `RunForm`. Card verbs live in
-`SessionCardActions` (`rowActions`, so the dashboard redraws the new conversation / sleep / close icons
-itself), errors as toasts; the `⋯` menu opens with the owner, and a top-level agent gets Share
-with other owners / Make private. Drag to join and the menu's Join both go through `teamMove` in
+`SessionCardMenu`, the card's context menu (`SessionBrowser`'s `rowMenu`: right click, or a touch long press;
+no hover icons and no `⋯`), errors as toasts; it opens with the owner, ends with Delete agent or Close session,
+and a top-level agent gets Share with other owners / Make private. Drag to join and the menu's Join both go through `teamMove` in
 `SessionsSidebar`: a cross-owner join asks first (`CrossOwnerDialog`), the outcome's message is
 drawn under the card, and an open invitation adds a toast with a Withdraw invitation action. The session header draws `AgentHeading` for an agent.
 
 - **Conversations.** The session route takes `conversation=<n>` for a past conversation (read-only);
   without it the route is the current one, which a stable id makes reload-safe. Sub-agent and shell frames carry
   `conversation` along. Every card, named or not, has Conversations (the session's `conversations(id)` through
-  `conversationList`) and one New conversation entry (quick action and menu) with the discard confirmation
+  `conversationList`) and one New conversation entry (in the card menu) with the discard confirmation
   (`useDiscardConfirmation`). The card menu reads `conversations(id)` when it opens, so Retry start
   (`retryConversationStart`) and Send again / Dismiss for an uncertain first message (`settlePendingPrompt`) are
   there for every session (`conversationRecovery`). Past agents in the New dropdown, Delete agent... (confirmed,

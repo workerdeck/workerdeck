@@ -60,7 +60,7 @@ import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { NewAgentDialog } from '@/components/NewAgentDialog.tsx'
 import { ConversationsDialog, PastAgentsDialog, type ConversationsTarget } from '@/components/ConversationsDialog.tsx'
 import { DeleteAgentDialog, type DeleteAgentTarget } from '@/components/DeleteAgentDialog.tsx'
-import { SessionCardActions, teamLeads, teamMembers, type CardAction } from './SessionCardActions.tsx'
+import { SessionCardMenu, teamLeads, teamMembers, type CardAction } from './SessionCardMenu.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { clientFor, hostById, primaryHost } from '@/lib/hosts.ts'
 import { getSearchShown, setSearchShown } from '@/lib/sidebar.ts'
@@ -522,8 +522,8 @@ export function SessionsSidebar() {
             onTeamMove={teamMove}
             relays={relays}
             onAgentConversations={(row) => setConversationsOf(conversationsTarget(row))}
-            rowActions={(row) => (
-              <SessionCardActions
+            rowMenu={(row) => (
+              <SessionCardMenu
                 row={row}
                 rows={rows}
                 allowShared={agentDefaults[row.hostId]?.allowShared !== false}

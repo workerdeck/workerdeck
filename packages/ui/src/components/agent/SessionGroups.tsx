@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { ChevronDown, ChevronRight, GripVertical, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
 import { customGroupColor, groupFoldSummary, PROJECT_ACCENTS } from '@workerdeck/protocol'
 import type { CustomGroup, SessionGroup } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
@@ -54,12 +54,7 @@ export function CustomGroupHeader({
       leading={
         <>
           {onToggleCollapsed ? <FoldButton name={group.label ?? 'group'} collapsed={collapsed} onToggle={onToggleCollapsed} /> : null}
-          {custom ? (
-            <>
-              {draggable ? <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" /> : null}
-              {look ? <GroupBadge group={look} onStyle={onStyle} /> : null}
-            </>
-          ) : null}
+          {custom ? <>{look ? <GroupBadge group={look} onStyle={onStyle} /> : null}</> : null}
         </>
       }
       actions={
@@ -134,7 +129,6 @@ export function FacetGroupHeader({
       leading={
         <>
           <FoldButton name={label} collapsed={collapsed} onToggle={onToggleCollapsed} />
-          {draggable ? <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" /> : null}
           {icon}
         </>
       }

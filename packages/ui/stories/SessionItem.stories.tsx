@@ -247,7 +247,7 @@ export const GoalUnderLabel: Story = {
       id: 'goal-3',
       title: 'Goal session',
       agent: { id: 'g3', name: 'WD-Lead' },
-      statusLabel: { text: 'waiting on CI', emoji: '⏳', setAt: 0 },
+      statusLabel: { text: 'Waiting on CI', setAt: 0 },
       goal: GOAL,
     }),
   },
