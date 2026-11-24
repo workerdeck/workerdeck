@@ -1,5 +1,5 @@
 use crate::rest::{ChecklistItem, ChecklistStatus, SubagentInfo, SubagentStatus};
-use crate::vm::session_list::{StepDisplay, is_agent_record};
+use crate::vm::session_list::is_agent_record;
 use crate::vm::text::js_trim;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -124,13 +124,9 @@ pub fn visible_tasks(tasks: &[SessionTask], show_completed: bool) -> Vec<Session
     tasks.iter().filter(|task| show_completed || task.state != SessionTaskState::Done).cloned().collect()
 }
 
-pub fn displayed_tasks(checklist: &[ChecklistItem], subagents: &[SubagentInfo], show: StepDisplay) -> Vec<SessionTask> {
-    if show == StepDisplay::None {
-        return Vec::new();
-    }
-    let tasks = session_tasks(checklist, subagents);
-    if show == StepDisplay::All {
-        return tasks;
-    }
-    tasks.into_iter().filter(|task| matches!(task.state, SessionTaskState::Running | SessionTaskState::Pending)).collect()
+pub fn displayed_tasks(checklist: &[ChecklistItem], subagents: &[SubagentInfo]) -> Vec<SessionTask> {
+    session_tasks(checklist, subagents)
+        .into_iter()
+        .filter(|task| matches!(task.state, SessionTaskState::Running | SessionTaskState::Pending))
+        .collect()
 }

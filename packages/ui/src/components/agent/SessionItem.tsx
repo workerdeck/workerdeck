@@ -13,15 +13,7 @@ import {
   projectSubpath,
   sessionLabel,
 } from '@workerdeck/protocol'
-import type {
-  FoldableStepKind,
-  SessionInfo,
-  SessionRow,
-  SessionState,
-  SessionTask,
-  StepDisplay,
-  SubagentDisplay,
-} from '@workerdeck/protocol'
+import type { FoldableStepKind, SessionInfo, SessionRow, SessionState, SessionTask } from '@workerdeck/protocol'
 import { AgentAvatar } from './AgentAvatar.tsx'
 import { ModelBadge } from './EngineIcon.tsx'
 import { StepChips, StepRow, sessionSteps } from './SessionSteps.tsx'
@@ -39,12 +31,9 @@ export interface SessionItemProps {
   activeStepKey?: string
   showGateway?: boolean
   showProject?: boolean
-  subagents?: SubagentDisplay
-  shells?: StepDisplay
   // Step rows fold into one chip per kind unless the kind is listed here; without `onToggleSteps` the card keeps its own.
   expandedSteps?: readonly FoldableStepKind[]
   onToggleSteps?: (kind: FoldableStepKind) => void
-  tasks?: StepDisplay
   onSelect?: (modifiers: SelectModifiers) => void
   onSelectSubagent?: (toolUseId: string) => void
   onSelectTask?: (task: SessionTask) => void
@@ -79,9 +68,6 @@ export function SessionItem({
   activeStepKey,
   showGateway,
   showProject = true,
-  subagents = 'active',
-  shells = 'active',
-  tasks = 'active',
   expandedSteps,
   onToggleSteps,
   onSelect,
@@ -143,16 +129,13 @@ export function SessionItem({
   const steps = sessionSteps(
     info,
     (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.(NO_MODIFIERS)),
-    subagents,
     {
       now: now ?? Date.now(),
-      show: shells,
       onSelect: (shellId) => (onSelectShell ? onSelectShell(shellId) : onSelect?.(NO_MODIFIERS)),
       onKill: onKillShell,
       onAgentWrite: onShellAgentWrite,
     },
     {
-      show: tasks,
       live: info.status === 'running' || info.status === 'starting' || info.status === 'awaiting_approval',
       onSelect: (task) => (onSelectTask ? onSelectTask(task) : onSelect?.(NO_MODIFIERS)),
       onStop: onStopTask,

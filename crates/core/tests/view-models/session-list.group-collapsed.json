@@ -12,9 +12,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "collapsedGroups": [
             "custom:g-core"
           ]
@@ -32,10 +29,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "key": "custom:g-core"

@@ -77,10 +77,6 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             setFiltersOpen((open) => !open)
             return
           }
-          case 'wd-subagents': {
-            setConfig((held) => (held.subagents === msg.subagents ? held : { ...held, subagents: msg.subagents }))
-            return
-          }
         }
       }),
     [bridge],

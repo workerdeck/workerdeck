@@ -64,7 +64,6 @@ function filterEngagement(config: ViewConfig) {
   return {
     hasFacetFilter: protocol.hasFacetFilter(config),
     facetFilterCount: protocol.facetFilterCount(config),
-    displayCustomized: protocol.displayCustomized(config),
   }
 }
 

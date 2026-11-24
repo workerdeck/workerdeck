@@ -41,23 +41,9 @@ export const Collapsed: Story = {
   args: { row: makeRow({ id: '1', title: 'Session 1 Title', subagents: AGENTS }, 5) },
 }
 
-export const ShowAll: Story = {
-  args: {
-    row: makeRow({ id: '2', title: 'Session 2 Title', subagents: AGENTS }, 5),
-    subagents: 'all',
-  },
-}
-
-export const HiddenSubagents: Story = {
-  args: {
-    row: makeRow({ id: '2h', title: 'Session 2 Title', subagents: AGENTS }, 5),
-    subagents: 'none',
-  },
-}
-
 export const SelectionNone: Story = {
   name: 'Selection · nothing selected',
-  args: { row: makeRow({ id: 'sel-0', title: 'Session Title', subagents: MIXED }), subagents: 'all' },
+  args: { row: makeRow({ id: 'sel-0', title: 'Session Title', subagents: MIXED }) },
 }
 
 export const SelectionSession: Story = {
@@ -65,7 +51,6 @@ export const SelectionSession: Story = {
   args: {
     row: makeRow({ id: 'sel-1', title: 'Session Title', subagents: MIXED }),
     active: true,
-    subagents: 'all',
   },
 }
 
@@ -75,7 +60,6 @@ export const SelectionSubagent: Story = {
     row: makeRow({ id: 'sel-2', title: 'Session Title', subagents: MIXED }),
     active: true,
     activeStepKey: 'a',
-    subagents: 'all',
   },
 }
 
@@ -85,7 +69,6 @@ export const SelectionTaskKeyIgnored: Story = {
     row: makeRow({ id: 'sel-3', title: 'Session Title', subagents: MIXED }),
     active: true,
     activeStepKey: 't1',
-    subagents: 'all',
   },
 }
 
@@ -103,7 +86,6 @@ function SelectionPlayground(args: React.ComponentProps<typeof SessionItem>) {
     <div className="flex flex-col gap-2">
       <SessionItem
         {...args}
-        subagents="all"
         active={selected}
         activeStepKey={agentKey}
         onSelect={() => {
@@ -126,10 +108,9 @@ function SelectionPlayground(args: React.ComponentProps<typeof SessionItem>) {
 }
 
 export const Shells: Story = {
-  name: 'Shells · a running one and a failed one',
+  name: 'Shells · the running one',
   args: {
     row: makeRow({ id: 'sh', title: 'Shell sessions', shells: SHELLS } as never),
-    subagents: 'all',
   },
 }
 
@@ -137,7 +118,6 @@ export const ShellsWithAgents: Story = {
   name: 'Shells · under the agents',
   args: {
     row: makeRow({ id: 'sha', title: 'Shell sessions', subagents: AGENTS, shells: SHELLS } as never),
-    subagents: 'all',
   },
 }
 
@@ -145,7 +125,6 @@ export const ShellsReadOnly: Story = {
   name: 'Shells · no kill offered',
   args: {
     row: makeRow({ id: 'shr', title: 'Shell sessions', shells: SHELLS } as never),
-    subagents: 'all',
     onKillShell: undefined,
   },
 }
@@ -156,7 +135,6 @@ export const ShellSelected: Story = {
     row: makeRow({ id: 'shs', title: 'Shell sessions', subagents: AGENTS, shells: SHELLS } as never),
     active: true,
     activeStepKey: 'sh1',
-    subagents: 'all',
   },
 }
 
@@ -209,11 +187,11 @@ export const TheList: Story = {
   args: { row: makeRow({ id: 'x', title: 'unused' }) },
   render: (args) => (
     <div className="flex flex-col">
-      <SessionItem {...args} row={makeRow({ id: 'a', title: 'Session 1 Title', subagents: AGENTS }, 5)} subagents="all" activeStepKey="a" />
+      <SessionItem {...args} row={makeRow({ id: 'a', title: 'Session 1 Title', subagents: AGENTS }, 5)} activeStepKey="a" />
       <SessionItem {...args} row={makeRow({ id: 'b', title: 'Session 2 Title', status: 'idle' }, 3)} />
-      <SessionItem {...args} row={makeRow({ id: 'c', title: 'Session 3 Title', subagents: AGENTS }, 5)} active subagents="all" />
+      <SessionItem {...args} row={makeRow({ id: 'c', title: 'Session 3 Title', subagents: AGENTS }, 5)} active />
       <SessionItem {...args} row={makeRow({ id: 'd', title: 'Session 4 Title', subagents: AGENTS }, 5)} />
-      <SessionItem {...args} row={makeRow({ id: 'e', title: 'Session 5 Title', subagents: AGENTS }, 5)} subagents="all" />
+      <SessionItem {...args} row={makeRow({ id: 'e', title: 'Session 5 Title', subagents: AGENTS }, 5)} />
     </div>
   ),
 }

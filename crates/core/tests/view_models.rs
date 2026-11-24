@@ -108,7 +108,6 @@ fn session_list(fn_name: &str, a: &Args) -> Value {
             let state = a.opt(1).unwrap_or_else(|| sl::session_state(&info));
             out(sl::card_status(&info, state))
         }
-        "visibleSubagents" => out(sl::visible_subagents(&a.info(0), a.get(1))),
         "runningSubagents" => out(sl::running_subagents(&a.info(0))),
         "subagentLabel" => out(sl::subagent_label(&a.get(0))),
         "isAgentRecord" => out(sl::is_agent_record(&a.get(0))),
@@ -127,7 +126,7 @@ fn session_list(fn_name: &str, a: &Args) -> Value {
         "projectSubpath" => out(sl::project_subpath(&a.info(0))),
         "isJobRun" => out(sl::is_job_run(&a.info(0))),
         "promotedShells" => out(sl::promoted_shells(&a.info(0), a.get(1))),
-        "visibleShells" => out(sl::visible_shells(&a.info(0), a.get(1), a.get(2))),
+        "visibleShells" => out(sl::visible_shells(&a.info(0), a.get(1))),
         "inScope" => out(sl::in_scope(&a.get(0), &a.get(1))),
         "scopeActive" => out(sl::scope_active(&a.get(0), a.opt::<sl::WorkspaceScope>(1).as_ref())),
         "filterRows" => {
@@ -186,7 +185,6 @@ fn session_list(fn_name: &str, a: &Args) -> Value {
             json!({
                 "hasFacetFilter": sl::has_facet_filter(&config),
                 "facetFilterCount": sl::facet_filter_count(&config),
-                "displayCustomized": sl::display_customized(&config),
             })
         }
         "clearFilters" => out(sl::clear_filters(&a.get(0))),
@@ -305,7 +303,7 @@ fn checklist_fn(fn_name: &str, a: &Args) -> Value {
         }
         "displayedTasks" => {
             let (items, subs) = task_sources(a.raw(0));
-            out(checklist::displayed_tasks(&items, &subs, a.get(1)))
+            out(checklist::displayed_tasks(&items, &subs))
         }
         "taskScript" => {
             let (items, subs) = task_sources(a.raw(0));

@@ -2,8 +2,8 @@ import SwiftUI
 import WorkerDeckCore
 import WorkerDeckKit
 
-/// The facets, the two layout choices, and how much of each card's child lists
-/// (agents, shells, tasks) is drawn. Search is its own toggle in the title bar;
+/// The facets and the two layout choices, each a submenu that names its value
+/// ("Project: All"). Search is its own toggle in the title bar;
 /// everything else lives here, which is why the subset line above the list is
 /// unconditional - with this menu closed it is the only thing saying rows are
 /// hidden.
@@ -43,62 +43,51 @@ struct FilterMenu: View, Equatable {
 
   var body: some View {
     Menu {
-      Section("State") {
-        ForEach(Self.states, id: \.0) { state, label in
-          Toggle(label, isOn: toggle(filter.states.contains(state)) { list.toggleState(state: state) })
-        }
-      }
-      if hosts.count > 1 {
-        Section("Gateway") {
-          ForEach(hosts) { host in
-            facet(host.name, .gateway, host.id.uuidString, filter.gateways)
+      Section {
+        facetMenu("State", chosen: Self.states.filter { filter.states.contains($0.0) }.map(\.1)) {
+          ForEach(Self.states, id: \.0) { state, label in
+            Toggle(label, isOn: toggle(filter.states.contains(state)) { list.toggleState(state: state) })
           }
         }
-      }
-      if adapters.count > 1 {
-        Section("Engine") {
-          ForEach(adapters, id: \.self) { adapter in
-            facet(adapter, .adapter, adapter, filter.adapters)
+        if hosts.count > 1 {
+          facetMenu("Gateway", chosen: hosts.filter { filter.gateways.contains($0.id.uuidString) }.map(\.name)) {
+            ForEach(hosts) { host in facet(host.name, .gateway, host.id.uuidString, filter.gateways) }
           }
         }
-      }
-      if projects.count > 1 {
-        Section("Project") {
-          ForEach(projects) { project in
-            facet(project.label, .project, project.key, filter.projects)
+        if adapters.count > 1 {
+          facetMenu("Engine", chosen: adapters.filter { filter.adapters.contains($0) }) {
+            ForEach(adapters, id: \.self) { adapter in facet(adapter, .adapter, adapter, filter.adapters) }
+          }
+        }
+        if projects.count > 1 {
+          facetMenu("Project", chosen: projects.filter { filter.projects.contains($0.key) }.map(\.label)) {
+            ForEach(projects) { project in facet(project.label, .project, project.key, filter.projects) }
           }
         }
       }
       Section {
-        Menu("Group by") {
-          Picker("Group by", selection: pick(filter.groupBy) { list.setGroupBy(groupBy: $0) }) {
-            Text("None").tag(ListGroupBy.none)
-            Text("Engine").tag(ListGroupBy.adapter)
-            Text("State").tag(ListGroupBy.state)
-            Text("Project").tag(ListGroupBy.project)
-          }
+        Picker("Group by", selection: pick(filter.groupBy) { list.setGroupBy(groupBy: $0) }) {
+          Text("None").tag(ListGroupBy.none)
+          Text("Engine").tag(ListGroupBy.adapter)
+          Text("State").tag(ListGroupBy.state)
+          Text("Project").tag(ListGroupBy.project)
         }
-        Menu("Sort by") {
-          Picker("Sort by", selection: pick(filter.sortBy) { list.setSortBy(sortBy: $0) }) {
-            Text("Recent").tag(ListSortBy.recent)
-            Text("Name").tag(ListSortBy.name)
-            Text("Gateway").tag(ListSortBy.gateway)
-            Text("Engine").tag(ListSortBy.adapter)
-            Text("State").tag(ListSortBy.state)
-            Text("Project").tag(ListSortBy.project)
-          }
+        .pickerStyle(.menu)
+        Picker("Sort by", selection: pick(filter.sortBy) { list.setSortBy(sortBy: $0) }) {
+          Text("Recent").tag(ListSortBy.recent)
+          Text("Name").tag(ListSortBy.name)
+          Text("Gateway").tag(ListSortBy.gateway)
+          Text("Engine").tag(ListSortBy.adapter)
+          Text("State").tag(ListSortBy.state)
+          Text("Project").tag(ListSortBy.project)
         }
+        .pickerStyle(.menu)
       }
       if orderCustomized {
         Button("Reset group order") {
           list.resetGroupOrder()
           changed()
         }
-      }
-      Section("Show under each session") {
-        display("Agents", .agent, filter.agents)
-        display("Shells", .shell, filter.shells)
-        display("Tasks", .task, filter.tasks)
       }
       if !pastAgents.isEmpty {
         Section {
@@ -121,15 +110,16 @@ struct FilterMenu: View, Equatable {
     .accessibilityIdentifier("Filter")
   }
 
-  /// One card display as a submenu that names its current value, the same three
-  /// choices the dashboard's segmented control offers.
-  private func display(_ label: String, _ kind: StepKind, _ value: StepShow) -> some View {
-    Picker(label, selection: pick(value) { list.setStepDisplay(kind: kind, show: $0) }) {
-      Text("All").tag(StepShow.all)
-      Text("Active").tag(StepShow.active)
-      Text("Hide").tag(StepShow.hide)
+  // A multi-select facet as a submenu named "Title" over its value ("All", the one chosen, or "N selected"); its
+  // toggles keep it open.
+  private func facetMenu(_ title: String, chosen: [String], @ViewBuilder content: () -> some View) -> some View {
+    Menu {
+      content()
+    } label: {
+      Text(title)
+      Text(chosen.isEmpty ? "All" : chosen.count == 1 ? chosen[0] : "\(chosen.count) selected")
     }
-    .pickerStyle(.menu)
+    .menuActionDismissBehavior(.disabled)
   }
 
   private func facet(_ label: String, _ facet: ListFacet, _ value: String, _ chosen: [String]) -> some View {

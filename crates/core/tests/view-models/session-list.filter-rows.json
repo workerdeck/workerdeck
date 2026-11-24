@@ -478,10 +478,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -960,10 +957,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "label": "workerdeck",
@@ -1454,10 +1448,7 @@
           "projects": [],
           "scoped": false,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "label": "workerdeck",
@@ -1948,10 +1939,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -2430,10 +2418,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -2912,10 +2897,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -3394,10 +3376,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -3876,10 +3855,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -4358,10 +4334,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -4840,10 +4813,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -5326,10 +5296,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -5811,10 +5778,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -6295,10 +6259,7 @@
           ],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -6776,10 +6737,7 @@
           "states": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ]
     ]

@@ -36,16 +36,7 @@ import { agentDefaultsCached, relayOfCached } from './machine.ts'
 import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost, SurfaceTarget } from './bridge-protocol.ts'
-import {
-  buildRows,
-  displayCustomized,
-  facetFilterCount,
-  filterRows,
-  normalizeViewConfig,
-  runningSubagents,
-  type SubagentDisplay,
-  type ViewConfig,
-} from './view-config.ts'
+import { buildRows, facetFilterCount, filterRows, normalizeViewConfig, runningSubagents, type ViewConfig } from './view-config.ts'
 import { WebviewViewHost } from './webview-host.ts'
 import {
   SESSION_ACTIONS,
@@ -173,20 +164,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     void vscode.commands.executeCommand(`${SidebarProvider.viewId}.focus`)
   }
 
-  setSubagents(subagents: SubagentDisplay): void {
-    this.#viewConfig = { ...this.#viewConfig, subagents }
-    void this.#context.globalState.update(VIEW_CONFIG_KEY, this.#viewConfig)
-    this.#syncFiltered()
-    this.post({ kind: 'wd-subagents', subagents })
-  }
-
   #syncFiltered(): void {
-    const filtered = facetFilterCount(this.#viewConfig) > 0 || displayCustomized(this.#viewConfig)
+    const filtered = facetFilterCount(this.#viewConfig) > 0
     void vscode.commands.executeCommand('setContext', FILTERED_CONTEXT_KEY, filtered)
-  }
-
-  subagentsDisplay(): SubagentDisplay {
-    return this.#viewConfig.subagents
   }
 
   #pushState(): void {
@@ -201,7 +181,8 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
   refreshUnread(): void {
     const state = this.#model.sidebarState()
     const visible = filterRows(buildRows(state), this.#viewConfig, state.scope)
-    const rows = visible.reduce((total, row) => total + (state.unseen?.[`${row.hostId}:${row.info.id}`] ?? 0), 0)
+    const drawn = visible.filter((row) => row.info.agent?.lead !== undefined && row.state !== 'working')
+    const rows = drawn.reduce((total, row) => total + (state.unseen?.[`${row.hostId}:${row.info.id}`] ?? 0), 0)
     this.#delegate.unread(rows, this.#model.attentionCount())
     let running = 0
     let sessions = 0
@@ -222,7 +203,6 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     this.#pushState()
     // The webview boots with the bar closed and learns otherwise here: it cannot read a context key.
     this.post({ kind: 'wd-search-open', open: this.#searchOpen })
-    this.post({ kind: 'wd-subagents', subagents: this.#viewConfig.subagents })
     if (this.#filtersRequested) {
       this.#filtersRequested = false
       this.post({ kind: 'wd-filters-toggle' })

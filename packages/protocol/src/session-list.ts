@@ -104,14 +104,6 @@ export function runningSubagents(info: SessionInfo): SubagentInfo[] {
   return (info.subagents ?? []).filter((sub) => sub.status === 'running')
 }
 
-export function visibleSubagents(info: SessionInfo, show: SubagentDisplay): SubagentInfo[] {
-  if (show === 'none') {
-    return []
-  }
-  const subagents = info.subagents ?? []
-  return show === 'all' ? [...subagents] : subagents.filter((sub) => sub.status === 'running')
-}
-
 export function isAgentRecord(sub: SubagentInfo): boolean {
   return sub.isAgent === true || (sub.agentType?.trim() ?? '') !== ''
 }
@@ -139,11 +131,6 @@ export type CustomGroup = { id: string; name: string; members: string[]; color?:
 // The largest `icon` data URL a client stores: a 64 px PNG fits many times over, a raw photo does not.
 export const CUSTOM_GROUP_ICON_MAX = 48_000
 
-// How much of one of a card's child lists it draws. A layout preference, not a facet filter.
-export type StepDisplay = 'all' | 'active' | 'none'
-
-export type SubagentDisplay = StepDisplay
-
 export type ViewConfig = {
   search: string
   gateways: string[]
@@ -153,9 +140,6 @@ export type ViewConfig = {
   scoped: boolean
   groupBy: GroupBy
   sortBy: SortBy
-  subagents: SubagentDisplay
-  shells?: StepDisplay
-  tasks?: StepDisplay
   customGroups?: CustomGroup[]
   // `teamKey` values: the teams this client draws expanded rather than Auto. A viewing preference, never sent to the gateway.
   expandedTeams?: string[]
@@ -187,9 +171,6 @@ export const DEFAULT_VIEW_CONFIG: ViewConfig = {
   scoped: true,
   groupBy: 'state',
   sortBy: 'recent',
-  subagents: 'active',
-  shells: 'active',
-  tasks: 'active',
 }
 
 export type ScopeRoot = { hostId?: string; path: string }
@@ -330,12 +311,8 @@ export function promotedShells(info: SessionInfo, now: number): ShellInfo[] {
   })
 }
 
-export function visibleShells(info: SessionInfo, show: StepDisplay, now: number): ShellInfo[] {
-  if (show === 'none') {
-    return []
-  }
-  const shells = (info.shells ?? []).filter((shell) => shell.status !== 'running' || now - shell.startedAt >= SHELL_PROMOTE_MS)
-  return show === 'active' ? shells.filter((shell) => shell.status === 'running') : shells
+export function visibleShells(info: SessionInfo, now: number): ShellInfo[] {
+  return (info.shells ?? []).filter((shell) => shell.status === 'running' && now - shell.startedAt >= SHELL_PROMOTE_MS)
 }
 
 function matchesSearch(row: SessionRow, needle: string): boolean {
@@ -907,23 +884,12 @@ export function facetFilterCount(config: ViewConfig): number {
   return [config.gateways, config.adapters, config.states, config.projects ?? []].filter((facet) => facet.length > 0).length
 }
 
-export function displayCustomized(config: ViewConfig): boolean {
-  return (
-    config.subagents !== DEFAULT_VIEW_CONFIG.subagents ||
-    (config.shells ?? DEFAULT_VIEW_CONFIG.shells) !== DEFAULT_VIEW_CONFIG.shells ||
-    (config.tasks ?? DEFAULT_VIEW_CONFIG.tasks) !== DEFAULT_VIEW_CONFIG.tasks
-  )
-}
-
 export function clearFilters(config: ViewConfig): ViewConfig {
   return {
     ...DEFAULT_VIEW_CONFIG,
     scoped: false,
     groupBy: config.groupBy,
     sortBy: config.sortBy,
-    subagents: config.subagents,
-    shells: config.shells,
-    tasks: config.tasks,
     customGroups: config.customGroups,
     expandedTeams: config.expandedTeams,
     collapsedGroups: config.collapsedGroups,

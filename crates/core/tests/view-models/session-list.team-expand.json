@@ -11,10 +11,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "hostId": "mac",
@@ -80,9 +77,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "expandedTeams": [
             "mac:ag-lead",
             "box:ag-x"
@@ -151,10 +145,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "hostId": "mac",
@@ -191,9 +182,6 @@
       "scoped": true,
       "groupBy": "state",
       "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active",
       "expandedTeams": [
         "mac:ag-lead"
       ]
@@ -207,9 +195,6 @@
       "scoped": true,
       "groupBy": "state",
       "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active",
       "expandedTeams": [
         "box:ag-x"
       ]
@@ -222,10 +207,7 @@
       "projects": [],
       "scoped": true,
       "groupBy": "state",
-      "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active"
+      "sortBy": "recent"
     }
   ]
 }

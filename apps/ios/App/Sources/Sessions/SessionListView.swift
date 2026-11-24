@@ -554,9 +554,9 @@ struct SessionListView: View {
     .listRowInsets(Self.headingInsets)
   }
 
-  // `FacetGroupHeader`: project icon, label (capitals for a facet), gateway badge, on a project group a `+` that starts
-  // a session there, then the fold chevron in the team caret's column; folded, one warning icon says a session in it
-  // needs a person. No count. Drag it onto another heading to reorder.
+  // `FacetGroupHeader`: project icon, label (capitals for a facet), gateway badge, then the fold chevron in the team
+  // caret's column; folded, one warning icon says a session in it needs a person. No count. A project group's
+  // long-press menu starts a session there. Drag it onto another heading to reorder.
   private func groupHeader(_ group: ListGroup, model: SessionListModel, sections: [ListSection]) -> some View {
     groupHeading(group, model: model)
       .opacity(dragging?.subject == .group(group.key) ? 0 : 1)
@@ -598,16 +598,6 @@ struct SessionListView: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("\(group.collapsed ? "Expand" : "Collapse") \(label)")
-      if let hostId = group.hostId.flatMap(UUID.init(uuidString:)), model.filter.groupBy == .project {
-        Button {
-          if settled { path.append(.create(hostId: hostId, seed: CreateSessionSeed(cwd: group.cwd ?? ""))) }
-        } label: {
-          Image(systemName: "plus").font(.system(size: 12, weight: .semibold)).padding(.vertical, 4).contentShape(Rectangle())
-        }
-        .buttonStyle(.borderless)
-        .tint(ListPalette.fg3)
-        .accessibilityLabel("New session in \(label)")
-      }
       if group.collapsed, group.foldAttention {
         Image(systemName: "exclamationmark.circle")
           .font(.system(size: 12, weight: .medium))
@@ -627,6 +617,13 @@ struct SessionListView: View {
     .foregroundStyle(ListPalette.fg4)
     .frame(minHeight: 20)
     .textCase(nil)
+    .contextMenu {
+      if let hostId = group.hostId.flatMap(UUID.init(uuidString:)), model.filter.groupBy == .project {
+        Button("New session", systemImage: "plus") {
+          path.append(.create(hostId: hostId, seed: CreateSessionSeed(cwd: group.cwd ?? "")))
+        }
+      }
+    }
   }
 
   // MARK: - Drag and drop

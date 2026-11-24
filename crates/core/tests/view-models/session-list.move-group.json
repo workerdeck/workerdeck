@@ -11,10 +11,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         [
           {
@@ -56,10 +53,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         [
           {
@@ -101,10 +95,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         [
           {
@@ -146,10 +137,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         [
           {
@@ -192,9 +180,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "groupOrder": {
             "state": [
               "hidden-a",
@@ -245,10 +230,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "custom",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         [
           {
@@ -293,9 +275,6 @@
       "scoped": true,
       "groupBy": "state",
       "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active",
       "groupOrder": {
         "state": [
           "working",
@@ -314,9 +293,6 @@
       "scoped": true,
       "groupBy": "state",
       "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active",
       "groupOrder": {
         "state": [
           "attention",
@@ -334,10 +310,17 @@
       "projects": [],
       "scoped": true,
       "groupBy": "state",
-      "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active"
+      "sortBy": "recent"
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent"
     },
     {
       "search": "",
@@ -348,22 +331,6 @@
       "scoped": true,
       "groupBy": "state",
       "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active"
-    },
-    {
-      "search": "",
-      "gateways": [],
-      "adapters": [],
-      "states": [],
-      "projects": [],
-      "scoped": true,
-      "groupBy": "state",
-      "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active",
       "groupOrder": {
         "state": [
           "attention",
@@ -385,10 +352,7 @@
       "projects": [],
       "scoped": true,
       "groupBy": "custom",
-      "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active"
+      "sortBy": "recent"
     }
   ]
 }

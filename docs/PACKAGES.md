@@ -273,9 +273,9 @@ it, and two foldings would mean a name picked off a list that does not match its
 `session-list.ts` is the
 **sessions-list view model** (the `attention/working/idle/ended` buckets, the
 gateway/adapter/state/**project** facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`
-- which preserves `groupBy`, `sortBy` and `subagents`, those being layout preferences rather than
+- which preserves `groupBy`, `sortBy` and the folding state, those being layout preferences rather than
 facets, so "clear filters" never silently re-draws the list a different shape -
-`visibleSubagents` over `ViewConfig.subagents`,
+`runningSubagents`,
 `projectLabel` and its companion `projectSubpath` - what a row shows *instead of* the project
 name when the list is already grouped by project, i.e. where in the project the session sits, and
 nothing at all at the root, and
@@ -2227,15 +2227,14 @@ beat), so a list that spent blue on "running" would be saying something differen
 transcript about the same agent. Failure still outranks it - an alarm is not a category.
 `SessionSteps.tsx` holds those rows - `sessionSteps`, `StepRow` - lifted out
 of the VS Code webview, which is exactly why this list had none of it: a session's sub-agents are
-a protocol fact and how many of them a card draws is a list preference, so neither was ever
+a protocol fact and which of them a card draws is a protocol rule, so neither was ever
 extension-specific. There is **no per-row disclosure**: the rows are always drawn, and the `1/3`
-count that doubled as the twisty's handle is gone with `StepToggle`. How many draw is one global
-preference, `ViewConfig.subagents` (`all` / `active` / `none`, default `active` - running only;
-done and failed records need `all`), applied by protocol's `visibleSubagents` and
-set, with `ViewConfig.shells` and `ViewConfig.tasks` beside it, from the `SessionFilters` popover
-(`SessionFiltersButton` in a host's header; `SessionBrowser` can still draw it inline with
-`showControls`, and draws `SessionSearch` on `showSearch`). Steps are agents, then tasks
-(`displayedTasks`: the checklist plus untyped spawns), then shells (`visibleShells`). A step is divided from the card's header by **indentation and its own rounded
+count that doubled as the twisty's handle is gone with `StepToggle`. A card draws only what is
+still running, with no setting: agents from `runningSubagents`, then tasks (`displayedTasks`: the
+checklist plus untyped spawns, running or pending), then shells (`visibleShells`). The
+`SessionFilters` popover (`SessionFiltersButton` in a host's header; `SessionBrowser` can still
+draw it inline with `showControls`, and draws `SessionSearch` on `showSearch`) carries facets,
+grouping and sort only. A step is divided from the card's header by **indentation and its own rounded
 hit shape**, not by a rule. The rules came first, on the argument that at 11px (`text-micro`) an
 indent is not enough to say "list inside a row" - right about the reading and wrong about the
 cost: a stack of hairlines across every open card turned the list into a ledger, and a rule cannot

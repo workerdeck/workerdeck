@@ -34,8 +34,6 @@ import type {
   SessionGroup,
   SessionRow,
   SessionTask,
-  StepDisplay,
-  SubagentDisplay,
   TeamView,
   ViewConfig,
   WorkspaceScope,
@@ -479,9 +477,6 @@ export function SessionBrowser({
                   rootAttributes={rowAttributes?.(member)}
                   showGateway={gateways > 1 && config.groupBy !== 'project'}
                   showProject={config.groupBy !== 'project'}
-                  subagents={config.subagents}
-                  shells={config.shells}
-                  tasks={config.tasks}
                   expandedSteps={expandedStepsOf(config, member)}
                   onToggleSteps={(kind) => onConfigChange(toggleStepsExpanded(config, member, kind))}
                   onSelect={onSelect}
@@ -633,9 +628,6 @@ interface SessionRowItemProps {
   rootAttributes?: Record<`data-${string}`, string>
   showGateway?: boolean
   showProject?: boolean
-  subagents?: SubagentDisplay
-  shells?: StepDisplay
-  tasks?: StepDisplay
   expandedSteps?: readonly FoldableStepKind[]
   onToggleSteps?: (kind: FoldableStepKind) => void
   onSelect?: (row: SessionRow, modifiers: SelectModifiers) => void
@@ -668,9 +660,6 @@ function SessionRowItem({
   rootAttributes,
   showGateway,
   showProject = true,
-  subagents,
-  shells,
-  tasks,
   expandedSteps,
   onToggleSteps,
   onSelect,
@@ -695,9 +684,6 @@ function SessionRowItem({
       rootAttributes={rootAttributes}
       showGateway={showGateway}
       showProject={showProject}
-      subagents={subagents}
-      shells={shells}
-      tasks={tasks}
       expandedSteps={expandedSteps}
       onToggleSteps={onToggleSteps}
       onSelect={(modifiers) => onSelect?.(row, modifiers)}

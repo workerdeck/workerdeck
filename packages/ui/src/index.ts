@@ -181,10 +181,8 @@ export {
 } from './components/agent/SessionBrowser.tsx'
 export { alreadyInTeam, crossOwnerDrop, rowOwner, teamDropRefusal, type TeamMove } from './lib/team-drop.ts'
 export {
-  STEP_DISPLAY_OPTIONS,
   SessionFilters,
   SessionFiltersButton,
-  StepDisplayControl,
   type SessionFiltersButtonProps,
   type SessionFiltersProps,
 } from './components/agent/SessionFilters.tsx'
@@ -222,13 +220,6 @@ export {
   StepRow,
   sessionSteps,
 } from './components/agent/SessionSteps.tsx'
-export {
-  SUBAGENT_DISPLAY_META,
-  SUBAGENT_DISPLAY_ORDER,
-  SubagentDisplayIcon,
-  SubagentToggle,
-  type SubagentToggleProps,
-} from './components/agent/SubagentToggle.tsx'
 export { SubagentStrip } from './components/agent/SubagentStrip.tsx'
 export { FleetStrip, type FleetStripProps } from './components/agent/FleetStrip.tsx'
 export { ShellStrip, type ShellStripProps } from './components/agent/ShellStrip.tsx'

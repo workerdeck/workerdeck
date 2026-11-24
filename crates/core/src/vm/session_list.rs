@@ -70,14 +70,6 @@ pub enum SortBy {
     Project,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum StepDisplay {
-    All,
-    Active,
-    None,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CustomGroup {
     pub id: String,
@@ -101,11 +93,6 @@ pub struct ViewConfig {
     pub scoped: bool,
     pub group_by: GroupBy,
     pub sort_by: SortBy,
-    pub subagents: StepDisplay,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub shells: Option<StepDisplay>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tasks: Option<StepDisplay>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_groups: Option<Vec<CustomGroup>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -170,9 +157,6 @@ impl Default for ViewConfig {
             scoped: true,
             group_by: GroupBy::State,
             sort_by: SortBy::Recent,
-            subagents: StepDisplay::Active,
-            shells: Some(StepDisplay::Active),
-            tasks: Some(StepDisplay::Active),
             custom_groups: None,
             expanded_teams: None,
             collapsed_groups: None,
@@ -417,14 +401,6 @@ pub fn running_subagents(info: &SessionInfo) -> Vec<SubagentInfo> {
     subagents_of(info).iter().filter(|sub| sub.status == SubagentStatus::Running).cloned().collect()
 }
 
-pub fn visible_subagents(info: &SessionInfo, show: StepDisplay) -> Vec<SubagentInfo> {
-    match show {
-        StepDisplay::None => Vec::new(),
-        StepDisplay::All => subagents_of(info).to_vec(),
-        StepDisplay::Active => running_subagents(info),
-    }
-}
-
 fn trimmed(value: Option<&String>) -> &str {
     value.map(|v| js_trim(v)).unwrap_or("")
 }
@@ -489,15 +465,6 @@ pub fn normalize_view_config(stored: Option<&Value>) -> ViewConfig {
     }
     if let Some(sort_by) = parse_enum(stored, "sortBy") {
         config.sort_by = sort_by;
-    }
-    if let Some(subagents) = parse_enum(stored, "subagents") {
-        config.subagents = subagents;
-    }
-    if let Some(shells) = parse_enum(stored, "shells") {
-        config.shells = Some(shells);
-    }
-    if let Some(tasks) = parse_enum(stored, "tasks") {
-        config.tasks = Some(tasks);
     }
     config.custom_groups = parse_enum(stored, "customGroups");
     config.expanded_teams = parse_enum(stored, "expandedTeams");
@@ -629,14 +596,10 @@ pub fn promoted_shells(info: &SessionInfo, now: f64) -> Vec<ShellInfo> {
         .collect()
 }
 
-pub fn visible_shells(info: &SessionInfo, show: StepDisplay, now: f64) -> Vec<ShellInfo> {
-    if show == StepDisplay::None {
-        return Vec::new();
-    }
+pub fn visible_shells(info: &SessionInfo, now: f64) -> Vec<ShellInfo> {
     shells_of(info)
         .iter()
-        .filter(|shell| shell.status != ShellStatus::Running || now - shell.started_at >= SHELL_PROMOTE_MS)
-        .filter(|shell| show == StepDisplay::All || shell.status == ShellStatus::Running)
+        .filter(|shell| shell.status == ShellStatus::Running && now - shell.started_at >= SHELL_PROMOTE_MS)
         .cloned()
         .collect()
 }
@@ -1269,20 +1232,11 @@ pub fn facet_filter_count(config: &ViewConfig) -> u32 {
         .count() as u32
 }
 
-pub fn display_customized(config: &ViewConfig) -> bool {
-    config.subagents != StepDisplay::Active
-        || config.shells.unwrap_or(StepDisplay::Active) != StepDisplay::Active
-        || config.tasks.unwrap_or(StepDisplay::Active) != StepDisplay::Active
-}
-
 pub fn clear_filters(config: &ViewConfig) -> ViewConfig {
     ViewConfig {
         scoped: false,
         group_by: config.group_by,
         sort_by: config.sort_by,
-        subagents: config.subagents,
-        shells: config.shells,
-        tasks: config.tasks,
         custom_groups: config.custom_groups.clone(),
         expanded_teams: config.expanded_teams.clone(),
         collapsed_groups: config.collapsed_groups.clone(),

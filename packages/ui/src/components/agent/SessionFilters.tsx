@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { Filter, X } from 'lucide-react'
-import { STATE_LABELS, STATE_ORDER, adaptersOf, displayCustomized, facetFilterCount, orderedGroupBy, projectsOf, resetGroupOrder } from '@workerdeck/protocol'
-import type { GroupBy, SessionRow, SessionState, SortBy, StepDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
+import { STATE_LABELS, STATE_ORDER, adaptersOf, facetFilterCount, orderedGroupBy, projectsOf, resetGroupOrder } from '@workerdeck/protocol'
+import type { GroupBy, SessionRow, SessionState, SortBy, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover.tsx'
 import { OptionSelect, Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '../ui/Select.tsx'
@@ -16,12 +16,6 @@ export type SessionFiltersProps = {
   gateways?: readonly { id: string; name: string }[]
   className?: string
 }
-
-export const STEP_DISPLAY_OPTIONS: readonly { value: StepDisplay; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'active', label: 'Active' },
-  { value: 'none', label: 'Hide' },
-]
 
 export function SessionFilters({ config, onConfigChange, rows, scope, gateways: gatewaysProp, className }: SessionFiltersProps) {
   const adapters = useMemo(() => adaptersOf(rows), [rows])
@@ -137,18 +131,6 @@ export function SessionFilters({ config, onConfigChange, rows, scope, gateways: 
           />
         </FilterRow>
       </Section>
-
-      <Section title="Show under each session">
-        <FilterRow label="Agents">
-          <StepDisplayControl label="Agents" value={config.subagents} onChange={(subagents) => set({ subagents })} />
-        </FilterRow>
-        <FilterRow label="Shells">
-          <StepDisplayControl label="Shells" value={config.shells ?? 'active'} onChange={(shells) => set({ shells })} />
-        </FilterRow>
-        <FilterRow label="Tasks">
-          <StepDisplayControl label="Tasks" value={config.tasks ?? 'active'} onChange={(tasks) => set({ tasks })} />
-        </FilterRow>
-      </Section>
     </div>
   )
 }
@@ -160,7 +142,6 @@ export type SessionFiltersButtonProps = SessionFiltersProps & {
 
 export function SessionFiltersButton({ open, onOpenChange, className, ...props }: SessionFiltersButtonProps) {
   const count = facetFilterCount(props.config)
-  const engaged = count > 0 || displayCustomized(props.config)
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
@@ -172,7 +153,7 @@ export function SessionFiltersButton({ open, onOpenChange, className, ...props }
             title={count > 0 ? `${count} filter${count === 1 ? '' : 's'} active` : 'Filters'}
             className={className}
           >
-            <Filter className={cn('size-3.5', engaged && 'fill-current text-fg-1')} />
+            <Filter className={cn('size-3.5', count > 0 && 'fill-current text-fg-1')} />
           </Button>
         }
       />
@@ -180,37 +161,6 @@ export function SessionFiltersButton({ open, onOpenChange, className, ...props }
         <SessionFilters {...props} />
       </PopoverContent>
     </Popover>
-  )
-}
-
-export function StepDisplayControl({
-  label,
-  value,
-  onChange,
-}: {
-  label: string
-  value: StepDisplay
-  onChange: (value: StepDisplay) => void
-}) {
-  return (
-    <div role="radiogroup" aria-label={label} className="flex w-full rounded-md border border-border p-px">
-      {STEP_DISPLAY_OPTIONS.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          role="radio"
-          aria-checked={option.value === value}
-          onClick={() => onChange(option.value)}
-          className={cn(
-            'min-w-0 flex-1 truncate rounded-[4px] px-1.5 py-0.5 text-label outline-none transition-colors',
-            'focus-visible:ring-2 focus-visible:ring-ring',
-            option.value === value ? 'bg-row-selected text-fg-1' : 'text-fg-3 hover:bg-row-hover hover:text-fg-1',
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
   )
 }
 

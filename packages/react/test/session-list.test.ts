@@ -6,7 +6,6 @@ import {
   addCustomGroup,
   adaptersOf,
   clearFilters,
-  displayCustomized,
   displayedTasks,
   facetFilterCount,
   filterRows,
@@ -238,12 +237,6 @@ describe('clearFilters', () => {
     expect(hasFacetFilter(config({ scoped: true }))).toBe(false)
   })
 
-  it('keeps the shells and tasks display, which are layout rather than filters', () => {
-    const next = clearFilters(config({ states: ['idle'], shells: 'all', tasks: 'none' }))
-    expect(next.shells).toBe('all')
-    expect(next.tasks).toBe('none')
-  })
-
   it('keeps what the reader folded, which is layout too', () => {
     const next = clearFilters(config({ search: 'x', expandedTeams: ['mac:A'], collapsedGroups: ['custom:g'], earlierOpen: true }))
     expect(next.expandedTeams).toEqual(['mac:A'])
@@ -256,13 +249,6 @@ describe('filter engagement', () => {
   it('counts facets, not search or scope', () => {
     expect(facetFilterCount(config({ search: 'x', scoped: true }))).toBe(0)
     expect(facetFilterCount(config({ states: ['idle'], projects: ['a'] }))).toBe(2)
-  })
-
-  it('reads a config persisted before shells and tasks existed as the defaults', () => {
-    expect(displayCustomized(config())).toBe(false)
-    expect(displayCustomized({ ...config(), shells: undefined, tasks: undefined })).toBe(false)
-    expect(displayCustomized(config({ tasks: 'all' }))).toBe(true)
-    expect(displayCustomized(config({ subagents: 'none' }))).toBe(true)
   })
 })
 
@@ -289,10 +275,8 @@ describe('visibleShells', () => {
     ],
   })
 
-  it('draws promoted running shells for active, every settled one for all, none for none', () => {
-    expect(visibleShells(inf, 'active', 10_000).map((s) => s.id)).toEqual(['run'])
-    expect(visibleShells(inf, 'all', 10_000).map((s) => s.id)).toEqual(['run', 'clean', 'bad'])
-    expect(visibleShells(inf, 'none', 10_000)).toEqual([])
+  it('draws only the promoted running shells', () => {
+    expect(visibleShells(inf, 10_000).map((s) => s.id)).toEqual(['run'])
   })
 })
 
@@ -308,11 +292,9 @@ describe('displayedTasks', () => {
     ],
   })
 
-  it('hides done and failed tasks for active and carries the stop through', () => {
-    expect(displayedTasks(inf, 'all').map((t) => t.label)).toEqual(['plan', 'build', 'node server.js', 'broke'])
-    expect(displayedTasks(inf, 'active').map((t) => t.label)).toEqual(['build', 'node server.js'])
-    expect(displayedTasks(inf, 'none')).toEqual([])
-    expect(displayedTasks(inf, 'all')[2]?.stoppable).toBe(true)
+  it('hides done and failed tasks and carries the stop through', () => {
+    expect(displayedTasks(inf).map((t) => t.label)).toEqual(['build', 'node server.js'])
+    expect(displayedTasks(inf)[1]?.stoppable).toBe(true)
   })
 })
 

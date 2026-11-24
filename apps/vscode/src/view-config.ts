@@ -8,7 +8,6 @@ export {
   STATE_ORDER,
   adaptersOf,
   clearFilters,
-  displayCustomized,
   facetFilterCount,
   filterRows,
   groupRows,
@@ -34,7 +33,6 @@ export type {
   SessionState,
   CustomGroup,
   SortBy,
-  SubagentDisplay,
   SubsetSummary,
   ViewConfig,
 } from '@workerdeck/protocol'

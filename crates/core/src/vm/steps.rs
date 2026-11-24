@@ -2,9 +2,7 @@
 use crate::controller::shell;
 use crate::rest::{SessionInfo, SessionStatus, ShellInfo, ShellStatus, SubagentStatus};
 use crate::vm::checklist::{SessionTask, SessionTaskSource, SessionTaskState, displayed_tasks};
-use crate::vm::session_list::{
-    FoldableStepKind, StepDisplay, ViewConfig, is_agent_record, subagent_label, visible_shells, visible_subagents,
-};
+use crate::vm::session_list::{FoldableStepKind, is_agent_record, running_subagents, subagent_label, visible_shells};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,8 +40,8 @@ pub fn session_live(info: &SessionInfo) -> bool {
     matches!(info.status, SessionStatus::Running | SessionStatus::Starting | SessionStatus::AwaitingApproval)
 }
 
-pub fn session_steps(info: &SessionInfo, config: &ViewConfig, now: f64) -> Vec<Step> {
-    let mut steps: Vec<Step> = visible_subagents(info, config.subagents)
+pub fn session_steps(info: &SessionInfo, now: f64) -> Vec<Step> {
+    let mut steps: Vec<Step> = running_subagents(info)
         .iter()
         .filter(|sub| is_agent_record(sub))
         .map(|sub| {
@@ -66,13 +64,11 @@ pub fn session_steps(info: &SessionInfo, config: &ViewConfig, now: f64) -> Vec<S
             }
         })
         .collect();
-    if let Some(show) = config.tasks {
-        let live = session_live(info);
-        let checklist = info.checklist.as_deref().unwrap_or_default();
-        let subagents = info.subagents.as_deref().unwrap_or_default();
-        steps.extend(displayed_tasks(checklist, subagents, show).iter().map(|task| task_step(task, live)));
-    }
-    steps.extend(visible_shells(info, config.shells.unwrap_or(StepDisplay::Active), now).iter().map(shell_step));
+    let live = session_live(info);
+    let checklist = info.checklist.as_deref().unwrap_or_default();
+    let subagents = info.subagents.as_deref().unwrap_or_default();
+    steps.extend(displayed_tasks(checklist, subagents).iter().map(|task| task_step(task, live)));
+    steps.extend(visible_shells(info, now).iter().map(shell_step));
     steps
 }
 
@@ -202,8 +198,7 @@ mod tests {
 
     #[test]
     fn agents_then_tasks_then_shells() {
-        let config = ViewConfig { shells: Some(StepDisplay::All), ..ViewConfig::default() };
-        let steps = session_steps(&info("running"), &config, 10_000.0);
+        let steps = session_steps(&info("running"), 10_000.0);
         let kinds: Vec<_> = steps.iter().map(|s| (s.kind, s.key.as_str(), s.state)).collect();
         assert_eq!(
             kinds,
@@ -213,7 +208,6 @@ mod tests {
                 (StepKind::Task, "checklist:1", StepState::Pending),
                 (StepKind::Task, "spawn:t_spawn", StepState::Running),
                 (StepKind::Shell, "sh_1", StepState::Running),
-                (StepKind::Shell, "sh_2", StepState::Failed),
             ]
         );
         assert_eq!(steps[0].label, "Explore · map it");
@@ -224,12 +218,11 @@ mod tests {
             [FoldableStepKind::Task, FoldableStepKind::Task, FoldableStepKind::Bash]
         );
         assert!(steps[4].killable && steps[4].detail.is_none());
-        assert!(!steps[5].killable && steps[5].detail.is_some());
     }
 
     #[test]
     fn a_checklist_item_left_running_after_the_turn_is_pending() {
-        let steps = session_steps(&info("idle"), &ViewConfig::default(), 0.0);
+        let steps = session_steps(&info("idle"), 0.0);
         let item = steps.iter().find(|s| s.key == "checklist:0").unwrap();
         assert_eq!(item.state, StepState::Pending);
         assert_eq!(item.title, "write it · left in progress");

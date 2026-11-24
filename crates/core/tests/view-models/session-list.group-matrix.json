@@ -479,9 +479,6 @@
           "scoped": true,
           "groupBy": "none",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -992,9 +989,6 @@
           "scoped": true,
           "groupBy": "none",
           "sortBy": "name",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -1505,9 +1499,6 @@
           "scoped": true,
           "groupBy": "none",
           "sortBy": "gateway",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -2018,9 +2009,6 @@
           "scoped": true,
           "groupBy": "none",
           "sortBy": "adapter",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -2531,9 +2519,6 @@
           "scoped": true,
           "groupBy": "none",
           "sortBy": "state",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -3044,9 +3029,6 @@
           "scoped": true,
           "groupBy": "none",
           "sortBy": "project",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -3557,9 +3539,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -4070,9 +4049,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "name",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -4583,9 +4559,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "gateway",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -5096,9 +5069,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "adapter",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -5609,9 +5579,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "state",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -6122,9 +6089,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "project",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -6635,9 +6599,6 @@
           "scoped": true,
           "groupBy": "adapter",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -7148,9 +7109,6 @@
           "scoped": true,
           "groupBy": "adapter",
           "sortBy": "name",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -7661,9 +7619,6 @@
           "scoped": true,
           "groupBy": "adapter",
           "sortBy": "gateway",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -8174,9 +8129,6 @@
           "scoped": true,
           "groupBy": "adapter",
           "sortBy": "adapter",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -8687,9 +8639,6 @@
           "scoped": true,
           "groupBy": "adapter",
           "sortBy": "state",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -9200,9 +9149,6 @@
           "scoped": true,
           "groupBy": "adapter",
           "sortBy": "project",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -9713,9 +9659,6 @@
           "scoped": true,
           "groupBy": "project",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -10226,9 +10169,6 @@
           "scoped": true,
           "groupBy": "project",
           "sortBy": "name",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -10739,9 +10679,6 @@
           "scoped": true,
           "groupBy": "project",
           "sortBy": "gateway",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -11252,9 +11189,6 @@
           "scoped": true,
           "groupBy": "project",
           "sortBy": "adapter",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -11765,9 +11699,6 @@
           "scoped": true,
           "groupBy": "project",
           "sortBy": "state",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -12278,9 +12209,6 @@
           "scoped": true,
           "groupBy": "project",
           "sortBy": "project",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -12791,9 +12719,6 @@
           "scoped": true,
           "groupBy": "custom",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -13304,9 +13229,6 @@
           "scoped": true,
           "groupBy": "custom",
           "sortBy": "name",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -13817,9 +13739,6 @@
           "scoped": true,
           "groupBy": "custom",
           "sortBy": "gateway",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -14330,9 +14249,6 @@
           "scoped": true,
           "groupBy": "custom",
           "sortBy": "adapter",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -14843,9 +14759,6 @@
           "scoped": true,
           "groupBy": "custom",
           "sortBy": "state",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -15356,9 +15269,6 @@
           "scoped": true,
           "groupBy": "custom",
           "sortBy": "project",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",

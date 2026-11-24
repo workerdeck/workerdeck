@@ -3,7 +3,8 @@ import UIKit
 
 // Two small sessions for the core preview (`UIPREVIEW_CORE=media|empty`), answered in-process: a result picture, a
 // codex host-path picture, a truncated result whose full text the "fetch" press brings, and a running Bash call the
-// row menu can move to the background. `empty` is a fresh session with nothing said yet.
+// row menu can move to the background. `empty` is a fresh session with nothing said yet; `question` and `permission`
+// dock a pending prompt.
 enum CoreMediaFixture {
   static let fullLine = "full output line 120 of the build log"
   static let codexPath = "/work/fixture/diagram.png"
@@ -19,6 +20,8 @@ enum CoreMediaFixture {
     switch variant {
     case "media": return [attached(lastSeq: media.count)] + media
     case "empty": return [attached(lastSeq: 0)]
+    case "question": return prompted(question)
+    case "permission": return prompted(permission)
     default: return nil
     }
   }
@@ -46,6 +49,25 @@ enum CoreMediaFixture {
       return #"{"type":"event","event":{"# + body + #","seq":\#(seq),"ts":\#(1_760_000_000_000 + seq * 1000)}}"#
     }
   }
+
+  private static func prompted(_ request: String) -> [String] {
+    let bodies = [
+      #""type":"user_message","message":{"role":"user","content":"Set up the installer signing."},"parentToolUseId":null,"uuid":"u-1""#,
+      #""type":"assistant_message","message":{"role":"assistant","content":[{"type":"text","text":"The certificate limit is reached, so I am asking how to proceed."}]},"parentToolUseId":null,"uuid":"t-1""#,
+      #""type":"permission_requested","request":"# + request,
+    ]
+    let events = bodies.enumerated().map { index, body in
+      let seq = index + 1
+      return #"{"type":"event","event":{"# + body + #","seq":\#(seq),"ts":\#(1_760_000_000_000 + seq * 1000)}}"#
+    }
+    return [attached(lastSeq: events.count)] + events
+  }
+
+  private static let question =
+    #"{"id":"perm-q","toolName":"AskUserQuestion","toolUseId":"toolu_q","input":{"questions":[{"header":"Installer","question":"The portal will not create a Mac Installer Distribution certificate: the limit is reached. What should I do?","options":[{"label":"Revoke oldest, create new","description":"Codemagic probably uses the newest one."},{"label":"Use an existing one","description":"Export it from the Mac that created it."},{"label":"Stop here"}]},{"header":"Targets","question":"Which targets should be signed?","multiSelect":true,"options":[{"label":"macOS app"},{"label":"iOS app"},{"label":"Widgets"}]}]}}"#
+
+  private static let permission =
+    #"{"id":"perm-b","toolName":"Bash","toolUseId":"toolu_b","input":{"command":"security find-identity -v -p codesigning","description":"List signing identities"}}"#
 
   static func respond(_ method: String, _ path: String) -> (UInt16, String)? {
     guard method == "GET", path.contains("/result?toolUseId=toolu_log") else { return nil }

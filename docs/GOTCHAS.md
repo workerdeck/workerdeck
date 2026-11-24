@@ -2752,10 +2752,9 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   the web sidebar, the VS Code sidebar and the iOS session list.
 - **A shell reaches the session card only after `SHELL_PROMOTE_MS`, and the debounce is the
   client's clock, not the server's.** `decorate` puts every tracked shell on `SessionInfo.shells`;
-  `visibleShells(info, show, now)` is what decides which of them draw, and it is called with the
+  `visibleShells(info, now)` is what decides which of them draw, and it is called with the
   poll's `now` (web) or the push's (VS Code). So `$ ls` never lands on a card and `$ npm run dev`
-  lands after three seconds. Under the default `active` display an ended shell leaves the card at
-  once, failed or not; `all` keeps every ended one. (`promotedShells`, still exported, is the older
+  lands after three seconds. An ended shell leaves the card at once, failed or not. (`promotedShells`, still exported, is the older
   rule that let a **reported** non-zero exit linger `SHELL_LINGER_MS`; no card draws from it now.)
   The server's own filter in `decorate` is deliberately looser: it keeps the record,
   the client decides the drawing. `sessionSteps` draws shells only when the caller passes the shell

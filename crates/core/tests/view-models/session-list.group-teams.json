@@ -478,10 +478,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "none",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -599,10 +596,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "project",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "all": [
@@ -1192,10 +1186,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "all": [
@@ -1782,10 +1773,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "project",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "all": [
@@ -2299,10 +2287,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "none",
-          "sortBy": "name",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "name"
         },
         {
           "all": [
@@ -2868,10 +2853,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "project",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "gatewayCount": 3
@@ -2887,10 +2869,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -2904,9 +2883,6 @@
           "scoped": true,
           "groupBy": "custom",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",
@@ -3139,9 +3115,6 @@
           "scoped": true,
           "groupBy": "custom",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "customGroups": [
             {
               "id": "g-core",

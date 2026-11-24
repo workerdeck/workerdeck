@@ -12,9 +12,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "expandedTeams": [
             "mac:ag-lead"
           ]
@@ -82,10 +79,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         },
         {
           "hostId": "mac",
@@ -151,9 +145,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "expandedTeams": [
             "mac:ag-lead"
           ]

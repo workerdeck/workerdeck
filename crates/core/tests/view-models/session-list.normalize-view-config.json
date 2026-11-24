@@ -51,8 +51,7 @@
           "collapsedGroups": [
             "custom:g-ops"
           ],
-          "earlierOpen": true,
-          "subagents": "all"
+          "earlierOpen": true
         }
       ],
       [
@@ -65,8 +64,6 @@
             "working"
           ],
           "scoped": false,
-          "shells": "none",
-          "tasks": "all",
           "expandedTeams": [
             "mac:ag-x"
           ]
@@ -83,10 +80,7 @@
       "projects": [],
       "scoped": true,
       "groupBy": "state",
-      "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active"
+      "sortBy": "recent"
     },
     {
       "search": "",
@@ -96,10 +90,7 @@
       "projects": [],
       "scoped": true,
       "groupBy": "state",
-      "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active"
+      "sortBy": "recent"
     },
     {
       "search": "",
@@ -109,10 +100,7 @@
       "projects": [],
       "scoped": true,
       "groupBy": "state",
-      "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active"
+      "sortBy": "recent"
     },
     {
       "search": "",
@@ -122,10 +110,7 @@
       "projects": [],
       "scoped": true,
       "groupBy": "state",
-      "sortBy": "name",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active"
+      "sortBy": "name"
     },
     {
       "search": "",
@@ -136,9 +121,6 @@
       "scoped": true,
       "groupBy": "custom",
       "sortBy": "recent",
-      "subagents": "all",
-      "shells": "active",
-      "tasks": "active",
       "customGroups": [
         {
           "id": "g-core",
@@ -183,9 +165,6 @@
       "scoped": false,
       "groupBy": "state",
       "sortBy": "recent",
-      "subagents": "active",
-      "shells": "none",
-      "tasks": "all",
       "expandedTeams": [
         "mac:ag-x"
       ]

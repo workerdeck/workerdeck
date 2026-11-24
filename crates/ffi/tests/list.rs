@@ -1,4 +1,4 @@
-use wdffi::{DragFrame, FleetRetry, ListDrop, ListError, ListFacet, ListGroupBy, ListSortBy, ReasonChip, RowState, SessionList, StepFold, StepKind, StepShow};
+use wdffi::{DragFrame, FleetRetry, ListDrop, ListError, ListFacet, ListGroupBy, ListSortBy, ReasonChip, RowState, SessionList, StepFold};
 
 fn session(id: &str, status: &str, extra: &str) -> String {
     format!(r#"{{"id":"{id}","status":"{status}","cwd":"/work/app","createdAt":1000,"lastSeq":4{extra}}}"#)
@@ -72,15 +72,18 @@ fn a_row_carries_its_model_badge_and_card_status() {
 }
 
 #[test]
-fn a_mark_counts_prose_after_it_as_unseen() {
+fn a_mark_counts_a_members_prose_after_it_as_unseen() {
     let list = SessionList::new(None, None);
-    list.set_host("h1".into(), "mac".into(), true, body(&[idle("s1", r#","proseCount":2"#)])).unwrap();
+    let member = |n: u32| idle("s1", &format!(r#","proseCount":{n},"agent":{{"id":"a1","name":"Docs","lead":"Lead"}}"#));
+    let solo = |n: u32| idle("s2", &format!(r#","proseCount":{n}"#));
+    list.set_host("h1".into(), "mac".into(), true, body(&[member(2), solo(2)])).unwrap();
     assert_eq!(list.unseen_total(), 0);
     assert!(list.mark_seen("h1".into(), "s1".into(), 10_000.0));
-    list.set_host("h1".into(), "mac".into(), true, body(&[idle("s1", r#","proseCount":5"#)])).unwrap();
+    assert!(list.mark_seen("h1".into(), "s2".into(), 10_000.0));
+    list.set_host("h1".into(), "mac".into(), true, body(&[member(5), solo(9)])).unwrap();
     assert_eq!(list.unseen_total(), 3);
     let restored = SessionList::new(Some(list.config_json()), Some(list.marks_json()));
-    restored.set_host("h1".into(), "mac".into(), true, body(&[idle("s1", r#","proseCount":5"#)])).unwrap();
+    restored.set_host("h1".into(), "mac".into(), true, body(&[member(5), solo(9)])).unwrap();
     assert_eq!(restored.unseen_total(), 3);
 }
 
@@ -342,18 +345,13 @@ fn headings_reorder_by_drop_and_reset() {
 #[test]
 fn the_filter_menu_drives_the_list_directly() {
     let agents = r#","subagents":[{"toolUseId":"a","agentType":"Explore","description":"d","status":"done","startedAt":0,"toolCount":1},{"toolUseId":"b","agentType":"Explore","description":"d","status":"running","startedAt":0,"toolCount":1}]"#;
-    let list = SessionList::new(None, None);
+    let stored = r#"{"groupBy":"state","subagents":"none","shells":"all","tasks":"none"}"#;
+    let list = SessionList::new(Some(stored.into()), None);
     list.set_host("h1".into(), "mac".into(), true, body(&[session("s1", "running", &format!(r#","pendingPermissionCount":0{agents}"#))]))
         .unwrap();
-    let start = list.filter();
-    assert_eq!((start.agents, start.engaged), (StepShow::Active, false));
+    assert!(!list.filter().engaged);
     assert_eq!(steps_of(&list), 1);
-    list.set_step_display(StepKind::Agent, StepShow::All);
-    assert_eq!(steps_of(&list), 2);
-    list.set_step_display(StepKind::Agent, StepShow::Hide);
-    assert_eq!(steps_of(&list), 0);
-    assert!(list.filter().engaged);
-    assert!(list.config_json().contains(r#""subagents":"none""#));
+    assert!(!list.config_json().contains("subagents"));
     list.toggle_state(RowState::Idle);
     assert!(list.groups(0.0).iter().all(|g| g.rows.is_empty()));
     list.toggle_state(RowState::Idle);

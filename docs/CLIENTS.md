@@ -419,8 +419,7 @@ owns that boolean, since the key lives where commands do, and closing the bar cl
 so no hidden text keeps filtering the list) and a **filter button** that opens the shared
 `SessionFilters` as a popover the webview draws in its top-right corner (`wd-filters-toggle`;
 a press before the view has booted is held until `onReady`). The button is `$(filter-filled)`
-whenever a facet is set or a child list is off its default (`workerdeck.sessionsFiltered`,
-from protocol's `facetFilterCount`/`displayCustomized`). **Gateways are their own collapsible view**, not a screen: a
+whenever a facet is set (`workerdeck.sessionsFiltered`, from protocol's `facetFilterCount`). **Gateways are their own collapsible view**, not a screen: a
 gateway is a mode every session belongs to, so managing them sits beside the list
 permanently, with the connected count in the view header's description. There is **no
 implicit localhost gateway**.
@@ -507,7 +506,9 @@ status-bar item** (`UnreadStatusItem`, `workerdeck.statusBar.unread`), the same 
 over the sessions the **filter is
 showing** - the webview mirrors its view config to the host (`wd-view-config`, one-way;
 the shared rules moved to `src/view-config.ts` so both sides filter identically), because a
-badge counting rows in hidden sessions sends you looking for something that isn't there.
+badge counting rows in hidden sessions sends you looking for something that isn't there. Only
+the counts the list draws are summed: a Member's, once its turn stopped; a top-level row draws
+none, so it counts none (a phone once showed 1148 unread with no count on screen).
 What it counts is **prose** - `SessionInfo.proseCount`, protocol's narrower door - so a
 session grinding through forty tool calls shows nothing at all until it says something; the
 host reads it through protocol's `unseenCount` rather than the copy of that arithmetic it used
@@ -720,18 +721,14 @@ own nodes are covered by the `'unsafe-inline'` that was already in `style-src` f
 A session row **draws its sub-agents** (`SessionInfo.subagents`) - `sessionSteps` and `StepRow`,
 which live in **`packages/ui`** (`SessionSteps.tsx`) rather than in this webview, that being
 exactly why the dashboard had none of them; a session's sub-agents are a protocol fact and how
-many of them a card shows is a list preference, so neither is extension-specific.
+which of them a card shows is a protocol rule, so neither is extension-specific.
 There is **no per-row disclosure**, and the `1/3` count that doubled as its handle is gone with
 it: what a sub-agent is doing is the most answerable thing a card can say, and a control that
-started closed on every row, on every client, unpersisted, hid it by default. How many rows draw
-is one preference instead - `ViewConfig.subagents`, `all` / `active` / `none`, default `active`
-(running only; done and failed records need `all`) - read by `visibleSubagents` in
-protocol. Shells and tasks have the same three stops (`ViewConfig.shells`/`.tasks`, optional so
-an older persisted config reads as the default; `visibleShells`, `displayedTasks`), and all three
-live in the **filter popover** as segmented controls (`StepDisplayControl`, labelled All / Hide
-completed / Hide on every client). The title-bar sub-agent submenus, their `media/` glyphs and the
-`workerdeck.sessionsSubagents` key are gone; the three `workerdeck.subagents*` commands survive for
-the palette. The sessions title bar carries three buttons and no more - new, search, filter.
+started closed on every row, on every client, unpersisted, hid it by default. A card draws only
+what is still running, with no setting: `runningSubagents`, `visibleShells` and `displayedTasks`
+(running and pending) in protocol. The per-kind All / Active / Hide display that once lived in the
+filter popover, the `workerdeck.subagents*` commands and the `ViewConfig.subagents`/`.shells`/`.tasks`
+fields are gone; a persisted config that still carries those keys loads and ignores them. The sessions title bar carries three buttons and no more - new, search, filter.
 **Refresh is in the overflow**, beside resume: the list is pushed over the socket, so a manual
 refresh is the thing you reach for when something has already gone wrong.
 Pressing a child selects the session and **hands the panel over to that agent's own work**
@@ -1166,20 +1163,18 @@ design has no room for, and `navigationLinkIndicatorVisibility(.hidden)` - annot
 only 26 honours it), so the modifier could not carry a 17.0 deployment target. A list-row button
 paints its label in the accent, which the card overrides to `.primary`; every other colour on the
 row is explicit already. **Sub-agent rows are simply drawn**, as they are on every other client:
-there is no per-row disclosure and no `1/3` chip that was also its handle. How many rows a card
-carries is three `ViewConfig` fields - `subagents`, `shells`, `tasks`, each `all` / `active` /
-`none` (labelled All / Active / Hide) - offered in the funnel's "Show under each session" section
-as menu pickers, persisted with the rest of the config. The funnel fills while a facet filters
-*or* a display is off its default (`facetFilterCount`, `displayCustomized`). On iOS 26 search
+there is no per-row disclosure and no `1/3` chip that was also its handle. A card carries only the
+agents, tasks and shells still running (tasks also pending), with no setting. The funnel fills
+while a facet filters (`facetFilterCount`). On iOS 26 search
 and + float in the bottom bar, like Contacts (`glassToolbar`: `DefaultToolbarItem(kind: .search)`,
 Live tab only), and the top bar keeps Servers, Settings and the funnel so the title fits. Before
 iOS 26 search is its own top-bar button: the `.searchable` bar is applied only while it is open
 (`SessionSearch`), its Cancel closes it, and closing clears the query, so a hidden search can never
-be what empties the list. `ViewConfig`'s lenient `init(from:)` is
-what lets that key be added: a config stored by an older build decodes with the new field at its
-default rather than failing and resetting every preference the person had. The claim is
+be what empties the list. `ViewConfig`'s lenient `init(from:)` lets keys come and go: a config
+stored by another build decodes with a new field at its default and a removed one ignored, rather
+than failing and resetting every preference the person had. The claim is
 **pressed, not asserted**: `WorkerDeckAppUITests` runs the `UIPREVIEW=sessions` fixture and checks
-that step rows are there without a press, that the filter menu's displays change how many, that a
+that step rows are there without a press, that a
 row's stop button does not open the row, and that the row still pushes (`xcodebuild test … -only-testing:WorkerDeckAppUITests`, in `apps/ios/README.md`).
 The **context ring reads off the ring ramp**, not the bar ramp: the web draws two off one
 percentage and they turn in different places, so `ringTint` (80/95, neutral below, the core's
@@ -1260,9 +1255,7 @@ rather than where it is drawn: its spawn message is encrypted on the wire, and t
 show.
 Steps are **always drawn**, one full-width row each, in the kit's `sessionSteps` order: agents,
 then tasks (the engine's checklist and untyped spawns, `displayedTasks`), then shells. Each kind
-follows its own `ViewConfig` display, default `active`, which draws only what is still running
-(and, for tasks, pending); failures and completions need `all`. They live in the config rather than in `AppSettings` because
-anything the three clients must agree about lives in `ViewConfig`.
+draws only what is still running (and, for tasks, pending); failures and completions leave the card.
 
 Each step is its **own full-width row**, a real thumb target where a line inside a two-line row is
 not, and `SessionRoute.step` gives each kind its destination: an agent pushes the session with that
@@ -1341,7 +1334,8 @@ row it draws **without its inner label** - two digits inside a 14pt ring are unr
 length, and across twenty rows the fill *is* the reading.
 The sessions list and unread model are the Rust core's (`SessionList`, `Session.usage()`); the Swift kit keeps only the per-session reads in `SessionList.swift` (`sessionState`, `projectLabel`). The phone's list is **one list across every configured
 gateway**, gateway as a facet rather than the frame, with search/facets/group/sort, the subset
-line, per-row unread and the app-icon badge summed over the rows the filter is *showing*. The
+line, per-row unread and the app-icon badge summed over the rows the filter is *showing*, Members only, as VS Code
+(`SessionList.unseen_total`). The
 scope filter is passed `nil` throughout: a phone has no open folders, so it is genuinely inert
 rather than hiding everything, and no fake scope is invented to fill the hole. Marks are only
 written while a session is on screen *and attached*, with a re-fetch-and-mark on disappear -
@@ -1382,7 +1376,9 @@ computed from the session rows, so `@Observable` invalidated it whenever a snaps
 replaced, and a `ToolbarItem` with no `id` is re-identified when the builder re-runs. Stable
 ids, plus a `FilterMenu` that is `Equatable` over plain values and never the model. Worth
 remembering as a shape, not an incident: any toolbar control whose body touches polled state
-wants both halves.
+wants both halves. Every section of that dropdown is a submenu that names its value (State, Gateway, Engine, Project:
+"All", the one chosen or "N selected"; Group by, Sort by), and a facet's toggles keep it open
+(`menuActionDismissBehavior(.disabled)`).
 `MarkdownBlocks` (headings, lists, quotes, rules, fences; tables stay literal, and anything
 unmodelled falls through as prose rather than being lost) - the classifier is **line-local by
 design**, because the parser reruns on every streamed delta and a block that changed shape a
@@ -1479,7 +1475,10 @@ its header: one line per Member that needs you, a tap opens it, Retry start on a
 may lead (`SessionList.mayLead`, over the unfiltered rows: an agent that is no one's member, or one not read yet) is on
 top of the stack so the strip stays current. Verbs follow the web menu (rename, status, avatar, make agent, add to
 team, leave, dissolve, sharing, new conversation, conversations, delete agent), from a long
-press and swipes (leading rename and new conversation). Make agent and a team join name the session in
+press and swipes (leading rename and new conversation). A project heading has no `+`: its long-press menu holds New
+session. The docked approval or question (`CorePromptCard`) draws in the terminal vocabulary of the web's
+`TerminalPermissionPrompt` / `TerminalQuestionPrompt`: numbered `❯ 1.` choice rows, a tab strip with a Submit tab and
+a review step for questions (`UIPREVIEW=core UIPREVIEW_CORE=question|permission`). Make agent and a team join name the session in
 place (`name_session_call`, `PATCH /sessions/:id { agent }`). New agent reuses the New session form with an
 agent section (name, team, sharing, brief); New session has an optional name, which creates it named. Team moves are **same-gateway only** on the phone;
 cross-gateway invitations stay on the web and VS Code. `UIPREVIEW=teams`

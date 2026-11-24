@@ -9,7 +9,7 @@ export function SessionsView() {
   const gateway = useGateway()
   const rows = useRows(gateway)
   const view = useView()
-  const [config, setConfig] = useState<ViewConfig>({ ...DEFAULT_VIEW_CONFIG, groupBy: 'none', subagents: 'all', tasks: 'all' })
+  const [config, setConfig] = useState<ViewConfig>({ ...DEFAULT_VIEW_CONFIG, groupBy: 'none' })
   return (
     <div className="py-1 text-body-sm">
       <SessionBrowser

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAgentRecord, visibleSubagents } from '@workerdeck/protocol'
+import { isAgentRecord } from '@workerdeck/protocol'
 import type { ShellInfo, SubagentInfo } from '@workerdeck/protocol'
 import { sessionSteps, stepChips, type Step, type TaskStepOptions } from '../src/components/agent/SessionSteps.tsx'
 import type { SessionInfo } from '@workerdeck/protocol'
@@ -76,7 +76,7 @@ describe('sessionSteps', () => {
     expect(sessionSteps(info, () => {})).toEqual([])
   })
 
-  it('draws what the display preference asks for', () => {
+  it('draws only the running agents', () => {
     const info = {
       subagents: [
         sub({ toolUseId: 'run', agentType: 'Explore' }),
@@ -84,9 +84,7 @@ describe('sessionSteps', () => {
         sub({ toolUseId: 'bad', agentType: 'Explore', status: 'failed' }),
       ],
     } as unknown as SessionInfo
-    expect(sessionSteps(info, () => {}, 'all').map((s) => s.key)).toEqual(['run', 'done', 'bad'])
-    expect(sessionSteps(info, () => {}, 'active').map((s) => s.key)).toEqual(['run'])
-    expect(sessionSteps(info, () => {}, 'none')).toEqual([])
+    expect(sessionSteps(info, () => {}).map((s) => s.key)).toEqual(['run'])
   })
 })
 
@@ -109,7 +107,7 @@ function shell(over: Partial<ShellInfo>): ShellInfo {
 }
 
 describe('sessionSteps shells', () => {
-  const opts = (over: Partial<Parameters<typeof sessionSteps>[3] & object> = {}) => ({ now: 10_000, onSelect: () => {}, ...over })
+  const opts = (over: Partial<Parameters<typeof sessionSteps>[2] & object> = {}) => ({ now: 10_000, onSelect: () => {}, ...over })
 
   it('draws no shells at all when the caller does not ask for them', () => {
     const info = { shells: [shell({})] } as unknown as SessionInfo
@@ -121,83 +119,54 @@ describe('sessionSteps shells', () => {
       subagents: [sub({ toolUseId: 'a', agentType: 'Explore' })],
       shells: [shell({ id: 'sh1' })],
     } as unknown as SessionInfo
-    const steps = sessionSteps(info, () => {}, 'all', opts())
+    const steps = sessionSteps(info, () => {}, opts())
     expect(steps.map((s) => s.key)).toEqual(['a', 'sh1'])
     expect(steps.map((s) => s.kind)).toEqual(['agent', 'shell'])
   })
 
   it('honours the promote debounce against the caller clock', () => {
     const info = { shells: [shell({ id: 'sh1', startedAt: 0 })] } as unknown as SessionInfo
-    expect(sessionSteps(info, () => {}, 'all', opts({ now: 2999 }))).toEqual([])
-    expect(sessionSteps(info, () => {}, 'all', opts({ now: 3000 })).map((s) => s.key)).toEqual(['sh1'])
+    expect(sessionSteps(info, () => {}, opts({ now: 2999 }))).toEqual([])
+    expect(sessionSteps(info, () => {}, opts({ now: 3000 })).map((s) => s.key)).toEqual(['sh1'])
   })
 
   it('reports the pressed shell to the caller', () => {
     const info = { shells: [shell({ id: 'sh1' }), shell({ id: 'sh2', ordinal: 2 })] } as unknown as SessionInfo
     const pressed: string[] = []
-    for (const step of sessionSteps(info, () => {}, 'all', opts({ onSelect: (id: string) => pressed.push(id) }))) {
+    for (const step of sessionSteps(info, () => {}, opts({ onSelect: (id: string) => pressed.push(id) }))) {
       step.onSelect()
     }
     expect(pressed).toEqual(['sh1', 'sh2'])
   })
 
-  it('offers a kill only on a running shell, and only when the caller can kill', () => {
+  it('offers a kill only when the caller can kill', () => {
     const running = { shells: [shell({ id: 'sh1' })] } as unknown as SessionInfo
     const killed: string[] = []
-    const withKill = sessionSteps(running, () => {}, 'all', opts({ onKill: (id: string) => killed.push(id) }))
+    const withKill = sessionSteps(running, () => {}, opts({ onKill: (id: string) => killed.push(id) }))
     withKill[0]?.onKill?.()
     expect(killed).toEqual(['sh1'])
-    expect(sessionSteps(running, () => {}, 'all', opts())[0]?.onKill).toBeUndefined()
+    expect(sessionSteps(running, () => {}, opts())[0]?.onKill).toBeUndefined()
 
     const failed = { shells: [shell({ id: 'sh1', status: 'exited', exitCode: 1, endedAt: 9000 })] } as unknown as SessionInfo
-    expect(sessionSteps(failed, () => {}, 'all', opts({ onKill: () => {} }))[0]?.onKill).toBeUndefined()
+    expect(sessionSteps(failed, () => {}, opts({ onKill: () => {} }))).toEqual([])
   })
 
-  it('spells the state and the detail from the shell record', () => {
+  it('draws only the running shells', () => {
     const info = {
       shells: [shell({ id: 'run' }), shell({ id: 'bad', ordinal: 2, status: 'exited', exitCode: 1, endedAt: 9000 })],
     } as unknown as SessionInfo
-    const steps = sessionSteps(info, () => {}, 'all', opts({ show: 'all' }))
-    expect(steps.map((s) => s.state)).toEqual(['running', 'failed'])
-    expect(steps.map((s) => s.detail)).toEqual([undefined, 'exit 1'])
-    expect(sessionSteps(info, () => {}, 'all', opts()).map((s) => s.key)).toEqual(['run'])
+    const steps = sessionSteps(info, () => {}, opts())
+    expect(steps.map((s) => [s.key, s.state, s.detail])).toEqual([['run', 'running', undefined]])
   })
 
   it('never promotes a clean exit', () => {
     const info = { shells: [shell({ id: 'sh1', status: 'exited', exitCode: 0, endedAt: 9000 })] } as unknown as SessionInfo
-    expect(sessionSteps(info, () => {}, 'all', opts())).toEqual([])
-  })
-
-  it('draws shells even when the display preference hides sub-agents', () => {
-    const info = {
-      subagents: [sub({ toolUseId: 'a', agentType: 'Explore' })],
-      shells: [shell({ id: 'sh1' })],
-    } as unknown as SessionInfo
-    expect(sessionSteps(info, () => {}, 'none', opts()).map((s) => s.key)).toEqual(['sh1'])
-  })
-})
-
-describe('visibleSubagents', () => {
-  const info = {
-    subagents: [sub({ toolUseId: 'run' }), sub({ toolUseId: 'done', status: 'done' }), sub({ toolUseId: 'bad', status: 'failed' })],
-  } as unknown as SessionInfo
-
-  it('keeps only running records under active', () => {
-    expect(visibleSubagents(info, 'active').map((s) => s.toolUseId)).toEqual(['run'])
-  })
-
-  it('keeps every record under all, and none under none', () => {
-    expect(visibleSubagents(info, 'all').map((s) => s.toolUseId)).toEqual(['run', 'done', 'bad'])
-    expect(visibleSubagents(info, 'none')).toEqual([])
-  })
-
-  it('survives a session with no sub-agents at all', () => {
-    expect(visibleSubagents({} as SessionInfo, 'all')).toEqual([])
+    expect(sessionSteps(info, () => {}, opts())).toEqual([])
   })
 })
 
 describe('sessionSteps tasks', () => {
-  const opts = (over: Partial<TaskStepOptions> = {}): TaskStepOptions => ({ show: 'all', live: true, onSelect: () => {}, ...over })
+  const opts = (over: Partial<TaskStepOptions> = {}): TaskStepOptions => ({ live: true, onSelect: () => {}, ...over })
   const info = {
     checklist: [{ text: 'build', status: 'in_progress' }],
     subagents: [sub({ toolUseId: 'a', agentType: 'Explore' }), sub({ toolUseId: 'bg', description: 'node server.js', stoppable: true })],
@@ -205,23 +174,24 @@ describe('sessionSteps tasks', () => {
   } as unknown as SessionInfo
 
   it('draws tasks between agents and shells', () => {
-    const steps = sessionSteps(info, () => {}, 'all', { now: 10_000, onSelect: () => {} }, opts())
+    const steps = sessionSteps(info, () => {}, { now: 10_000, onSelect: () => {} }, opts())
     expect(steps.map((s) => s.kind)).toEqual(['agent', 'task', 'task', 'shell'])
   })
 
+  const taskSteps = (options: TaskStepOptions) => sessionSteps(info, () => {}, undefined, options).filter((s) => s.kind === 'task')
+
   it('draws a checklist item left in progress on an idle session as pending, not running', () => {
-    const [build] = sessionSteps(info, () => {}, 'none', undefined, opts({ live: false }))
-    expect(build?.state).toBe('pending')
-    expect(sessionSteps(info, () => {}, 'none', undefined, opts())[0]?.state).toBe('running')
+    expect(taskSteps(opts({ live: false }))[0]?.state).toBe('pending')
+    expect(taskSteps(opts())[0]?.state).toBe('running')
   })
 
   it('offers a stop only on a stoppable task, and only when the caller can stop', () => {
     const stopped: string[] = []
-    const steps = sessionSteps(info, () => {}, 'none', undefined, opts({ onStop: (id) => stopped.push(id) }))
+    const steps = taskSteps(opts({ onStop: (id) => stopped.push(id) }))
     expect(steps[0]?.onKill).toBeUndefined()
     steps[1]?.onKill?.()
     expect(stopped).toEqual(['bg'])
-    expect(sessionSteps(info, () => {}, 'none', undefined, opts())[1]?.onKill).toBeUndefined()
+    expect(taskSteps(opts())[1]?.onKill).toBeUndefined()
   })
 })
 
@@ -265,11 +235,11 @@ describe('stepChips', () => {
   })
 
   it('folds a spawned task as bash and a checklist item as a task', () => {
-    const tasks: TaskStepOptions = { show: 'all', live: true, onSelect: () => {} }
+    const tasks: TaskStepOptions = { live: true, onSelect: () => {} }
     const info = {
       checklist: [{ text: 'write it', status: 'in_progress' }],
       subagents: [sub({ toolUseId: 'bg', description: 'npm test' })],
     } as unknown as SessionInfo
-    expect(sessionSteps(info, () => {}, 'all', undefined, tasks).map((s) => s.fold)).toEqual(['task', 'bash'])
+    expect(sessionSteps(info, () => {}, undefined, tasks).map((s) => s.fold)).toEqual(['task', 'bash'])
   })
 })

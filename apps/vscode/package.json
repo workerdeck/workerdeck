@@ -234,24 +234,6 @@
         "category": "WorkerDeck"
       },
       {
-        "command": "workerdeck.subagentsActive",
-        "title": "Sub-agents: Hide Completed",
-        "shortTitle": "Hide Completed",
-        "category": "WorkerDeck"
-      },
-      {
-        "command": "workerdeck.subagentsAll",
-        "title": "Sub-agents: Show All",
-        "shortTitle": "All Sub-agents",
-        "category": "WorkerDeck"
-      },
-      {
-        "command": "workerdeck.subagentsNone",
-        "title": "Sub-agents: Hidden",
-        "shortTitle": "Hide Sub-agents",
-        "category": "WorkerDeck"
-      },
-      {
         "command": "workerdeck.refreshSessions",
         "title": "Refresh Sessions",
         "category": "WorkerDeck",

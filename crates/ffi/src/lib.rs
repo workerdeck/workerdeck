@@ -44,9 +44,9 @@ pub use face::{
 pub use files::{
     HostEntry, HostEntryKind, HostFileContent, HostFileEditor, HostFileState, HostFiles, HostFilesAvailability, HostListing, HostRoot,
 };
-pub use list::{DragFrame, ListDrop, ListDragTarget, SiblingMove, 
-    FleetRetry, ListChip, ListError, ListFacet, ListFilter, ListGroup, ListGroupBy, ListRow, ListSortBy, Mark, NewAgentSeed, ReasonChip,
-    RowState, SessionList, StepFold, StepKind, StepShow,
+pub use list::{
+    DragFrame, FleetRetry, ListChip, ListDragTarget, ListDrop, ListError, ListFacet, ListFilter, ListGroup, ListGroupBy, ListRow,
+    ListSortBy, Mark, NewAgentSeed, ReasonChip, RowState, SessionList, SiblingMove, StepFold, StepKind,
 };
 pub use pickers::{ModePicker, ModeRow, ModelPicker, PickerRow};
 pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};

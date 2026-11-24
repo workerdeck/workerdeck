@@ -63,10 +63,6 @@ export function viewCommands({ sidebar }: ViewCommandDeps): CommandTable {
     'workerdeck.showFilter': () => sidebar.toggleFilters(),
     'workerdeck.showFilterActive': () => sidebar.toggleFilters(),
     'workerdeck.toggleFilter': () => sidebar.toggleFilters(),
-    // Each command sets the state it names: a menu item means a state, not the next one in a cycle.
-    'workerdeck.subagentsActive': () => sidebar.setSubagents('active'),
-    'workerdeck.subagentsAll': () => sidebar.setSubagents('all'),
-    'workerdeck.subagentsNone': () => sidebar.setSubagents('none'),
   }
 }
 

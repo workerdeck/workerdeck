@@ -1,6 +1,6 @@
 import { ArrowRight, Bot, Check, Circle, CircleAlert, ListChecks, SquareTerminal } from 'lucide-react'
-import { displayedTasks, isAgentRecord, stepChips, subagentLabel, visibleShells, visibleSubagents } from '@workerdeck/protocol'
-import type { FoldableStepKind, SessionInfo, SessionTask, ShellInfo, StepDisplay, SubagentDisplay, SubagentInfo } from '@workerdeck/protocol'
+import { displayedTasks, isAgentRecord, runningSubagents, stepChips, subagentLabel, visibleShells } from '@workerdeck/protocol'
+import type { FoldableStepKind, SessionInfo, SessionTask, ShellInfo, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
 import { AgentWriteIcon } from '../terminal/affordances.tsx'
@@ -36,7 +36,6 @@ export type Step = {
 
 export type ShellStepOptions = {
   now: number
-  show?: StepDisplay
   onSelect: (shellId: string) => void
   onKill?: (shellId: string) => void
   // Offered only where the session's agent holds the shell write tools.
@@ -44,7 +43,6 @@ export type ShellStepOptions = {
 }
 
 export type TaskStepOptions = {
-  show: StepDisplay
   // Whether the session is still working: a checklist item left in progress after the turn ended is not running.
   live: boolean
   onSelect: (task: SessionTask) => void
@@ -54,11 +52,10 @@ export type TaskStepOptions = {
 export function sessionSteps(
   info: SessionInfo,
   onSelect: (toolUseId: string) => void,
-  show: SubagentDisplay = 'all',
   shells?: ShellStepOptions,
   tasks?: TaskStepOptions,
 ): Step[] {
-  const agents: Step[] = visibleSubagents(info, show)
+  const agents: Step[] = runningSubagents(info)
     .filter(isAgentRecord)
     .map((sub) => ({
       key: sub.toolUseId,
@@ -71,12 +68,12 @@ export function sessionSteps(
       title: `${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`,
       onSelect: () => onSelect(sub.toolUseId),
     }))
-  const taskSteps = tasks === undefined ? [] : displayedTasks(info, tasks.show).map((task) => taskStep(task, tasks))
+  const taskSteps = tasks === undefined ? [] : displayedTasks(info).map((task) => taskStep(task, tasks))
   if (shells === undefined) {
     return [...agents, ...taskSteps]
   }
   const grants = info.shellAgentWrite !== undefined
-  const shellSteps = visibleShells(info, shells.show ?? 'active', shells.now).map((shell) => shellStep(shell, shells, grants))
+  const shellSteps = visibleShells(info, shells.now).map((shell) => shellStep(shell, shells, grants))
   return [...agents, ...taskSteps, ...shellSteps]
 }
 

@@ -9,8 +9,8 @@ use wd_native::vm::conversations::{clear_context_offered, new_conversation_gate}
 use wd_native::vm::create_form::{AgentSeed as FormSeed, SeedLead};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
 use wd_native::vm::session_list::{
-    self as vm, FoldableStepKind, GroupBy, GroupOptions, SessionGroup, SessionRow, SessionState, SortBy, StepDisplay, ViewConfig,
-    filter_rows, group_rows, normalize_view_config,
+    self as vm, FoldableStepKind, GroupBy, GroupOptions, SessionGroup, SessionRow, SessionState, SortBy, ViewConfig, filter_rows,
+    group_rows, normalize_view_config,
 };
 use wd_native::vm::list_drag::{self as drag, DragRow, DragRowKind, DragTarget, Joinable, SessionDragContext, Slot, TeamBlock};
 use wd_native::vm::steps;
@@ -441,14 +441,6 @@ pub enum ListSortBy {
     Project,
 }
 
-// How much of a card's agents, shells or tasks draws under it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum StepShow {
-    All,
-    Active,
-    Hide,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ListFacet {
     Gateway,
@@ -456,7 +448,7 @@ pub enum ListFacet {
     Project,
 }
 
-// The filter menu's whole reading. `engaged` fills its funnel: a facet filters, or a card display is off its default.
+// The filter menu's whole reading. `engaged` fills its funnel: a facet filters.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ListFilter {
     pub search: String,
@@ -466,9 +458,6 @@ pub struct ListFilter {
     pub projects: Vec<String>,
     pub group_by: ListGroupBy,
     pub sort_by: ListSortBy,
-    pub agents: StepShow,
-    pub shells: StepShow,
-    pub tasks: StepShow,
     pub engaged: bool,
 }
 
@@ -501,22 +490,6 @@ fn sort_by_of(value: SortBy) -> ListSortBy {
         SortBy::Adapter => ListSortBy::Adapter,
         SortBy::State => ListSortBy::State,
         SortBy::Project => ListSortBy::Project,
-    }
-}
-
-fn show_of(value: StepDisplay) -> StepShow {
-    match value {
-        StepDisplay::All => StepShow::All,
-        StepDisplay::Active => StepShow::Active,
-        StepDisplay::None => StepShow::Hide,
-    }
-}
-
-fn display_of(value: StepShow) -> StepDisplay {
-    match value {
-        StepShow::All => StepDisplay::All,
-        StepShow::Active => StepDisplay::Active,
-        StepShow::Hide => StepDisplay::None,
     }
 }
 
@@ -639,7 +612,7 @@ struct CardSteps {
 }
 
 fn steps_of(row: &SessionRow, config: &ViewConfig, now_ms: f64) -> CardSteps {
-    let all = steps::session_steps(&row.info, config, now_ms);
+    let all = steps::session_steps(&row.info, now_ms);
     let expanded = vm::expanded_steps_of(config, &row.host_id, &row.info.id);
     let folds: Vec<steps::FoldStep> = all.iter().map(Into::into).collect();
     let chips = steps::step_chips(&folds, &expanded, None)
@@ -1093,9 +1066,14 @@ impl SessionList {
         self.state().selected = Some(vm::session_key(&host_id, &session_id));
     }
 
+    // The icon badge counts what the list draws: a Member's unread once its turn stopped, never a top-level row's.
     pub fn unseen_total(&self) -> u32 {
         let state = self.state();
-        filter_rows(&state.rows(), &state.config, None).iter().map(|r| r.unseen as u32).sum()
+        filter_rows(&state.rows(), &state.config, None)
+            .iter()
+            .filter(|r| r.info.agent.as_ref().is_some_and(|a| a.lead.is_some()) && r.state != SessionState::Working)
+            .map(|r| r.unseen as u32)
+            .sum()
     }
 
     // Poll faster while anything is running or waiting on the reader.
@@ -1154,10 +1132,7 @@ impl SessionList {
             projects: config.projects.clone().unwrap_or_default(),
             group_by: group_by_of(config.group_by),
             sort_by: sort_by_of(config.sort_by),
-            agents: show_of(config.subagents),
-            shells: show_of(config.shells.unwrap_or(StepDisplay::Active)),
-            tasks: show_of(config.tasks.unwrap_or(StepDisplay::Active)),
-            engaged: vm::facet_filter_count(config) > 0 || vm::display_customized(config),
+            engaged: vm::facet_filter_count(config) > 0,
         }
     }
 
@@ -1193,16 +1168,6 @@ impl SessionList {
             ListSortBy::State => SortBy::State,
             ListSortBy::Project => SortBy::Project,
         };
-    }
-
-    pub fn set_step_display(&self, kind: StepKind, show: StepShow) {
-        let config = &mut self.state().config;
-        let display = display_of(show);
-        match kind {
-            StepKind::Agent => config.subagents = display,
-            StepKind::Shell => config.shells = Some(display),
-            StepKind::Task => config.tasks = Some(display),
-        }
     }
 
     // The body of `GET /v1/meta`: the relay it names (see `set_relay`) and the new-agent defaults. False when the

@@ -11,10 +11,7 @@
           "projects": [],
           "scoped": true,
           "groupBy": "state",
-          "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active"
+          "sortBy": "recent"
         }
       ],
       [
@@ -27,9 +24,6 @@
           "scoped": true,
           "groupBy": "state",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "groupOrder": {
             "state": [
               "idle"
@@ -50,9 +44,6 @@
           "scoped": true,
           "groupBy": "project",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "groupOrder": {
             "project": [
               "p"
@@ -70,9 +61,6 @@
           "scoped": true,
           "groupBy": "custom",
           "sortBy": "recent",
-          "subagents": "active",
-          "shells": "active",
-          "tasks": "active",
           "groupOrder": {
             "state": [
               "idle"
@@ -91,10 +79,7 @@
       "projects": [],
       "scoped": true,
       "groupBy": "state",
-      "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active"
+      "sortBy": "recent"
     },
     {
       "search": "",
@@ -105,9 +90,6 @@
       "scoped": true,
       "groupBy": "state",
       "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active",
       "groupOrder": {
         "project": [
           "p"
@@ -123,9 +105,6 @@
       "scoped": true,
       "groupBy": "project",
       "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active",
       "groupOrder": {}
     },
     {
@@ -137,9 +116,6 @@
       "scoped": true,
       "groupBy": "custom",
       "sortBy": "recent",
-      "subagents": "active",
-      "shells": "active",
-      "tasks": "active",
       "groupOrder": {
         "state": [
           "idle"
