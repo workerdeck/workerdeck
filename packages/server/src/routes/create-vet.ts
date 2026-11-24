@@ -1,4 +1,4 @@
-import { pickCreateSessionRequest, type CreateSessionRequest, type ProfileInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, pickCreateSessionRequest, type CreateSessionRequest, type ProfileInfo } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { HOST_ONLY_KEYS } from '../lib/host-only-keys.ts'
 import type { Refusal } from '../lib/http.ts'
@@ -84,7 +84,7 @@ function refuseHostAuthority(
   }
   const engine = engineOf(profile)
   const name = profile?.name ?? 'default'
-  if ((engine === 'claude' || engine === 'codex') && !auth.allowedProfiles?.includes(name)) {
+  if (ENGINE_CAPABILITIES[engine].hostCwd && !auth.allowedProfiles?.includes(name)) {
     return `profile '${name}' runs the ${engine} engine on the host; a non-operator caller needs it named in its allowedProfiles`
   }
   const mode = refusePermissionMode(req.permissionMode, { operator: false })

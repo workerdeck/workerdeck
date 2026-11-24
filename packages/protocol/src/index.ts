@@ -547,7 +547,7 @@ export type ProfileDefaults = {
   sharing?: Sharing
 }
 
-export type ProfileEngine = 'claude' | 'codex' | 'provider'
+export type ProfileEngine = 'claude' | 'codex' | 'provider' | 'agy'
 
 export type EngineCapabilities = {
   interactiveApprovals: boolean
@@ -638,6 +638,33 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     goals: { pause: true, budget: true },
     streaming: 'token',
   },
+  agy: {
+    interactiveApprovals: true,
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+    defaultPermissionMode: 'default',
+    resume: true,
+    resumeBackfill: true,
+    forkSession: false,
+    listSessions: true,
+    contextUsage: true,
+    rateLimits: false,
+    mcpStatus: false,
+    mcpServerActions: false,
+    sessionMcpServers: true,
+    toolFilters: 'none',
+    slashCommands: true,
+    clearContext: true,
+    skillsList: false,
+    settingSources: false,
+    budgets: false,
+    attachments: ['image', 'text'],
+    reasoningEfforts: ['low', 'high'],
+    vfs: false,
+    hostCwd: true,
+    systemInstructions: true,
+    engineSleep: true,
+    streaming: 'token',
+  },
   provider: {
     interactiveApprovals: false,
     permissionModes: ['default', 'bypassPermissions', 'dontAsk'],
@@ -703,6 +730,7 @@ export type ProfileInfo = {
   engine?: ProfileEngine
   configDir?: string
   codexHome?: string
+  agyHome?: string
   provider?: ProviderConfig
   description?: string
   defaults?: ProfileDefaults
@@ -1108,7 +1136,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
 const TRANSIENT_SDK_SUBTYPES: ReadonlySet<unknown> = new Set(['status', 'thinking_tokens'])
 
 function transientSdkKey(payload: { type: string; subtype?: unknown }): string | undefined {
-  return payload.type === 'system' && TRANSIENT_SDK_SUBTYPES.has(payload.subtype) ? `sdk_event:system:${String(payload.subtype)}` : undefined
+  return payload.type === 'system' && TRANSIENT_SDK_SUBTYPES.has(payload.subtype)
+    ? `sdk_event:system:${String(payload.subtype)}`
+    : undefined
 }
 
 export function logCoalesceKey(body: SessionEventBody): string | undefined {
@@ -1149,7 +1179,8 @@ export function supersededDeltaSeqs(events: readonly SessionEvent[], afterSeq: n
     }
     if (event.type === 'assistant_message') {
       const content = event.message.content
-      const takesStreamed = Array.isArray(content) && content.some((block) => block.type === 'thinking' && !(block as { thinking?: string }).thinking)
+      const takesStreamed =
+        Array.isArray(content) && content.some((block) => block.type === 'thinking' && !(block as { thinking?: string }).thinking)
       ahead.set(event.parentToolUseId ?? '', { text: true, thinking: !takesStreamed })
       continue
     }

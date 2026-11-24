@@ -53,6 +53,10 @@ export class ProfileService {
       if (p.codexHome && !existsSync(p.codexHome)) {
         return `profile '${p.name}' codexHome does not exist: ${p.codexHome}`
       }
+    } else if (p.engine === 'agy') {
+      if (p.agyHome && !existsSync(p.agyHome)) {
+        return `profile '${p.name}' agyHome does not exist: ${p.agyHome}`
+      }
     } else if (!p.configDir || !existsSync(p.configDir)) {
       return `profile '${p.name}' configDir does not exist: ${p.configDir}`
     }
@@ -183,11 +187,12 @@ export class ProfileService {
     if (isProviderProfile(profile)) {
       return null
     }
-    const codex = engineOf(profile) === 'codex'
-    const dir = codex ? profile.codexHome : profile.configDir
-    // A codex profile that names no CODEX_HOME runs on the server's own environment, which every
+    const engine = engineOf(profile)
+    const key = engine === 'codex' ? 'codexHome' : engine === 'agy' ? 'agyHome' : 'configDir'
+    const dir = profile[key]
+    // A codex or agy profile that names no home runs on the server's own environment, which every
     // session already inherits - there is no separate credential store for the roots to bound.
-    if (codex && !dir) {
+    if (key !== 'configDir' && !dir) {
       return null
     }
     const roots = this.#opts.allowedConfigDirRoots
@@ -197,9 +202,7 @@ export class ProfileService {
         error: 'managed Claude and Codex profiles are disabled: set `allowedConfigDirRoots` to the ' + 'directories they may point at',
       }
     }
-    return dir && cwdAllowed(dir, roots)
-      ? null
-      : { status: 403, error: `${codex ? 'codexHome' : 'configDir'} is outside the allowed roots` }
+    return dir && cwdAllowed(dir, roots) ? null : { status: 403, error: `${key} is outside the allowed roots` }
   }
 
   async saveManaged(incoming: ProfileInfo): Promise<{ ok: true; profile: ProfileInfo } | ({ ok: false } & Refusal)> {

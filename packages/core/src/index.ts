@@ -188,7 +188,7 @@ export type { CodexRunnerConfig } from './engines/codex/runner.ts'
 export { connectAppServer } from './engines/codex/process.ts'
 export { codexChildEnv, INITIALIZE_PARAMS } from './engines/codex/connect.ts'
 export { codexHistoryEvents } from './engines/codex/history.ts'
-export { JsonRpcError, JsonRpcStdioConnection } from './engines/codex/jsonrpc.ts'
+export { JsonRpcError, JsonRpcStdioConnection, type JsonRpcStdioOptions } from './lib/jsonrpc-stdio.ts'
 export type {
   AppServerConnection,
   AppServerConnectFn,

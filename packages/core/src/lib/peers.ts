@@ -263,7 +263,7 @@ const MENTIONS_TAIL = new RegExp(
 const MESSAGE_ENVELOPE =
   /^<peer-message ((?:[a-z-]+="[^"]*" ?)+)>\n([\s\S]*)\n<\/peer-message>\n\nThis came from another agent session [\s\S]* a reply goes back with peers_send to session \S+\.$/
 
-const ENGINES: ReadonlySet<string> = new Set<ProfileEngine>(['claude', 'codex', 'provider'])
+const ENGINES: ReadonlySet<string> = new Set<ProfileEngine>(['claude', 'codex', 'provider', 'agy'])
 
 // The inverse of `withPeerContext`, for history an engine reads back: it stores what the model was sent, so a replay
 // would otherwise draw the envelope where the live event drew the bare text and its `origin`.
