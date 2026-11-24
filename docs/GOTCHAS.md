@@ -1428,7 +1428,13 @@ carry wrong.
 
 ## Status label (`set_status`, `SessionInfo.statusLabel`)
 
-A one-line status a session shows under its name (`StatusLabel`: text up to 80, an optional emoji, `setAt`).
+A short status a session shows beside its name (`StatusLabel`: text up to 80, `setAt`; the wire keeps an optional
+emoji that no client draws any more).
+
+- **An agent's own status is Verb Noun: at most three words, no emoji** (Tobias, 2026-11-24; "Running Tests",
+  "Needs Relay Key"). `agentStatusRefusal` (protocol) is the rule, and `set_status` refuses anything else with an
+  error that teaches the format, so the agent retries; the tool takes no `emoji`. An operator's `PATCH` is not held
+  to it.
 
 - **The event log holds it, the runner config seeds it.** `status_label` events fold into
   `EventLog.statusLabel` (`undefined` = no set or reset seen yet, `null` = cleared), and

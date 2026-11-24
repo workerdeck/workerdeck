@@ -378,11 +378,7 @@ pub struct CardStatus {
 
 pub fn card_status(info: &SessionInfo, state: SessionState) -> CardStatus {
     if let Some(label) = info.status_label.as_ref().filter(|label| !label.text.is_empty()) {
-        let text = match &label.emoji {
-            Some(emoji) if !emoji.is_empty() => format!("{emoji} {}", label.text),
-            _ => label.text.clone(),
-        };
-        return CardStatus { text, source: CardStatusSource::Label };
+        return CardStatus { text: label.text.clone(), source: CardStatusSource::Label };
     }
     if let Some(text) = crate::vm::goal::goal_card_text(info.goal.as_ref()) {
         return CardStatus { text, source: CardStatusSource::Goal };

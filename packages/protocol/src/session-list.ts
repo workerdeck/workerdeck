@@ -76,7 +76,7 @@ export type CardStatus = { text: string; source: 'label' | 'goal' | 'task' | 'ti
 export function cardStatus(info: SessionInfo, state: SessionState = sessionState(info)): CardStatus {
   const label = info.statusLabel
   if (label?.text) {
-    return { text: label.emoji ? `${label.emoji} ${label.text}` : label.text, source: 'label' }
+    return { text: label.text, source: 'label' }
   }
   const goal = goalCardText(info.goal)
   if (goal) {

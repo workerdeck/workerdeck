@@ -101,10 +101,11 @@ never peek at it. Sharing is set on the lead; members are never shared on their 
 
 ## Status
 
-Every session, agent or not, has a one-line status. On an agent card it sits under the name and
+Every session, agent or not, has a short status. On an agent card it sits after the name and
 the model badge; with no status set, the card shows the checklist item in progress, else the
 session title, else the agent's state ("Idle", "Working…"), slightly dimmer. The agent sets it with
-the `set_status` tool (`text`, an optional `emoji`; an empty text clears it), and you can set or
+the `set_status` tool (`text`: Verb Noun, at most three words, no emoji, like "Running Tests" or "Needs Relay
+Key"; anything else is refused so the agent tries again; an empty text clears it), and you can set or
 clear it from the card menu or with `PATCH /v1/sessions/:id` `{ "statusLabel": { "text": "..." } }`.
 It stays until changed and clears when the conversation resets. Every agent is told to keep it
 current (set it when starting a task, when blocked or waiting, and when done); add your own rules

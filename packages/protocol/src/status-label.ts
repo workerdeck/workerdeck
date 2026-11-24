@@ -9,6 +9,21 @@ export type StatusWaitingOn = 'human'
 
 export const STATUS_LABEL_TEXT_MAX = 80
 export const STATUS_LABEL_EMOJI_MAX = 16
+export const AGENT_STATUS_WORDS_MAX = 3
+export const AGENT_STATUS_EXAMPLES = ['Running Tests', 'Waiting on CI', 'Needs Relay Key', 'Review iOS', 'Refresh Docs'] as const
+
+const PICTOGRAPHIC = /\p{Extended_Pictographic}/u
+
+// What an agent may put in its own status: a glance, Verb Noun, at most three words and no emoji. Returns why a line is
+// refused, or undefined. An operator's `PATCH` is not held to it.
+export function agentStatusRefusal(text: string): string | undefined {
+  const line = text.replace(/\s+/g, ' ').trim()
+  if (PICTOGRAPHIC.test(line)) {
+    return 'no emoji'
+  }
+  const words = line ? line.split(' ').length : 0
+  return words > AGENT_STATUS_WORDS_MAX ? `${words} words, at most ${AGENT_STATUS_WORDS_MAX}` : undefined
+}
 
 // Trimmed and capped; an empty text clears. Returns an error string for input a caller must refuse.
 export function readStatusLabelInput(input: unknown): StatusLabelInput | null | string {
