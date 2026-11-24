@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import type { SessionInfo } from '@workerdeck/protocol'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
-import { forgetLocality, isLocalHostCached, refreshLocality, relayOfCached } from './machine.ts'
+import { forgetLocality, isLocalHostCached, keepAwakeCached, refreshLocality, relayOfCached } from './machine.ts'
 import { probeFailure } from './gateway.ts'
 import { HostSnapshots } from './host-snapshots.ts'
 import type { WorkerDeckClient } from '@workerdeck/client'
@@ -221,6 +221,7 @@ export class SessionsModel implements vscode.Disposable {
         cwdSuggestion: folder ?? this.sessionsOf(host.id)[0]?.cwd,
         ...(host.managed ? { managed: true } : {}),
         ...(relay ? { relay } : {}),
+        ...(keepAwakeCached(host) ? { keepAwake: true } : {}),
       })
       if (snap?.probe === 'connected') {
         sessions[host.id] = snap.sessions

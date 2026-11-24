@@ -1,6 +1,6 @@
 import { HttpError } from './http.ts'
 
-export type ShellRouteAction = 'output' | 'kill' | 'agent-write'
+export type ShellRouteAction = 'output' | 'kill' | 'agent-write' | 'keep-awake'
 
 export type SessionItemRoute =
   | { kind: 'session'; id: string }
@@ -22,7 +22,7 @@ export type SessionItemRoute =
 
 export type SessionRoute = { kind: 'collection' } | SessionItemRoute
 
-const SHELL_ACTIONS = new Set<string>(['output', 'kill', 'agent-write'])
+const SHELL_ACTIONS = new Set<string>(['output', 'kill', 'agent-write', 'keep-awake'])
 
 // Whole-segment matching: `/sessionsX` is not a session path. A segment that is not valid percent-encoding is a 400,
 // and an empty session id is no route at all, so `/sessions//permissions/x` can never reach the collection.

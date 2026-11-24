@@ -522,6 +522,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     owners,
     teams: teamLinks,
     relayStatus: relay ? () => relay.status() : undefined,
+    keepsAwake: options.keepsAwake,
     registry,
     parking,
     history,

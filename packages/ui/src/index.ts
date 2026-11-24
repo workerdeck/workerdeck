@@ -186,6 +186,8 @@ export {
   type SessionFiltersButtonProps,
   type SessionFiltersProps,
 } from './components/agent/SessionFilters.tsx'
+export { KeepAwakeNote } from './components/agent/KeepAwakeNote.tsx'
+export type { KeepAwakeNoteProps } from './components/agent/KeepAwakeNote.tsx'
 export { SessionItem, type SelectModifiers, type SessionItemProps } from './components/agent/SessionItem.tsx'
 export { AgentAvatar, AgentHeading, LeadChip, type AgentAvatarProps, type AgentHeadingProps } from './components/agent/AgentAvatar.tsx'
 export {
@@ -230,6 +232,7 @@ export {
   SHELL_GLYPH,
   SHELL_KILL_GLYPH,
   shellAgentWriteLabel,
+  shellKeepAwakeLabel,
   shellGrantable,
   shellInfoFailed,
   shellInfoLabel,

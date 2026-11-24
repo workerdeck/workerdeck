@@ -97,7 +97,12 @@ export function httpRoutes(ctx: ServerContext): HttpRoute[] {
         json(res, 200, {
           protocolVersion: PROTOCOL_VERSION,
           ...(ctx.auth.isOperator(auth)
-            ? { machineId: machineId(), ...(ctx.relayStatus ? { relay: ctx.relayStatus() } : {}), agents: agentDefaults(ctx) }
+            ? {
+                machineId: machineId(),
+                ...(ctx.relayStatus ? { relay: ctx.relayStatus() } : {}),
+                agents: agentDefaults(ctx),
+                ...(ctx.keepsAwake?.() ? { keepAwake: true } : {}),
+              }
             : {}),
         } satisfies GatewayMeta),
     }),

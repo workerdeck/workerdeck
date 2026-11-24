@@ -8,7 +8,16 @@ export type ShellSize = { cols: number; rows: number }
 
 export type ShellSink = { write: (data: string) => void; end: (reason: string) => void }
 
-export type ShellSpawnInput = { runner: Runner; command: string; owner: ShellOwner; proposed?: boolean; stdin?: string; interactive?: boolean; flush?: boolean }
+export type ShellSpawnInput = {
+  runner: Runner
+  command: string
+  owner: ShellOwner
+  proposed?: boolean
+  stdin?: string
+  interactive?: boolean
+  flush?: boolean
+  keepAwake?: boolean
+}
 
 export type ShellSpawned = { shell: ShellInfo; source: LocalShellSource }
 
@@ -49,6 +58,7 @@ export type ShellRegistry = {
   running: () => ShellInfo[]
   kill: (sessionId: string, shellId: string, reason?: ShellEndReason) => ShellInfo | undefined
   setAgentWrite: (sessionId: string, shellId: string, enabled: boolean) => ShellInfo | undefined
+  setKeepAwake: (sessionId: string, shellId: string, enabled: boolean) => ShellInfo | undefined
   killAll: (reason: ShellEndReason) => number
   killAllSync: () => void
   attach: (sessionId: string, shellId: string, sink: ShellSink) => Promise<ShellAttachment>

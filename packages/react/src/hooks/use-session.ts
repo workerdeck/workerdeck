@@ -121,6 +121,7 @@ export type UseClaudeSessionResult = {
   verifyShell: (shellId: string) => Promise<boolean>
   killShell: (shellId: string) => Promise<boolean>
   setShellAgentWrite: (shellId: string, enabled: boolean) => Promise<boolean>
+  setShellKeepAwake: (shellId: string, enabled: boolean) => Promise<boolean>
 }
 
 export function useClaudeSession(
@@ -385,6 +386,22 @@ export function useClaudeSession(
     [client, sessionId],
   )
 
+  const setShellKeepAwake = useCallback(
+    async (shellId: string, enabled: boolean): Promise<boolean> => {
+      if (!sessionId) {
+        return false
+      }
+      try {
+        const record = await client.setShellKeepAwake(sessionId, shellId, enabled)
+        dispatch({ type: 'transcript_hydrate_shell', shellId, shell: record })
+        return true
+      } catch {
+        return false
+      }
+    },
+    [client, sessionId],
+  )
+
   const actions = useMemo(
     () => ({
       send: (text: string, attachmentIds?: string[]) => handleRef.current?.send(text, attachmentIds),
@@ -423,6 +440,7 @@ export function useClaudeSession(
       verifyShell,
       killShell,
       setShellAgentWrite,
+      setShellKeepAwake,
     }),
     [
       state,
@@ -443,6 +461,7 @@ export function useClaudeSession(
       verifyShell,
       killShell,
       setShellAgentWrite,
+      setShellKeepAwake,
     ],
   )
 }

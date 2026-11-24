@@ -7,13 +7,14 @@ const REFRESH_MS = 60_000
 export type HostMeta = {
   relays: HostRelays
   agentDefaults: Readonly<Record<string, GatewayAgentDefaults | undefined>>
+  keepAwake: Readonly<Record<string, boolean | undefined>>
 }
 
 // The operator-only half of each gateway's `/meta`: its relay identity, which lets a team span two configured
 // gateways, and what a new agent there defaults to.
 export function useHostMeta(): HostMeta {
   const { hosts } = useHosts()
-  const [meta, setMeta] = useState<HostMeta>({ relays: {}, agentDefaults: {} })
+  const [meta, setMeta] = useState<HostMeta>({ relays: {}, agentDefaults: {}, keepAwake: {} })
   const ids = hosts.map((host) => host.id).join('\0')
   useEffect(() => {
     let live = true
@@ -36,6 +37,7 @@ export function useHostMeta(): HostMeta {
         setMeta({
           relays: Object.fromEntries(entries.map(([id, answer]) => [id, answer?.relay])),
           agentDefaults: Object.fromEntries(entries.map(([id, answer]) => [id, answer?.agents])),
+          keepAwake: Object.fromEntries(entries.map(([id, answer]) => [id, answer?.keepAwake])),
         })
       }
     }

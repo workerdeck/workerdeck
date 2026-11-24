@@ -1,18 +1,20 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import type { SessionInfo } from '@workerdeck/protocol'
+import { holdsAwake, wakeHolders, type SessionInfo, type ShellInfo } from '@workerdeck/protocol'
 
-// The states that are waiting on this machine: a turn in flight, and a session blocked on the operator, who is
-// coming back to it and would find the socket gone. Deliberately the same set `workerdeck guard` calls busy.
-const AWAKE_STATUSES = new Set<SessionInfo['status']>(['starting', 'running', 'awaiting_approval'])
+const WAKE_EVENTS = new Set(['status_changed', 'session_closed', 'session_error'])
 
 export type WakeLock = {
   readonly held: boolean
+  readonly available: boolean
   set: (wanted: boolean) => void
   release: () => void
 }
 
-export function sessionsNeedTheMachine(sessions: readonly SessionInfo[]): boolean {
-  return sessions.some((session) => AWAKE_STATUSES.has(session.status))
+// `wakeHolders`: a turn in flight or a running `keepAwake` shell. Not an approval wait, unlike `guard`'s busy set: no
+// model request is open while a session waits on a person, so a sleep suspends it without costing the turn.
+// The registry's infos carry no shells, so the shell registry's running ones are passed beside them.
+export function sessionsNeedTheMachine(sessions: readonly SessionInfo[], shells: readonly ShellInfo[] = []): boolean {
+  return holdsAwake(wakeHolders(sessions)) || shells.some((shell) => shell.keepAwake && shell.status === 'running')
 }
 
 // Both platforms hold the lock for as long as a child process lives, and both tie that child's life to *this* pid
@@ -42,6 +44,7 @@ function lockCommand(pid: number): { command: string; args: string[] } | null {
 
 export type WakeSource = {
   list: () => SessionInfo[]
+  shells?: () => ShellInfo[]
   observe: (
     listener: (runner: {
       subscribe: (listener: (event: { type: string }) => void, afterSeq?: number) => unknown
@@ -54,12 +57,12 @@ export type WakeSource = {
 // a session can take - closed, failed, parked, evicted, drained - and one missed path pins the machine awake until
 // the gateway stops. Derived state cannot leak that way, so the sweep below is insurance, not the mechanism.
 export function driveWakeLock(source: WakeSource, lock: Pick<WakeLock, 'set'>): void {
-  const sync = (): void => lock.set(sessionsNeedTheMachine(source.list()))
+  const sync = (): void => lock.set(sessionsNeedTheMachine(source.list(), source.shells?.()))
   source.observe((runner) =>
     // Handed back, not dropped: a runner carried to another generation by a hot reload would otherwise keep
     // syncing a lock that belongs to a process state this observer no longer describes.
     runner.subscribe((event) => {
-      if (event.type === 'status_changed' || event.type === 'session_closed' || event.type === 'session_error') {
+      if (WAKE_EVENTS.has(event.type)) {
         sync()
       }
     }, runner.info().lastSeq),
@@ -111,6 +114,9 @@ export function createWakeLock(options: { pid?: number; onUnavailable?: (reason:
   return {
     get held(): boolean {
       return child !== null
+    },
+    get available(): boolean {
+      return available
     },
     set: (wanted) => (wanted ? start() : stop()),
     release: stop,

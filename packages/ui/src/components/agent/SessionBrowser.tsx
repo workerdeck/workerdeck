@@ -41,6 +41,7 @@ import type {
 import { Empty } from '../ui/Empty.tsx'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '../ui/Menu.tsx'
 import { Input } from '../ui/Input.tsx'
+import { KeepAwakeNote } from './KeepAwakeNote.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionFilters } from './SessionFilters.tsx'
 import { SessionItem, type SelectModifiers } from './SessionItem.tsx'
@@ -86,6 +87,7 @@ export interface SessionBrowserProps {
   onSelectShell?: (row: SessionRow, shellId: string) => void
   onKillShell?: (row: SessionRow, shellId: string) => void
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
+  onShellKeepAwake?: (row: SessionRow, shellId: string, enabled: boolean) => void
   // A "Conversations" link on an agent's hover card.
   onAgentConversations?: (row: SessionRow) => void
   // Makes cards draggable onto each other: the middle of an agent's card joins its team, a member dragged out of its team leaves.
@@ -93,6 +95,8 @@ export interface SessionBrowserProps {
   onTeamMove?: (move: TeamMove) => Promise<void> | void
   // Each gateway's `GatewayMeta.relay` by host id: draws a member under a lead on another gateway, and allows the drop.
   relays?: HostRelays
+  // Host ids whose gateway reports `GatewayMeta.keepAwake`: draws `KeepAwakeNote` under the list while one holds.
+  keepAwake?: Readonly<Record<string, boolean | undefined>>
   // Draws a `+` on each project heading: start a session on that gateway, in that project's root.
   onCreateInGroup?: (target: GroupTarget) => void
   emptyState?: ReactNode
@@ -138,8 +142,10 @@ export function SessionBrowser({
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
+  onShellKeepAwake,
   onTeamMove,
   relays,
+  keepAwake,
   onCreateInGroup,
   emptyState,
   showControls = true,
@@ -490,6 +496,7 @@ export function SessionBrowser({
                   onSelectShell={onSelectShell}
                   onKillShell={onKillShell}
                   onShellAgentWrite={onShellAgentWrite}
+                  onShellKeepAwake={onShellKeepAwake}
                   {...extra}
                 />
               )
@@ -586,6 +593,7 @@ export function SessionBrowser({
           ) : null}
         </div>
       )}
+      {keepAwake ? <KeepAwakeNote rows={rows} awake={keepAwake} /> : null}
     </div>
   )
 }
@@ -641,6 +649,7 @@ interface SessionRowItemProps {
   onSelectShell?: (row: SessionRow, shellId: string) => void
   onKillShell?: (row: SessionRow, shellId: string) => void
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
+  onShellKeepAwake?: (row: SessionRow, shellId: string, enabled: boolean) => void
 }
 
 function SessionRowItem({
@@ -670,6 +679,7 @@ function SessionRowItem({
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
+  onShellKeepAwake,
 }: SessionRowItemProps) {
   const item = (
     <SessionItem
@@ -693,6 +703,7 @@ function SessionRowItem({
       onSelectShell={onSelectShell ? (id) => onSelectShell(row, id) : undefined}
       onKillShell={onKillShell ? (id) => onKillShell(row, id) : undefined}
       onShellAgentWrite={onShellAgentWrite ? (id, enabled) => onShellAgentWrite(row, id, enabled) : undefined}
+      onShellKeepAwake={onShellKeepAwake ? (id, enabled) => onShellKeepAwake(row, id, enabled) : undefined}
       onRename={onRename ? (title) => onRename(row, title) : undefined}
       actions={actions}
     />

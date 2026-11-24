@@ -125,6 +125,7 @@ function restoreEntries(state: SessionShells, index: StoredShellIndex, base: str
       info.endedAt = now
       delete info.exitCode
       delete info.signal
+      delete info.keepAwake
       dirty = true
     }
     state.entries.set(info.id, {

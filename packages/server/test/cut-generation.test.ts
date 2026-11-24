@@ -445,6 +445,13 @@ const ROUTES: RouteCase[] = [
     body: { enabled: false },
     ok: 200,
   },
+  {
+    name: 'a shell keep-awake toggle',
+    method: 'POST',
+    path: (id, shell) => `/sessions/${id}/shells/${shell}/keep-awake`,
+    body: { enabled: false },
+    ok: 200,
+  },
   { name: 'a sleep', method: 'POST', path: (id) => `/sessions/${id}/sleep`, ok: 200 },
   { name: 'a task stop', method: 'POST', path: (id) => `/sessions/${id}/tasks/t-1/stop`, ok: 200 },
   { name: 'a task to the background', method: 'POST', path: (id) => `/sessions/${id}/tasks/t-1/background`, ok: 200 },

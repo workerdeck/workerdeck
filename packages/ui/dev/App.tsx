@@ -172,11 +172,21 @@ export function App() {
     loadOutput: async () => true,
     verify: async () => true,
     kill: async (shellId) => {
-      patchShell(shellId, () => ({ status: 'exited', endReason: 'killed', endedAt: Date.now(), agentWrite: undefined }))
+      patchShell(shellId, () => ({
+        status: 'exited',
+        endReason: 'killed',
+        endedAt: Date.now(),
+        agentWrite: undefined,
+        keepAwake: undefined,
+      }))
       return true
     },
     agentWrite: async (shellId, enabled) => {
       patchShell(shellId, () => ({ agentWrite: enabled ? true : undefined }))
+      return true
+    },
+    keepAwake: async (shellId, enabled) => {
+      patchShell(shellId, () => ({ keepAwake: enabled ? true : undefined }))
       return true
     },
   }

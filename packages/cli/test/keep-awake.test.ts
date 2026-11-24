@@ -1,4 +1,4 @@
-import type { SessionInfo } from '@workerdeck/protocol'
+import { wakeHolders, wakeSummary, type SessionInfo } from '@workerdeck/protocol'
 import { describe, expect, it } from 'vitest'
 import { parseArgs, resolveInstanceConfig } from '../src/config.ts'
 import { createWakeLock, driveWakeLock, sessionsNeedTheMachine } from '../src/lib/keep-awake.ts'
@@ -10,17 +10,33 @@ function session(status: SessionInfo['status']): SessionInfo {
 }
 
 describe('sessionsNeedTheMachine', () => {
-  it('holds while a turn is in flight or a session is blocked on a human', () => {
-    for (const status of ['starting', 'running', 'awaiting_approval'] as const) {
+  it('holds while a turn is in flight', () => {
+    for (const status of ['starting', 'running'] as const) {
       expect(sessionsNeedTheMachine([session(status)])).toBe(true)
     }
   })
 
-  it('releases for every state that is not waiting on this machine', () => {
-    for (const status of ['idle', 'parked', 'failed', 'closed'] as const) {
+  it('releases for a session waiting on an approval, and every state with no turn in flight', () => {
+    for (const status of ['awaiting_approval', 'idle', 'parked', 'failed', 'closed'] as const) {
       expect(sessionsNeedTheMachine([session(status)])).toBe(false)
     }
     expect(sessionsNeedTheMachine([])).toBe(false)
+  })
+
+  it('holds for a running keep-awake shell on an idle session, not for an ended one or one without the flag', () => {
+    const shell = (status: 'running' | 'exited', keepAwake?: boolean) => ({ id: 'sh', status, ...(keepAwake ? { keepAwake } : {}) })
+    const idle = (shells: object[]) => ({ ...session('idle'), shells }) as SessionInfo
+    expect(sessionsNeedTheMachine([idle([shell('running', true)])])).toBe(true)
+    expect(sessionsNeedTheMachine([idle([shell('exited', true)])])).toBe(false)
+    expect(sessionsNeedTheMachine([idle([shell('running')])])).toBe(false)
+  })
+
+  it('summarises what holds, and nothing when nothing does', () => {
+    const shells = [{ id: 'sh', label: 'build', status: 'running', keepAwake: true }]
+    const sessions = [session('running'), session('starting'), { ...session('idle'), shells } as SessionInfo]
+    expect(wakeSummary(wakeHolders(sessions))).toBe('Keeping this machine awake: 2 turns, 1 shell')
+    expect(wakeSummary(wakeHolders([session('running')]), 'mac')).toBe('Keeping mac awake: 1 turn')
+    expect(wakeSummary(wakeHolders([session('awaiting_approval')]))).toBeUndefined()
   })
 
   it('holds while any one session needs it, not only the first', () => {

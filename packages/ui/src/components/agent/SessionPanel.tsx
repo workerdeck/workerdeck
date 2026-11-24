@@ -305,6 +305,7 @@ export function SessionPanel({
     verifyShell,
     killShell,
     setShellAgentWrite,
+    setShellKeepAwake,
   } = useClaudeSession(client, address, { onProtocolError: setProtocolError, cacheTranscript })
   const {
     shellId: framedShellId,
@@ -316,8 +317,15 @@ export function SessionPanel({
   } = useShellFrame({ sessionId, items: state.items, session: state.session, shells, reveal, openShell, onShellChange })
   const agentWrite = state.session?.shellAgentWrite !== undefined ? setShellAgentWrite : undefined
   const shellActions = useMemo(
-    () => ({ loadOutput: loadShellOutput, verify: verifyShell, kill: killShell, open: enterShell, agentWrite }),
-    [loadShellOutput, verifyShell, killShell, enterShell, agentWrite],
+    () => ({
+      loadOutput: loadShellOutput,
+      verify: verifyShell,
+      kill: killShell,
+      open: enterShell,
+      agentWrite,
+      keepAwake: setShellKeepAwake,
+    }),
+    [loadShellOutput, verifyShell, killShell, enterShell, agentWrite, setShellKeepAwake],
   )
   useEffect(() => setProtocolError(undefined), [sessionId])
   const {
@@ -716,6 +724,7 @@ export function SessionPanel({
               onBack={leaveShell}
               onKill={() => void killShell(framedShellId)}
               onAgentWrite={agentWrite ? (enabled) => void agentWrite(framedShellId, enabled) : undefined}
+              onKeepAwake={(enabled) => void setShellKeepAwake(framedShellId, enabled)}
               terminal={terminal}
               {...cell}
             />

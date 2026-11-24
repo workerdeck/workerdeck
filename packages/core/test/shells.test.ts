@@ -19,6 +19,7 @@ import {
   SHELL_PROPOSE_STDIN_MAX,
   type ShellDirectory,
   type ShellReadResult,
+  type ShellRunOptions,
   shellExitedText,
 } from '../src/index.ts'
 import { isSyntheticUserText } from '../src/lib/normalize.ts'
@@ -230,6 +231,20 @@ describe('runShellTool', () => {
     expect(read.text).toBe(
       '[shell #3 sh_a: $ npm run dev, still running, interactive, the current screen, found "ready" after 1.2s]\nVITE ready',
     )
+  })
+
+  it('defaults keepAwake on a run to wakeOnExit, and lets an explicit value win either way', async () => {
+    const shells = directory()
+    const run = async (args: Record<string, unknown>): Promise<ShellRunOptions> => {
+      await runShellTool(shells, 'a', 'shell_run', { command: 'make', ...args }, { write: true })
+      return shells.calls.at(-1)![2] as ShellRunOptions
+    }
+    expect(await run({})).not.toHaveProperty('keepAwake')
+    expect(await run({ wakeOnExit: true })).toMatchObject({ wakeOnExit: true, keepAwake: true })
+    expect(await run({ wakeOnExit: true, keepAwake: false })).not.toHaveProperty('keepAwake')
+    const explicit = await run({ keepAwake: true })
+    expect(explicit).toMatchObject({ keepAwake: true })
+    expect(explicit).not.toHaveProperty('wakeOnExit')
   })
 
   it('names the new shell in the header of a run, and what was typed in the header of a write', async () => {

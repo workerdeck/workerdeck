@@ -2879,6 +2879,11 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   `SYNTHETIC_USER_PREFIXES` so a resumed history (claude, and codex's replay) marks it synthetic again.
   `wait: 'run'` returns once the shell starts and spawns it with `flush`, so the `LocalCommandQueue`
   takes it into the next message like a `$` despite `proposed`. A wake on a closed session is dropped.
+- **A shell holds the machine awake only while it runs with `keepAwake`.** `shell_run`'s `keepAwake`
+  defaults to its `wakeOnExit`, because the shell the agent waits on is the one a sleep would cost, while
+  a dev server it leaves behind must not pin a laptop awake for days. A `$` starts without it; the row's
+  coffee toggle (`POST .../keep-awake`) flips it on any running shell. The key is set or absent, never
+  `false`, and ends with the shell, so `wakeHolders` never has to tell a stale mark from a live one.
 - **The clients draw it as its own card.** `ApprovalPrompts` routes a `shell_propose` request to
   `ShellProposalPrompt` / `TerminalShellProposalPrompt` (editable command, a password field when
   `secret`). A host that draws the generic `PermissionPrompt` still gets the command verbatim, but
