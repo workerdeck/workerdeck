@@ -174,7 +174,6 @@ export function SessionBrowser({
     [visible, config, gateways, rows, relayHosts],
   )
   const subset = subsetSummary(config, scope, visible.length, rows.length)
-  const tiles = useMemo(() => rows.some((row) => row.info.agent !== undefined), [rows])
   const custom = config.groupBy === 'custom'
   const [editingGroup, setEditingGroup] = useState<string>()
   const views = useMemo(() => {
@@ -191,7 +190,17 @@ export function SessionBrowser({
   }, [groups, config, isActive])
 
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
-  const byKey = useMemo(() => new Map(rows.map((row) => [sessionKey(row), row])), [rows])
+  const byKey = useMemo(() => {
+    const out = new Map(rows.map((row) => [sessionKey(row), row]))
+    for (const group of groups) {
+      for (const row of group.rows) {
+        if (row.members?.length) {
+          out.set(sessionKey(row), row)
+        }
+      }
+    }
+    return out
+  }, [rows, groups])
   const ordered = orderedGroupBy(config.groupBy)
   const customGroups = config.customGroups ?? []
   const setCustom = (next: ViewConfig['customGroups']) => set({ customGroups: next })
@@ -449,7 +458,7 @@ export function SessionBrowser({
               const grabbable = onTeamMove !== undefined || (custom && variant === 'card')
               const handles = grabbable
                 ? {
-                    ...(lead ? drag.box(key) : member.members?.length ? {} : drag.box(key)),
+                    ...(lead || member.members?.length ? {} : drag.box(key)),
                     ...drag.row(key, lead ? teamLane(sessionKey(lead)) : lane),
                     ...drag.grip({ kind: 'session', key, lead: lead && sessionKey(lead) }),
                   }
@@ -479,8 +488,6 @@ export function SessionBrowser({
                   tasks={config.tasks}
                   expandedSteps={expandedStepsOf(config, member)}
                   onToggleSteps={(kind) => onConfigChange(toggleStepsExpanded(config, member, kind))}
-                  projectIcons={projectIcons}
-                  tile={tiles}
                   onSelect={onSelect}
                   onDelete={onDelete}
                   onRename={member.info.agent ? onRenameAgent : onRename}
@@ -550,6 +557,13 @@ export function SessionBrowser({
                               selected={teamSelected}
                               boxProps={onTeamMove || custom ? drag.box(key) : {}}
                               spacer={(before) => drag.spacer(teamLane(key), before)}
+                              landing={
+                                sessionDrag?.height !== undefined && sessionDrag.target?.slot.lane === teamLane(key)
+                                  ? sessionDrag.target.slot.before
+                                  : null
+                              }
+                              lifted={sessionDrag && drag.lifted(sessionDrag.key) ? sessionDrag.key : undefined}
+                              memberBox={(member) => (onTeamMove ? drag.box(member) : {})}
                               onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
                               renderLead={(tray) =>
                                 item(row, 'card', undefined, {
@@ -584,6 +598,7 @@ export function SessionBrowser({
 }
 
 const GROUPS_LANE = 'groups'
+const SPACER = '\0spacer'
 const LIFTED = 'data-[drag-lifted]:bg-surface data-[drag-lifted]:shadow-lg data-[drag-lifted]:ring-1 data-[drag-lifted]:ring-border'
 
 function laneOf(group: SessionGroup): string {
@@ -607,7 +622,6 @@ interface SessionRowItemProps {
   row: SessionRow
   variant?: 'card' | 'member'
   teamTray?: ReactNode
-  tile?: boolean
   className?: string
   dragProps?: HTMLAttributes<HTMLElement>
   dropCue?: DragCue
@@ -626,7 +640,6 @@ interface SessionRowItemProps {
   tasks?: StepDisplay
   expandedSteps?: readonly FoldableStepKind[]
   onToggleSteps?: (kind: FoldableStepKind) => void
-  projectIcons?: Record<string, string>
   onSelect?: (row: SessionRow, modifiers: SelectModifiers) => void
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
@@ -644,7 +657,6 @@ function SessionRowItem({
   row,
   variant,
   teamTray,
-  tile,
   className,
   dragProps,
   dropCue,
@@ -663,7 +675,6 @@ function SessionRowItem({
   tasks,
   expandedSteps,
   onToggleSteps,
-  projectIcons,
   onSelect,
   onRename,
   onSelectSubagent,
@@ -678,7 +689,6 @@ function SessionRowItem({
       row={row}
       variant={variant}
       teamTray={teamTray}
-      tile={tile}
       className={className}
       active={active === true}
       activeStepKey={active ? (activeShellId ?? activeSubagentId) : undefined}
@@ -692,7 +702,6 @@ function SessionRowItem({
       tasks={tasks}
       expandedSteps={expandedSteps}
       onToggleSteps={onToggleSteps}
-      projectIcons={projectIcons}
       onSelect={(modifiers) => onSelect?.(row, modifiers)}
       onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}
       onSelectTask={onSelectTask ? (task) => onSelectTask(row, task) : undefined}
@@ -760,6 +769,9 @@ function TeamBlock({
   selected,
   boxProps,
   spacer,
+  landing,
+  lifted,
+  memberBox,
   onToggle,
   renderLead,
   renderMember,
@@ -769,6 +781,10 @@ function TeamBlock({
   selected: boolean
   boxProps: HTMLAttributes<HTMLElement>
   spacer: (before: string | undefined) => ReactNode
+  // Where the dragged row lands in this team (`undefined` is last), or null when it lands elsewhere.
+  landing: string | undefined | null
+  lifted: string | undefined
+  memberBox: (key: string) => HTMLAttributes<HTMLElement>
   onToggle: () => void
   renderLead: (tray?: ReactNode) => ReactNode
   renderMember: (member: SessionRow) => ReactNode
@@ -797,6 +813,22 @@ function TeamBlock({
     </span>
   ) : undefined
   const nested = view.shown.length > 0
+  // The rail runs through the rows that hold a place: every member but the lifted one, and the spacer where it lands.
+  const railed = view.shown.map(sessionKey).filter((key) => key !== lifted)
+  if (landing !== null) {
+    const at = landing === undefined ? -1 : railed.indexOf(landing)
+    railed.splice(at < 0 ? railed.length : at, 0, SPACER)
+  }
+  const tail = spacer(undefined)
+  const branch = (key: string) => {
+    const i = railed.indexOf(key)
+    const last = i === railed.length - 1
+    return cn(
+      TREE_BRANCH,
+      i === 0 ? 'before:-top-2' : 'before:-top-1',
+      last ? (i === 0 ? 'before:h-[calc(50%+9px)]' : 'before:h-[calc(50%+5px)]') : 'before:bottom-0',
+    )
+  }
   return (
     <div
       {...boxProps}
@@ -808,21 +840,19 @@ function TeamBlock({
       {renderLead(tray)}
       {nested ? (
         <div className="flex flex-col gap-1 py-1 pr-1 pl-5">
-          {view.shown.map((member, i) => (
-            <Fragment key={sessionKey(member)}>
-              {spacer(sessionKey(member))}
-              <div
-                className={cn(
-                  TREE_BRANCH,
-                  i === 0 ? 'before:-top-2' : 'before:-top-1',
-                  i === view.shown.length - 1 ? (i === 0 ? 'before:h-[calc(50%+9px)]' : 'before:h-[calc(50%+5px)]') : 'before:bottom-0',
-                )}
-              >
-                {renderMember(member)}
-              </div>
-            </Fragment>
-          ))}
-          {spacer(undefined)}
+          {view.shown.map((member) => {
+            const key = sessionKey(member)
+            const gap = spacer(key)
+            return (
+              <Fragment key={key}>
+                {gap ? <div className={branch(SPACER)}>{gap}</div> : null}
+                <div {...memberBox(key)} className={cn('relative rounded-md', key !== lifted && branch(key), LIFTED)}>
+                  {renderMember(member)}
+                </div>
+              </Fragment>
+            )
+          })}
+          {tail ? <div className={branch(SPACER)}>{tail}</div> : null}
         </div>
       ) : null}
     </div>

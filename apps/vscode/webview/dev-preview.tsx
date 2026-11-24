@@ -40,13 +40,6 @@ const checklist = [
 ]
 
 const ICON_HASH = 'deadbeef'
-const projectIcons = {
-  [ICON_HASH]:
-    'data:image/svg+xml;base64,' +
-    btoa(
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d4d4d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20.5 7.75 12 12.5 3.5 7.75Z"/><path d="M3.5 12.25 12 17l8.5-4.75"/><path d="M3.5 16.5 12 21.25l8.5-4.75"/></svg>',
-    ),
-}
 const wd = {
   name: 'WorkerDeck',
   root: '/Users/atomic/projects/ai/workerdeck',
@@ -150,7 +143,6 @@ createRoot(document.getElementById('root')!).render(
             info: r,
             unseen: unseen[(r as { id: string }).id] ?? 0,
           }}
-          projectIcons={projectIcons}
           active={i === 0}
           activeStepKey={i === 0 ? 'a' : undefined}
           onSelect={() => {}}

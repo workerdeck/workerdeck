@@ -29,7 +29,7 @@ export default defineConfig({
       // The gateway refuses a foreign Origin even keyless, so the proxy has to look same-origin to it.
       '/v1': { target: workerUrl, changeOrigin: true, ws: true, headers: { origin: new URL(workerUrl).origin } },
       // The app asks `/auth/status` who served it, so the dev server has to look like a gateway or no implicit host appears.
-      '/auth': { target: workerUrl, changeOrigin: true },
+      '/auth': { target: workerUrl, changeOrigin: true, headers: { origin: new URL(workerUrl).origin } },
     },
   },
 })

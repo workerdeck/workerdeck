@@ -2031,39 +2031,20 @@ file's geometry rather than either copy. The original frame is Figma node `28:67
 WorkerDeck file (`sn8cy5m6eXneXLvKCXq5xt`), but **this section outranks it**: the frame is the
 source for geometry only, and several rules below were decided after it was drawn (the 6px
 in-row gaps that replaced its transparent glyph padding, the 16px project glyph, agents sorted
-above tasks). A 4px-padded, 4px-rounded card whose whole surface is the
-hit target, holding two 20px lines: **line one is state and identity** - the status glyph leads
-(this *reverses* the old row's "state last" rule, and knowingly: a trailing glyph has no fixed x,
-so a list of thirty gives the eye nothing to run down), then the title, then the two readings that
-change while you are looking at them, the unread badge and the `ContextRing`. **Line two is
-identity and cost** - the engine's mark and model in the **vendor's own colour**
-(`vendorMarkClass`/`vendorTextClass`, `--vendor-*`; the class goes *on* `EngineIcon`, which ships
-its own `text-fg-3` that only a class on the element itself merges over), then a `·`-joined run of
-project / gateway / profile / cost, then the age, then the sub-agent disclosure and the host's
-`actions` slot. Both lines hang their glyph in **one 16px `Gutter`**, because the two glyphs are
-different sizes and as plain flex children the text columns start at different x - two pixels,
-invisible as a measurement and obvious as a misalignment; the terminal gutter's argument at card
-scale. Cells within a line are **6px** apart where the two lines are **4px**: a horizontal gap
-separates a glyph from the words it labels and 4px read as one smudge at 13px, where a vertical
-gap separates lines that their own leading has already parted. That run is **one truncating span
-and the age is not in it** - the parts have a priority order and a single ellipsis honours it for
-free, but at the end of the run the age was the first thing the ellipsis ate, which is backwards:
-`4m ago` answers "is this still moving" in three characters and `4m …` answers nothing, while a
-truncated project name still says which repo. The flex slack goes **after** the age, not into the
-run, or a card with no disclosure leaves a hole between a project and its own timestamp. A
-**zero cost contributes nothing**
-rather than `formatCost`'s em-dash: a dash is right in a details panel where an empty cell looks
-broken, and wrong in a run competing for the width the project name needs.
+above tasks). **Every card is one 36 px line** (4 px padding, 6 px corners, the whole surface the hit target): a 28 px
+avatar (an agent's face, or for a plain session the vendor-tinted engine tile), the name (never truncated), the
+model badge, then the status text, which is the one thing that truncates. A plain session's status text is a
+`·`-joined run of status, project, gateway (only when the list spans gateways) and age; profile and cost are not
+on the card. Right of the slack, in this order: the step chips (shells, sub-agents, tasks), the reason icons or the
+member unread count, the team caret, the host's `actions` slot, so a caret always sits in the rightmost column
+whatever chips a row carries. Before 4.7 a list with no agent drew plain sessions as a two-line card (status glyph,
+title, unread pill and `ContextRing` over engine mark, model and a project / gateway / profile / cost run); it is
+gone, and there is no `tile` prop any more.
 The card is **`w-full` and the list owns the inset** - `px-1` on the group column, never margins on
 the card. `w-full` plus `mx-1` is `100% + 8px`, an overflow by construction: the dashboard's cards
 ran past the sidebar's right edge and the column grew a horizontal scrollbar. Padding on the
 container cannot do that whatever the card's own width rule turns out to be, which is why it is the
-rule rather than the fix. (The extension was never affected - its scroll container has always been
-`p-1` with no margins on the card.) The metadata run is assembled as a **list of present parts**
-with the separator drawn *between* them, not as a template with a `·` attached to each: every part
-is genuinely optional, and an attached separator outlives its part - `friendlyModel(undefined)` is
-`undefined`, so a session with no model recorded yet opened its line with a `· ` hanging off
-nothing.
+rule rather than the fix.
 
 **Selection is the card's own fill**, not the accent bar `rowShapeClass` draws: the card is an
 inset shape with air around it, so filling it is unambiguous where a fill on a full-bleed row is
@@ -2147,8 +2128,8 @@ anything and not selected; a lead reads its team's state. Agent cards draw no ac
 and `SessionBrowser`'s default row actions take no width until hovered. Rows sit 4 px apart, and agent names sit on
 `--fg-name` until selected. A team showing members is one nested card (`--row-nest`; only the selected row
 takes the selection colour, and the nested card keeps `--row-nest` whichever row is selected; the lead's
-`^ N` chip returns it to Auto). Once
-any row has an agent, plain rows draw as tiles too, so the column holds. An agent card renames the
+`^ N` chip returns it to Auto). Plain
+rows always draw as tiles, so the column holds. An agent card renames the
 agent (`onRenameAgent`), never the session title. `AvatarDialog` is the one face editor (eight
 rolls to start from, then kind, swatch and tone per slot, previews in every state, saved with
 `changeAgentAvatar({ face })`, errors inline because a VS Code view has no toaster) for every
@@ -2184,7 +2165,7 @@ later conversation.
 **Sleep** in a card menu is gated by `canSleep`: the row's
 `capabilities.engineSleep` is true, and the session is `idle` and not already asleep. It is a REST
 call (`sleepSession`), so it needs no borrowed socket. An asleep card
-(`info.engineAsleep`) dims its two lines to 60% and carries the tooltip "Asleep, wakes on your next
+(`info.engineAsleep`) dims its line to 60% and carries the tooltip "Asleep, wakes on your next
 message"; the status glyph is untouched, because the session's state is still `idle`.
 
 A session row's sub-agent, pressed, hands the **panel body over to that agent**:

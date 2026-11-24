@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CircleX, Globe, Hand, ShieldAlert, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import {
@@ -10,7 +10,6 @@ import {
   listState,
   goalHoldsEngine,
   projectLabel,
-  projectName,
   projectSubpath,
   sessionLabel,
 } from '@workerdeck/protocol'
@@ -24,14 +23,11 @@ import type {
   SubagentDisplay,
 } from '@workerdeck/protocol'
 import { AgentAvatar } from './AgentAvatar.tsx'
-import { ContextRing } from './ContextRing.tsx'
-import { EngineIcon, ModelBadge, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
-import { ProjectIcon } from './ProjectIcon.tsx'
-import { SessionStatusIcon } from './SessionStatusIcon.tsx'
+import { ModelBadge } from './EngineIcon.tsx'
 import { StepChips, StepRow, sessionSteps } from './SessionSteps.tsx'
 import type { Step } from './SessionSteps.tsx'
 import { cn } from '../../lib/utils.ts'
-import { formatCost, formatRelativeTime, friendlyModel } from '../../lib/format.ts'
+import { formatRelativeTime, friendlyModel } from '../../lib/format.ts'
 
 const SHARED_TITLE = 'Shared with other owners'
 
@@ -43,7 +39,6 @@ export interface SessionItemProps {
   activeStepKey?: string
   showGateway?: boolean
   showProject?: boolean
-  projectIcons?: Record<string, string>
   subagents?: SubagentDisplay
   shells?: StepDisplay
   // Step rows fold into one chip per kind unless the kind is listed here; without `onToggleSteps` the card keeps its own.
@@ -73,9 +68,6 @@ export interface SessionItemProps {
   teamUnseen?: number
   // A folded lead's members, drawn on its first line before the context ring.
   teamTray?: ReactNode
-  // Draws a session with no agent in the agent card's shape (an engine-mark tile for the avatar), so a list mixing
-  // agents and plain sessions keeps one column.
-  tile?: boolean
   className?: string
 }
 
@@ -87,7 +79,6 @@ export function SessionItem({
   activeStepKey,
   showGateway,
   showProject = true,
-  projectIcons,
   subagents = 'active',
   shells = 'active',
   tasks = 'active',
@@ -112,7 +103,6 @@ export function SessionItem({
   badgeState,
   teamUnseen = 0,
   teamTray,
-  tile = false,
   className,
 }: SessionItemProps) {
   const { info } = row
@@ -130,16 +120,6 @@ export function SessionItem({
 
   const engine = info.engine ?? 'claude'
   const project = showProject ? projectLabel(row) : projectSubpath(row)
-  const projectTitle = showProject ? projectName(row) : undefined
-  const projectIcon = showProject ? info.project?.icon : undefined
-  const iconSrc = projectIcon?.type === 'image' ? projectIcons?.[projectIcon.hash] : undefined
-  const cost = formatCost(info.costUsd ?? info.totalCostUsd)
-  const extras = [
-    showGateway ? row.hostName : undefined,
-    info.profile ? `@${info.profile}` : undefined,
-    cost === '-' ? undefined : cost,
-  ].filter((part): part is string => Boolean(part))
-
   const model = info.modelName ?? friendlyModel(info.model)
   const status = statusLine(info.statusLabel)
   // Only its own reason to need a person: a member that needs one is always listed under its lead, so the lead stays plain.
@@ -160,32 +140,6 @@ export function SessionItem({
   const shownState = badgeState ?? row.teamState ?? row.state
   const quiet = !active && !needsYou && row.unseen === 0 && (shownState === 'idle' || shownState === 'ended')
   const quietAvatar = quiet && 'opacity-50 grayscale'
-  const parts: ReactNode[] = []
-  if (model) {
-    parts.push(
-      <span key="model" className={vendorTextClass(engine, info.model)}>
-        {model}
-      </span>,
-    )
-  }
-  if (status) {
-    parts.push(
-      <span key="status" title={status} className="text-fg-3">
-        {status}
-      </span>,
-    )
-  }
-  if (project !== undefined) {
-    parts.push(
-      <span key="project" title={projectTitle}>
-        <ProjectIcon icon={projectIcon} src={iconSrc} name={projectTitle} className="mr-1.5 size-4 align-[-0.3em]" />
-        {project}
-      </span>,
-    )
-  }
-  for (const extra of extras) {
-    parts.push(<span key={extra}>{extra}</span>)
-  }
   const steps = sessionSteps(
     info,
     (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.(NO_MODIFIERS)),
@@ -240,30 +194,13 @@ export function SessionItem({
         title={agent ? agentTitle(info) : undefined}
         className={cn(
           'text-body-sm font-medium tracking-[-0.005em]',
-          agent || tile ? 'shrink-0 whitespace-nowrap' : 'min-w-0 shrink truncate',
+          agent ? 'shrink-0 whitespace-nowrap' : 'min-w-0 truncate',
           active || !agent ? 'text-fg-1' : 'text-fg-name',
         )}
       >
         {label}
       </span>
     )
-  const unread =
-    row.unseen > 0 ? (
-      <span
-        // Prose, not rows: `unseen` counts messages a person has not read (`proseCount`).
-        title={`${row.unseen} new message${row.unseen === 1 ? '' : 's'}`}
-        className={cn(
-          'flex h-4 min-w-6 shrink-0 items-center justify-center rounded-full px-2',
-          'text-[0.75rem] leading-none tracking-[-0.005em] tabular-nums',
-          // Grey while the turn is still producing, accent once it has stopped: the badge's colour
-          // answers "is this waiting for me", and a working session is not yet.
-          row.state === 'working' ? 'bg-badge text-badge-fg' : 'bg-accent text-accent-fg',
-        )}
-      >
-        {row.unseen}
-      </span>
-    ) : null
-
   return (
     <div
       {...rootAttributes}
@@ -298,84 +235,46 @@ export function SessionItem({
         className,
       )}
     >
-      {agent || tile ? (
-        <div className="flex h-7 items-center gap-2">
-          <AgentAvatar
-            row={row}
-            size={28}
-            {...(variant === 'member' ? {} : { state: badgeState, context: true })}
-            className={cn(quietAvatar)}
-          />
-          <div className={cn('flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden', info.engineAsleep && 'opacity-60')}>
-            {nameLabel}
-            {model ? <ModelBadge engine={engine} model={info.model} name={model} className="text-label" /> : null}
-            {agent?.shared ? (
-              <span title={SHARED_TITLE} aria-label={SHARED_TITLE} className="flex shrink-0 text-fg-4">
-                <Globe className="size-3" />
-              </span>
-            ) : null}
-            {line ? (
-              <span title={lineTitle} className={cn('min-w-0 truncate text-label tracking-[-0.005em]', lineTone)}>
-                {line.text}
-              </span>
-            ) : agent ? null : (
-              <span className="min-w-0 truncate text-label tracking-[-0.005em] text-fg-4">
-                {[status, project, time].filter(Boolean).join(' · ')}
-              </span>
-            )}
-            <span className="flex-1" />
-            {attentionOf(info).reasons.length > 0 ? reasons : unreadCount}
-            {teamUnseen > 0 ? (
-              <span
-                title={`${teamUnseen} new message${teamUnseen === 1 ? '' : 's'} in the team`}
-                className="flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-accent px-1.5 text-[0.75rem] leading-none text-accent-fg tabular-nums"
-              >
-                <Users className="size-3" />
-                {teamUnseen}
-              </span>
-            ) : null}
-            {teamTray}
-            {chips}
-            {actions}
-          </div>
-        </div>
-      ) : (
-        <div className={cn('flex flex-col gap-1 py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
-          <div className="flex h-5 items-center gap-1.5 overflow-hidden">
-            <Gutter>
-              <SessionStatusIcon row={row} />
-            </Gutter>
-            {nameLabel}
-            <span className="flex-1" />
-            {reasons}
-            {unread}
-            <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />
-          </div>
-
-          <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
-            <Gutter>
-              <EngineIcon engine={engine} model={info.model} className={cn('size-4', vendorMarkClass(engine, info.model))} />
-            </Gutter>
-            <span className="min-w-0 truncate text-fg-4">
-              {parts.map((part, i) => (
-                <Fragment key={i}>
-                  {i > 0 ? ' · ' : ''}
-                  {part}
-                </Fragment>
-              ))}
+      <div className="flex h-7 items-center gap-2">
+        <AgentAvatar
+          row={row}
+          size={28}
+          {...(variant === 'member' ? {} : { state: badgeState, context: true })}
+          className={cn(quietAvatar)}
+        />
+        <div className={cn('flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden', info.engineAsleep && 'opacity-60')}>
+          {nameLabel}
+          {model ? <ModelBadge engine={engine} model={info.model} name={model} className="text-label" /> : null}
+          {agent?.shared ? (
+            <span title={SHARED_TITLE} aria-label={SHARED_TITLE} className="flex shrink-0 text-fg-4">
+              <Globe className="size-3" />
             </span>
-            {time ? (
-              <span className="shrink-0 text-fg-4">
-                {parts.length > 0 ? '· ' : ''}
-                {time}
-              </span>
-            ) : null}
-            <span className="min-w-0 flex-1" />
-            {chips}
-            {actions}
-          </div>
+          ) : null}
+          {isEditing ? null : line ? (
+            <span title={lineTitle} className={cn('min-w-0 truncate text-label tracking-[-0.005em]', lineTone)}>
+              {line.text}
+            </span>
+          ) : agent ? null : (
+            <span className="min-w-0 shrink-[999] truncate text-label tracking-[-0.005em] text-fg-4">
+              {[status, project, showGateway ? row.hostName : undefined, time].filter(Boolean).join(' · ')}
+            </span>
+          )}
+          {isEditing ? null : <span className="flex-1" />}
+          {chips}
+          {attentionOf(info).reasons.length > 0 ? reasons : unreadCount}
+          {teamUnseen > 0 ? (
+            <span
+              title={`${teamUnseen} new message${teamUnseen === 1 ? '' : 's'} in the team`}
+              className="flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-accent px-1.5 text-[0.75rem] leading-none text-accent-fg tabular-nums"
+            >
+              <Users className="size-3" />
+              {teamUnseen}
+            </span>
+          ) : null}
+          {teamTray}
+          {actions}
         </div>
-      )}
+      </div>
 
       {shown.length > 0 ? (
         <div className="flex flex-col">
@@ -405,10 +304,6 @@ function ReasonChips({ info }: { info: SessionInfo }) {
       </span>
     )
   })
-}
-
-function Gutter({ children }: { children: ReactNode }) {
-  return <span className="flex size-4 shrink-0 items-center justify-center">{children}</span>
 }
 
 function NameEditor({
