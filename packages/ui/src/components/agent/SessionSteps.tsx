@@ -248,7 +248,7 @@ export function StepChips({
       }}
       onDoubleClick={(event) => event.stopPropagation()}
       className={cn(
-        'flex h-4 shrink-0 items-center gap-1 rounded-[3px] px-1 text-micro leading-none tabular-nums outline-none',
+        'flex size-4 shrink-0 items-center justify-center rounded-[3px] text-micro leading-none outline-none',
         'focus-visible:ring-1 focus-visible:ring-ring',
         chip.failed
           ? 'text-danger'
@@ -263,7 +263,6 @@ export function StepChips({
       )}
     >
       <ChipIcon kind={chip.kind} />
-      {chip.count}
     </button>
   ))
 }

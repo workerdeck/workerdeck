@@ -46,7 +46,7 @@ import { Input } from '../ui/Input.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionFilters } from './SessionFilters.tsx'
 import { SessionItem, type SelectModifiers } from './SessionItem.tsx'
-import { CustomGroupHeader, FacetGroupHeader, HeadingAction, NewGroupButton } from './SessionGroups.tsx'
+import { CustomGroupHeader, FacetGroupHeader, FoldButton, GroupHeading, HeadingAction, NewGroupButton } from './SessionGroups.tsx'
 import { useListDrag, type DragCue, type DragItem } from './use-list-drag.tsx'
 import { crossOwnerDrop, joinDrop, memberDrop, type TeamMove } from '../../lib/team-drop.ts'
 import { teamMovePatches, useHeldEdits } from '../../lib/held-edits.ts'
@@ -353,16 +353,12 @@ export function SessionBrowser({
     }
     if (group.earlier) {
       return (
-        <button
-          type="button"
+        <GroupHeading
           {...headingDrag(group)}
-          aria-expanded={config.earlierOpen === true}
-          onClick={() => set({ earlierOpen: !config.earlierOpen })}
-          className="flex items-center gap-1 px-2 text-left text-label text-fg-4 hover:text-fg-2"
-        >
-          {config.earlierOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-          Earlier · {group.rows.length} one-off session{group.rows.length === 1 ? '' : 's'}
-        </button>
+          label="Earlier"
+          title={`${group.rows.length} one-off session${group.rows.length === 1 ? '' : 's'}`}
+          fold={<FoldButton name="Earlier" collapsed={!config.earlierOpen} onToggle={() => set({ earlierOpen: !config.earlierOpen })} />}
+        />
       )
     }
     if (config.groupBy === 'none' || !group.label) {
@@ -533,9 +529,9 @@ export function SessionBrowser({
                       Drag sessions here
                     </div>
                   )}
-                  {hidden
-                    ? null
-                    : group.rows.map((row) => {
+                  {hidden || group.rows.length === 0 ? null : (
+                    <div data-drag-fold="" className="flex flex-col gap-1">
+                      {group.rows.map((row) => {
                         const key = sessionKey(row)
                         if (!row.members?.length) {
                           return (
@@ -576,7 +572,9 @@ export function SessionBrowser({
                           </Fragment>
                         )
                       })}
-                  {groupDrag ? null : drag.spacer(lane, undefined)}
+                      {drag.spacer(lane, undefined)}
+                    </div>
+                  )}
                 </div>
               </Fragment>
             )

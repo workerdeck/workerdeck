@@ -24,6 +24,8 @@ type Live = {
   box?: HTMLElement
   scroller?: HTMLElement
   frame?: number
+  // A group drag's fold: the rows shrink away before the drag takes over, the held heading kept under the pointer.
+  fold?: { timer: ReturnType<typeof setTimeout>; animations: Animation[] }
   detach: () => void
 }
 
@@ -39,6 +41,7 @@ const THRESHOLD_PX = 4
 const EDGE_PX = 40
 const MAX_SCROLL_PX = 16
 const FLIP_MS = 160
+const FOLD_MS = 220
 const ERROR_MS = 5000
 const NO_DRAG = 'input, textarea, select, [contenteditable="true"], [data-no-drag]'
 
@@ -107,6 +110,41 @@ function flip(root: HTMLElement, tops: Map<string, number>, animate: boolean): v
   }
 }
 
+// Every group's rows sit in one `data-drag-fold` box under its heading; the box and the gap above it go together.
+function foldBoxes(root: HTMLElement): { box: HTMLElement; gap: number }[] {
+  return [...root.querySelectorAll<HTMLElement>('[data-drag-fold]')].map((box) => ({
+    box,
+    gap: box.parentElement ? Number.parseFloat(getComputedStyle(box.parentElement).rowGap) || 0 : 0,
+  }))
+}
+
+function foldFrames(height: number, gap: number, away: boolean): Keyframe[] {
+  const open = { height: `${height}px`, marginTop: '0px', opacity: 1, overflow: 'hidden' }
+  const shut = { height: '0px', marginTop: `${-gap}px`, opacity: 0, overflow: 'hidden' }
+  return away ? [open, shut] : [shut, open]
+}
+
+function foldAway(root: HTMLElement): Animation[] {
+  return foldBoxes(root).map(({ box, gap }) =>
+    box.animate(foldFrames(box.offsetHeight, gap, true), { duration: FOLD_MS, easing: 'ease-in-out', fill: 'forwards' }),
+  )
+}
+
+// After the drop the rows come back: each fold box grows from nothing, and the dropped group's box slides from where
+// the pointer left it.
+function unfold(root: HTMLElement, dropped: { key: string; top: number } | undefined): void {
+  for (const { box, gap } of foldBoxes(root)) {
+    box.animate(foldFrames(box.offsetHeight, gap, false), { duration: FOLD_MS, easing: 'ease-in-out' })
+  }
+  const node = dropped && root.querySelector<HTMLElement>(`[data-drag-box="${CSS.escape(dropped.key)}"]`)
+  if (node && dropped) {
+    const delta = dropped.top - node.getBoundingClientRect().top
+    if (Math.abs(delta) >= 0.5) {
+      node.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], { duration: FOLD_MS, easing: 'ease-out' })
+    }
+  }
+}
+
 function swallow(event: MouseEvent): void {
   event.stopPropagation()
   event.preventDefault()
@@ -127,6 +165,7 @@ export function useListDrag(options: ListDragOptions) {
   const latest = useRef(options)
   const tops = useRef(new Map<string, number>())
   const failureTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const unfolding = useRef<{ key: string; top: number } | null>(null)
 
   useLayoutEffect(() => {
     latest.current = options
@@ -165,6 +204,15 @@ export function useListDrag(options: ListDragOptions) {
     state.detach()
     if (state.frame !== undefined) {
       cancelAnimationFrame(state.frame)
+    }
+    if (state.fold) {
+      clearTimeout(state.fold.timer)
+      for (const animation of state.fold.animations) {
+        animation.onfinish = () => animation.cancel()
+        animation.reverse()
+      }
+    } else if (state.item.kind === 'group') {
+      unfolding.current = { key: state.item.key, top: state.box?.getBoundingClientRect().top ?? 0 }
     }
     state.box?.style.removeProperty('transform')
     document.body.style.removeProperty('cursor')
@@ -224,6 +272,9 @@ export function useListDrag(options: ListDragOptions) {
           scroller.scrollTop += Math.max(-MAX_SCROLL_PX, Math.min(MAX_SCROLL_PX, Math.round(push / 3)))
         }
       }
+      if (state.fold) {
+        place()
+      }
       if (live.current === state) {
         state.frame = requestAnimationFrame(tick)
       }
@@ -233,12 +284,32 @@ export function useListDrag(options: ListDragOptions) {
     window.getSelection()?.removeAllRanges()
     document.body.style.cursor = 'grabbing'
     document.body.style.userSelect = 'none'
+    const node = root.current
+    const held = node?.querySelector<HTMLElement>(`[data-drag-box="${CSS.escape(item.key)}"]`)
+    if (item.kind === 'group' && node && held && node.querySelector('[data-drag-fold]')) {
+      state.box = held
+      state.fold = {
+        animations: foldAway(node),
+        timer: setTimeout(() => {
+          if (live.current === state) {
+            state.fold = undefined
+            setActive({ ...item })
+          }
+        }, FOLD_MS),
+      }
+      place()
+      return
+    }
     setActive({ ...item })
   }
 
   useLayoutEffect(() => {
     const state = live.current
     const node = root.current
+    if (!active && unfolding.current && node) {
+      unfold(node, unfolding.current)
+      unfolding.current = null
+    }
     if (!active || !state || !node) {
       return
     }

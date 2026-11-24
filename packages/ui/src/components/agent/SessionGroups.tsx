@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleAlert, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
 import { customGroupColor, groupFoldSummary, PROJECT_ACCENTS } from '@workerdeck/protocol'
 import type { CustomGroup, SessionGroup } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuItem } from '../ui/Menu.tsx'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover.tsx'
 import { cn } from '../../lib/utils.ts'
 
@@ -39,47 +40,62 @@ export function CustomGroupHeader({
   }
 
   const custom = group.custom !== undefined
-  const summary = collapsed ? groupFoldSummary(group) : undefined
-  return (
+  const heading = (
     <GroupHeading
       {...dragProps}
       label={group.label ?? ''}
-      count={group.rows.length}
-      after={
-        summary ? <span className={cn('truncate', summary.attention ? 'text-warning' : 'text-fg-4/70')}>{summary.text}</span> : undefined
-      }
       caps={!custom}
       className={cn('group/heading', draggable && 'cursor-grab')}
       onDoubleClick={custom ? () => onEditingChange(true) : undefined}
-      leading={
+      leading={custom && look ? <GroupBadge group={look} onStyle={onStyle} /> : undefined}
+      fold={
         <>
+          <FoldAttention group={group} collapsed={collapsed} />
           {onToggleCollapsed ? <FoldButton name={group.label ?? 'group'} collapsed={collapsed} onToggle={onToggleCollapsed} /> : null}
-          {custom ? <>{look ? <GroupBadge group={look} onStyle={onStyle} /> : null}</> : null}
         </>
-      }
-      actions={
-        custom ? (
-          <>
-            <HeadingAction label="Rename group" onClick={() => onEditingChange(true)}>
-              <Pencil className="size-3" />
-            </HeadingAction>
-            <HeadingAction label="Delete group" title="Delete the group - its sessions move to Ungrouped" onClick={onRemove}>
-              <Trash2 className="size-3" />
-            </HeadingAction>
-          </>
-        ) : undefined
       }
     />
   )
+  if (!custom) {
+    return heading
+  }
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger className="contents">{heading}</ContextMenuTrigger>
+      <ContextMenuContent onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+        <MenuItem onClick={() => onEditingChange(true)} className="[&_svg]:size-3.5">
+          <Pencil />
+          Rename group
+        </MenuItem>
+        <MenuItem destructive title="Its sessions move to Ungrouped" onClick={onRemove} className="[&_svg]:size-3.5">
+          <Trash2 />
+          Delete group
+        </MenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
 }
 
-function FoldButton({ name, collapsed, onToggle }: { name: string; collapsed: boolean; onToggle: () => void }) {
+// A folded group that holds a session needing a person says so with one icon; the counts are its tooltip.
+function FoldAttention({ group, collapsed }: { group: SessionGroup; collapsed: boolean }) {
+  const summary = collapsed ? groupFoldSummary(group) : undefined
+  if (!summary?.attention) {
+    return null
+  }
+  return (
+    <span title={summary.text} aria-label={summary.text} className="flex size-4 shrink-0 items-center justify-center text-warning">
+      <CircleAlert className="size-3.5" />
+    </span>
+  )
+}
+
+export function FoldButton({ name, collapsed, onToggle }: { name: string; collapsed: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
       aria-expanded={!collapsed}
       aria-label={collapsed ? `Expand ${name}` : `Collapse ${name}`}
-      className="-mr-1 -ml-1 grid size-4 place-items-center rounded-sm text-fg-4 hover:text-fg-1"
+      className="-mr-0.5 flex size-5 shrink-0 items-center justify-center rounded-[4px] text-fg-4 outline-none hover:bg-row-hover hover:text-fg-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       onClick={(e) => {
         e.stopPropagation()
         onToggle()
@@ -117,25 +133,21 @@ export function FacetGroupHeader({
   collapsed: boolean
   onToggleCollapsed: () => void
 }) {
-  const summary = collapsed ? groupFoldSummary(group) : undefined
   return (
     <GroupHeading
       {...dragProps}
       label={label}
-      count={group.rows.length}
       title={title}
       caps={caps}
       className={cn(draggable && 'cursor-grab')}
-      leading={
+      leading={icon}
+      fold={
         <>
+          <FoldAttention group={group} collapsed={collapsed} />
           <FoldButton name={label} collapsed={collapsed} onToggle={onToggleCollapsed} />
-          {icon}
         </>
       }
       badge={badge}
-      after={
-        summary ? <span className={cn('truncate', summary.attention ? 'text-warning' : 'text-fg-4/70')}>{summary.text}</span> : undefined
-      }
       actions={actions}
     />
   )
@@ -175,21 +187,22 @@ function GroupNameInput({ initial, onRename, onDone }: { initial: string; onRena
 
 export function GroupHeading({
   label,
-  count,
   badge,
   after,
   leading,
   actions,
+  fold,
   caps = true,
   className,
   ...rest
 }: {
   label: ReactNode
-  count: number
   badge?: string
   after?: ReactNode
   leading?: ReactNode
   actions?: ReactNode
+  // The fold chevron, last on the line so it shares the team caret's column.
+  fold?: ReactNode
   // Off for a name the operator typed, which keeps its own case.
   caps?: boolean
 } & HTMLAttributes<HTMLDivElement>) {
@@ -198,13 +211,14 @@ export function GroupHeading({
       {leading}
       <span className={cn('min-w-0 truncate', caps ? 'uppercase tracking-wide' : 'text-fg-3')}>{label}</span>
       {badge ? <span className="shrink-0 rounded-sm border border-border px-1 leading-4 font-normal text-fg-4">{badge}</span> : null}
-      <span className="text-fg-4/70">{count}</span>
       {after}
+      <span className="flex-1" />
       {actions ? (
-        <span className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover/heading:opacity-100 focus-within:opacity-100">
+        <span className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/heading:opacity-100 focus-within:opacity-100">
           {actions}
         </span>
       ) : null}
+      {fold}
     </div>
   )
 }

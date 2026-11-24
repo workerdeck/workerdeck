@@ -551,7 +551,7 @@ with the **age**, the one part of that identity run that keeps changing while yo
 one's own tail is the pair that changes while you *look*: the unread badge and the context ring.
 **Step rows fold into chips.** Sub-agents, checklist tasks, background jobs (`bash`, a spawned task) and
 shells no longer draw a row each by default: line two ends, just before the actions, with one compact chip
-per kind present (`StepChips`: the kind's icon and a count, the wording in its tooltip and `aria-label`,
+per kind present (`StepChips`: the kind's icon only, the count and wording in its tooltip and `aria-label`,
 coloured running/failed like the rows). A click expands that kind's rows on that card and highlights the
 chip; a folded chip holding the open sub-agent or shell takes the selection tint so the open step stays
 findable. Which kinds a card draws expanded is a viewing preference in the view config

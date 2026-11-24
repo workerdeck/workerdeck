@@ -2098,7 +2098,12 @@ should move. Mouse and pen only; touch scrolls. The lifted row follows the point
 its own slot collapses (negative margin) and a spacer marks where it lands while the rest slide
 (FLIP). While a session drags every team collapses to its lead, except the dragged member's own
 team, which expands fully; while a group drags every group folds. Both are render overrides, so
-the operator's fold state comes back on drop. Rules that bite: hit-testing reads layout offsets
+the operator's fold state comes back on drop. The group fold is animated, not cut: each group's rows sit
+in one `data-drag-fold` box, and for `FOLD_MS` (220) after the grab those boxes shrink to nothing (height,
+the gap above, opacity; Web Animations, `fill: 'forwards'`) while the tick keeps the held heading under the
+pointer; only then does `active` go up and the override unmount them. A release inside that window
+reverses the animations and commits nothing. On drop the boxes grow back from zero and the dropped group
+slides from where the pointer left it. Rules that bite: hit-testing reads layout offsets
 (`offsetTop`, which ignores transforms) relative to the list root, which must stay `relative`; a
 pointer over no row keeps the last answer, so moving the spacer can never flip its own decision
 back; a join leaves the spacer where it was for the same reason. Reordering exists only where an
@@ -2112,7 +2117,10 @@ record's current conversation, sent from the second on). A card whose own state 
 `attention` fills with `--row-attention` (a lead never fills for its team: a member that needs a person is always
 listed under it) (the warning hue at the
 selection's weight; the VS Code webview mixes the theme's warning colour into the sidebar), so the
-card that asks for an action is the loudest one. Custom groups draw a badge (`GroupBadge`: the
+card that asks for an action is the loudest one. A group heading draws no count and no hover icons: its fold chevron sits last on the line in the team caret's
+style and column (20 px, `-mr-0.5`), and a custom group's Rename and Delete live in a right-click context menu
+on the heading (a project heading keeps its hover `+`). A folded group shows no summary text, only a warning
+`CircleAlert` before the chevron when a member needs a person (`groupFoldSummary`'s text is its tooltip). Custom groups draw a badge (`GroupBadge`: the
 group's `icon`, else `customGroupColor`, a stable palette colour until one is picked) and keep the
 case the operator typed; an image from disk is scaled to 64 px and stored as a data URL in the view
 config (`CUSTOM_GROUP_ICON_MAX`). `AgentAvatar` draws the agent's face (`AgentRef.face`) as composited
