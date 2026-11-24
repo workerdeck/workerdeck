@@ -145,6 +145,8 @@ export type ViewConfig = {
   expandedTeams?: string[]
   // `SessionGroup.key` values: the custom groups this client draws folded. A viewing preference too.
   collapsedGroups?: string[]
+  // `sessionKey` values: the team members this client keeps drawn while their team is in Auto. A viewing preference.
+  pinnedMembers?: string[]
   // `sessionKey` -> the step kinds this client draws as rows on that card; every other kind folds into a chip.
   expandedSteps?: Record<string, FoldableStepKind[]>
   groupOrder?: GroupOrder
@@ -533,9 +535,19 @@ export function toggleTeamExpanded(config: ViewConfig, row: SessionRow): ViewCon
   return { ...config, expandedTeams: held.includes(key) ? held.filter((k) => k !== key) : [...held, key] }
 }
 
+export function isMemberPinned(config: ViewConfig, row: Pick<SessionRow, 'hostId' | 'info'>): boolean {
+  return (config.pinnedMembers ?? []).includes(sessionKey(row))
+}
+
+export function toggleMemberPinned(config: ViewConfig, row: Pick<SessionRow, 'hostId' | 'info'>): ViewConfig {
+  const key = sessionKey(row)
+  const held = config.pinnedMembers ?? []
+  return { ...config, pinnedMembers: held.includes(key) ? held.filter((k) => k !== key) : [...held, key] }
+}
+
 export type TeamView = { expanded: boolean; shown: SessionRow[]; tray: SessionRow[] }
 
-// Auto draws a member that needs a person (`attentionOf`) or is selected; the rest sit in the lead's tray. An expanded
+// Auto draws a member that needs a person (`attentionOf`), is pinned or is selected; the rest sit in the lead's tray. An expanded
 // team, or one under a search or facet filter, draws every member.
 export function teamView(lead: SessionRow, config: ViewConfig, selected: string | undefined): TeamView {
   const members = lead.members ?? []
@@ -546,7 +558,8 @@ export function teamView(lead: SessionRow, config: ViewConfig, selected: string 
   const shown: SessionRow[] = []
   const tray: SessionRow[] = []
   for (const member of members) {
-    const auto = attentionOf(member.info).reasons.length > 0 || sessionKey(member) === selected
+    const key = sessionKey(member)
+    const auto = attentionOf(member.info).reasons.length > 0 || key === selected || isMemberPinned(config, member)
     ;(auto ? shown : tray).push(member)
   }
   return { expanded, shown, tray }
@@ -893,6 +906,7 @@ export function clearFilters(config: ViewConfig): ViewConfig {
     customGroups: config.customGroups,
     expandedTeams: config.expandedTeams,
     collapsedGroups: config.collapsedGroups,
+    pinnedMembers: config.pinnedMembers,
     expandedSteps: config.expandedSteps,
     earlierOpen: config.earlierOpen,
   }

@@ -137,6 +137,8 @@ fn session_list(fn_name: &str, a: &Args) -> Value {
         "teamState" => out(sl::team_state(&a.get::<Vec<SessionRow>>(0))),
         "toggleTeamExpanded" => out(sl::toggle_team_expanded(&a.get(0), &a.get(1))),
         "isTeamExpanded" => out(sl::is_team_expanded(&a.get(0), &a.get(1))),
+        "toggleMemberPinned" => out(sl::toggle_member_pinned(&a.get(0), &a.get(1))),
+        "isMemberPinned" => out(sl::is_member_pinned(&a.get(0), &a.get(1))),
         "teamView" => out(sl::team_view(&a.get(0), &a.get(1), a.str(2).as_deref())),
         "groupFoldSummary" => out(sl::group_fold_summary(&serde_json::from_value::<Vec<SessionRow>>(a.raw(0)["rows"].clone()).unwrap())),
         "stepChips" => {

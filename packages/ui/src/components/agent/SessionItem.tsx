@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CircleX, Globe, Hand, ShieldAlert, Users } from 'lucide-react'
+import { CircleX, Globe, Hand, Pin, ShieldAlert, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import {
   ATTENTION_LABELS,
@@ -57,6 +57,10 @@ export interface SessionItemProps {
   teamUnseen?: number
   // A folded lead's members, drawn on its first line before the context ring.
   teamTray?: ReactNode
+  // A member's pin keeps it drawn while its team is in Auto. The button shows on hover, stays when pinned, and gives way
+  // to a reason chip.
+  pinned?: boolean
+  onTogglePin?: () => void
   className?: string
 }
 
@@ -89,6 +93,8 @@ export function SessionItem({
   badgeState,
   teamUnseen = 0,
   teamTray,
+  pinned = false,
+  onTogglePin,
   className,
 }: SessionItemProps) {
   const { info } = row
@@ -245,6 +251,7 @@ export function SessionItem({
           {isEditing ? null : <span className="flex-1" />}
           {chips}
           {attentionOf(info).reasons.length > 0 ? reasons : unreadCount}
+          {onTogglePin && attentionOf(info).reasons.length === 0 ? <PinButton name={label} pinned={pinned} onToggle={onTogglePin} /> : null}
           {teamUnseen > 0 ? (
             <span
               title={`${teamUnseen} new message${teamUnseen === 1 ? '' : 's'} in the team`}
@@ -267,6 +274,31 @@ export function SessionItem({
         </div>
       ) : null}
     </div>
+  )
+}
+
+function PinButton({ name, pinned, onToggle }: { name: string; pinned: boolean; onToggle: () => void }) {
+  const title = pinned ? 'Unpin' : 'Pin: keep visible when the team is collapsed'
+  return (
+    <button
+      type="button"
+      aria-pressed={pinned}
+      aria-label={pinned ? `Unpin ${name}` : `Pin ${name}`}
+      title={title}
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      className={cn(
+        'size-4 shrink-0 items-center justify-center rounded-[3px] outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        pinned
+          ? 'flex text-fg-3 hover:text-fg-1'
+          : 'hidden text-fg-4 group-focus-within/session:flex group-hover/session:flex hover:text-fg-1',
+      )}
+    >
+      <Pin className="size-3" fill={pinned ? 'currentColor' : 'none'} />
+    </button>
   )
 }
 

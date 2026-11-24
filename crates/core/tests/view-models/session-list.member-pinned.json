@@ -1,0 +1,102 @@
+{
+  "input": {
+    "fn": "isMemberPinned",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "pinnedMembers": [
+            "mac:s-review-02"
+          ]
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "codex",
+          "state": "working",
+          "info": {
+            "id": "s-review-02",
+            "status": "running",
+            "cwd": "/work/workerdeck/packages/ui",
+            "createdAt": 1760000000100,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "WD-Review",
+            "project": {
+              "name": "WorkerDeck",
+              "root": "/work/workerdeck",
+              "shortcode": "WD"
+            },
+            "agent": {
+              "id": "ag-review",
+              "name": "WD-Review",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 2
+            },
+            "lastActivityAt": 1760000007000,
+            "engine": "codex",
+            "proseCount": 3
+          },
+          "unseen": 1
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent"
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "codex",
+          "state": "working",
+          "info": {
+            "id": "s-review-02",
+            "status": "running",
+            "cwd": "/work/workerdeck/packages/ui",
+            "createdAt": 1760000000100,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "WD-Review",
+            "project": {
+              "name": "WorkerDeck",
+              "root": "/work/workerdeck",
+              "shortcode": "WD"
+            },
+            "agent": {
+              "id": "ag-review",
+              "name": "WD-Review",
+              "lead": "ag-lead",
+              "team": "WD-Lead",
+              "order": 2
+            },
+            "lastActivityAt": 1760000007000,
+            "engine": "codex",
+            "proseCount": 3
+          },
+          "unseen": 1
+        }
+      ]
+    ]
+  },
+  "output": [
+    true,
+    false
+  ]
+}

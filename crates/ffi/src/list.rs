@@ -226,6 +226,8 @@ pub struct ListRow {
     pub context_percent: Option<f64>,
     pub lead: bool,
     pub member: bool,
+    // A Member the operator pinned: drawn while its team is in Auto.
+    pub pinned: bool,
     pub team: Option<String>,
     pub shared: bool,
     // An agent's second line: its team when it is a Member, and which conversation it is on.
@@ -633,6 +635,7 @@ fn steps_of(row: &SessionRow, config: &ViewConfig, now_ms: f64) -> CardSteps {
 struct RowLook<'a> {
     show_gateway: bool,
     selected: Option<&'a str>,
+    config: &'a ViewConfig,
 }
 
 fn list_row(row: &SessionRow, depth: u8, look: &RowLook, team: Option<&vm::TeamView>, card: CardSteps) -> ListRow {
@@ -705,6 +708,7 @@ fn list_row(row: &SessionRow, depth: u8, look: &RowLook, team: Option<&vm::TeamV
         context_percent: info.context_usage.as_ref().map(|c| c.percentage),
         lead: info.agent.as_ref().is_some_and(|a| a.leads == Some(true)),
         member: info.agent.as_ref().is_some_and(|a| a.lead.is_some()),
+        pinned: vm::is_member_pinned(look.config, row),
         team: info.agent.as_ref().and_then(|a| a.team.clone()),
         shared: info.agent.as_ref().is_some_and(|a| a.shared == Some(true)),
         agent_detail: info.agent.as_ref().map(|a| {
@@ -832,7 +836,8 @@ impl SessionList {
         let reorderable = vm::ordered_group_by(config.group_by);
         let selected = state.selected.clone();
         let dragging = state.drag.as_ref().map(|d| d.key.clone());
-        let look = RowLook { show_gateway: vm::shows_gateway(state.hosts.len(), &config), selected: selected.as_deref() };
+        let look =
+            RowLook { show_gateway: vm::shows_gateway(state.hosts.len(), &config), selected: selected.as_deref(), config: &config };
         drawn
             .into_iter()
             .map(|group| {
@@ -1094,6 +1099,12 @@ impl SessionList {
         let mut state = self.state();
         let Some(row) = state.rows().into_iter().find(|r| r.host_id == host_id && r.info.id == session_id) else { return };
         state.config = vm::toggle_team_expanded(&state.config, &row);
+    }
+
+    pub fn toggle_pin(&self, host_id: String, session_id: String) {
+        let mut state = self.state();
+        let Some(row) = state.rows().into_iter().find(|r| r.host_id == host_id && r.info.id == session_id) else { return };
+        state.config = vm::toggle_member_pinned(&state.config, &row);
     }
 
     pub fn set_search(&self, search: String) {

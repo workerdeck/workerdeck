@@ -352,6 +352,11 @@ final class SessionListModel {
     syncConfig()
   }
 
+  func togglePin(_ item: ListItem) {
+    core.togglePin(hostId: item.row.hostId, sessionId: item.row.sessionId)
+    syncConfig()
+  }
+
   // Agents on the row's gateway it could join, leads first.
   func teamLeads(for item: ListItem) -> [TeamLead] {
     _ = revision

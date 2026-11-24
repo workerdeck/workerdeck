@@ -13,6 +13,8 @@ import {
   subsetSummary,
   teamSummaryText,
   teamView,
+  isMemberPinned,
+  toggleMemberPinned,
   toggleTeamExpanded,
   expandedStepsOf,
   isGroupCollapsed,
@@ -490,6 +492,9 @@ export function SessionBrowser({
                   onSelectShell={onSelectShell}
                   onKillShell={onKillShell}
                   onShellAgentWrite={onShellAgentWrite}
+                  {...(lead
+                    ? { pinned: isMemberPinned(config, member), onTogglePin: () => onConfigChange(toggleMemberPinned(config, member)) }
+                    : {})}
                   {...extra}
                 />
               )
@@ -615,6 +620,8 @@ interface SessionRowItemProps {
   row: SessionRow
   variant?: 'card' | 'member'
   teamTray?: ReactNode
+  pinned?: boolean
+  onTogglePin?: () => void
   className?: string
   dragProps?: HTMLAttributes<HTMLElement>
   dropCue?: DragCue
@@ -647,6 +654,8 @@ function SessionRowItem({
   row,
   variant,
   teamTray,
+  pinned,
+  onTogglePin,
   className,
   dragProps,
   dropCue,
@@ -676,6 +685,8 @@ function SessionRowItem({
       row={row}
       variant={variant}
       teamTray={teamTray}
+      pinned={pinned}
+      onTogglePin={onTogglePin}
       className={className}
       active={active === true}
       activeStepKey={active ? (activeShellId ?? activeSubagentId) : undefined}

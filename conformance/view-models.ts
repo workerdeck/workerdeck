@@ -483,7 +483,27 @@ const SESSION_LIST: VmCase[] = [
       [TEAM, config(), 'mac:s-failed'],
       [TEAM, config({ expandedTeams: ['mac:ag-lead'] }), undefined],
       [TEAM, config({ search: 'quiet' }), undefined],
+      [TEAM, config({ pinnedMembers: ['mac:s-quiet-a'] }), undefined],
+      [TEAM, config({ pinnedMembers: ['mac:s-quiet-a'], expandedTeams: ['mac:ag-lead'] }), undefined],
       [BY_ID.get('s-solo-0004'), config(), undefined],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'member-pin',
+    fn: 'toggleMemberPinned',
+    calls: [
+      [config(), BY_ID.get('s-review-02')],
+      [config({ pinnedMembers: ['mac:s-review-02', 'box:s-x'] }), BY_ID.get('s-review-02')],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'member-pinned',
+    fn: 'isMemberPinned',
+    calls: [
+      [config({ pinnedMembers: ['mac:s-review-02'] }), BY_ID.get('s-review-02')],
+      [config(), BY_ID.get('s-review-02')],
     ],
   },
   {

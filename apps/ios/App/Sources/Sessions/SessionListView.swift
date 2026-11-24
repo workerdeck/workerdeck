@@ -890,6 +890,11 @@ struct SessionListView: View {
     }
     if row.row.member {
       Button {
+        model.togglePin(row)
+      } label: {
+        Label(row.row.pinned ? "Unpin" : "Pin", systemImage: row.row.pinned ? "pin.slash" : "pin")
+      }
+      Button {
         Task { await model.leave(row) }
       } label: {
         Label("Leave \(row.row.team ?? "team")", systemImage: "rectangle.portrait.and.arrow.right")

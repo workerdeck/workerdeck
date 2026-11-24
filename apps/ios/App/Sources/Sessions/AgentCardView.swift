@@ -67,6 +67,13 @@ struct SessionCard: View {
         StepChipsView(chips: row.chips, toggle: actions.toggleChip)
         if row.reasons.isEmpty {
           unread
+          if row.pinned {
+            Image(systemName: "pin.fill")
+              .font(.system(size: 10))
+              .foregroundStyle(ListPalette.fg3)
+              .frame(width: 16, height: 16)
+              .accessibilityLabel("Pinned")
+          }
         } else {
           ReasonIconsView(reasons: row.reasons)
         }

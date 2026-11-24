@@ -100,6 +100,8 @@ pub struct ViewConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collapsed_groups: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned_members: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expanded_steps: Option<Entries<Vec<FoldableStepKind>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group_order: Option<GroupOrder>,
@@ -160,6 +162,7 @@ impl Default for ViewConfig {
             custom_groups: None,
             expanded_teams: None,
             collapsed_groups: None,
+            pinned_members: None,
             expanded_steps: None,
             group_order: None,
             earlier_open: None,
@@ -469,6 +472,7 @@ pub fn normalize_view_config(stored: Option<&Value>) -> ViewConfig {
     config.custom_groups = parse_enum(stored, "customGroups");
     config.expanded_teams = parse_enum(stored, "expandedTeams");
     config.collapsed_groups = parse_enum(stored, "collapsedGroups");
+    config.pinned_members = parse_enum(stored, "pinnedMembers");
     config.expanded_steps = parse_enum(stored, "expandedSteps");
     config.group_order = parse_enum(stored, "groupOrder");
     config.earlier_open = parse_enum(stored, "earlierOpen");
@@ -878,6 +882,15 @@ pub fn toggle_team_expanded(config: &ViewConfig, row: &SessionRow) -> ViewConfig
     }
 }
 
+pub fn is_member_pinned(config: &ViewConfig, row: &SessionRow) -> bool {
+    let key = row_key(row);
+    config.pinned_members.as_deref().unwrap_or_default().iter().any(|k| *k == key)
+}
+
+pub fn toggle_member_pinned(config: &ViewConfig, row: &SessionRow) -> ViewConfig {
+    ViewConfig { pinned_members: Some(toggled(config.pinned_members.as_ref(), &row_key(row))), ..config.clone() }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TeamView {
     pub expanded: bool,
@@ -885,7 +898,7 @@ pub struct TeamView {
     pub tray: Vec<SessionRow>,
 }
 
-// Auto draws a member that needs a person (`attention_of`) or is selected; the rest sit in the lead's tray. An expanded
+// Auto draws a member that needs a person (`attention_of`), is pinned or is selected; the rest sit in the lead's tray. An expanded
 // team, or one under a search or facet filter, draws every member.
 pub fn team_view(lead: &SessionRow, config: &ViewConfig, selected: Option<&str>) -> TeamView {
     let members = lead.members.clone().unwrap_or_default();
@@ -895,7 +908,11 @@ pub fn team_view(lead: &SessionRow, config: &ViewConfig, selected: Option<&str>)
     }
     let (shown, tray) = members
         .into_iter()
-        .partition(|member| !attention_of(&member.info).reasons.is_empty() || selected == Some(row_key(member).as_str()));
+        .partition(|member| {
+            !attention_of(&member.info).reasons.is_empty()
+                || selected == Some(row_key(member).as_str())
+                || is_member_pinned(config, member)
+        });
     TeamView { expanded, shown, tray }
 }
 
@@ -1240,6 +1257,7 @@ pub fn clear_filters(config: &ViewConfig) -> ViewConfig {
         custom_groups: config.custom_groups.clone(),
         expanded_teams: config.expanded_teams.clone(),
         collapsed_groups: config.collapsed_groups.clone(),
+        pinned_members: config.pinned_members.clone(),
         earlier_open: config.earlier_open,
         ..ViewConfig::default()
     }

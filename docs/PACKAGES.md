@@ -423,13 +423,14 @@ as `options.all`: a filter that matches only a member then pulls its lead in as 
 member whose lead is not in the list at all stays top-level rather than vanish. Ended sessions with
 no agent fold into a trailing `earlier` group, except under state grouping (which already has
 Ended) and custom grouping (the operator placed them). `expandedTeams` (team keys,
-`hostId:agentId`) and `earlierOpen` are per-client view preferences; a stored `collapsedTeams` is
+`hostId:agentId`), `pinnedMembers` (session keys) and `earlierOpen` are per-client view preferences; a stored `collapsedTeams` is
 dropped on normalize, never migrated, because its meaning is the inverse.
 
 **Team Auto.** Every team is in Auto unless its key is in `expandedTeams`; there is no setting and no
 fully collapsed state. `teamView(lead, config, selected)` returns `{ expanded, shown, tray }`: in Auto a Member is
 shown when `attentionOf` gives it a reason (approval, failed, blocked) or it is the selected row (`selected` is a
-`sessionKey`); working, unread and idle Members go to `tray`. Expanded, or under any search or facet filter, every
+`sessionKey`) or it is pinned (`pinnedMembers`, `toggleMemberPinned`); working, unread and idle Members go to `tray`.
+A pin outlives a move between teams (it names the session) and loses to a filter that hides the row. Expanded, or under any search or facet filter, every
 Member is shown. There is no clock and no linger: a Member leaves the moment its reason clears and it is not selected.
 
 **Attention in the list.** `listState(row)` is `'attention'` when `attentionOf(row.info)` has a reason, else
@@ -2084,7 +2085,8 @@ line (`TeamBlock` in `SessionBrowser`). In Auto (see `teamView` in protocol) the
 Members `shown`; the rest stay folded behind one caret on the lead's line (`teamTray`: no member avatars, no
 count, and no attention count, since a Member that needs a person is always shown), with `teamSummaryText` as its
 tooltip. Every card draws one icon per `attentionOf` reason (shield, hand, circled X), and tints as needing you by
-its own `listState` only. The caret expands the team and collapses it back to Auto.
+its own `listState` only. The caret expands the team and collapses it back to Auto. A member row draws a pin button
+(`pinned`, `onTogglePin`) on hover, kept while pinned (filled), and dropped while the row draws a reason icon.
 The selected Member comes from `isActive`, so hosts pass nothing new. `onTeamMove` makes cards draggable onto each other (`lib/team-drop.ts`, pure): the
 middle half of an agent's card joins its team, a member reorders inside its expanded team, and a
 member dragged out of its team block (or onto its lead's top edge) leaves. Joining renumbers the

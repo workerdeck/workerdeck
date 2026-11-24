@@ -1454,7 +1454,8 @@ line (4 padding, 28 avatar, 6pt corners) of name (an agent's never truncates, a 
 `ModelBadgeView` (core `model_badge`), then the status that gives way first (an agent's `card_status`; a plain session's
 status · project · gateway · age), and right of the slack the icon-only step chips (count in the label), the reason
 icons (`ReasonIconsView`: shield, hand, circled X) or a Member's unread as plain accent digits (only once its turn
-stopped, never beside a reason), and the lead's team caret (`TeamCaret`, no tray, no counts). Members sit 20pt in on
+stopped, never beside a reason) then a pinned Member's pin glyph (also never beside a reason; Pin/Unpin is in the
+row's long-press menu, `SessionList.toggle_pin`), and the lead's team caret (`TeamCaret`, no tray, no counts). Members sit 20pt in on
 elbow tree lines (`CardBackground`: a 2pt trunk under the lead avatar's left third, a stub to each Member's face); a team
 draws its grey shared card only while one of its rows is selected (`ListRow.selected`: the row opened last, since a
 phone keeps no highlight). A long press peeks
@@ -1647,6 +1648,7 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   `team_attention` and `team_summary` (the tray line); every row carries `needs_you` (the tint: its own attention only, a lead never tints for its team), `selected` and `reasons` (one
   chip each, `danger` for a failure). Auto has no clock: a Member draws only while it needs a person. A phone has no
   lasting highlight, so the Member opened last counts as selected (`SessionList.select`), as on iOS.
+  A pinned Member (`SessionList.toggle_pin`, the row's `pinned`) stays drawn too; Android has no pin control yet.
   A lead's session screen draws the fleet strip (`session/FleetStrip.kt`, `SessionList.fleet`) under its header,
   current conversation only: one line per Member that needs you, a tap opens it, Retry start on a failed start. The
   list's poll lives in `SessionsModel` and never stops while a session is open; the strip recomputes on
