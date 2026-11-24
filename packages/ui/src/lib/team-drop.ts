@@ -69,6 +69,13 @@ export function crossOwnerDrop(dragged: SessionRow, lead: SessionRow | null, rel
   return lead !== null && rowOwner(dragged, relays) !== rowOwner(lead, relays)
 }
 
+// A reorder inside the team the agent is already in: the gateway still wants `crossOwner`, but the person agreed to
+// that team when it was joined, so nothing asks again.
+export function alreadyInTeam(dragged: SessionRow, lead: SessionRow | null): boolean {
+  const leadId = lead?.info.agent?.id
+  return leadId !== undefined && dragged.info.agent?.lead === leadId
+}
+
 // The move a drop over a member asks for: join (or reorder within) that member's team, at the member's place.
 export function memberDrop(
   dragged: SessionRow,
@@ -96,7 +103,7 @@ export function joinDrop(dragged: SessionRow, lead: SessionRow, relays: HostRela
   return placeMember(dragged, lead, others, others.length)
 }
 
-function placeMember(dragged: SessionRow, lead: SessionRow, others: readonly SessionRow[], index: number): TeamMove {
+export function placeMember(dragged: SessionRow, lead: SessionRow, others: readonly SessionRow[], index: number): TeamMove {
   const siblings = others
     .map((row, i) => ({ row, order: i < index ? i : i + 1 }))
     .filter(({ row, order }) => row.info.agent?.order !== order)

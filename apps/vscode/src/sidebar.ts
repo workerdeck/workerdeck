@@ -746,7 +746,8 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     const moverOwner = this.#ownerOf(mover.hostId, moverInfo)
     const leadOwner = leadAt && leadInfo ? this.#ownerOf(leadAt.hostId, leadInfo) : undefined
     const crossOwner = leadInfo !== null && moverOwner !== leadOwner
-    if (crossOwner) {
+    // A reorder inside the team it is already in was confirmed when it joined.
+    if (crossOwner && moverInfo.agent?.lead !== lead) {
       const leadName = leadInfo.agent?.name ?? 'that lead'
       const ok = await vscode.window.showWarningMessage(
         `Join ${leadName}'s team across owners?`,

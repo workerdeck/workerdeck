@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRef, SessionInfo, SessionRow } from '@workerdeck/protocol'
-import { crossOwnerDrop, dropZone, joinDrop, memberDrop, teamDropRefusal } from '../src/lib/team-drop.ts'
+import { alreadyInTeam, crossOwnerDrop, dropZone, joinDrop, memberDrop, teamDropRefusal } from '../src/lib/team-drop.ts'
 
 function row(id: string, agent?: Partial<AgentRef>, over: Partial<SessionRow> = {}): SessionRow {
   const info = {
@@ -77,6 +77,14 @@ describe('teamDropRefusal', () => {
     expect(crossOwnerDrop(owned('nova', 'silkweave'), owned('pip', 'tobias'))).toBe(true)
     expect(crossOwnerDrop(owned('nova', 'tobias'), owned('pip', 'tobias'))).toBe(false)
     expect(crossOwnerDrop(owned('nova', 'silkweave'), null)).toBe(false)
+  })
+
+  it('asks nothing for a reorder inside the team the agent is already in', () => {
+    const atlas = row('atlas', { leads: true })
+    expect(alreadyInTeam(row('juno', { lead: 'a-atlas' }), atlas)).toBe(true)
+    expect(alreadyInTeam(row('pip', { lead: 'a-other' }), atlas)).toBe(false)
+    expect(alreadyInTeam(row('pip', {}), atlas)).toBe(false)
+    expect(alreadyInTeam(row('juno', { lead: 'a-atlas' }), null)).toBe(false)
   })
 })
 

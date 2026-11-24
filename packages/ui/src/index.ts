@@ -179,7 +179,7 @@ export {
   type GroupTarget,
   type SessionBrowserProps,
 } from './components/agent/SessionBrowser.tsx'
-export { crossOwnerDrop, rowOwner, teamDropRefusal, type TeamMove } from './lib/team-drop.ts'
+export { alreadyInTeam, crossOwnerDrop, rowOwner, teamDropRefusal, type TeamMove } from './lib/team-drop.ts'
 export {
   STEP_DISPLAY_OPTIONS,
   SessionFilters,

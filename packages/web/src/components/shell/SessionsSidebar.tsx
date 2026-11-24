@@ -46,6 +46,7 @@ import {
   toast,
   AvatarDialog,
   faceProjectOf,
+  alreadyInTeam,
   crossOwnerDrop,
   rowOwner,
   conversationRecovery,
@@ -188,9 +189,11 @@ export function SessionsSidebar() {
     }
   }
 
-  // Asks before a join between two owners' agents; resolves false when the person declines.
+  // Asks before a join between two owners' agents, never for a reorder inside a team; false when the person declines.
   const confirmCrossOwner = (move: TeamMove) =>
-    !crossOwnerDrop(move.row, move.lead, relays) ? Promise.resolve(true) : new Promise<boolean>((resolve) => setCrossing({ move, resolve }))
+    !crossOwnerDrop(move.row, move.lead, relays) || alreadyInTeam(move.row, move.lead)
+      ? Promise.resolve(true)
+      : new Promise<boolean>((resolve) => setCrossing({ move, resolve }))
 
   const offerWithdraw = (invitation: TeamInvitation) =>
     toast('The invitation is still open', {
