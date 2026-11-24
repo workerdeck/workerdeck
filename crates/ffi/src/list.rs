@@ -12,6 +12,7 @@ use wd_native::vm::session_list::{
     self as vm, FoldableStepKind, GroupBy, GroupOptions, SessionGroup, SessionRow, SessionState, SortBy, StepDisplay, ViewConfig,
     filter_rows, group_rows, normalize_view_config,
 };
+use wd_native::vm::list_drag::{self as drag, DragRow, DragRowKind, DragTarget, Joinable, SessionDragContext, Slot, TeamBlock};
 use wd_native::vm::steps;
 use wd_native::vm::watermarks::{Seen, Watermarks, unseen_count};
 
@@ -212,10 +213,10 @@ pub struct ListRow {
     // The expanded kinds' steps, drawn under the card; `chips` covers every step.
     pub steps: Vec<ListStep>,
     pub chips: Vec<ListChip>,
-    // The list mixes agents and plain sessions: a plain session draws in the agent card's shape, an engine tile for a face.
-    pub tile: bool,
-    // The card's tint: it needs a person itself (`attention_of`), or (on a lead) a Member does.
+    // The card's tint: it needs a person itself; a lead never tints for its team, whose Member that does is listed.
     pub needs_you: bool,
+    // The row a phone counts as selected (the one opened last): its team draws the shared card.
+    pub selected: bool,
     // One chip per reason the session needs a person, in `attention_of` order.
     pub reasons: Vec<ReasonChip>,
     // A lead's Members that need a person, and its tray line ("2 need you · 3 working · 1 idle").
@@ -317,6 +318,70 @@ pub struct ListGroup {
     pub attention: u32,
     pub unseen: u32,
     pub rows: Vec<ListRow>,
+}
+
+// A drawn row's layout frame, by `ListRow.key` (`head:<group key>` for a heading, `spacer` for the gap); the dragged
+// card keeps the frame it was lifted from.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct DragFrame {
+    pub key: String,
+    pub top: f64,
+    pub height: f64,
+}
+
+// Where the dragged card lands: before `before` in `lane` (a group key, or `team:<lead key>`), or onto `join`'s team.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ListDragTarget {
+    pub lane: String,
+    pub before: Option<String>,
+    pub join: Option<String>,
+    pub leave: bool,
+    pub refusal: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct SiblingMove {
+    pub agent_id: String,
+    pub order: f64,
+}
+
+// What a drop asks the gateway for. `Team` joins or reorders: the mover's lead and order, then each renumbered
+// sibling; `cross_owner` is sent whenever the owners differ, `confirm_owner` names the lead's owner only when the
+// move is a new join the person has to confirm. `Placed` changed the view config (a custom group), nothing to send.
+#[derive(Debug, Clone, PartialEq, uniffi::Enum)]
+pub enum ListDrop {
+    Nothing,
+    Team { lead_session_id: String, lead_agent_id: String, order: f64, siblings: Vec<SiblingMove>, cross_owner: bool, confirm_owner: Option<String> },
+    Leave,
+    Placed,
+}
+
+struct Drag {
+    key: String,
+    origin: Option<Slot>,
+    target: Option<DragTarget>,
+    member_of: Option<String>,
+}
+
+fn team_lane(lead: &str) -> String {
+    format!("team:{lead}")
+}
+
+// While a card drags every team folds to its lead, except the dragged member's own, which shows every member.
+fn drag_team_view(lead: &SessionRow, dragged: &str) -> vm::TeamView {
+    let members = lead.members.clone().unwrap_or_default();
+    let own = members.iter().any(|m| vm::session_key(&m.host_id, &m.info.id) == dragged);
+    vm::TeamView { expanded: own, shown: if own { members } else { Vec::new() }, tray: Vec::new() }
+}
+
+fn to_target(target: &DragTarget) -> ListDragTarget {
+    ListDragTarget {
+        lane: target.slot.lane.clone(),
+        before: target.slot.before.clone(),
+        join: target.join.clone(),
+        leave: target.leave == Some(true),
+        refusal: target.refusal.as_ref().map(|r| r.message.clone()),
+    }
 }
 
 struct Host {
@@ -487,6 +552,7 @@ struct State {
     config: ViewConfig,
     marks: Watermarks,
     selected: Option<String>,
+    drag: Option<Drag>,
     agent_defaults: Entries<GatewayAgentDefaults>,
     profiles: Entries<Vec<ProfileInfo>>,
 }
@@ -591,9 +657,9 @@ fn steps_of(row: &SessionRow, config: &ViewConfig, now_ms: f64) -> CardSteps {
     CardSteps { shown, chips }
 }
 
-struct RowLook {
+struct RowLook<'a> {
     show_gateway: bool,
-    tile: bool,
+    selected: Option<&'a str>,
 }
 
 fn list_row(row: &SessionRow, depth: u8, look: &RowLook, team: Option<&vm::TeamView>, card: CardSteps) -> ListRow {
@@ -649,8 +715,8 @@ fn list_row(row: &SessionRow, depth: u8, look: &RowLook, team: Option<&vm::TeamV
         tray_overflow: (tray.len() - drawn) as u32,
         steps: card.shown,
         chips: card.chips,
-        tile: look.tile,
-        needs_you: vm::list_state(row) == SessionState::Attention || row.team_state == Some(SessionState::Attention),
+        needs_you: vm::list_state(row) == SessionState::Attention,
+        selected: look.selected == Some(vm::session_key(&row.host_id, &info.id).as_str()),
         reasons: vm::attention_of(info)
             .reasons
             .into_iter()
@@ -747,6 +813,7 @@ impl SessionList {
                 config: normalize_view_config(stored.as_ref()),
                 marks: Watermarks::from_json(marks_json.as_deref()),
                 selected: None,
+                drag: None,
                 agent_defaults: Entries::new(),
                 profiles: Entries::new(),
             }),
@@ -789,10 +856,10 @@ impl SessionList {
         let rows = state.rows();
         let drawn = state.drawn(&rows);
         let config = state.config.clone();
-        let look =
-            RowLook { show_gateway: vm::shows_gateway(state.hosts.len(), &config), tile: rows.iter().any(|row| row.info.agent.is_some()) };
         let reorderable = vm::ordered_group_by(config.group_by);
         let selected = state.selected.clone();
+        let dragging = state.drag.as_ref().map(|d| d.key.clone());
+        let look = RowLook { show_gateway: vm::shows_gateway(state.hosts.len(), &config), selected: selected.as_deref() };
         drawn
             .into_iter()
             .map(|group| {
@@ -806,7 +873,10 @@ impl SessionList {
                         out.push(list_row(row, 0, &look, None, steps_of(row, &config, now_ms)));
                         continue;
                     }
-                    let team = vm::team_view(row, &config, selected.as_deref());
+                    let team = match &dragging {
+                        Some(key) => drag_team_view(row, key),
+                        None => vm::team_view(row, &config, selected.as_deref()),
+                    };
                     out.push(list_row(row, 0, &look, Some(&team), steps_of(row, &config, now_ms)));
                     out.extend(team.shown.iter().map(|m| list_row(m, 1, &look, None, steps_of(m, &config, now_ms))));
                 }
@@ -874,6 +944,148 @@ impl SessionList {
     pub fn toggle_steps(&self, host_id: String, session_id: String, kind: StepFold) {
         let mut state = self.state();
         state.config = vm::toggle_steps_expanded(&state.config, &host_id, &session_id, kind.into());
+    }
+
+    // A card lifted: from here until `end_drag` every team folds to its lead but the dragged member's own.
+    pub fn begin_drag(&self, key: String) {
+        let mut state = self.state();
+        let rows = state.rows();
+        let drawn = state.drawn(&rows);
+        let member_of = drawn
+            .iter()
+            .flat_map(|g| g.rows.iter())
+            .find(|r| r.members.as_ref().is_some_and(|m| m.iter().any(|m| vm::session_key(&m.host_id, &m.info.id) == key)))
+            .map(|lead| vm::session_key(&lead.host_id, &lead.info.id));
+        state.drag = Some(Drag { key, origin: None, target: None, member_of });
+    }
+
+    // The drop the finger at `y` asks for, over the frames of what is drawn now (the dragged card's own excluded).
+    pub fn drag_move(&self, frames: Vec<DragFrame>, y: f64) -> Option<ListDragTarget> {
+        let mut state = self.state();
+        let rows = state.rows();
+        let drawn = state.drawn(&rows);
+        let custom = state.config.group_by == GroupBy::Custom;
+        let drag_state = state.drag.as_ref()?;
+        let key = drag_state.key.clone();
+        let mut lanes: std::collections::HashMap<String, (String, DragRowKind)> = std::collections::HashMap::new();
+        for group in &drawn {
+            if custom {
+                lanes.insert(format!("head:{}", group.key), (group.key.clone(), DragRowKind::Heading));
+            }
+            for row in &group.rows {
+                let row_key = vm::session_key(&row.host_id, &row.info.id);
+                for member in row.members.iter().flatten() {
+                    lanes.insert(vm::session_key(&member.host_id, &member.info.id), (team_lane(&row_key), DragRowKind::Row));
+                }
+                lanes.insert(row_key, (group.key.clone(), DragRowKind::Row));
+            }
+        }
+        let mut layout: Vec<DragRow> = frames
+            .iter()
+            .filter_map(|f| {
+                let (lane, kind) = lanes.get(&f.key)?.clone();
+                Some(DragRow { key: f.key.clone(), lane, kind, top: f.top, height: f.height })
+            })
+            .collect();
+        layout.sort_by(|a, b| a.top.total_cmp(&b.top));
+        let origin = match &drag_state.origin {
+            Some(origin) => origin.clone(),
+            None => drag::origin_slot(&layout, &key)?,
+        };
+        let dragged = rows.iter().find(|r| vm::session_key(&r.host_id, &r.info.id) == key)?;
+        let joinable = vm::team_leads(&rows, dragged)
+            .into_iter()
+            .map(|lead| (vm::session_key(&lead.host_id, &lead.info.id), Joinable::Yes(true)))
+            .collect();
+        let team = drag_state.member_of.as_ref().and_then(|lead| {
+            let lead_row = layout.iter().find(|r| &r.key == lead)?;
+            let lane = team_lane(lead);
+            let spacer = frames.iter().find(|f| f.key == "spacer");
+            let bottom = layout
+                .iter()
+                .filter(|r| r.lane == lane)
+                .map(|r| r.top + r.height)
+                .chain(spacer.filter(|f| f.top >= lead_row.top).map(|f| f.top + f.height))
+                .fold(lead_row.top + lead_row.height, f64::max);
+            Some(TeamBlock { lane, lead: lead.clone(), lead_lane: lead_row.lane.clone(), top: lead_row.top, bottom })
+        });
+        let current = drag_state.target.clone().unwrap_or_else(|| DragTarget { slot: origin.clone(), ..DragTarget::default() });
+        let ctx = SessionDragContext { dragged: key, origin: origin.clone(), reorder: custom, joinable, team };
+        let target = drag::session_target(&layout, y, &current, &ctx);
+        let out = to_target(&target);
+        if let Some(d) = state.drag.as_mut() {
+            d.origin = Some(origin);
+            d.target = Some(target);
+        }
+        Some(out)
+    }
+
+    // Ends the drag; with `commit` it reads what the last target asks for (a custom group move is applied here).
+    pub fn end_drag(&self, commit: bool) -> ListDrop {
+        let mut state = self.state();
+        let Some(Drag { key, origin, target, member_of }) = state.drag.take() else { return ListDrop::Nothing };
+        let (Some(origin), Some(target)) = (origin, target) else { return ListDrop::Nothing };
+        if !commit || target.refusal.is_some() {
+            return ListDrop::Nothing;
+        }
+        let rows = state.rows();
+        let drawn = state.drawn(&rows);
+        let grouped: Vec<&SessionRow> =
+            drawn.iter().flat_map(|g| g.rows.iter()).flat_map(|r| std::iter::once(r).chain(r.members.iter().flatten())).collect();
+        let row_of = |k: &str| grouped.iter().copied().find(|r| vm::session_key(&r.host_id, &r.info.id) == k);
+        let Some(dragged) = row_of(&key) else { return ListDrop::Nothing };
+        let team_move = |lead: &SessionRow, before: Option<&str>, joining: bool| -> ListDrop {
+            let Some(lead_agent) = lead.info.agent.as_ref() else { return ListDrop::Nothing };
+            let others: Vec<&SessionRow> = lead.members.iter().flatten().filter(|m| vm::session_key(&m.host_id, &m.info.id) != key).collect();
+            let index = before
+                .and_then(|b| others.iter().position(|m| vm::session_key(&m.host_id, &m.info.id) == b))
+                .unwrap_or(others.len());
+            let orders: Vec<Option<f64>> = others.iter().map(|m| m.info.agent.as_ref().and_then(|a| a.order).map(|o| o as f64)).collect();
+            let place = drag::place_member(&orders, index);
+            let crossing = dragged.info.owner != lead.info.owner;
+            ListDrop::Team {
+                lead_session_id: lead.info.id.clone(),
+                lead_agent_id: lead_agent.id.clone(),
+                order: place.order,
+                siblings: place
+                    .siblings
+                    .iter()
+                    .filter_map(|s| Some(SiblingMove { agent_id: others[s.index].info.agent.as_ref()?.id.clone(), order: s.order }))
+                    .collect(),
+                cross_owner: crossing,
+                confirm_owner: if crossing && joining { lead.info.owner.clone() } else { None },
+            }
+        };
+        if let Some(join) = &target.join {
+            return row_of(join).map_or(ListDrop::Nothing, |lead| team_move(lead, None, true));
+        }
+        let custom = state.config.group_by == GroupBy::Custom;
+        let lane_group = drawn.iter().find(|g| g.key == target.slot.lane).map(|g| g.custom.clone());
+        let place = |state: &mut State| -> ListDrop {
+            let Some(custom_id) = &lane_group else { return ListDrop::Nothing };
+            let groups = state.config.custom_groups.clone().unwrap_or_default();
+            let moved = vm::move_to_custom_group(&groups, &key, custom_id.as_deref(), target.slot.before.as_deref());
+            state.config = ViewConfig { custom_groups: Some(moved), ..state.config.clone() };
+            ListDrop::Placed
+        };
+        if member_of.is_some() && target.leave == Some(true) {
+            if custom {
+                place(&mut state);
+            }
+            return ListDrop::Leave;
+        }
+        if drag::same_slot(&target.slot, &origin) {
+            return ListDrop::Nothing;
+        }
+        if let Some(lead) = member_of.as_deref().and_then(row_of)
+            && target.slot.lane == team_lane(member_of.as_deref().unwrap_or_default())
+        {
+            return team_move(lead, target.slot.before.as_deref(), false);
+        }
+        if custom {
+            return place(&mut state);
+        }
+        ListDrop::Nothing
     }
 
     // The Member a phone counts as selected: the one opened last, since nothing stays highlighted on a phone.

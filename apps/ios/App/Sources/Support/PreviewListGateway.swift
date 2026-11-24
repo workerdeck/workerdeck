@@ -35,10 +35,13 @@ final class PreviewListGateway: URLProtocol {
     case ("GET", "/v1/sessions"):
       return (200, ListFixture.body(state.withLock { $0 }))
     case ("PATCH", "agents"):
-      guard body.keys.contains("lead") else { return (200, "{}") }
       state.withLock { sessions in
         guard let at = sessions.firstIndex(where: { agent(of: $0)?["id"] as? String == id }) else { return }
-        place(&sessions, at: at, lead: body["lead"] as? String)
+        if body.keys.contains("lead") { place(&sessions, at: at, lead: body["lead"] as? String) }
+        if let order = body["order"] as? Double, var mover = agent(of: sessions[at]) {
+          mover["order"] = order
+          sessions[at]["agent"] = mover
+        }
       }
       return (200, "{}")
     case ("PATCH", "sessions"):

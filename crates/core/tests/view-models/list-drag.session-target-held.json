@@ -1,0 +1,1077 @@
+{
+  "input": {
+    "fn": "sessionTargetOf",
+    "calls": [
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        5,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "m1",
+          "origin": {
+            "lane": "team:lead",
+            "before": "m2"
+          },
+          "reorder": false,
+          "joinable": {
+            "solo": true,
+            "plain": "only an agent can lead a team"
+          },
+          "team": {
+            "lane": "team:lead",
+            "lead": "lead",
+            "leadLane": "a",
+            "top": 20,
+            "bottom": 176
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        175,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "m1",
+          "origin": {
+            "lane": "team:lead",
+            "before": "m2"
+          },
+          "reorder": false,
+          "joinable": {
+            "solo": true,
+            "plain": "only an agent can lead a team"
+          },
+          "team": {
+            "lane": "team:lead",
+            "lead": "lead",
+            "leadLane": "a",
+            "top": 20,
+            "bottom": 176
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        400,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "m1",
+          "origin": {
+            "lane": "team:lead",
+            "before": "m2"
+          },
+          "reorder": false,
+          "joinable": {
+            "solo": true,
+            "plain": "only an agent can lead a team"
+          },
+          "team": {
+            "lane": "team:lead",
+            "lead": "lead",
+            "leadLane": "a",
+            "top": 20,
+            "bottom": 176
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        5,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "m1",
+          "origin": {
+            "lane": "team:lead",
+            "before": "m2"
+          },
+          "reorder": true,
+          "joinable": {
+            "solo": true
+          },
+          "team": {
+            "lane": "team:lead",
+            "lead": "lead",
+            "leadLane": "a",
+            "top": 20,
+            "bottom": 176
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        175,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "m1",
+          "origin": {
+            "lane": "team:lead",
+            "before": "m2"
+          },
+          "reorder": true,
+          "joinable": {
+            "solo": true
+          },
+          "team": {
+            "lane": "team:lead",
+            "lead": "lead",
+            "leadLane": "a",
+            "top": 20,
+            "bottom": 176
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        400,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "m1",
+          "origin": {
+            "lane": "team:lead",
+            "before": "m2"
+          },
+          "reorder": true,
+          "joinable": {
+            "solo": true
+          },
+          "team": {
+            "lane": "team:lead",
+            "lead": "lead",
+            "leadLane": "a",
+            "top": 20,
+            "bottom": 176
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        5,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "plain",
+          "origin": {
+            "lane": "a",
+            "before": "earlier"
+          },
+          "reorder": false,
+          "joinable": {
+            "lead": true,
+            "solo": "Solo is a member of a team; teams are one level deep"
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        175,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "plain",
+          "origin": {
+            "lane": "a",
+            "before": "earlier"
+          },
+          "reorder": false,
+          "joinable": {
+            "lead": true,
+            "solo": "Solo is a member of a team; teams are one level deep"
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        400,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "plain",
+          "origin": {
+            "lane": "a",
+            "before": "earlier"
+          },
+          "reorder": false,
+          "joinable": {
+            "lead": true,
+            "solo": "Solo is a member of a team; teams are one level deep"
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        5,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "plain",
+          "origin": {
+            "lane": "a",
+            "before": "earlier"
+          },
+          "reorder": true,
+          "joinable": {
+            "lead": true
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        175,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "plain",
+          "origin": {
+            "lane": "a",
+            "before": "earlier"
+          },
+          "reorder": true,
+          "joinable": {
+            "lead": true
+          }
+        }
+      ],
+      [
+        [
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        400,
+        {
+          "slot": {
+            "lane": "a",
+            "before": "solo"
+          },
+          "leave": true
+        },
+        {
+          "dragged": "plain",
+          "origin": {
+            "lane": "a",
+            "before": "earlier"
+          },
+          "reorder": true,
+          "joinable": {
+            "lead": true
+          }
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "slot": {
+        "lane": "team:lead",
+        "before": "m2"
+      },
+      "leave": true
+    },
+    {
+      "slot": {
+        "lane": "team:lead"
+      }
+    },
+    {
+      "slot": {
+        "lane": "team:lead",
+        "before": "m2"
+      },
+      "leave": true
+    },
+    {
+      "slot": {
+        "lane": "a",
+        "before": "lead"
+      },
+      "leave": true
+    },
+    {
+      "slot": {
+        "lane": "team:lead"
+      }
+    },
+    {
+      "slot": {
+        "lane": "b"
+      },
+      "leave": true
+    },
+    {
+      "slot": {
+        "lane": "a",
+        "before": "solo"
+      }
+    },
+    {
+      "slot": {
+        "lane": "a",
+        "before": "solo"
+      }
+    },
+    {
+      "slot": {
+        "lane": "a",
+        "before": "solo"
+      },
+      "leave": true
+    },
+    {
+      "slot": {
+        "lane": "a",
+        "before": "lead"
+      }
+    },
+    {
+      "slot": {
+        "lane": "team:lead"
+      }
+    },
+    {
+      "slot": {
+        "lane": "b"
+      }
+    }
+  ]
+}

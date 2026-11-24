@@ -2,18 +2,13 @@ import SwiftUI
 import WorkerDeckCore
 import WorkerDeckKit
 
-// A lead's tray in Auto: the core already cut it to the pictures drawn and a `+n` overflow.
-struct TeamTray {
-  let row: ListRow
-  let select: (TrayMember) -> Void
+// A lead's fold control: the caret that expands its team and collapses it back to Auto.
+struct TeamCaret {
+  let open: Bool
   let toggle: () -> Void
-
-  var members: [TrayMember] { row.tray }
-  var expanded: Bool { row.teamExpanded }
-  var overflow: Int { Int(row.trayOverflow) }
 }
 
-// What a card does besides opening its session: its chips, its unfolded steps, its team tray.
+// What a card does besides opening its session: its chips, its unfolded steps.
 struct CardActions {
   var open: () -> Void
   var toggleChip: (StepFold) -> Void = { _ in }
@@ -21,20 +16,17 @@ struct CardActions {
   var killStep: (ListStep) -> (() -> Void)? = { _ in nil }
 }
 
-// `SessionItem` from packages/ui: the agent card (48 = 4 padding + 40 face), the Member card inside a team's shared card
-// (one 28 row = 4 padding + 20 face), a plain session in the agent card's shape (`tile`), or the gutter row when no agent is listed.
+// `SessionItem` from packages/ui: every row is one 36 line (4 padding, a 28 avatar), lead, Member and plain session
+// alike. Name, model badge, then the status, which truncates first; right of the slack the step chips, the reason icons
+// or a Member's unread count, and the team caret.
 struct SessionCard: View {
-  static let edge: CGFloat = 8
-
   let item: ListItem
-  var tray: TeamTray?
+  var caret: TeamCaret?
   var hostName: String?
   var showsProject = true
-  var projectImage: UIImage?
   let actions: CardActions
 
   private var row: ListRow { item.row }
-  private var member: Bool { row.depth > 0 && row.agent != nil }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -43,114 +35,123 @@ struct SessionCard: View {
       }
       .buttonStyle(.plain)
       ForEach(row.steps) { step in
-        SessionStepRow(
-          step: step, indent: member ? 28 : item.agentCard ? 48 : 22, onOpen: { actions.openStep(step) },
-          onKill: actions.killStep(step))
+        SessionStepRow(step: step, indent: 36, onOpen: { actions.openStep(step) }, onKill: actions.killStep(step))
       }
     }
     .padding(4)
   }
 
-  @ViewBuilder
   private var head: some View {
-    if member {
-      memberHead
-    } else if item.agentCard {
-      cardHead
-    } else {
-      SessionRowView(
-        row: row, hostName: hostName, unseen: item.unseen, projectImage: projectImage, showsProject: showsProject,
-        chips: chips)
-    }
-  }
-
-  private var cardHead: some View {
     HStack(spacing: 8) {
-      AgentAvatarView(row: row, size: 40, context: row.agent != nil)
-      VStack(alignment: .leading, spacing: 0) {
-        HStack(spacing: 6) {
-          name()
-          if row.agent != nil { badge(size: 13) }
-          if row.shared {
-            Image(systemName: "globe")
-              .font(.system(size: 10))
-              .foregroundStyle(ListPalette.fg4)
-              .accessibilityLabel("Shared with other owners")
-          }
-          Spacer(minLength: 0)
-          ReasonChipsView(reasons: row.reasons)
-          UnreadBadge(count: item.unseen, live: row.state == .working)
-          if let tray { TrayView(tray: tray) }
-          if row.agent == nil, let percentage = row.contextPercent {
-            ContextRing(percentage: percentage, diameter: 14, lineWidth: 2, showsLabel: false)
-          }
-        }
-        .frame(minHeight: 20)
-        HStack(spacing: 6) {
-          (row.agent != nil ? status : SessionRowView.details(
-            row: row, hostName: hostName, showsProject: showsProject, projectImage: projectImage))
-            .font(ListType.body())
-            .tracking(ListType.tracking * 13)
-            .foregroundStyle(ListPalette.fg4)
-            .lineLimit(1)
-            .truncationMode(.tail)
-          Spacer(minLength: 0)
-          chips
-        }
-        .frame(minHeight: 20)
-      }
-      .opacity(row.asleep ? 0.6 : 1)
-    }
-  }
-
-  // One 20 row: name (at most 60%, never the first to give way), badge, status (truncates), then unread and chips.
-  private var memberHead: some View {
-    HStack(spacing: 8) {
-      AgentAvatarView(row: row, size: 20)
+      AgentAvatarView(row: row, size: 28, context: row.depth == 0)
+        .grayscale(quiet ? 1 : 0)
+        .opacity(quiet ? 0.5 : 1)
+        .accessibilityHidden(true)
       HStack(spacing: 6) {
-        MemberLine(spacing: 6) {
-          name()
-          badge(size: 12)
-          status
-            .font(ListType.label())
-            .tracking(ListType.tracking * 12)
-            .lineLimit(1)
-            .truncationMode(.tail)
+        name
+        if let badge = row.modelBadge, let label = row.modelLabel {
+          ModelBadgeView(badge: badge, name: label, mark: row.mark, tinted: row.markTinted, size: 12)
         }
+        if row.shared {
+          Image(systemName: "globe")
+            .font(.system(size: 10))
+            .foregroundStyle(ListPalette.fg4)
+            .accessibilityLabel("Shared with other owners")
+        }
+        status
+          .font(ListType.label())
+          .tracking(ListType.tracking * 12)
+          .lineLimit(1)
+          .truncationMode(.tail)
         Spacer(minLength: 0)
-        ReasonChipsView(reasons: row.reasons)
-        UnreadBadge(count: item.unseen, live: row.state == .working)
-        chips
+        StepChipsView(chips: row.chips, toggle: actions.toggleChip)
+        if row.reasons.isEmpty {
+          unread
+        } else {
+          ReasonIconsView(reasons: row.reasons)
+        }
+        if let caret { CaretView(caret: caret, team: row.agent ?? "team", summary: row.teamSummary) }
       }
-      .frame(height: 20)
       .opacity(row.asleep ? 0.6 : 1)
     }
+    .frame(height: 28)
   }
 
-  private func name() -> some View {
-    let title = row.agent ?? row.title
-    return Text(title)
+  // Nothing here for a person right now: the face greys out so the cards that do want attention stand out.
+  private var quiet: Bool {
+    let shown = row.teamState ?? row.state
+    return !row.selected && !row.needsYou && row.unseen == 0 && (shown == .idle || shown == .ended)
+  }
+
+  @ViewBuilder
+  private var name: some View {
+    let text = Text(row.agent ?? row.title)
       .font(ListType.body(.medium))
       .tracking(ListType.tracking * 13)
-      .foregroundStyle(row.agent != nil ? ListPalette.name : ListPalette.fg1)
       .lineLimit(1)
-      .layoutPriority(1)
-      .accessibilityLabel(row.lead ? "\(title), team lead" : title)
-  }
-
-  @ViewBuilder
-  private func badge(size: CGFloat) -> some View {
-    if let badge = row.modelBadge, let name = row.modelLabel {
-      ModelBadgeView(badge: badge, name: name, mark: row.mark, tinted: row.markTinted, size: size)
+    if let agent = row.agent {
+      text
+        .foregroundStyle(ListPalette.name)
+        .fixedSize()
+        .accessibilityLabel(row.lead ? "\(agent), team lead" : agent)
+    } else {
+      text.foregroundStyle(ListPalette.fg1).layoutPriority(1)
     }
   }
 
-  private var status: Text {
-    Text(row.cardStatus).foregroundStyle(row.cardStatusIsLabel ? ListPalette.fg3 : ListPalette.fg4)
+  // An agent's own line; a plain session's status, project, gateway and age, giving way before its title does.
+  private var status: some View {
+    Group {
+      if row.agent != nil {
+        Text(row.cardStatus).foregroundStyle(row.cardStatusIsLabel ? ListPalette.fg3 : ListPalette.fg4)
+      } else {
+        Text(plainRun).foregroundStyle(ListPalette.fg4)
+      }
+    }
+    .layoutPriority(-1)
   }
 
-  private var chips: StepChipsView {
-    StepChipsView(chips: row.chips, toggle: actions.toggleChip)
+  private var plainRun: String {
+    let project = showsProject ? row.project : row.projectSubpath
+    let age = ago(epochMs: row.lastActivityAt, nowMs: Date().timeIntervalSince1970 * 1000)
+    return [row.statusText, project, hostName, age == "just now" ? age : "\(age) ago"]
+      .compactMap { $0?.isEmpty == false ? $0 : nil }
+      .joined(separator: " \u{00B7} ")
+  }
+
+  // Plain accent text, on a Member only (a top-level agent is always relevant), once its turn has stopped.
+  @ViewBuilder
+  private var unread: some View {
+    if row.depth > 0, item.unseen > 0, row.state != .working {
+      Text(item.unseen > 99 ? "99+" : "\(item.unseen)")
+        .font(ListType.label(.semibold))
+        .monospacedDigit()
+        .foregroundStyle(.tint)
+        .frame(minWidth: 16, minHeight: 16)
+        .accessibilityLabel("\(item.unseen) new message\(item.unseen == 1 ? "" : "s")")
+    }
+  }
+}
+
+// The lead's caret, in the column a group heading's chevron shares.
+struct CaretView: View {
+  let caret: TeamCaret
+  let team: String
+  let summary: String?
+
+  var body: some View {
+    Button(action: caret.toggle) {
+      Image(systemName: caret.open ? "chevron.down" : "chevron.right")
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(ListPalette.fg4)
+        .frame(width: 20, height: 20)
+        .contentShape(Rectangle())
+        .hitPadding(8)
+    }
+    .buttonStyle(.borderless)
+    .padding(.trailing, 2)
+    .accessibilityLabel(caret.open ? "Show only active Team Members of \(team)" : "Show all Team Members of \(team)")
+    .accessibilityHint(summary ?? "")
   }
 }
 
@@ -188,42 +189,7 @@ struct ModelBadgeView: View {
   }
 }
 
-// The Member line's first three: the name takes what it needs up to 60% of the line, the badge its own width, and the
-// status what is left.
-struct MemberLine: Layout {
-  var spacing: CGFloat
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let frames = place(width: proposal.width, subviews: subviews)
-    let height = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
-    return CGSize(width: frames.map { $0.x + $0.width }.max() ?? 0, height: height)
-  }
-
-  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-    for (subview, frame) in zip(subviews, place(width: bounds.width, subviews: subviews)) {
-      subview.place(
-        at: CGPoint(x: bounds.minX + frame.x, y: bounds.midY), anchor: .leading,
-        proposal: ProposedViewSize(width: frame.width, height: bounds.height))
-    }
-  }
-
-  private func place(width: CGFloat?, subviews: Subviews) -> [(x: CGFloat, width: CGFloat)] {
-    let available = width ?? .infinity
-    var x: CGFloat = 0
-    var out: [(x: CGFloat, width: CGFloat)] = []
-    for (index, subview) in subviews.enumerated() {
-      let ideal = subview.sizeThatFits(.unspecified).width
-      let room = max(0, available - x)
-      let cap = index == 0 ? min(room, available * 0.6) : room
-      let used = min(ideal, cap)
-      out.append((x, used))
-      if used > 0 { x += used + spacing }
-    }
-    return out
-  }
-}
-
-// `StepChips`: one chip per fold kind, tapped to show or hide that kind's steps under the card.
+// `StepChips`: one icon per fold kind (the count is its label), tapped to show or hide that kind's steps under the card.
 struct StepChipsView: View {
   let chips: [ListChip]
   let toggle: (StepFold) -> Void
@@ -234,16 +200,12 @@ struct StepChipsView: View {
         Button {
           toggle(chip.kind)
         } label: {
-          HStack(spacing: 4) {
-            icon(chip.kind)
-            Text("\(chip.count)").monospacedDigit()
-          }
-          .font(ListType.micro())
-          .foregroundStyle(tone(chip))
-          .padding(.horizontal, 4)
-          .frame(height: 16)
-          .background(RoundedRectangle(cornerRadius: 3).fill(chip.open ? ListPalette.chipOpen : Color.clear))
-          .hitPadding()
+          icon(chip.kind)
+            .font(ListType.micro())
+            .foregroundStyle(tone(chip))
+            .frame(width: 16, height: 16)
+            .background(RoundedRectangle(cornerRadius: 3).fill(chip.open ? ListPalette.chipOpen : Color.clear))
+            .hitPadding()
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("\(chip.open ? "Hide" : "Show") \(chip.label)")
@@ -290,116 +252,106 @@ struct ReasonChipsView: View {
   }
 }
 
-// Auto's tray on a lead: how many Members need a person, the rest as 16 pt faces, then `+n` or a chevron that expands
-// the team; expanded, `^ n` returns it to Auto.
-struct TrayView: View {
-  let tray: TeamTray
+// One icon per reason a card needs a person: shield (approval), hand (blocked), circled X (failed).
+struct ReasonIconsView: View {
+  let reasons: [ReasonChip]
 
   var body: some View {
-    HStack(spacing: 4) {
-      if tray.row.teamAttention > 0 {
-        Text("\(tray.row.teamAttention)")
-          .font(.system(size: 12))
-          .monospacedDigit()
-          .foregroundStyle(ListPalette.warning)
-          .padding(.horizontal, 6)
-          .frame(height: 16)
-          .background(Capsule().fill(ListPalette.warningBackground))
-          .accessibilityLabel(tray.row.teamSummary ?? "")
-      }
-      if !tray.expanded {
-        ForEach(tray.members, id: \.key) { member in
-          Button { tray.select(member) } label: {
-            TrayAvatarView(member: member, size: 16).hitPadding()
-          }
-          .buttonStyle(.borderless)
-          .accessibilityLabel("Open \(member.title)")
-        }
-      }
-      if tray.expanded || !tray.members.isEmpty {
-        Button(action: tray.toggle) {
-          Group {
-            if tray.expanded {
-              HStack(spacing: 2) {
-                Image(systemName: "chevron.up").font(.system(size: 9, weight: .semibold))
-                Text("\(tray.row.members)").monospacedDigit()
-              }
-            } else if tray.overflow > 0 {
-              Text("+\(tray.overflow)").monospacedDigit()
-            } else {
-              Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
-            }
-          }
-          .font(ListType.label())
-          .foregroundStyle(tray.expanded ? ListPalette.fg3 : ListPalette.fg4)
-          .padding(.horizontal, 2)
-          .hitPadding()
-        }
-        .buttonStyle(.borderless)
-        .accessibilityLabel(tray.expanded ? "Show only active Members" : "Show all Team Members")
-      }
+    ForEach(reasons, id: \.label) { reason in
+      Image(systemName: Self.symbol(reason))
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(reason.danger ? ListPalette.danger : ListPalette.warning)
+        .frame(width: 16, height: 16)
+        .accessibilityLabel(reason.label)
+        .accessibilityHint(reason.title)
     }
+  }
+
+  private static func symbol(_ reason: ReasonChip) -> String {
+    if reason.danger { return "xmark.circle" }
+    return reason.label == "Blocked" ? "hand.raised" : "exclamationmark.shield"
   }
 }
 
-// The card surfaces under a row: its own rounded card, or its slice of a team's shared card.
+// What a row draws behind its card: a team's shared card while one of its rows is the selected one, the elbow tree
+// line from the lead's avatar to each Member, and the attention tint on the row that needs a person itself.
 struct CardBackground: View {
-  let item: ListItem
-  private let edge = SessionCard.edge
+  let nest: NestRole?
+  var needsYou = false
+  var teamSelected = false
+  static let edge: CGFloat = 8
+  static let radius: CGFloat = 6
+  // The lead's avatar spans 4 to 32 inside its card and a Member's starts at 24: the trunk runs under its left third.
+  private static let trunk: CGFloat = edge + 11
+  private static let indent: CGFloat = 20
+
+  init(item: ListItem) {
+    nest = item.nest
+    needsYou = item.needsYou
+    teamSelected = item.teamSelected
+  }
+
+  init(nest: NestRole?) {
+    self.nest = nest
+  }
 
   var body: some View {
-    let fill: Color? = item.needsYou ? ListPalette.attention : nil
-    switch item.nest {
-    case nil:
-      RoundedRectangle(cornerRadius: 8).fill(fill ?? .clear).padding(.vertical, 2).padding(.horizontal, edge)
-    case .lead:
-      ZStack {
-        UnevenRoundedRectangle(topLeadingRadius: 8, topTrailingRadius: 8).fill(ListPalette.nest)
-        if let fill { RoundedRectangle(cornerRadius: 8).fill(fill) }
+    let insets = Self.insets(nest)
+    ZStack(alignment: .topLeading) {
+      if teamSelected { team }
+      if needsYou {
+        RoundedRectangle(cornerRadius: Self.radius).fill(ListPalette.attention).padding(insets)
       }
-      .padding(.top, 2)
-      .padding(.horizontal, edge)
-    case .member, .lastMember:
-      let last = item.nest == .lastMember
-      ZStack {
-        UnevenRoundedRectangle(bottomLeadingRadius: last ? 8 : 0, bottomTrailingRadius: last ? 8 : 0)
-          .fill(ListPalette.nest)
-          .padding(.bottom, last ? 2 : 0)
-        if let fill {
-          RoundedRectangle(cornerRadius: 4).fill(fill)
-            .padding(.top, 4)
-            .padding(.bottom, last ? 6 : 0)
-            .padding(.horizontal, 4)
-        }
-      }
-      .padding(.horizontal, edge)
+      tree
     }
   }
 
-  static func insets(_ item: ListItem) -> EdgeInsets {
-    let edge = SessionCard.edge
-    switch item.nest {
+  @ViewBuilder
+  private var team: some View {
+    let edge = Self.edge
+    let r = Self.radius
+    switch nest {
+    case .lead:
+      UnevenRoundedRectangle(topLeadingRadius: r, topTrailingRadius: r).fill(ListPalette.nest)
+        .padding(.top, 2).padding(.horizontal, edge)
+    case .member:
+      Rectangle().fill(ListPalette.nest).padding(.horizontal, edge)
+    case .lastMember:
+      UnevenRoundedRectangle(bottomLeadingRadius: r, bottomTrailingRadius: r).fill(ListPalette.nest)
+        .padding(.bottom, 2).padding(.horizontal, edge)
+    case nil:
+      EmptyView()
+    }
+  }
+
+  private var tree: some View {
+    Canvas { ctx, size in
+      let line = ListPalette.borderStrong
+      switch nest {
+      case .lead:
+        ctx.fill(Path(CGRect(x: Self.trunk, y: 34, width: 2, height: max(0, size.height - 34))), with: .color(line))
+      case .member, .lastMember:
+        let mid: CGFloat = 4 + 18
+        let bottom = nest == .lastMember ? mid + 1 : size.height
+        ctx.fill(Path(CGRect(x: Self.trunk, y: 0, width: 2, height: bottom)), with: .color(line))
+        ctx.fill(
+          Path(CGRect(x: Self.trunk, y: mid - 1, width: Self.edge + Self.indent + 4 - Self.trunk, height: 2)),
+          with: .color(line))
+      case nil:
+        break
+      }
+    }
+    .accessibilityHidden(true)
+  }
+
+  static func insets(_ item: ListItem) -> EdgeInsets { insets(item.nest) }
+
+  static func insets(_ nest: NestRole?) -> EdgeInsets {
+    switch nest {
     case nil: return EdgeInsets(top: 2, leading: edge, bottom: 2, trailing: edge)
     case .lead: return EdgeInsets(top: 2, leading: edge, bottom: 0, trailing: edge)
-    case .member: return EdgeInsets(top: 4, leading: edge + 4, bottom: 0, trailing: edge + 4)
-    case .lastMember: return EdgeInsets(top: 4, leading: edge + 4, bottom: 6, trailing: edge + 4)
-    }
-  }
-}
-
-struct UnreadBadge: View {
-  let count: Int
-  let live: Bool
-
-  var body: some View {
-    if count > 0 {
-      Text("\(count)")
-        .font(ListType.label().monospacedDigit())
-        .foregroundStyle(live ? ListPalette.badgeForeground : Color.white)
-        .padding(.horizontal, 8)
-        .frame(minWidth: 24, minHeight: 16)
-        .background(Capsule().fill(live ? AnyShapeStyle(ListPalette.badge) : AnyShapeStyle(.tint)))
-        .accessibilityLabel("\(count) new messages")
+    case .member: return EdgeInsets(top: 4, leading: edge + indent, bottom: 0, trailing: edge + 4)
+    case .lastMember: return EdgeInsets(top: 4, leading: edge + indent, bottom: 6, trailing: edge + 4)
     }
   }
 }

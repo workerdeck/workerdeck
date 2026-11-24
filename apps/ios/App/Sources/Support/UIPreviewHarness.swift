@@ -112,6 +112,13 @@ private struct TeamsPreview: View {
     config: #"{"groupBy":"none"}"#)
   @State private var revision = 0
 
+  // `UIPREVIEW_TEAM=open` draws the team expanded with WD-Docs as the row opened last, so its block takes the card.
+  init() {
+    guard ProcessInfo.processInfo.environment["UIPREVIEW_TEAM"] == "open" else { return }
+    model.list.toggleTeam(hostId: model.hostId, sessionId: "lead")
+    model.list.select(hostId: model.hostId, sessionId: "m3")
+  }
+
   var body: some View {
     let _ = revision
     NavigationStack {
@@ -129,17 +136,17 @@ private struct TeamsPreview: View {
                 model.list.toggleGroup(key: "earlier")
                 revision += 1
               } label: {
-                HStack(spacing: 4) {
-                  Image(systemName: section.group.collapsed ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
+                HStack(spacing: 8) {
                   Text("Earlier · \(section.group.sessions) one-off session\(section.group.sessions == 1 ? "" : "s")")
                   Spacer(minLength: 0)
+                  FoldChevron(collapsed: section.group.collapsed)
                 }
                 .font(ListType.label())
                 .foregroundStyle(ListPalette.fg4)
               }
               .buttonStyle(.plain)
               .textCase(nil)
+              .listRowInsets(SessionListView.headingInsets)
             }
           }
         }
@@ -154,15 +161,15 @@ private struct TeamsPreview: View {
   private func card(_ item: ListItem) -> some View {
     SessionCard(
       item: item,
-      tray: item.row.depth == 0 && (!item.row.tray.isEmpty || item.row.teamExpanded)
-        ? TeamTray(
-          row: item.row, select: { _ in },
-          toggle: {
-            model.list.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
-            revision += 1
-          })
-        : nil,
-      actions: CardActions(open: {}))
+      caret: SessionListView.caret(item.row) {
+        model.list.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
+        revision += 1
+      },
+      actions: CardActions(
+        open: {
+          model.list.select(hostId: item.row.hostId, sessionId: item.row.sessionId)
+          revision += 1
+        }))
     .listRowInsets(CardBackground.insets(item))
     .listRowSeparator(.hidden)
     .listRowBackground(CardBackground(item: item))
@@ -480,7 +487,7 @@ private struct ProjectsPreview: View {
           VStack(alignment: .leading, spacing: 2) {
             Text(item.caption).font(.caption2).foregroundStyle(.tertiary)
             if let row = item.session {
-              SessionRowView(row: row, unseen: 0, projectImage: item.image)
+              SessionCard(item: ListItem(row: row), actions: CardActions(open: {}))
             }
           }
         }

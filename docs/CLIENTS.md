@@ -1453,19 +1453,28 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 **Agents and teams** (Agent Teams phase 5). The kit mirrors `AgentRef`, `AgentInfo`,
 `StatusLabel`, `SessionInfo.agent`/`owner`/`statusLabel`, `GatewayMeta`, the `/agents` routes and
 `/meta` (`Agents.swift`), and the team half of the list view model (team units, `teamState`, the context lead, `teamView`, `teamLeads`/`teamMembers`) is the core's `SessionList`. The app draws agents with
-`SessionCard` (the web's geometry: 48pt card with a 40 face, name + `ModelBadgeView` (core `model_badge`) over the core's `card_status`, single-row 28pt
-Member cards (20 face, name capped at 60% by `MemberLine`) inside the team's shared card; a long press peeks
+`SessionCard`, the web's single-line row for every card (4.7 redesign, `docs/PACKAGES.md` § ui SessionItem): one 36pt
+line (4 padding, 28 avatar, 6pt corners) of name (an agent's never truncates, a plain title truncates after its status),
+`ModelBadgeView` (core `model_badge`), then the status that gives way first (an agent's `card_status`; a plain session's
+status · project · gateway · age), and right of the slack the icon-only step chips (count in the label), the reason
+icons (`ReasonIconsView`: shield, hand, circled X) or a Member's unread as plain accent digits (only once its turn
+stopped, never beside a reason), and the lead's team caret (`TeamCaret`, no tray, no counts). Members sit 20pt in on
+elbow tree lines (`CardBackground`: a 2pt trunk under the lead avatar's left third, a stub to each Member's face); a team
+draws its grey shared card only while one of its rows is selected (`ListRow.selected`: the row opened last, since a
+phone keeps no highlight). A long press peeks
 (`CoreSessionPeek`: the live transcript, read-only, marks what it shows read; a tap opens the session through
 `PeekCommit`, which adds the UIKit preview-commit callback to SwiftUI's menu delegate at runtime, pinned by
-`ListDragUITests.testTapOnThePeekOpensTheSession`) over an icon bar (Rename, Status, New) and the other actions, step
-chips that unfold a kind inside the card, a tray of the Members Auto hides; a tap on one opens it, and the member opened
-last stands in for the selected row; the list
+`ListDragUITests.testTapOnThePeekOpensTheSession`) over a plain menu of every verb (no icon bar); the list
 uses the web's fixed type scale (`ListType`: 13/12/11, not Dynamic Type) and grey ramp (`ListPalette.fg1..4`), and touch
-padding on chips and tray faces is layout-neutral (`hitPadding`) so a line stays 20pt)
+padding on chips is layout-neutral (`hitPadding`)
 and `AgentAvatarView`: an agent draws its face through `FaceView` (the core's draw ops in a `Canvas`, motions under a
 30 fps `TimelineView`, paused under Reduce Motion; the canvas keeps a 4-unit margin because the bubble, ring and chip reach
-past the 32-unit box), a plain session a dashed engine tile with the status badge. A card whose session or team needs an
-answer is tinted orange. A lead's session screen draws the fleet strip (`CoreFleetStrip`, the core's `SessionList.fleet`) under
+past the 32-unit box), a plain session an engine tile on a solid vendor ground that fills from the bottom with context
+use (amber from 40%), status badge top right. An idle or ended face with nothing unread, not selected and not asking
+greys out (grayscale, half opacity). Only a card that needs a person itself is tinted orange (`ListRow.needs_you`; a
+lead never tints for its team). Group headings draw no count: the fold chevron sits last in the caret's column, a
+folded group shows one warning icon when a member needs a person (`fold_summary` is its label), and a lifted heading
+folds every group over 220 ms. A lead's session screen draws the fleet strip (`CoreFleetStrip`, the core's `SessionList.fleet`) under
 its header: one line per Member that needs you, a tap opens it, Retry start on a failed start (disabled while one is in flight); the list's poll keeps running while a session that
 may lead (`SessionList.mayLead`, over the unfiltered rows: an agent that is no one's member, or one not read yet) is on
 top of the stack so the strip stays current. Verbs follow the web menu (rename, status, avatar, make agent, add to
@@ -1477,9 +1486,16 @@ cross-gateway invitations stay on the web and VS Code. `UIPREVIEW=teams`
 draws every state from canned rows.
 
 **Drag and drop in the iOS list** (`Sessions/ListDrag.swift`). Hold, then move: the card or heading itself rides
-under the finger, vertical only. A lifted heading folds every group and the others slide aside as it passes them
-(`move_group` on release); a card held over an agent it could join rings it, and a Member moved anywhere outside its
-team shows "Leave"; cards never reorder. A still hold is the long-press menu, a sideways move the swipe.
+under the finger, vertical only. A lifted heading folds every group over 220 ms and the others slide aside as it passes
+them (`move_group` on release). A lifted card leaves the list and a gap as tall as it slides to where it would land,
+the web's list drag on the core: `SessionList.begin_drag` folds every team to its lead but the dragged member's own
+(all members shown), `drag_move` resolves the finger over the frames drawn now (the card's lift frame, `head:<group>`
+headings, `spacer`) through `vm::list_drag` (the port of `row-drag.ts`, goldens `list-drag.*`), and `end_drag` reads
+what the drop asks for (`ListDrop`: a join or a reorder inside the team with the renumbered siblings, a leave, or a
+custom-group placement applied to the config). The middle half of an agent's card joins its team (ringed); a Member
+reorders inside its team or shows "Leave" outside it; top-level cards reorder only in custom groups. A new join across
+owners asks first (`confirm_owner`); a reorder inside the team it is already in sends `crossOwner` without asking. A
+still hold is the long-press menu, a sideways move the swipe.
 - SwiftUI's `.contextMenu` makes every gesture on its row, and every `UILongPressGestureRecognizer` around it, wait for
   the menu to fail, which never happens once its press preview starts; that is why `.draggable` never ran on a
   phone. The lift is therefore a custom `UIGestureRecognizer` (`HoldThenMove`, not a long press) installed on the
@@ -1629,7 +1645,7 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   system bar icon colours.
 - **Teams are Auto** (`teamView` in the core, goldens `session-list.team-view.json`): a lead's
   row carries its `tray` (four Members, or three and `tray_overflow`, as on the web), `team_expanded`,
-  `team_attention` and `team_summary` (the tray line); every row carries `needs_you` (the tint) and `reasons` (one
+  `team_attention` and `team_summary` (the tray line); every row carries `needs_you` (the tint: its own attention only, a lead never tints for its team), `selected` and `reasons` (one
   chip each, `danger` for a failure). Auto has no clock: a Member draws only while it needs a person. A phone has no
   lasting highlight, so the Member opened last counts as selected (`SessionList.select`), as on iOS.
   A lead's session screen draws the fleet strip (`session/FleetStrip.kt`, `SessionList.fleet`) under its header,
@@ -1640,7 +1656,7 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   agent cards (4 padding, 40 face, two 20 lines, no time, no dividers, 4 dp apart; line one the name and the
   `ModelBadge` from `ListRow.model_badge`, line two `card_status`, fg-3 only when `card_status_is_label`), 28 dp
   Members in one row (20 face, name capped at 60%, 12 sp badge, the status truncating first), the gutter card for plain
-  sessions or, once any row is an agent (`ListRow.tile`), the engine tile in the agent shape; step chips per fold
+  sessions or, once any row is an agent, the engine tile in the agent shape (`ListRow.tile` is gone; the 4.7 port is next); step chips per fold
   kind (`ListRow.chips`, `SessionList.toggleSteps`), the unfolded kinds' rows under the card. A team that shows a
   Member is one nested card (`cardUnits`). Headings fold
   every group, keep a project's own case, badge its gateway and offer `+` (create in that cwd). The colours are

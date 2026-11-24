@@ -657,7 +657,7 @@
   },
   "output": [
     {
-      "text": "🦀 Reviewing the port",
+      "text": "Reviewing the port",
       "source": "label"
     },
     {
@@ -709,7 +709,7 @@
       "source": "title"
     },
     {
-      "text": "🦀 Porting",
+      "text": "Porting",
       "source": "label"
     },
     {

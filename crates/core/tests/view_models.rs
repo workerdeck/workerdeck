@@ -510,6 +510,17 @@ fn goal_fn(fn_name: &str, a: &Args) -> Value {
     }
 }
 
+fn list_drag_fn(fn_name: &str, a: &Args) -> Value {
+    use wd_native::vm::list_drag as ld;
+    match fn_name {
+        "sessionTargetOf" => out(ld::session_target(&a.get::<Vec<ld::DragRow>>(0), a.get(1), &a.get(2), &a.get(3))),
+        "groupSlot" => out(ld::group_slot(&a.get::<Vec<ld::DragRow>>(0), a.get(1), &a.get(2), &a.str(3).unwrap())),
+        "originSlot" => out(ld::origin_slot(&a.get::<Vec<ld::DragRow>>(0), &a.str(1).unwrap())),
+        "placeMemberOf" => out(ld::place_member(&a.get::<Vec<Option<f64>>>(0), a.get(1))),
+        _ => panic!("list-drag.{fn_name} has no Rust binding"),
+    }
+}
+
 fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
     let a = Args(args);
     match module {
@@ -528,6 +539,7 @@ fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
         "conversations" => conversations_fn(fn_name, &a),
         "face" => face_fn(fn_name, &a),
         "goal" => goal_fn(fn_name, &a),
+        "list-drag" => list_drag_fn(fn_name, &a),
         _ => panic!("unknown view-model module {module}"),
     }
 }

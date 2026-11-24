@@ -1628,7 +1628,65 @@ const GOALS: VmCase[] = [
   },
 ]
 
+const DRAG_ROWS = [
+  { key: 'head:a', lane: 'a', kind: 'heading', top: 0, height: 20 },
+  { key: 'lead', lane: 'a', kind: 'row', top: 20, height: 36 },
+  { key: 'm1', lane: 'team:lead', kind: 'row', top: 60, height: 36 },
+  { key: 'm2', lane: 'team:lead', kind: 'row', top: 100, height: 36 },
+  { key: 'm3', lane: 'team:lead', kind: 'row', top: 140, height: 36 },
+  { key: 'solo', lane: 'a', kind: 'row', top: 180, height: 36 },
+  { key: 'plain', lane: 'a', kind: 'row', top: 220, height: 36 },
+  { key: 'earlier', lane: 'a', kind: 'pinned', top: 260, height: 20 },
+  { key: 'head:b', lane: 'b', kind: 'heading', top: 290, height: 20 },
+  { key: 'empty:b', lane: 'b', kind: 'empty', top: 310, height: 36 },
+]
+const DRAG_YS = [-10, 5, 25, 38, 52, 65, 110, 150, 175, 185, 198, 215, 230, 250, 265, 295, 330, 400]
+const TEAM_BLOCK = { lane: 'team:lead', lead: 'lead', leadLane: 'a', top: 20, bottom: 176 }
+const DRAG_CONTEXTS = [
+  { dragged: 'm1', origin: { lane: 'team:lead', before: 'm2' }, reorder: false, joinable: { solo: true, plain: 'only an agent can lead a team' }, team: TEAM_BLOCK },
+  { dragged: 'm1', origin: { lane: 'team:lead', before: 'm2' }, reorder: true, joinable: { solo: true }, team: TEAM_BLOCK },
+  { dragged: 'plain', origin: { lane: 'a', before: 'earlier' }, reorder: false, joinable: { lead: true, solo: 'Solo is a member of a team; teams are one level deep' } },
+  { dragged: 'plain', origin: { lane: 'a', before: 'earlier' }, reorder: true, joinable: { lead: true } },
+]
+const LIST_DRAG: VmCase[] = [
+  {
+    module: 'list-drag',
+    name: 'session-target',
+    fn: 'sessionTargetOf',
+    calls: DRAG_CONTEXTS.flatMap((ctx) => DRAG_YS.map((y) => [DRAG_ROWS, y, { slot: ctx.origin }, ctx])),
+  },
+  {
+    module: 'list-drag',
+    name: 'session-target-held',
+    fn: 'sessionTargetOf',
+    calls: DRAG_CONTEXTS.flatMap((ctx) =>
+      [5, 175, 400].map((y) => [DRAG_ROWS.filter((drag) => drag.kind !== 'heading'), y, { slot: { lane: 'a', before: 'solo' }, leave: true }, ctx]),
+    ),
+  },
+  {
+    module: 'list-drag',
+    name: 'group-slot',
+    fn: 'groupSlot',
+    calls: DRAG_YS.map((y) => [DRAG_ROWS.map((drag) => ({ ...drag, lane: 'groups' })), y, { lane: 'groups' }, 'head:a']),
+  },
+  { module: 'list-drag', name: 'origin-slot', fn: 'originSlot', calls: [[DRAG_ROWS, 'm1'], [DRAG_ROWS, 'm3'], [DRAG_ROWS, 'plain'], [DRAG_ROWS, 'gone']] },
+  {
+    module: 'list-drag',
+    name: 'place-member',
+    fn: 'placeMemberOf',
+    calls: [
+      [[0, 1, 2], 0],
+      [[0, 1, 2], 1],
+      [[0, 1, 2], 3],
+      [[null, null], 1],
+      [[0, 2, 5], 2],
+      [[], 0],
+    ],
+  },
+]
+
 export const VM_CORPUS: VmCase[] = [
+  ...LIST_DRAG,
   ...GOALS,
   ...SESSION_LIST,
   ...AGENTS,

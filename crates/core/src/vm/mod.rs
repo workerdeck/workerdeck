@@ -13,6 +13,7 @@ pub mod face;
 pub mod fmt;
 pub mod gateway;
 pub mod goal;
+pub mod list_drag;
 pub mod host_files;
 pub mod model_menu;
 pub mod model_name;

@@ -1,0 +1,321 @@
+{
+  "input": {
+    "fn": "originSlot",
+    "calls": [
+      [
+        [
+          {
+            "key": "head:a",
+            "lane": "a",
+            "kind": "heading",
+            "top": 0,
+            "height": 20
+          },
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "head:b",
+            "lane": "b",
+            "kind": "heading",
+            "top": 290,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        "m1"
+      ],
+      [
+        [
+          {
+            "key": "head:a",
+            "lane": "a",
+            "kind": "heading",
+            "top": 0,
+            "height": 20
+          },
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "head:b",
+            "lane": "b",
+            "kind": "heading",
+            "top": 290,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        "m3"
+      ],
+      [
+        [
+          {
+            "key": "head:a",
+            "lane": "a",
+            "kind": "heading",
+            "top": 0,
+            "height": 20
+          },
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "head:b",
+            "lane": "b",
+            "kind": "heading",
+            "top": 290,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        "plain"
+      ],
+      [
+        [
+          {
+            "key": "head:a",
+            "lane": "a",
+            "kind": "heading",
+            "top": 0,
+            "height": 20
+          },
+          {
+            "key": "lead",
+            "lane": "a",
+            "kind": "row",
+            "top": 20,
+            "height": 36
+          },
+          {
+            "key": "m1",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 60,
+            "height": 36
+          },
+          {
+            "key": "m2",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 100,
+            "height": 36
+          },
+          {
+            "key": "m3",
+            "lane": "team:lead",
+            "kind": "row",
+            "top": 140,
+            "height": 36
+          },
+          {
+            "key": "solo",
+            "lane": "a",
+            "kind": "row",
+            "top": 180,
+            "height": 36
+          },
+          {
+            "key": "plain",
+            "lane": "a",
+            "kind": "row",
+            "top": 220,
+            "height": 36
+          },
+          {
+            "key": "earlier",
+            "lane": "a",
+            "kind": "pinned",
+            "top": 260,
+            "height": 20
+          },
+          {
+            "key": "head:b",
+            "lane": "b",
+            "kind": "heading",
+            "top": 290,
+            "height": 20
+          },
+          {
+            "key": "empty:b",
+            "lane": "b",
+            "kind": "empty",
+            "top": 310,
+            "height": 36
+          }
+        ],
+        "gone"
+      ]
+    ]
+  },
+  "output": [
+    {
+      "lane": "team:lead",
+      "before": "m2"
+    },
+    {
+      "lane": "team:lead"
+    },
+    {
+      "lane": "a",
+      "before": "earlier"
+    },
+    null
+  ]
+}

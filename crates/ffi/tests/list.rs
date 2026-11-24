@@ -1,4 +1,4 @@
-use wdffi::{FleetRetry, ListError, ListFacet, ListGroupBy, ListSortBy, ReasonChip, RowState, SessionList, StepFold, StepKind, StepShow};
+use wdffi::{DragFrame, FleetRetry, ListDrop, ListError, ListFacet, ListGroupBy, ListSortBy, ReasonChip, RowState, SessionList, StepFold, StepKind, StepShow};
 
 fn session(id: &str, status: &str, extra: &str) -> String {
     format!(r#"{{"id":"{id}","status":"{status}","cwd":"/work/app","createdAt":1000,"lastSeq":4{extra}}}"#)
@@ -64,7 +64,7 @@ fn a_row_carries_its_model_badge_and_card_status() {
     let row = |id: &str| rows.iter().find(|r| r.session_id == id).unwrap();
     let badge = row("s1").model_badge.clone().unwrap();
     assert_eq!((badge.letter.as_str(), badge.version.as_deref()), ("S", Some("6.1")));
-    assert_eq!((row("s1").card_status.as_str(), row("s1").card_status_is_label), ("🦀 Porting", true));
+    assert_eq!((row("s1").card_status.as_str(), row("s1").card_status_is_label), ("Porting", true));
     assert_eq!(row("s2").model_badge.as_ref().map(|b| b.letter.as_str()), Some("O"));
     assert_eq!((row("s2").card_status.as_str(), row("s2").card_status_is_label), ("Fix the list", false));
     assert_eq!(row("s3").card_status, "Starting…");
@@ -151,7 +151,7 @@ fn auto_shows_members_that_need_a_person_and_the_selected_one_and_trays_the_rest
     assert_eq!(ids, ["lead", "failed", "blocked"]);
     let lead = drawn.iter().find(|r| r.session_id == "lead").unwrap();
     assert_eq!(lead.tray.iter().map(|t| t.session_id.as_str()).collect::<Vec<_>>(), ["busy", "quiet"]);
-    assert!(!lead.team_expanded && lead.needs_you);
+    assert!(!lead.team_expanded && !lead.needs_you);
     assert_eq!(lead.team_attention, 2);
     assert_eq!(lead.team_summary.as_deref(), Some("2 need you \u{00B7} 1 working \u{00B7} 1 idle"));
     let failed = drawn.iter().find(|r| r.session_id == "failed").unwrap();
@@ -161,8 +161,9 @@ fn auto_shows_members_that_need_a_person_and_the_selected_one_and_trays_the_rest
     assert_eq!(blocked.reasons[0].title, "Waiting on you: Need the key");
 
     list.select("h1".into(), "quiet".into());
-    let ids: Vec<_> = rows(&list).into_iter().map(|r| r.session_id).collect();
-    assert!(ids.contains(&"quiet".to_owned()));
+    let drawn = rows(&list);
+    assert!(drawn.iter().any(|r| r.session_id == "quiet" && r.selected));
+    assert!(drawn.iter().filter(|r| r.selected).count() == 1);
 
     list.toggle_team("h1".into(), "lead".into());
     let drawn = rows(&list);
@@ -411,4 +412,52 @@ fn a_row_carries_its_conversation_and_every_live_session_offers_a_cut() {
     assert_eq!(plain.new_conversation_blocked.as_deref(), Some("This conversation is still new"));
     assert_eq!(wdffi::address_of("c".into(), Some(3), Some(agent.conversation)).conversation, None);
     assert_eq!(wdffi::address_of("c".into(), Some(2), Some(agent.conversation)).conversation, Some(2));
+}
+
+#[test]
+fn a_drag_reorders_a_member_inside_its_team_and_joins_another() {
+    let list = SessionList::new(Some(r#"{"groupBy":"none"}"#.into()), None);
+    let agent = |id: &str, lead: &str| format!(r#","agent":{{"id":"{id}","name":"{id}"{lead}}}"#);
+    let member = |id: &str, order: u32| agent(id, &format!(r#","lead":"L","order":{order}"#));
+    let sessions = [
+        idle("lead", &agent("L", "")),
+        idle("a", &member("A", 0)),
+        idle("b", &member("B", 1)),
+        idle("c", &member("C", 2)),
+        idle("solo", &agent("S", "")),
+    ];
+    list.set_host("h1".into(), "mac".into(), true, body(&sessions)).unwrap();
+    let frame = |key: &str, top: f64| DragFrame { key: format!("h1:{key}"), top, height: 36.0 };
+
+    list.begin_drag("h1:a".into());
+    let drawn: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).map(|r| r.session_id).collect();
+    assert_eq!(drawn, ["lead", "a", "b", "c", "solo"], "the dragged member's team draws every member");
+    let frames = vec![frame("lead", 0.0), frame("a", 40.0), frame("b", 80.0), frame("c", 120.0), frame("solo", 160.0)];
+    let target = list.drag_move(frames.clone(), 150.0).unwrap();
+    assert_eq!((target.lane.as_str(), target.before.as_deref()), ("team:h1:lead", None));
+    let ListDrop::Team { lead_agent_id, order, siblings, confirm_owner, .. } = list.end_drag(true) else { panic!("no team move") };
+    assert_eq!((lead_agent_id.as_str(), order, confirm_owner), ("L", 2.0, None));
+    assert_eq!(siblings.iter().map(|s| (s.agent_id.as_str(), s.order)).collect::<Vec<_>>(), [("B", 0.0), ("C", 1.0)]);
+
+    list.begin_drag("h1:solo".into());
+    let target = list.drag_move(frames, 18.0).unwrap();
+    assert_eq!(target.join.as_deref(), Some("h1:lead"));
+    let ListDrop::Team { order, siblings, .. } = list.end_drag(true) else { panic!("no join") };
+    assert_eq!((order, siblings.len()), (3.0, 0));
+    let drawn: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).map(|r| r.session_id).collect();
+    assert!(!drawn.contains(&"b".to_owned()), "the teams fold back to Auto once the drag ends");
+}
+
+#[test]
+fn a_plain_session_dropped_on_a_solo_agent_joins_it() {
+    let list = SessionList::new(Some(r#"{"groupBy":"none"}"#.into()), None);
+    let sessions = [idle("solo", r#","agent":{"id":"S","name":"S"}"#), idle("plain", "")];
+    list.set_host("h1".into(), "mac".into(), true, body(&sessions)).unwrap();
+    let frame = |key: &str, top: f64| DragFrame { key: format!("h1:{key}"), top, height: 36.0 };
+    list.begin_drag("h1:plain".into());
+    let target = list.drag_move(vec![frame("solo", 0.0), frame("plain", 40.0)], 58.0).unwrap();
+    assert_eq!(target.join, None);
+    let target = list.drag_move(vec![frame("solo", 0.0), frame("plain", 40.0)], 18.0).unwrap();
+    assert_eq!(target.join.as_deref(), Some("h1:solo"));
+    assert!(matches!(list.end_drag(true), ListDrop::Team { order: 0.0, .. }));
 }

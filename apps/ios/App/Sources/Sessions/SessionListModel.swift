@@ -314,6 +314,39 @@ final class SessionListModel {
     return core.groupOrderCustomized()
   }
 
+  // A card lifted: every team folds to its lead but the dragged member's own, which shows every member.
+  func beginDrag(_ item: ListItem) {
+    core.beginDrag(key: item.id)
+    revision &+= 1
+  }
+
+  func dragMove(frames: [DragFrame], y: Double) -> ListDragTarget? {
+    core.dragMove(frames: frames, y: y)
+  }
+
+  func endDrag(commit: Bool) -> ListDrop {
+    let drop = core.endDrag(commit: commit)
+    if case .placed = drop { syncConfig() } else { revision &+= 1 }
+    return drop
+  }
+
+  // A drop's join or reorder: the mover's lead and place, then each sibling the team renumbering moved.
+  func teamMove(_ item: ListItem, leadAgentId: String, order: Double, siblings: [SiblingMove], crossOwner: Bool) async {
+    let crossing = crossOwner ? true : nil
+    await agentAct(on: item, "Could not move the agent") { client in
+      if let agentId = item.row.agentId {
+        try await client.perform(
+          updateAgentCall(id: agentId, patch: AgentPatch(lead: .set(value: leadAgentId), order: order, crossOwner: crossing)))
+      } else {
+        try await client.perform(
+          nameSessionCall(id: item.sessionId, lead: leadAgentId, crossOwner: crossing, generation: item.row.conversation))
+      }
+      for sibling in siblings {
+        try await client.perform(updateAgentCall(id: sibling.agentId, patch: AgentPatch(order: sibling.order)))
+      }
+    }
+  }
+
   func toggleTeam(_ item: ListItem) {
     core.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
     syncConfig()

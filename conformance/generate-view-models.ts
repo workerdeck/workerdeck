@@ -19,6 +19,8 @@ import { projectTranscript } from '../packages/react/src/lib/transcript-projecti
 import { permissionPromptModel } from '../packages/ui/src/lib/permission-prompt.ts'
 import { shellProposalInput, shellRequestLines } from '../packages/ui/src/lib/shell-request.ts'
 import { faceStateOf, faceSvg, type FaceSvgOptions } from '../packages/ui/src/lib/face-svg.ts'
+import { groupSlot, originSlot, sessionTarget, type DragRow, type DragTarget, type SessionDragContext } from '../packages/ui/src/lib/row-drag.ts'
+import { placeMember } from '../packages/ui/src/lib/team-drop.ts'
 import { answerFor, EMPTY_SELECTION, toggleLabel, toggleOther, type Selection } from '../packages/ui/src/lib/question-answers.ts'
 import { caseEvents } from './corpus.ts'
 import { VM_CORPUS } from './view-models.ts'
@@ -220,8 +222,29 @@ function faceTree(options: FaceSvgOptions): FaceNode {
   return root.children[0]!
 }
 
+// The drag context with `joinable` as a plain map, since a callback cannot be a golden's input.
+function sessionTargetOf(rows: DragRow[], y: number, current: DragTarget, ctx: Omit<SessionDragContext, 'joinable'> & { joinable: Record<string, true | string> }) {
+  return sessionTarget(rows, y, current, { ...ctx, joinable: (key) => ctx.joinable[key] })
+}
+
+function dragMember(id: string, order: number | null) {
+  return { hostId: 'mac', info: { id, agent: { id, name: id, ...(order === null ? {} : { order }) } } } as unknown as protocol.SessionRow
+}
+
+// A team of members carrying these orders; the output names each renumbered sibling by its index.
+function placeMemberOf(orders: (number | null)[], index: number) {
+  const member = dragMember
+  const others = orders.map((order, i) => member(`m${i}`, order))
+  const move = placeMember(member('mover', null), member('lead', null), others, index)
+  return { order: move.order, siblings: (move.siblings ?? []).map(({ row, order }) => ({ index: others.indexOf(row), order })) }
+}
+
 const FNS: Record<string, Fn> = {
   ...(protocol as unknown as Record<string, Fn>),
+  sessionTargetOf,
+  placeMemberOf,
+  groupSlot,
+  originSlot: (rows: DragRow[], key: string) => originSlot(rows, key) ?? null,
   customGroupScript,
   filterEngagement,
   watermarkScript,

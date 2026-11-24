@@ -110,8 +110,7 @@ final class ProjectIconLoader {
             return
           }
           // Stored **display-ready**, scaled once here rather than per render.
-          // The row draws this glyph inline inside a `Text` run (see
-          // `SessionRowView.projectIconText`), and a `Text(Image(uiImage:))`
+          // A heading may draw this glyph inline inside a `Text` run, and a `Text(Image(uiImage:))`
           // renders at the image's own point size - there is no `.frame` to
           // constrain it, because it is a character in a line rather than a
           // view in a stack. A checked-in logo is whatever the repo committed,

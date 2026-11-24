@@ -113,6 +113,9 @@ enum ListPalette {
   static var fg3: Color { dyn(dark: 0x8F_8F_8F, light: 0x73_73_73) }
   static var fg4: Color { dyn(dark: 0x6E_6E_6E, light: 0xA1_A1_A1) }
   static var border: Color { dyn(dark: 0x1F_1F_1F, light: 0xEB_EB_EB) }
+  // `--border-strong`: a team's tree line. `--sw-amber-base`: a plain session's context fill past wrap-up.
+  static var borderStrong: Color { dyn(dark: 0x3D_3D_3D, light: 0xC9_C9_C9) }
+  static var amber: Color { dyn(dark: 0xC8_A0_52, light: 0xA8_87_44) }
   static var rowActive: Color {
     Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 1, alpha: 0.1) : UIColor(white: 0, alpha: 0.08) })
   }

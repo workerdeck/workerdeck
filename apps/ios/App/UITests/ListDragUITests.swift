@@ -27,10 +27,25 @@ final class ListDragUITests: XCTestCase {
   }
 
   @MainActor
+  func testMemberReordersInsideItsTeam() throws {
+    let app = launchPreview("list")
+    XCTAssertTrue(card(app, "WD-Docs").waitForExistence(timeout: 8))
+    drag(app, card(app, "WD-Docs"), onto: card(app, "WD-Lead"), shots: "join-first")
+    XCTAssertTrue(inTeam(app, "WD-Docs"), "WD-Docs is not in WD-Lead's team")
+    XCTAssertTrue(above(card(app, "WD-Review"), card(app, "WD-Docs")), "a join lands last")
+    drag(app, card(app, "WD-Docs"), toY: card(app, "WD-Review").frame.minY + 4, shots: "reorder")
+    let deadline = Date().addingTimeInterval(5)
+    while Date() < deadline, !above(card(app, "WD-Docs"), card(app, "WD-Review")) { usleep(200_000) }
+    XCTAssertTrue(above(card(app, "WD-Docs"), card(app, "WD-Review")), "WD-Docs did not move above WD-Review")
+  }
+
+  @MainActor
   func testUnnamedSessionDroppedOnASoloAgentStartsATeam() throws {
     let app = launchPreview("list")
     XCTAssertTrue(card(app, "Fix the relay drop").waitForExistence(timeout: 8))
-    drag(app, card(app, "Fix the relay drop"), onto: card(app, "BOX-Lead"), shots: "start-team")
+    // The lift folds every other team, so WD-Review's row goes and BOX-Lead moves up by its pitch before the drop.
+    let fold = card(app, "WD-Review").frame.minY - card(app, "WD-Lead").frame.minY
+    drag(app, card(app, "Fix the relay drop"), toY: card(app, "BOX-Lead").frame.midY - fold, shots: "start-team")
     XCTAssertTrue(
       card(app, "BOX-Lead, team lead").waitForExistence(timeout: 5), "BOX-Lead did not become a lead")
     XCTAssertFalse(card(app, "Fix the relay drop").exists, "the session is still drawn as an unnamed card")
@@ -128,7 +143,10 @@ final class ListDragUITests: XCTestCase {
   private func inTeam(_ app: XCUIApplication, _ name: String) -> Bool {
     let deadline = Date().addingTimeInterval(5)
     while Date() < deadline {
-      if app.buttons["Open \(name)"].exists || above(card(app, name), heading(app, "Working")) { return true }
+      // Auto folds an idle Member away; the lead's caret brings the whole team back.
+      let caret = app.buttons["Show all Team Members of WD-Lead"]
+      if caret.exists, !card(app, name).exists { caret.tap() }
+      if above(card(app, name), heading(app, "Working")) { return true }
       usleep(200_000)
     }
     attach(app.debugDescription, "tree")

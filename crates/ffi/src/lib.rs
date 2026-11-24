@@ -44,7 +44,7 @@ pub use face::{
 pub use files::{
     HostEntry, HostEntryKind, HostFileContent, HostFileEditor, HostFileState, HostFiles, HostFilesAvailability, HostListing, HostRoot,
 };
-pub use list::{
+pub use list::{DragFrame, ListDrop, ListDragTarget, SiblingMove, 
     FleetRetry, ListChip, ListError, ListFacet, ListFilter, ListGroup, ListGroupBy, ListRow, ListSortBy, Mark, NewAgentSeed, ReasonChip,
     RowState, SessionList, StepFold, StepKind, StepShow,
 };

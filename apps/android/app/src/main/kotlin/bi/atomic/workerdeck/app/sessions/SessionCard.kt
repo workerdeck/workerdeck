@@ -59,9 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import bi.atomic.workerdeck.R
-import bi.atomic.workerdeck.app.ui.BadgeGlyph
 import bi.atomic.workerdeck.app.ui.EngineMark
-import bi.atomic.workerdeck.app.ui.StateGlyph
 import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ListChip
 import bi.atomic.workerdeck.core.ffi.ListRow
@@ -156,8 +154,8 @@ class CardEvents(
 
 fun needsYou(row: ListRow): Boolean = row.needsYou
 
-// The web `SessionItem` card: an agent (or, in tile mode, a plain session) as a 40 face beside two 20 lines; any other
-// plain session in the gutter layout. `tray` is the lead's first-line team control.
+// The web `SessionItem` card before 4.7: an agent or a plain session's engine tile as a 40 face beside two 20 lines.
+// `tray` is the lead's first-line team control.
 @Composable
 fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<String, ImageBitmap>, tray: (@Composable () -> Unit)?) {
     val agent = row.agentId != null
@@ -170,46 +168,27 @@ fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<S
             .background(if (needsYou(row)) tones.attention else Color.Transparent)
             .padding(4.dp),
     ) {
-        if (agent || row.tile) {
-            Row(Modifier.height(40.dp), verticalAlignment = Alignment.CenterVertically) {
-                AgentAvatar(row, 40.dp, context = agent)
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f).alpha(if (row.asleep) 0.6f else 1f)) {
-                    Row(Modifier.height(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Name(row, tones, BODY, Modifier.weight(1f, fill = false))
-                            if (agent) ModelBadge(row, tones, 13.sp)
-                            if (row.shared) Icon(painterResource(R.drawable.globe), contentDescription = "Shared with other owners", tint = tones.fg4, modifier = Modifier.size(12.dp))
-                        }
-                        ReasonChips(row.reasons, tones)
-                        Unread(row, tones)
-                        tray?.invoke()
-                        if (!agent) ContextRing(row.contextPercent, tones)
-                    }
-                    Row(Modifier.height(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (agent) {
-                            CardStatus(row, tones, BODY, Modifier.weight(1f))
-                        } else {
-                            DetailLine(row, tones, icons, Modifier.weight(1f))
-                        }
-                        Chips(row, tones, events)
-                    }
-                }
-            }
-        } else {
-            Column(Modifier.padding(start = 6.dp, end = 2.dp, top = 2.dp, bottom = 2.dp).alpha(if (row.asleep) 0.6f else 1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+            AgentAvatar(row, 40.dp, context = agent)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f).alpha(if (row.asleep) 0.6f else 1f)) {
                 Row(Modifier.height(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
-                        row.badge?.let { BadgeGlyph(it, size = 14.dp) } ?: StateGlyph(row.state)
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Name(row, tones, BODY, Modifier.weight(1f, fill = false))
+                        if (agent) ModelBadge(row, tones, 13.sp)
+                        if (row.shared) Icon(painterResource(R.drawable.globe), contentDescription = "Shared with other owners", tint = tones.fg4, modifier = Modifier.size(12.dp))
                     }
-                    Name(row, tones, BODY, Modifier.weight(1f))
                     ReasonChips(row.reasons, tones)
                     Unread(row, tones)
-                    ContextRing(row.contextPercent, tones)
+                    tray?.invoke()
+                    if (!agent) ContextRing(row.contextPercent, tones)
                 }
                 Row(Modifier.height(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) { EngineMark(row.mark, row.markTinted, size = 16.dp) }
-                    DetailLine(row, tones, icons, Modifier.weight(1f))
+                    if (agent) {
+                        CardStatus(row, tones, BODY, Modifier.weight(1f))
+                    } else {
+                        DetailLine(row, tones, icons, Modifier.weight(1f))
+                    }
                     Chips(row, tones, events)
                 }
             }
