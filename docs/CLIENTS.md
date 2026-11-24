@@ -21,8 +21,10 @@ registered gateway.
 `registerCommands`), and the model / permission-mode / skills pickers share `pickFromVitals`
 (empty message, then a QuickPick whose `disabled` rows stay visible and unpickable). Every native
 multi-step flow (gateways, profiles, sessions) uses `quick-input.ts`'s one `showPick`/`showInput`
-and its `BACK`/`CANCEL` symbols, and both polled models refresh through `refreshPerHost`
-(`src/gateway.ts`), one snapshot per gateway with the removed ones pruned.
+and its `BACK`/`CANCEL` symbols. The sessions model (polled) and the profiles model (refreshed on demand) both
+load through `HostSnapshots` (`src/host-snapshots.ts`): one snapshot per gateway, each drawn as it answers, a pass
+that waits at most 4 s on any one gateway, one request in flight per gateway with at most one follow-up queued
+behind it, a refresh during a pass queued rather than dropped, and landings from before a host edit discarded.
 
 **`@types/vscode` is pinned with a tilde to the `engines.vscode` floor (`~1.146.0`), and a
 dependency sweep must not carrot it up.** The types version *is* the API surface you compile

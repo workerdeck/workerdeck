@@ -1,6 +1,7 @@
 import type { ProfileInfo } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
-import { refreshPerHost } from './gateway.ts'
+import { probeFailure } from './gateway.ts'
+import { HostSnapshots } from './host-snapshots.ts'
 import type { HostStore } from './hosts.ts'
 import type { WireProfile } from './bridge-protocol.ts'
 
@@ -10,25 +11,13 @@ export class ProfilesModel implements vscode.Disposable {
   readonly #store: HostStore
   readonly #onDidChange = new vscode.EventEmitter<void>()
   readonly onDidChange = this.#onDidChange.event
-  readonly #snapshots = new Map<string, Snapshot>()
+  readonly #snapshots: HostSnapshots<Snapshot>
   readonly #hosts: vscode.Disposable
-  #refreshing = false
 
   constructor(store: HostStore) {
     this.#store = store
-    this.#hosts = store.onDidChange(() => void this.refresh())
-  }
-
-  // Not polled, unlike sessions: a profile changes when someone changes it, and the one reading that
-  // does move on its own - the gateway's credential probe - is on a ~60s server-side TTL that a
-  // refresh action covers. A poll here would be a request per gateway per five seconds for nothing.
-  async refresh(): Promise<void> {
-    if (this.#refreshing) {
-      return
-    }
-    this.#refreshing = true
-    try {
-      await refreshPerHost(this.#store, this.#snapshots, async (_host, client): Promise<Snapshot> => {
+    this.#snapshots = new HostSnapshots(store, {
+      load: async (_host, client): Promise<Snapshot> => {
         if (!client) {
           return { error: 'unreachable' }
         }
@@ -36,14 +25,21 @@ export class ProfilesModel implements vscode.Disposable {
           const listed = await client.listProfiles()
           return { profiles: listed.profiles, canManage: listed.canManage === true }
         } catch (err) {
-          const status = (err as { status?: number }).status
-          return { error: status === 401 || status === 403 ? 'unauthorized' : 'unreachable' }
+          return { error: probeFailure(err) }
         }
-      })
-      this.#onDidChange.fire()
-    } finally {
-      this.#refreshing = false
-    }
+      },
+      silent: { error: 'unreachable' },
+      landed: () => this.#onDidChange.fire(),
+    })
+    this.#hosts = store.onDidChange(() => void this.refresh())
+  }
+
+  // Not polled, unlike sessions: a profile changes when someone changes it, and the one reading that
+  // does move on its own - the gateway's credential probe - is on a ~60s server-side TTL that a
+  // refresh action covers. A poll here would be a request per gateway per five seconds for nothing.
+  async refresh(): Promise<void> {
+    await this.#snapshots.refresh()
+    this.#onDidChange.fire()
   }
 
   rows(): WireProfile[] {
@@ -76,6 +72,7 @@ export class ProfilesModel implements vscode.Disposable {
 
   dispose(): void {
     this.#hosts.dispose()
+    this.#snapshots.dispose()
     this.#onDidChange.dispose()
   }
 }

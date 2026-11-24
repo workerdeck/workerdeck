@@ -3,7 +3,9 @@ import type { SessionInfo } from '@workerdeck/protocol'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
 import { forgetLocality, isLocalHostCached, refreshLocality, relayOfCached } from './machine.ts'
-import { probe, refreshPerHost, type ProbeResult } from './gateway.ts'
+import { probeFailure } from './gateway.ts'
+import { HostSnapshots } from './host-snapshots.ts'
+import type { WorkerDeckClient } from '@workerdeck/client'
 import type { SidebarState, WireHost } from './bridge-protocol.ts'
 import { workspaceScope } from './workspace-scope.ts'
 
@@ -16,12 +18,11 @@ export class SessionsModel implements vscode.Disposable {
   readonly #store: HostStore
   readonly #onDidChange = new vscode.EventEmitter<void>()
   readonly onDidChange = this.#onDidChange.event
-  readonly #snapshots = new Map<string, HostSnapshot>()
+  readonly #snapshots: HostSnapshots<HostSnapshot>
   #selected: SidebarState['selected']
   #timer: NodeJS.Timeout | undefined
   #timerMs: number | undefined
   readonly #watchers = new Set<string>()
-  #refreshing = false
   #nudge: NodeJS.Timeout | undefined
   readonly #folders: vscode.Disposable
 
@@ -30,6 +31,12 @@ export class SessionsModel implements vscode.Disposable {
 
   constructor(store: HostStore) {
     this.#store = store
+    this.#snapshots = new HostSnapshots(store, {
+      load: (host, client) => this.#snapshotOf(host, client),
+      silent: { probe: 'unreachable' },
+      landed: () => this.#onDidChange.fire(),
+      forget: forgetLocality,
+    })
     store.onDidChange(() => void this.refresh())
     this.#folders = vscode.workspace.onDidChangeWorkspaceFolders(() => this.#onDidChange.fire())
   }
@@ -141,36 +148,26 @@ export class SessionsModel implements vscode.Disposable {
   }
 
   async refresh(): Promise<void> {
-    if (this.#refreshing) {
-      return
+    await this.#snapshots.refresh()
+    this.#onDidChange.fire()
+    if (this.#timer) {
+      this.#retime()
     }
-    this.#refreshing = true
+  }
+
+  async #snapshotOf(host: GatewayHost, client: WorkerDeckClient | undefined): Promise<HostSnapshot> {
+    if (!client) {
+      return { probe: 'unreachable' }
+    }
     try {
-      const gone = await refreshPerHost(this.#store, this.#snapshots, async (host, client): Promise<HostSnapshot> => {
-        if (!client) {
-          return { probe: 'unreachable' }
-        }
-        try {
-          const sessions = await client.listSessions()
-          sessions.sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
-          // Warms the cache the sidebar reads synchronously; a reachable gateway is the only one
-          // that can answer, and a failure just leaves the previous answer standing.
-          void refreshLocality(this.#store, host)
-          return { probe: 'connected', sessions }
-        } catch {
-          const result: ProbeResult = await probe(client)
-          return result === 'connected' ? { probe: 'connected', sessions: [] } : { probe: result }
-        }
-      })
-      for (const id of gone) {
-        forgetLocality(id)
-      }
-      this.#onDidChange.fire()
-      if (this.#timer) {
-        this.#retime()
-      }
-    } finally {
-      this.#refreshing = false
+      const sessions = await client.listSessions()
+      sessions.sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
+      // Warms the cache the sidebar reads synchronously; a reachable gateway is the only one
+      // that can answer, and a failure just leaves the previous answer standing.
+      void refreshLocality(this.#store, host)
+      return { probe: 'connected', sessions }
+    } catch (err) {
+      return { probe: probeFailure(err) }
     }
   }
 
@@ -246,6 +243,7 @@ export class SessionsModel implements vscode.Disposable {
     }
     this.#stopPolling()
     this.#folders.dispose()
+    this.#snapshots.dispose()
     this.#onDidChange.dispose()
   }
 }
