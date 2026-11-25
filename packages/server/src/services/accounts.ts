@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { resolveBundledClaudeExecutable, resolveBundledCodexExecutable } from '@workerdeck/core'
+import { existsSync, rmSync } from 'node:fs'
+import { agyKeyFile, resolveBundledClaudeExecutable, resolveBundledCodexExecutable } from '@workerdeck/core'
 import { accountExpiry, type AccountExpiry, type ConnectAccountResponse, type ProfileAccount, type ProfileInfo } from '@workerdeck/protocol'
 import { CodexLoginError, codexLogout, startCodexDeviceLogin, type CodexDeviceLogin } from '../accounts/codex-device.ts'
 import { SetupTokenError, startClaudeSetupToken, type SetupTokenAttempt } from '../accounts/setup-token.ts'
 import { deleteAccount, readAccount, writeAccount } from '../accounts/token-store.ts'
 import type { EngineAvailability } from '@workerdeck/core'
+import { writeFileAtomicSync } from '../lib/atomic-file.ts'
 import type { Refusal } from '../lib/http.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import type { AuthContext } from './auth.ts'
@@ -66,7 +68,6 @@ export class AccountService {
   }
 
   async guard(auth: AuthContext, profile: ProfileInfo): Promise<Refusal | null> {
-    const { profiles, options } = this.#deps
     const engine = engineOf(profile)
     if (engine !== 'claude' && engine !== 'codex') {
       return { status: 400, error: `profile '${profile.name}' is not a Claude or Codex profile` }
@@ -74,6 +75,21 @@ export class AccountService {
     if (engine === 'codex' && !profile.codexHome) {
       return { status: 400, error: `profile '${profile.name}' has no codexHome of its own to sign in to` }
     }
+    return await this.#mayConnect(auth, profile)
+  }
+
+  async keyGuard(auth: AuthContext, profile: ProfileInfo): Promise<Refusal | null> {
+    if (engineOf(profile) !== 'agy') {
+      return { status: 400, error: `profile '${profile.name}' is not an agy profile` }
+    }
+    if (!profile.agyHome) {
+      return { status: 400, error: `profile '${profile.name}' has no agyHome of its own to hold a key` }
+    }
+    return await this.#mayConnect(auth, profile)
+  }
+
+  async #mayConnect(auth: AuthContext, profile: ProfileInfo): Promise<Refusal | null> {
+    const { profiles, options } = this.#deps
     const refused = profiles.declaredGuard(profile) ?? profiles.configDirGuard(profile)
     if (refused) {
       return refused
@@ -82,6 +98,25 @@ export class AccountService {
       return null
     }
     return { status: 403, error: `not allowed to connect an account to profile '${profile.name}'` }
+  }
+
+  // The operator's own Gemini API key, kept 0600 in the profile's agyHome and never read back over the API.
+  async setAgyKey(profile: ProfileInfo, key: string): Promise<Outcome<object>> {
+    try {
+      writeFileAtomicSync(agyKeyFile(profile.agyHome!), key + '\n')
+    } catch {
+      return { ok: false, status: 500, error: 'the key could not be stored' }
+    }
+    await this.#deps.onChange(profile)
+    return { ok: true }
+  }
+
+  async clearAgyKey(profile: ProfileInfo): Promise<Outcome<{ existed: boolean }>> {
+    const file = agyKeyFile(profile.agyHome!)
+    const existed = existsSync(file)
+    rmSync(file, { force: true })
+    await this.#deps.onChange(profile)
+    return { ok: true, existed }
   }
 
   async connect(profile: ProfileInfo): Promise<Outcome<ConnectAccountResponse>> {

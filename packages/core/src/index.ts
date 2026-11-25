@@ -6,6 +6,7 @@ export { AiSdkRunner } from './engines/provider/runner.ts'
 export type { AiSdkRunnerConfig, AiSdkSessionState, PendingToolCall, ToolCallOutput } from './engines/provider/runner.ts'
 export type { HistoryFn, QueryFn, SessionRunnerConfig } from './engines/claude/runner.ts'
 export { checkClaudeAuth, resolveBundledClaudeExecutable } from './engines/claude/auth.ts'
+export { AGY_KEY_FILE, agyKeyFile } from './engines/agy/connect.ts'
 export type { ClaudeAuthProbe, ClaudeAuthStatus } from './engines/claude/auth.ts'
 export { probeClaudeModels, type ClaudeModelsProbe } from './engines/claude/supported-models.ts'
 export type {

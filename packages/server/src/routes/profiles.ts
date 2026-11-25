@@ -4,6 +4,7 @@ import type {
   CompleteAccountResponse,
   ConnectAccountResponse,
   ProfileInfo,
+  SetAgyKeyRequest,
   UpdateProfileRequest,
 } from '@workerdeck/protocol'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
@@ -50,6 +51,10 @@ export async function handleProfiles(
   }
   if (auth.allowedProfiles && !auth.allowedProfiles.includes(profile.name)) {
     fail(403, `profile not allowed: ${profile.name}`)
+  }
+  if (sub.join('/') === 'agy-key') {
+    await handleAgyKey(ctx, req, res, profile, auth)
+    return
   }
   if (sub.length > 0) {
     await handleAccount(ctx, req, res, profile, sub.join('/'), auth)
@@ -117,6 +122,30 @@ async function handleAccount(
   }
   const response: CompleteAccountResponse = { profile: profiles.forResponse(profile), ...(done.pending ? { pending: true } : {}) }
   json(res, 200, response)
+}
+
+async function handleAgyKey(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, profile: ProfileInfo, auth: AuthContext): Promise<void> {
+  const { accounts, profiles } = ctx
+  requireMethod(req, 'PUT', 'DELETE')
+  refuseWith(await accounts.keyGuard(auth, profile))
+  if (req.method === 'DELETE') {
+    const cleared = await accounts.clearAgyKey(profile)
+    if (!cleared.ok) {
+      fail(cleared.status, cleared.error)
+    }
+    json(res, 200, { profile: profiles.forResponse(profile) })
+    return
+  }
+  const body = (await readJsonBody(req, ctx.maxBodyBytes)) as Partial<SetAgyKeyRequest>
+  const key = typeof body.key === 'string' ? body.key.trim() : ''
+  if (!key || key.length > 512 || /\s/.test(key)) {
+    fail(400, 'key is required: one line, no spaces, at most 512 characters')
+  }
+  const stored = await accounts.setAgyKey(profile, key)
+  if (!stored.ok) {
+    fail(stored.status, stored.error)
+  }
+  json(res, 200, { profile: profiles.forResponse(profile) })
 }
 
 function refuseWith(refused: { status: number; error: string } | null): void {

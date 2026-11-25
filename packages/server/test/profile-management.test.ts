@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -223,6 +223,58 @@ describe('profile management', () => {
     // No CODEX_HOME names no credential store of its own - it runs on the server's own environment.
     const inherited = await post(port, { name: 'codex-env', engine: 'codex' })
     expect(inherited.status).toBe(200)
+  })
+
+  it('makes a missing home inside the roots, private, and never one outside them', async () => {
+    const root = temp()
+    running = manageableServer({ allowedConfigDirRoots: [root] })
+    const { port } = await running.listen(0, '127.0.0.1')
+
+    for (const [name, body] of [
+      ['claude-new', { configDir: join(root, 'claude', 'nested') }],
+      ['codex-new', { engine: 'codex', codexHome: join(root, 'codex') }],
+      ['agy-new', { engine: 'agy', agyHome: join(root, 'gemini') }],
+    ] as const) {
+      const res = await post(port, { name, ...body })
+      expect(res.status).toBe(200)
+      const dir = Object.values(body).find((v) => v.startsWith(root))!
+      expect(statSync(dir).mode & 0o777).toBe(0o700)
+    }
+
+    const outside = join(homedirLike(), 'wd-never-made')
+    const refused = await post(port, { name: 'agy-out', engine: 'agy', agyHome: outside })
+    expect(refused.status).toBe(403)
+    expect(existsSync(outside)).toBe(false)
+  })
+
+  it('stores an agy key 0600 in the home, never answers it, and removes it', async () => {
+    const root = temp()
+    running = manageableServer({ allowedConfigDirRoots: [root] })
+    const { port } = await running.listen(0, '127.0.0.1')
+    const home = join(root, 'gemini')
+    await post(port, { name: 'gem', engine: 'agy', agyHome: home })
+    const key = (method: string, body?: unknown, headers: Record<string, string> = {}) =>
+      fetch(`http://127.0.0.1:${port}/v1/profiles/gem/agy-key`, {
+        method,
+        headers: { 'content-type': 'application/json', ...headers },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+
+    expect((await key('PUT', { key: 'two words' })).status).toBe(400)
+    expect((await key('PUT', { key: 'AQ.secret' }, { 'x-readonly': '1' })).status).toBe(403)
+    const stored = await key('PUT', { key: '  AQ.secret \n' })
+    expect(stored.status).toBe(200)
+    expect(await stored.text()).not.toContain('AQ.secret')
+    const file = join(home, 'gemini-api-key')
+    expect(readFileSync(file, 'utf8').trim()).toBe('AQ.secret')
+    expect(statSync(file).mode & 0o777).toBe(0o600)
+
+    expect((await key('DELETE')).status).toBe(200)
+    expect(existsSync(file)).toBe(false)
+
+    await post(port, { name: 'claude-x', configDir: root })
+    const wrong = await fetch(`http://127.0.0.1:${port}/v1/profiles/claude-x/agy-key`, { method: 'DELETE' })
+    expect(wrong.status).toBe(400)
   })
 
   it('cannot widen a session past what the profile grants, however the profile got there', async () => {

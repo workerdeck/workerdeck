@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
 import { modelFor, withAccountModels } from '../lib/models.ts'
 import { isOwnerName, isSharing, supportsPermissionMode, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '@workerdeck/core'
@@ -187,8 +188,7 @@ export class ProfileService {
     if (isProviderProfile(profile)) {
       return null
     }
-    const engine = engineOf(profile)
-    const key = engine === 'codex' ? 'codexHome' : engine === 'agy' ? 'agyHome' : 'configDir'
+    const key = homeKey(profile)
     const dir = profile[key]
     // A codex or agy profile that names no home runs on the server's own environment, which every
     // session already inherits - there is no separate credential store for the roots to bound.
@@ -211,6 +211,15 @@ export class ProfileService {
     if (refused) {
       return { ok: false, ...refused }
     }
+    // Inside the allowed roots a missing home is made, empty and private: each engine's sign-in fills it.
+    const home = isProviderProfile(profile) ? undefined : profile[homeKey(profile)]
+    if (home && !existsSync(home)) {
+      try {
+        await mkdir(home, { recursive: true, mode: 0o700 })
+      } catch {
+        return { ok: false, status: 400, error: `could not create ${homeKey(profile)}: ${home}` }
+      }
+    }
     const invalid = this.validate(profile)
     if (invalid) {
       return { ok: false, status: 400, error: invalid }
@@ -230,6 +239,11 @@ export class ProfileService {
     const model = modelFor(this.#opts.adapterFor(p.engine), p, undefined)
     return model === undefined || model === p.defaults?.model ? p : { ...p, defaults: { ...p.defaults, model } }
   }
+}
+
+function homeKey(profile: ProfileInfo): 'codexHome' | 'agyHome' | 'configDir' {
+  const engine = engineOf(profile)
+  return engine === 'codex' ? 'codexHome' : engine === 'agy' ? 'agyHome' : 'configDir'
 }
 
 export function isEffortMap(value: unknown): value is Record<string, string> {

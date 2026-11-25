@@ -750,7 +750,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `GEMINI_API_KEY` and the runner calls `authenticate {methodId: 'gemini-api-key'}`; inherited
   `GEMINI_API_KEY`/`GOOGLE_API_KEY` are dropped so a profile bills only its own key. agy accepts any
   key at `authenticate`; a bad one fails on the first prompt. Without a key file the profile runs on
-  agy's cached Google login. Never pass `--override_user_agent_name`.
+  agy's cached Google login. Never pass `--override_user_agent_name`. The key is written by hand or by
+  `PUT /v1/profiles/:name/agy-key` (`AccountService.setAgyKey`, same guard as a Claude connect: managed
+  profile, home inside `allowedConfigDirRoots`, `canManageProfiles` or `canConnect`); `DELETE` removes it.
+  The route answers the profile, never the key; VS Code and the dashboard both offer it.
+- **A managed profile's missing home is created** (0700) on save, for every engine, only after
+  `configDirGuard` accepted the path, so it never makes a directory outside the roots.
 - **`--app-data-dir` must be relative** (agy resolves it under `~/.gemini/` and refuses an absolute
   path); a profile's store is `antigravity-wd-<basename of agyHome>`.
 - **Not wired yet:** the gateway tools (agy has no client-defined tools; they need an MCP server in

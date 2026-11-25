@@ -6,8 +6,8 @@ import { useHosts } from '@/lib/hosts.ts'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { errorMessage, orderUsageWindows } from '@workerdeck/protocol'
 import { useAsync } from '@workerdeck/react'
-import { AccountConnectDialog, Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner, UsageMeters, toast } from '@workerdeck/ui'
-import { accountExpiry, type ProfileAccount } from '@workerdeck/protocol'
+import { AccountConnectDialog, Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Spinner, UsageMeters, toast } from '@workerdeck/ui'
+import { accountExpiry, type ProfileAccount, type ProfileInfo } from '@workerdeck/protocol'
 import { Code, KeyRound, Trash2, Unplug } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { openInVsCode } from './ProfilesView.tsx'
@@ -49,6 +49,67 @@ function CodexLoginRow({ available }: { available: boolean | undefined }) {
     return <span>signed in (per codex login status)</span>
   }
   return available === false ? <span className="text-fg-4">not signed in</span> : <span className="text-fg-4">not checked yet</span>
+}
+
+// The key is written once to the gateway, which keeps it 0600 in the agyHome; nothing here ever reads it back.
+function AgyKeyCard({ profile, onSaved }: { profile: ProfileInfo; onSaved: (profile: ProfileInfo) => void }) {
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const run = async (work: () => Promise<ProfileInfo>, done: string) => {
+    setBusy(true)
+    try {
+      onSaved(await work())
+      setKey('')
+      toast.success(done)
+    } catch (e) {
+      toast.error(errorMessage(e, 'Saving the key failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const save = () => run(() => client()!.setAgyKey(profile.name, key.trim()), 'Gemini key saved')
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Gemini API key</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        <DetailRow label="Key">
+          {profile.available === true ? (
+            <span>set</span>
+          ) : (
+            <span className="text-fg-4">{profile.unavailableReason ?? 'not checked yet'}</span>
+          )}
+        </DetailRow>
+        <div className="flex items-center justify-end gap-2">
+          <Input
+            type="password"
+            autoComplete="off"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && key.trim() && void save()}
+            placeholder="from aistudio.google.com/apikey"
+            className="max-w-72 font-mono"
+          />
+          <Button variant="outline" size="xs" disabled={busy || !key.trim()} onClick={() => void save()}>
+            <KeyRound className="size-3" />
+            {profile.available === true ? 'Replace key' : 'Save key'}
+          </Button>
+          {profile.available === true ? (
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={busy}
+              onClick={() => void run(() => client()!.clearAgyKey(profile.name), 'Gemini key removed')}
+            >
+              <Unplug className="size-3" />
+              Remove
+            </Button>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export function ProfileView() {
@@ -220,6 +281,10 @@ export function ProfileView() {
                   </div>
                 </CardContent>
               </Card>
+            ) : null}
+
+            {engine === 'agy' && profile.managed && profile.agyHome ? (
+              <AgyKeyCard profile={profile} onSaved={(saved) => loaded.setData({ ...detail!, profile: saved })} />
             ) : null}
 
             {engine === 'claude' && profile.managed ? (

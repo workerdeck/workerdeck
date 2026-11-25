@@ -1359,6 +1359,8 @@ export type RenameOwnerResponse = { agents: number; sessions: number }
 export type ConnectAccountResponse = { attemptId: string; authorizeUrl: string; expiresAt: string; userCode?: string }
 export type CompleteAccountRequest = { attemptId: string; code?: string }
 export type CompleteAccountResponse = { profile: ProfileInfo; pending?: boolean }
+// `PUT /v1/profiles/:name/agy-key`: the Gemini API key an agy profile runs on, stored 0600 in its agyHome.
+export type SetAgyKeyRequest = { key: string }
 export type GetProfileResponse = { profile: ProfileInfo; config: ProfileConfigSnapshot }
 export type ErrorResponse = { error: string }
 

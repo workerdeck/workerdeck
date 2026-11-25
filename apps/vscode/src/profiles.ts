@@ -240,6 +240,16 @@ function accountActions(profile: ProfileInfo): { label: string; description?: st
       ...(signedIn ? [{ label: '$(debug-disconnect) Sign out of codex', action: 'disconnect' as const }] : []),
     ]
   }
+  if (engine === 'agy') {
+    if (!profile.agyHome) {
+      return []
+    }
+    const keyed = profile.available === true
+    return [
+      { label: keyed ? '$(key) Replace Gemini API key' : '$(key) Set Gemini API key', action: 'connect' },
+      ...(keyed ? [{ label: '$(debug-disconnect) Remove Gemini API key', action: 'disconnect' as const }] : []),
+    ]
+  }
   if (engine !== 'claude') {
     return []
   }
@@ -311,6 +321,10 @@ async function connectAccount(deps: ProfileFlowDeps, host: GatewayHost, client: 
     await connectCodex(deps, host, client, profile)
     return
   }
+  if (profile.engine === 'agy') {
+    await setAgyKey(deps, host, client, profile)
+    return
+  }
   let attempt: Awaited<ReturnType<WorkerDeckClient['connectAccount']>>
   try {
     attempt = await vscode.window.withProgress(
@@ -358,7 +372,34 @@ async function connectAccount(deps: ProfileFlowDeps, host: GatewayHost, client: 
   )
 }
 
+// The key goes to the gateway once, which keeps it 0600 in the profile's agyHome and never sends it back.
+async function setAgyKey(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
+  const key = await showInput({
+    title: `${profile.name} - Gemini API key`,
+    prompt: 'Your Gemini API key from Google AI Studio (aistudio.google.com/apikey). Stored on the gateway only.',
+    password: true,
+    step: 1,
+    totalSteps: 1,
+    validate: (value) => (value.trim() === '' || /\s/.test(value.trim()) ? 'one key, no spaces' : undefined),
+  })
+  if (key === CANCEL || key === BACK) {
+    return
+  }
+  await apply(deps, host, () => client.setAgyKey(profile.name, key.trim()), `saved the Gemini key for ${profile.name}`)
+}
+
 async function confirmDisconnect(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
+  if (profile.engine === 'agy') {
+    const out = await vscode.window.showWarningMessage(
+      `Remove the Gemini API key from "${profile.name}"?`,
+      { modal: true, detail: "Deletes the gemini-api-key file in this profile's agyHome on the gateway." },
+      'Remove',
+    )
+    if (out === 'Remove') {
+      await apply(deps, host, () => client.clearAgyKey(profile.name), `removed the Gemini key from ${profile.name}`)
+    }
+    return
+  }
   if (profile.engine === 'codex') {
     const out = await vscode.window.showWarningMessage(
       `Sign out of codex for "${profile.name}"?`,
@@ -461,17 +502,21 @@ async function create(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
         continue
       }
       const dir = resolveRemotePath(answer.trim(), host)
+      let created: ProfileInfo | undefined
       await apply(
         deps,
         host,
-        () =>
-          client.createProfile({
+        async () =>
+          (created = await client.createProfile({
             name,
             engine: engine.engine,
             ...(engine.engine === 'codex' ? { codexHome: dir } : engine.engine === 'agy' ? { agyHome: dir } : { configDir: dir }),
-          }),
+          })),
         `added ${name}`,
       )
+      if (created?.engine === 'agy' && created.available !== true) {
+        await setAgyKey(deps, host, client, created)
+      }
       return
     }
   }
