@@ -469,7 +469,7 @@ export class AcpRunner extends EngineRunner<AcpRunnerConfig> implements Runner {
 
   #turnError(error: unknown): string {
     if (isAuthError(error)) {
-      return `${this.#dialect.label} is not signed in for this profile: save a Gemini API key in the profile's agyHome, or run \`agy\` once and log in`
+      return `${this.#dialect.label} is not signed in for this profile: save a Gemini API key in the profile's geminiHome, or run \`agy\` once and log in`
     }
     return errorMessage(error)
   }

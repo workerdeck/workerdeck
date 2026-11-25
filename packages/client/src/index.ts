@@ -5,7 +5,7 @@ import type {
   CompleteAccountRequest,
   CompleteAccountResponse,
   RenameOwnerRequest,
-  SetAgyKeyRequest,
+  SetGeminiKeyRequest,
   RenameOwnerResponse,
   ConnectAccountResponse,
   ConversationHistoryResponse,
@@ -385,13 +385,13 @@ export class WorkerDeckClient {
     return await this.#pick<SaveProfileResponse['profile']>('DELETE', `/profiles/${encodeURIComponent(profile)}/account`, 'profile')
   }
 
-  async setAgyKey(profile: string, key: string): Promise<ProfileInfo> {
-    const body: SetAgyKeyRequest = { key }
-    return await this.#pick<SaveProfileResponse['profile']>('PUT', `/profiles/${encodeURIComponent(profile)}/agy-key`, 'profile', body)
+  async setGeminiKey(profile: string, key: string): Promise<ProfileInfo> {
+    const body: SetGeminiKeyRequest = { key }
+    return await this.#pick<SaveProfileResponse['profile']>('PUT', `/profiles/${encodeURIComponent(profile)}/gemini-key`, 'profile', body)
   }
 
-  async clearAgyKey(profile: string): Promise<ProfileInfo> {
-    return await this.#pick<SaveProfileResponse['profile']>('DELETE', `/profiles/${encodeURIComponent(profile)}/agy-key`, 'profile')
+  async clearGeminiKey(profile: string): Promise<ProfileInfo> {
+    return await this.#pick<SaveProfileResponse['profile']>('DELETE', `/profiles/${encodeURIComponent(profile)}/gemini-key`, 'profile')
   }
 
   // Operator-only: moves every agent and session stamped `from` to `to` on this gateway.

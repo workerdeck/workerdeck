@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ProfileInfo } from '@workerdeck/protocol'
@@ -233,7 +233,7 @@ describe('profile management', () => {
     for (const [name, body] of [
       ['claude-new', { configDir: join(root, 'claude', 'nested') }],
       ['codex-new', { engine: 'codex', codexHome: join(root, 'codex') }],
-      ['agy-new', { engine: 'agy', agyHome: join(root, 'gemini') }],
+      ['gemini-new', { engine: 'gemini', geminiHome: join(root, 'gemini') }],
     ] as const) {
       const res = await post(port, { name, ...body })
       expect(res.status).toBe(200)
@@ -242,19 +242,35 @@ describe('profile management', () => {
     }
 
     const outside = join(homedirLike(), 'wd-never-made')
-    const refused = await post(port, { name: 'agy-out', engine: 'agy', agyHome: outside })
+    const refused = await post(port, { name: 'gemini-out', engine: 'gemini', geminiHome: outside })
     expect(refused.status).toBe(403)
     expect(existsSync(outside)).toBe(false)
   })
 
-  it('stores an agy key 0600 in the home, never answers it, and removes it', async () => {
+  it('expands a leading ~ to the gateway home and refuses a relative home', async () => {
+    running = manageableServer({ allowedConfigDirRoots: [homedir()] })
+    const { port } = await running.listen(0, '127.0.0.1')
+    const relative = await post(port, { name: 'rel', engine: 'gemini', geminiHome: 'profiles/gemini' })
+    expect(relative.status).toBe(400)
+    const name = `wd-test-${process.pid}`
+    try {
+      const tilde = await post(port, { name: 'tilde', engine: 'gemini', geminiHome: `~/${name}` })
+      expect(tilde.status).toBe(200)
+      expect(((await tilde.json()) as { profile: ProfileInfo }).profile.geminiHome).toBe(join(homedir(), name))
+      expect(existsSync(join(homedir(), name))).toBe(true)
+    } finally {
+      rmSync(join(homedir(), name), { recursive: true, force: true })
+    }
+  })
+
+  it('stores a Gemini key 0600 in the home, never answers it, and removes it', async () => {
     const root = temp()
     running = manageableServer({ allowedConfigDirRoots: [root] })
     const { port } = await running.listen(0, '127.0.0.1')
     const home = join(root, 'gemini')
-    await post(port, { name: 'gem', engine: 'agy', agyHome: home })
+    await post(port, { name: 'gem', engine: 'gemini', geminiHome: home })
     const key = (method: string, body?: unknown, headers: Record<string, string> = {}) =>
-      fetch(`http://127.0.0.1:${port}/v1/profiles/gem/agy-key`, {
+      fetch(`http://127.0.0.1:${port}/v1/profiles/gem/gemini-key`, {
         method,
         headers: { 'content-type': 'application/json', ...headers },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -273,7 +289,7 @@ describe('profile management', () => {
     expect(existsSync(file)).toBe(false)
 
     await post(port, { name: 'claude-x', configDir: root })
-    const wrong = await fetch(`http://127.0.0.1:${port}/v1/profiles/claude-x/agy-key`, { method: 'DELETE' })
+    const wrong = await fetch(`http://127.0.0.1:${port}/v1/profiles/claude-x/gemini-key`, { method: 'DELETE' })
     expect(wrong.status).toBe(400)
   })
 

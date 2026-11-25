@@ -3,12 +3,12 @@ import { homedir } from 'node:os'
 import { basename, delimiter, join } from 'node:path'
 import { withoutGatewaySecrets } from '../../lib/child-env.ts'
 
-export const AGY_KEY_FILE = 'gemini-api-key'
-export const AGY_TRACE_ENV = 'WORKERDECK_ACP_TRACE'
+export const GEMINI_KEY_FILE = 'gemini-api-key'
+export const GEMINI_TRACE_ENV = 'WORKERDECK_ACP_TRACE'
 
 const INHERITED_CREDENTIALS = ['GEMINI_API_KEY', 'GOOGLE_API_KEY']
 
-export type AgyAuth = { methodId: 'gemini-api-key' } | { methodId: null }
+export type GeminiAuth = { methodId: 'gemini-api-key' } | { methodId: null }
 
 export function resolveAgyExecutable(env: Record<string, string | undefined>, override?: string): string | undefined {
   const candidates = [
@@ -20,16 +20,16 @@ export function resolveAgyExecutable(env: Record<string, string | undefined>, ov
   return candidates.find((path): path is string => !!path && existsSync(path))
 }
 
-export function agyKeyFile(agyHome: string): string {
-  return join(agyHome, AGY_KEY_FILE)
+export function geminiKeyFile(geminiHome: string): string {
+  return join(geminiHome, GEMINI_KEY_FILE)
 }
 
-function readAgyKey(agyHome: string | undefined): string | undefined {
-  if (!agyHome) {
+function readGeminiKey(geminiHome: string | undefined): string | undefined {
+  if (!geminiHome) {
     return undefined
   }
   try {
-    const key = readFileSync(agyKeyFile(agyHome), 'utf8').trim()
+    const key = readFileSync(geminiKeyFile(geminiHome), 'utf8').trim()
     return key || undefined
   } catch {
     return undefined
@@ -38,14 +38,14 @@ function readAgyKey(agyHome: string | undefined): string | undefined {
 
 // An inherited Gemini key is dropped so a profile bills only the key it names; without a key file of its own, the
 // profile runs on agy's cached login.
-export function agyChildEnv(base: Record<string, string | undefined>, agyHome?: string): { env: Record<string, string>; auth: AgyAuth } {
+export function geminiChildEnv(base: Record<string, string | undefined>, geminiHome?: string): { env: Record<string, string>; auth: GeminiAuth } {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(withoutGatewaySecrets(base))) {
     if (value !== undefined && !INHERITED_CREDENTIALS.includes(key)) {
       env[key] = value
     }
   }
-  const key = readAgyKey(agyHome)
+  const key = readGeminiKey(geminiHome)
   if (key) {
     env.GEMINI_API_KEY = key
     return { env, auth: { methodId: 'gemini-api-key' } }
@@ -55,10 +55,10 @@ export function agyChildEnv(base: Record<string, string | undefined>, agyHome?: 
 
 // agy resolves `--app-data-dir` under ~/.gemini and refuses an absolute path, so a profile's store is named after
 // its home directory.
-export function agyArgs(agyHome?: string): string[] {
+export function geminiArgs(geminiHome?: string): string[] {
   const args = ['acp']
-  if (agyHome) {
-    args.push('--app-data-dir', `antigravity-wd-${basename(agyHome)}`)
+  if (geminiHome) {
+    args.push('--app-data-dir', `antigravity-wd-${basename(geminiHome)}`)
   }
   return args
 }

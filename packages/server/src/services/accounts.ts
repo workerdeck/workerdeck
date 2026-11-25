@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, rmSync } from 'node:fs'
-import { agyKeyFile, resolveBundledClaudeExecutable, resolveBundledCodexExecutable } from '@workerdeck/core'
+import { geminiKeyFile, resolveBundledClaudeExecutable, resolveBundledCodexExecutable } from '@workerdeck/core'
 import { accountExpiry, type AccountExpiry, type ConnectAccountResponse, type ProfileAccount, type ProfileInfo } from '@workerdeck/protocol'
 import { CodexLoginError, codexLogout, startCodexDeviceLogin, type CodexDeviceLogin } from '../accounts/codex-device.ts'
 import { SetupTokenError, startClaudeSetupToken, type SetupTokenAttempt } from '../accounts/setup-token.ts'
@@ -79,11 +79,11 @@ export class AccountService {
   }
 
   async keyGuard(auth: AuthContext, profile: ProfileInfo): Promise<Refusal | null> {
-    if (engineOf(profile) !== 'agy') {
-      return { status: 400, error: `profile '${profile.name}' is not an agy profile` }
+    if (engineOf(profile) !== 'gemini') {
+      return { status: 400, error: `profile '${profile.name}' is not a Gemini profile` }
     }
-    if (!profile.agyHome) {
-      return { status: 400, error: `profile '${profile.name}' has no agyHome of its own to hold a key` }
+    if (!profile.geminiHome) {
+      return { status: 400, error: `profile '${profile.name}' has no geminiHome of its own to hold a key` }
     }
     return await this.#mayConnect(auth, profile)
   }
@@ -100,10 +100,10 @@ export class AccountService {
     return { status: 403, error: `not allowed to connect an account to profile '${profile.name}'` }
   }
 
-  // The operator's own Gemini API key, kept 0600 in the profile's agyHome and never read back over the API.
-  async setAgyKey(profile: ProfileInfo, key: string): Promise<Outcome<object>> {
+  // The operator's own Gemini API key, kept 0600 in the profile's geminiHome and never read back over the API.
+  async setGeminiKey(profile: ProfileInfo, key: string): Promise<Outcome<object>> {
     try {
-      writeFileAtomicSync(agyKeyFile(profile.agyHome!), key + '\n')
+      writeFileAtomicSync(geminiKeyFile(profile.geminiHome!), key + '\n')
     } catch {
       return { ok: false, status: 500, error: 'the key could not be stored' }
     }
@@ -111,8 +111,8 @@ export class AccountService {
     return { ok: true }
   }
 
-  async clearAgyKey(profile: ProfileInfo): Promise<Outcome<{ existed: boolean }>> {
-    const file = agyKeyFile(profile.agyHome!)
+  async clearGeminiKey(profile: ProfileInfo): Promise<Outcome<{ existed: boolean }>> {
+    const file = geminiKeyFile(profile.geminiHome!)
     const existed = existsSync(file)
     rmSync(file, { force: true })
     await this.#deps.onChange(profile)

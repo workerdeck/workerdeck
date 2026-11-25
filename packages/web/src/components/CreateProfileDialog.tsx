@@ -21,8 +21,8 @@ import { Plus } from 'lucide-react'
 import { client } from '@/lib/client.ts'
 import { CAPABILITIES, Field, commaList } from '@/components/profile-fields.tsx'
 
-// The one credential here is an agy profile's Gemini key, sent once to its own route after the profile exists; the
-// server keeps it 0600 in the agyHome and never answers it. A home is a path bounded by `allowedConfigDirRoots`.
+// The one credential here is a Gemini profile's API key, sent once to its own route after the profile exists; the
+// server keeps it 0600 in the geminiHome and never answers it. A home is a path bounded by `allowedConfigDirRoots`.
 function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void }) {
   const [engine, setEngine] = useState<ProfileEngine>('provider')
   const [name, setName] = useState('')
@@ -33,8 +33,8 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
   const [apiKeyEnv, setApiKeyEnv] = useState('')
   const [configDir, setConfigDir] = useState('')
   const [codexHome, setCodexHome] = useState('')
-  const [agyHome, setAgyHome] = useState('')
-  const [agyKey, setAgyKey] = useState('')
+  const [geminiHome, setGeminiHome] = useState('')
+  const [geminiKey, setGeminiKeyDraft] = useState('')
   const [capabilities, setCapabilities] = useState<SessionCapability[]>([])
   const [mcpServers, setMcpServers] = useState('')
   const [instructions, setInstructions] = useState('')
@@ -42,7 +42,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
 
   const isProvider = engine === 'provider'
   const isCodex = engine === 'codex'
-  const isAgy = engine === 'agy'
+  const isGemini = engine === 'gemini'
 
   const submit = async () => {
     if (!name.trim()) {
@@ -79,22 +79,22 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
       if (codexHome.trim()) {
         profile.codexHome = codexHome.trim()
       }
-    } else if (isAgy) {
-      if (agyHome.trim()) {
-        profile.agyHome = agyHome.trim()
+    } else if (isGemini) {
+      if (geminiHome.trim()) {
+        profile.geminiHome = geminiHome.trim()
       }
     } else {
       profile.configDir = configDir.trim()
     }
-    if (isAgy && agyKey.trim() && !agyHome.trim()) {
+    if (isGemini && geminiKey.trim() && !geminiHome.trim()) {
       toast.error('A Gemini key needs a home directory to live in')
       return
     }
     setSaving(true)
     try {
       await client()!.createProfile(profile)
-      if (isAgy && agyKey.trim()) {
-        await client()!.setAgyKey(profile.name, agyKey.trim())
+      if (isGemini && geminiKey.trim()) {
+        await client()!.setGeminiKey(profile.name, geminiKey.trim())
       }
       toast.success(`Profile '${profile.name}' created`)
       onCreated(profile.name)
@@ -114,7 +114,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
               { value: 'provider', label: 'provider' },
               { value: 'claude', label: 'claude' },
               { value: 'codex', label: 'codex' },
-              { value: 'agy', label: 'agy' },
+              { value: 'gemini', label: 'gemini' },
             ]}
             value={engine}
             onValueChange={(value) => setEngine(value as ProfileEngine)}
@@ -132,8 +132,8 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
               <SelectItem value="codex">
                 <SelectItemText>codex - app-server + CODEX_HOME</SelectItemText>
               </SelectItem>
-              <SelectItem value="agy">
-                <SelectItemText>agy - Gemini through the Antigravity CLI</SelectItemText>
+              <SelectItem value="gemini">
+                <SelectItemText>gemini - Gemini via the Antigravity CLI</SelectItemText>
               </SelectItem>
             </SelectContent>
           </Select>
@@ -226,13 +226,13 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
             ones a managed profile may point at. Leave it empty to run on the server&apos;s own environment.
           </p>
         </>
-      ) : isAgy ? (
+      ) : isGemini ? (
         <>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Home directory">
               <Input
-                value={agyHome}
-                onChange={(e) => setAgyHome(e.target.value)}
+                value={geminiHome}
+                onChange={(e) => setGeminiHome(e.target.value)}
                 placeholder="/Users/you/.workerdeck/profiles/gemini"
                 spellCheck={false}
                 className="font-mono"
@@ -242,8 +242,8 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
               <Input
                 type="password"
                 autoComplete="off"
-                value={agyKey}
-                onChange={(e) => setAgyKey(e.target.value)}
+                value={geminiKey}
+                onChange={(e) => setGeminiKeyDraft(e.target.value)}
                 placeholder="from aistudio.google.com/apikey"
                 className="font-mono"
               />
@@ -252,7 +252,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
           <p className="text-label text-fg-4">
             Must resolve inside the server&apos;s <code className="font-mono">allowedConfigDirRoots</code>; a missing directory is created.
             The key is stored there as <code className="font-mono">gemini-api-key</code> (mode 0600) and never sent back. Without a key the
-            profile runs on agy&apos;s own login, and you can set one later on the profile.
+            profile runs on the Antigravity CLI&apos;s own login, and you can set one later on the profile.
           </p>
         </>
       ) : (

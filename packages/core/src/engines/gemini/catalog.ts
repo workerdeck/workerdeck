@@ -1,7 +1,7 @@
 import type { ModelCatalog } from '../adapter.ts'
 
 // Each model's thinking levels are the `thought_level` config option agy reports once that model is selected.
-export const AGY_CATALOG: ModelCatalog = {
+export const GEMINI_CATALOG: ModelCatalog = {
   provenance: 'session/new configOptions of agy 1.5.16 (Gemini API key), extracted 2026-11-24',
   defaultModel: 'gemini-4-neon',
   models: [

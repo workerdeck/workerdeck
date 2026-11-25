@@ -70,11 +70,11 @@ const ENGINES: readonly EngineChoice[] = [
     dirDefault: '~/.codex',
   },
   {
-    engine: 'agy',
-    label: 'Gemini (agy)',
+    engine: 'gemini',
+    label: 'Gemini',
     detail: 'The Antigravity CLI over ACP, against a home holding its gemini-api-key file.',
     dirPrompt: 'Home directory for this profile - holds its gemini-api-key file (0600).',
-    dirDefault: '~/.workerdeck/profiles/agy-gemini',
+    dirDefault: '~/.workerdeck/profiles/gemini',
   },
 ]
 
@@ -104,7 +104,7 @@ async function browse(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
     ...listed.profiles.map((profile) => ({
       label: profile.name,
       description: describeProfile(profile),
-      detail: profile.configDir ?? profile.codexHome ?? profile.agyHome ?? profile.description,
+      detail: profile.configDir ?? profile.codexHome ?? profile.geminiHome ?? profile.description,
       profile,
     })),
     ...(listed.canManage ? [{ label: '$(add) New profile…', description: undefined, detail: undefined, profile: undefined }] : []),
@@ -240,8 +240,8 @@ function accountActions(profile: ProfileInfo): { label: string; description?: st
       ...(signedIn ? [{ label: '$(debug-disconnect) Sign out of codex', action: 'disconnect' as const }] : []),
     ]
   }
-  if (engine === 'agy') {
-    if (!profile.agyHome) {
+  if (engine === 'gemini') {
+    if (!profile.geminiHome) {
       return []
     }
     const keyed = profile.available === true
@@ -321,8 +321,8 @@ async function connectAccount(deps: ProfileFlowDeps, host: GatewayHost, client: 
     await connectCodex(deps, host, client, profile)
     return
   }
-  if (profile.engine === 'agy') {
-    await setAgyKey(deps, host, client, profile)
+  if (profile.engine === 'gemini') {
+    await setGeminiKey(deps, host, client, profile)
     return
   }
   let attempt: Awaited<ReturnType<WorkerDeckClient['connectAccount']>>
@@ -372,8 +372,8 @@ async function connectAccount(deps: ProfileFlowDeps, host: GatewayHost, client: 
   )
 }
 
-// The key goes to the gateway once, which keeps it 0600 in the profile's agyHome and never sends it back.
-async function setAgyKey(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
+// The key goes to the gateway once, which keeps it 0600 in the profile's geminiHome and never sends it back.
+async function setGeminiKey(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
   const key = await showInput({
     title: `${profile.name} - Gemini API key`,
     prompt: 'Your Gemini API key from Google AI Studio (aistudio.google.com/apikey). Stored on the gateway only.',
@@ -385,18 +385,18 @@ async function setAgyKey(deps: ProfileFlowDeps, host: GatewayHost, client: Worke
   if (key === CANCEL || key === BACK) {
     return
   }
-  await apply(deps, host, () => client.setAgyKey(profile.name, key.trim()), `saved the Gemini key for ${profile.name}`)
+  await apply(deps, host, () => client.setGeminiKey(profile.name, key.trim()), `saved the Gemini key for ${profile.name}`)
 }
 
 async function confirmDisconnect(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
-  if (profile.engine === 'agy') {
+  if (profile.engine === 'gemini') {
     const out = await vscode.window.showWarningMessage(
       `Remove the Gemini API key from "${profile.name}"?`,
-      { modal: true, detail: "Deletes the gemini-api-key file in this profile's agyHome on the gateway." },
+      { modal: true, detail: "Deletes the gemini-api-key file in this profile's geminiHome on the gateway." },
       'Remove',
     )
     if (out === 'Remove') {
-      await apply(deps, host, () => client.clearAgyKey(profile.name), `removed the Gemini key from ${profile.name}`)
+      await apply(deps, host, () => client.clearGeminiKey(profile.name), `removed the Gemini key from ${profile.name}`)
     }
     return
   }
@@ -510,12 +510,12 @@ async function create(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
           (created = await client.createProfile({
             name,
             engine: engine.engine,
-            ...(engine.engine === 'codex' ? { codexHome: dir } : engine.engine === 'agy' ? { agyHome: dir } : { configDir: dir }),
+            ...(engine.engine === 'codex' ? { codexHome: dir } : engine.engine === 'gemini' ? { geminiHome: dir } : { configDir: dir }),
           })),
         `added ${name}`,
       )
-      if (created?.engine === 'agy' && created.available !== true) {
-        await setAgyKey(deps, host, client, created)
+      if (created?.engine === 'gemini' && created.available !== true) {
+        await setGeminiKey(deps, host, client, created)
       }
       return
     }

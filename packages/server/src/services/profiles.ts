@@ -1,5 +1,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { isAbsolute, join } from 'node:path'
 import { modelFor, withAccountModels } from '../lib/models.ts'
 import { isOwnerName, isSharing, supportsPermissionMode, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '@workerdeck/core'
@@ -54,9 +56,9 @@ export class ProfileService {
       if (p.codexHome && !existsSync(p.codexHome)) {
         return `profile '${p.name}' codexHome does not exist: ${p.codexHome}`
       }
-    } else if (p.engine === 'agy') {
-      if (p.agyHome && !existsSync(p.agyHome)) {
-        return `profile '${p.name}' agyHome does not exist: ${p.agyHome}`
+    } else if (p.engine === 'gemini') {
+      if (p.geminiHome && !existsSync(p.geminiHome)) {
+        return `profile '${p.name}' geminiHome does not exist: ${p.geminiHome}`
       }
     } else if (!p.configDir || !existsSync(p.configDir)) {
       return `profile '${p.name}' configDir does not exist: ${p.configDir}`
@@ -190,7 +192,7 @@ export class ProfileService {
     }
     const key = homeKey(profile)
     const dir = profile[key]
-    // A codex or agy profile that names no home runs on the server's own environment, which every
+    // A codex or Gemini profile that names no home runs on the server's own environment, which every
     // session already inherits - there is no separate credential store for the roots to bound.
     if (key !== 'configDir' && !dir) {
       return null
@@ -207,6 +209,17 @@ export class ProfileService {
 
   async saveManaged(incoming: ProfileInfo): Promise<{ ok: true; profile: ProfileInfo } | ({ ok: false } & Refusal)> {
     const { managed: _clientClaim, account: _derived, ...profile } = incoming
+    if (!isProviderProfile(profile)) {
+      const key = homeKey(profile)
+      const raw = profile[key]
+      if (raw !== undefined) {
+        const home = raw === '~' ? homedir() : raw.startsWith('~/') ? join(homedir(), raw.slice(2)) : raw
+        if (!isAbsolute(home)) {
+          return { ok: false, status: 400, error: `${key} must be an absolute path (or start with ~/): ${raw}` }
+        }
+        profile[key] = home
+      }
+    }
     const refused = this.configDirGuard(profile)
     if (refused) {
       return { ok: false, ...refused }
@@ -241,9 +254,9 @@ export class ProfileService {
   }
 }
 
-function homeKey(profile: ProfileInfo): 'codexHome' | 'agyHome' | 'configDir' {
+function homeKey(profile: ProfileInfo): 'codexHome' | 'geminiHome' | 'configDir' {
   const engine = engineOf(profile)
-  return engine === 'codex' ? 'codexHome' : engine === 'agy' ? 'agyHome' : 'configDir'
+  return engine === 'codex' ? 'codexHome' : engine === 'gemini' ? 'geminiHome' : 'configDir'
 }
 
 export function isEffortMap(value: unknown): value is Record<string, string> {

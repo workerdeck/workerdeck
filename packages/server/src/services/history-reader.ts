@@ -217,8 +217,8 @@ export function createHistoryReader(options: HistoryReaderOptions = {}): History
 
   return {
     read(target, signal) {
-      // An agy archive is not read yet: its conversations live in agy's own store, reachable only over session/load.
-      if (target.engine === 'provider' || target.engine === 'agy' || !target.engineSessionId) {
+      // A Gemini archive is not read yet: its conversations live in agy's own store, reachable only over session/load.
+      if (target.engine === 'provider' || target.engine === 'gemini' || !target.engineSessionId) {
         return Promise.resolve(MISSING)
       }
       const engineSessionId = target.engineSessionId

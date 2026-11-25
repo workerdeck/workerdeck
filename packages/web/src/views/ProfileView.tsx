@@ -51,8 +51,8 @@ function CodexLoginRow({ available }: { available: boolean | undefined }) {
   return available === false ? <span className="text-fg-4">not signed in</span> : <span className="text-fg-4">not checked yet</span>
 }
 
-// The key is written once to the gateway, which keeps it 0600 in the agyHome; nothing here ever reads it back.
-function AgyKeyCard({ profile, onSaved }: { profile: ProfileInfo; onSaved: (profile: ProfileInfo) => void }) {
+// The key is written once to the gateway, which keeps it 0600 in the geminiHome; nothing here ever reads it back.
+function GeminiKeyCard({ profile, onSaved }: { profile: ProfileInfo; onSaved: (profile: ProfileInfo) => void }) {
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState(false)
   const run = async (work: () => Promise<ProfileInfo>, done: string) => {
@@ -67,7 +67,7 @@ function AgyKeyCard({ profile, onSaved }: { profile: ProfileInfo; onSaved: (prof
       setBusy(false)
     }
   }
-  const save = () => run(() => client()!.setAgyKey(profile.name, key.trim()), 'Gemini key saved')
+  const save = () => run(() => client()!.setGeminiKey(profile.name, key.trim()), 'Gemini key saved')
   return (
     <Card>
       <CardHeader>
@@ -100,7 +100,7 @@ function AgyKeyCard({ profile, onSaved }: { profile: ProfileInfo; onSaved: (prof
               variant="outline"
               size="xs"
               disabled={busy}
-              onClick={() => void run(() => client()!.clearAgyKey(profile.name), 'Gemini key removed')}
+              onClick={() => void run(() => client()!.clearGeminiKey(profile.name), 'Gemini key removed')}
             >
               <Unplug className="size-3" />
               Remove
@@ -283,8 +283,8 @@ export function ProfileView() {
               </Card>
             ) : null}
 
-            {engine === 'agy' && profile.managed && profile.agyHome ? (
-              <AgyKeyCard profile={profile} onSaved={(saved) => loaded.setData({ ...detail!, profile: saved })} />
+            {engine === 'gemini' && profile.managed && profile.geminiHome ? (
+              <GeminiKeyCard profile={profile} onSaved={(saved) => loaded.setData({ ...detail!, profile: saved })} />
             ) : null}
 
             {engine === 'claude' && profile.managed ? (

@@ -547,7 +547,7 @@ export type ProfileDefaults = {
   sharing?: Sharing
 }
 
-export type ProfileEngine = 'claude' | 'codex' | 'provider' | 'agy'
+export type ProfileEngine = 'claude' | 'codex' | 'provider' | 'gemini'
 
 export type EngineCapabilities = {
   interactiveApprovals: boolean
@@ -638,7 +638,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     goals: { pause: true, budget: true },
     streaming: 'token',
   },
-  agy: {
+  gemini: {
     interactiveApprovals: true,
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
     defaultPermissionMode: 'default',
@@ -730,7 +730,7 @@ export type ProfileInfo = {
   engine?: ProfileEngine
   configDir?: string
   codexHome?: string
-  agyHome?: string
+  geminiHome?: string
   provider?: ProviderConfig
   description?: string
   defaults?: ProfileDefaults
@@ -1359,8 +1359,8 @@ export type RenameOwnerResponse = { agents: number; sessions: number }
 export type ConnectAccountResponse = { attemptId: string; authorizeUrl: string; expiresAt: string; userCode?: string }
 export type CompleteAccountRequest = { attemptId: string; code?: string }
 export type CompleteAccountResponse = { profile: ProfileInfo; pending?: boolean }
-// `PUT /v1/profiles/:name/agy-key`: the Gemini API key an agy profile runs on, stored 0600 in its agyHome.
-export type SetAgyKeyRequest = { key: string }
+// `PUT /v1/profiles/:name/gemini-key`: the Gemini API key a Gemini profile runs on, stored 0600 in its geminiHome.
+export type SetGeminiKeyRequest = { key: string }
 export type GetProfileResponse = { profile: ProfileInfo; config: ProfileConfigSnapshot }
 export type ErrorResponse = { error: string }
 

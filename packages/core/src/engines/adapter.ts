@@ -39,13 +39,13 @@ export interface EngineAdapter<C extends EngineRunnerConfig = EngineRunnerConfig
 import { claudeAdapter } from './claude/adapter.ts'
 import { codexAdapter } from './codex/adapter.ts'
 import { providerAdapter } from './provider/adapter.ts'
-import { agyAdapter } from './agy/adapter.ts'
+import { geminiAdapter } from './gemini/adapter.ts'
 
 const ADAPTERS: Record<ProfileEngine, EngineAdapter> = {
   claude: claudeAdapter,
   codex: codexAdapter,
   provider: providerAdapter,
-  agy: agyAdapter,
+  gemini: geminiAdapter,
 }
 
 export function getEngineAdapter(engine: ProfileEngine | undefined): EngineAdapter {

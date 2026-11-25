@@ -4,7 +4,7 @@ import type {
   CompleteAccountResponse,
   ConnectAccountResponse,
   ProfileInfo,
-  SetAgyKeyRequest,
+  SetGeminiKeyRequest,
   UpdateProfileRequest,
 } from '@workerdeck/protocol'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
@@ -52,8 +52,8 @@ export async function handleProfiles(
   if (auth.allowedProfiles && !auth.allowedProfiles.includes(profile.name)) {
     fail(403, `profile not allowed: ${profile.name}`)
   }
-  if (sub.join('/') === 'agy-key') {
-    await handleAgyKey(ctx, req, res, profile, auth)
+  if (sub.join('/') === 'gemini-key') {
+    await handleGeminiKey(ctx, req, res, profile, auth)
     return
   }
   if (sub.length > 0) {
@@ -124,24 +124,24 @@ async function handleAccount(
   json(res, 200, response)
 }
 
-async function handleAgyKey(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, profile: ProfileInfo, auth: AuthContext): Promise<void> {
+async function handleGeminiKey(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, profile: ProfileInfo, auth: AuthContext): Promise<void> {
   const { accounts, profiles } = ctx
   requireMethod(req, 'PUT', 'DELETE')
   refuseWith(await accounts.keyGuard(auth, profile))
   if (req.method === 'DELETE') {
-    const cleared = await accounts.clearAgyKey(profile)
+    const cleared = await accounts.clearGeminiKey(profile)
     if (!cleared.ok) {
       fail(cleared.status, cleared.error)
     }
     json(res, 200, { profile: profiles.forResponse(profile) })
     return
   }
-  const body = (await readJsonBody(req, ctx.maxBodyBytes)) as Partial<SetAgyKeyRequest>
+  const body = (await readJsonBody(req, ctx.maxBodyBytes)) as Partial<SetGeminiKeyRequest>
   const key = typeof body.key === 'string' ? body.key.trim() : ''
   if (!key || key.length > 512 || /\s/.test(key)) {
     fail(400, 'key is required: one line, no spaces, at most 512 characters')
   }
-  const stored = await accounts.setAgyKey(profile, key)
+  const stored = await accounts.setGeminiKey(profile, key)
   if (!stored.ok) {
     fail(stored.status, stored.error)
   }
