@@ -23,6 +23,7 @@ export class ParkableRunner implements Runner {
   #pending = new Map<string, ParkedExecution>()
   #files: Record<string, string>
   #parked = false
+  #busy = false
   #messages: string[] = []
 
   constructor(id: string, config: SessionRunnerConfig, restore?: RunnerSnapshot) {
@@ -64,7 +65,7 @@ export class ParkableRunner implements Runner {
   }
 
   snapshot(): RunnerSnapshot | undefined {
-    if (this.#parked) {
+    if (this.#parked || this.#busy) {
       return undefined
     }
     return this.#buildSnapshot()
@@ -161,7 +162,32 @@ export class ParkableRunner implements Runner {
     })
   }
 
-  async start(): Promise<void> {}
+  // As the provider engine does: a start with a prompt runs its turn at once, and no snapshot is taken until it ends.
+  async start(): Promise<void> {
+    const prompt = this.#config.prompt
+    if (typeof prompt !== 'string' || this.#messages.length > 0) {
+      return
+    }
+    this.#busy = true
+    this.#status = 'running'
+    this.#emit({ type: 'status_changed', status: 'running' })
+    this.#messages.push(`user:${prompt}`)
+    this.#emit({ type: 'user_message', message: { role: 'user', content: prompt }, parentToolUseId: null })
+  }
+
+  // Ends the prompt's turn the provider's way: its last events are emitted while the turn is still in flight.
+  reply(answer: string): void {
+    this.#messages.push(`assistant:${answer}`)
+    this.#emit({
+      type: 'assistant_message',
+      message: { role: 'assistant', content: [{ type: 'text', text: answer }], model: 'test-model' },
+      parentToolUseId: null,
+      uuid: `a${this.#seq}`,
+    })
+    this.finish()
+    this.#emit({ type: 'status_changed', status: 'idle' })
+    this.#busy = false
+  }
   setOwner(owner: string | undefined): void {
     this.#config = { ...this.#config, owner }
   }

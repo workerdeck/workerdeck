@@ -297,6 +297,7 @@ describe('every fault point leaves a record the next process finishes', () => {
 
     releases[0]!()
     await eventually(async () => expect((await onDisk(dir, id)).startFailed).toEqual({ n: 2, error: 'recovery fell over' }))
+    expect(second.diagnostics.some((entry) => entry.where === 'lifecycle' && String(entry.error).includes('recovery fell over'))).toBe(true)
     expect((await retry()).status).toBe(200)
     expect(second.built).toHaveLength(2)
     await until(() => releases.length === 2, 'the retried start to be held')

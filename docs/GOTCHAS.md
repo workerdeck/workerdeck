@@ -1840,8 +1840,12 @@ code map in `docs/PACKAGES.md` server.
   - a resumable engine whose runner names none yet is accepted with no engine id, unless a
     first-message identity is owed (a pending prompt for n+1); an idle start has no conversation
     to name, and requiring one would fail every cut without a prompt;
-  - an engine without resume needs a `live` runtime; one with neither resume nor `persistLive`
-    has nothing to keep and is accepted at once.
+  - an engine without resume needs a `live` (or `parked`) runtime; one with neither resume nor
+    `persistLive` has nothing to keep and is accepted at once. Its startup is not ready until the
+    runner can take a snapshot (`snapshotTakeable`): a start with a prompt runs its turn at once,
+    and the provider engine's `snapshot()` is undefined while a turn runs. Checked earlier, the
+    readback finds nothing and `#failStart` fences the session for good (4.6.0's silent loss).
+    `#failStart` reports through `onDiagnostic` (`lifecycle`).
 
   **Failure before and after the commit differ.** A refusal, or a failure before the commit (rolled
   back), leaves n as it was. A start that fails after the commit (startup or readback) keeps n+1,

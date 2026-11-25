@@ -750,7 +750,7 @@ export class ConversationCuts {
       return false
     }
     if (!resumable) {
-      return runtime.kind === 'live'
+      return runtime.kind === 'live' || runtime.kind === 'parked'
     }
     const named = runner.info().sdkSessionId
     if (named === undefined) {
@@ -790,6 +790,7 @@ export class ConversationCuts {
       return false
     }
     this.#failedStarts.add(id)
+    ctx.locks.onError(new Error(`session ${id}: conversation ${to} did not start, its records are fenced: ${error}`))
     // Drained first: a runtime save already queued for the failed attempt would otherwise clear the failure after it lands.
     await ctx.parking.fence(id)
     const failure = { message: error, at: Date.now(), conversation: to, start: true as const }
@@ -1051,7 +1052,7 @@ function startupOf(ctx: ServerContext, runner: Runner, wantsIdentity: boolean): 
         return
       }
       const resumable = (info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume
-      if (!(wantsIdentity && resumable ? info.sdkSessionId === undefined : info.status === 'starting')) {
+      if (wantsIdentity && resumable ? info.sdkSessionId !== undefined : info.status !== 'starting' && snapshotTakeable(ctx, runner, resumable)) {
         finish({ kind: 'ready' })
       }
     }
@@ -1060,12 +1061,26 @@ function startupOf(ctx: ServerContext, runner: Runner, wantsIdentity: boolean): 
         reason = event.message
       }
       check()
+      // An engine lifts its turn, or parks, only after the event that ends it: looked at again once that is done.
+      if (!done) {
+        queueMicrotask(check)
+      }
     })
     if (done) {
       unsubscribe()
     }
     check()
   })
+}
+
+// A live-persisting engine without resume is durable only through a snapshot, which it cannot take while a turn runs:
+// a start with a prompt is not ready to be checked until the prompt's turn ends or parks.
+function snapshotTakeable(ctx: ServerContext, runner: Runner, resumable: boolean): boolean {
+  if (resumable || !ctx.parking.persistsLive(runner)) {
+    return true
+  }
+  const status = runner.info().status
+  return status === 'parked' || (status !== 'running' && runner.snapshot?.() !== undefined)
 }
 
 async function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {

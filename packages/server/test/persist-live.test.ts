@@ -41,11 +41,11 @@ async function startGateway(store: RuntimeStore, persistLive = true): Promise<Ga
   return { server, base: `http://127.0.0.1:${port}/v1`, built }
 }
 
-async function create(base: string, scope?: Record<string, string>): Promise<SessionInfo> {
+async function create(base: string, scope?: Record<string, string>, prompt?: string): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ cwd: '/tmp/project', profile: 'agent', scope }),
+    body: JSON.stringify({ cwd: '/tmp/project', profile: 'agent', scope, prompt }),
   })
   return ((await res.json()) as { session: SessionInfo }).session
 }
@@ -108,6 +108,46 @@ describe('live sessions that survive a restart', () => {
     })
     const rows = await list(gateway.base)
     expect(rows.filter((row) => row.id === session.id)).toHaveLength(1)
+  })
+
+  it('keeps a session created with a prompt: the first start waits for the turn instead of failing it', async () => {
+    const store = await stateDir().then((dir) => fileRuntimeStore(dir))
+    const gateway = await startGateway(store)
+    const session = await create(gateway.base, undefined, 'hello')
+    const runner = gateway.built[0]!
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await gateway.server.parking.flush()
+    expect((await store.records.get(session.id))?.startFailed).toBeUndefined()
+    expect(gateway.server.parking.fenced(session.id)).toBe(false)
+    runner.reply('hi there')
+
+    await eventually(async () => {
+      const record = await store.records.get(session.id)
+      expect(record?.cut).toBeUndefined()
+      expect(record?.startFailed).toBeUndefined()
+      expect(record?.runtime?.kind).toBe('live')
+    })
+    runner.turn('again', 'still here')
+    await eventually(async () => {
+      const live = await store.get(session.id)
+      expect(live && live.kind === 'live' ? live.snapshot.state : undefined).toEqual({
+        messages: ['user:hello', 'assistant:hi there', 'user:again', 'assistant:still here'],
+      })
+    })
+  })
+
+  it('keeps a session whose first turn parks before it ends', async () => {
+    const store = await stateDir().then((dir) => fileRuntimeStore(dir))
+    const gateway = await startGateway(store)
+    const session = await create(gateway.base, undefined, 'hello')
+    gateway.built[0]!.defer('exec-1')
+
+    await eventually(async () => {
+      const record = await store.records.get(session.id)
+      expect(record?.runtime?.kind).toBe('parked')
+      expect(record?.cut).toBeUndefined()
+      expect(record?.startFailed).toBeUndefined()
+    })
   })
 
   it('writes nothing at all when the option is off', async () => {
