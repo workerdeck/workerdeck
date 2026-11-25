@@ -1814,6 +1814,22 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   worktree (the gateway runs from the main checkout). **Published** 2026-11-20: tag `v4.6.0` at `36dae6b2`, Publish
   green first try (run 44655175970), npm 12/12 with `latest` 4.6.0 (four staged for about three minutes), Marketplace
   job green.
+  **4.7.0** - a **minor**, protocol stays **2** (every wire addition optional). Engines: the **Gemini engine**
+  (`AcpRunner`, Gemini through the Antigravity CLI `agy acp`; renamed from `agy`), a profile signs in with a saved
+  Gemini key, agy's own login, or a Google Cloud project through gcloud ADC (`gcpProject`, the sign-in that offers
+  Auto mode); a missing profile home is created, `~` expanded and a relative one refused. Keep-awake: shells can hold
+  the machine awake (`shell_run` `keepAwake`, defaulting to `wakeOnExit`; a coffee toggle on any running shell),
+  an approval wait no longer holds it, `/meta` reports `keepAwake` and the session list draws a coffee line naming the
+  holders; `--keep-awake always` (`keepAwake: 'always'`) holds it for the gateway's life, for an always-on box
+  (`/meta` `alwaysAwake`). Lists: the single-line session list with tree lines, context menus, optimistic edits and a
+  drag of the real row (web, VS Code, iOS on the core); team member pins; iOS custom groups; native `shell_propose`
+  cards on iOS and Android. Fixes: a session created with a prompt is no longer fenced at its first start under
+  `persistLive`; VS Code refreshes each gateway on its own and never waits on a dead one; no cross-owner prompt for a
+  reorder inside a team. An agent's status is Verb Noun, at most three words. Engine pins unchanged from 4.6.0.
+  **Verified**: `pnpm lint` (119 warnings), typecheck, `turbo run test --concurrency=1` 13/13, gatekeeper; live:
+  keep-awake shells on the dev gateway (lock held by a turn or a `keepAwake` shell, released when idle) and
+  `--keep-awake always` on a private gateway (held with no sessions, `/meta` `alwaysAwake`, released on kill). iOS UI
+  suites ran in the 119th session, not again here; no paid smokes. Bumped in a worktree.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
