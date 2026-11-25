@@ -49,7 +49,7 @@ extension ListSection {
         while end < rows.count, rows[end].depth > 0 { end += 1 }
         let place = rows[(at + 1)..<end].firstIndex { $0.item?.id == target.before } ?? end
         rows.insert((nil, 1), at: place)
-      } else if lead == nil, target.lane == id {
+      } else if lead == nil, target.lane == id, !rows.isEmpty {
         let place = rows.firstIndex { $0.depth == 0 && $0.item?.id == target.before } ?? rows.count
         rows.insert((nil, 0), at: place)
       }

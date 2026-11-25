@@ -4,7 +4,7 @@ use crate::face::{FaceSpec, face_spec};
 use std::sync::Mutex;
 use wd_native::planner::fmt_cost;
 use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, ProjectIcon, SessionInfo, Sharing};
-use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
+use wd_native::vm::agents::{PROJECT_ACCENTS, new_agent_owner, new_agent_sharing};
 use wd_native::vm::conversations::{clear_context_offered, new_conversation_gate};
 use wd_native::vm::create_form::{AgentSeed as FormSeed, SeedLead};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
@@ -306,6 +306,9 @@ pub struct ListGroup {
     pub host_id: Option<String>,
     pub cwd: Option<String>,
     pub custom: Option<String>,
+    // A custom group's badge: its image as a data URL, else its colour.
+    pub color: Option<String>,
+    pub icon: Option<String>,
     pub earlier: bool,
     pub project_icon_hash: Option<String>,
     pub project_glyph: Option<String>,
@@ -399,6 +402,15 @@ pub struct Subset {
     pub shown: u32,
     pub total: u32,
     pub causes: Vec<String>,
+}
+
+// A custom group for the row menu's "Move to group".
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct GroupChoice {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -760,6 +772,12 @@ impl SessionList {
         self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    fn style_group(&self, id: &str, look: vm::CustomGroupLook) {
+        let mut state = self.state();
+        let groups = state.config.custom_groups.clone().unwrap_or_default();
+        state.config = ViewConfig { custom_groups: Some(vm::style_custom_group(&groups, id, &look)), ..state.config.clone() };
+    }
+
     // `agent_seed` for the create form, each lead with its owner so a cross-owner join can say so.
     pub(crate) fn form_seed(&self, host_id: &str, profile: Option<&str>) -> Option<FormSeed> {
         let seed = self.agent_seed(host_id.to_owned(), None, profile.map(str::to_owned))?;
@@ -833,7 +851,9 @@ impl SessionList {
         let rows = state.rows();
         let drawn = state.drawn(&rows);
         let config = state.config.clone();
+        let custom_mode = config.group_by == GroupBy::Custom;
         let reorderable = vm::ordered_group_by(config.group_by);
+        let stored = config.custom_groups.clone().unwrap_or_default();
         let selected = state.selected.clone();
         let dragging = state.drag.as_ref().map(|d| d.key.clone());
         let look =
@@ -860,6 +880,7 @@ impl SessionList {
                 }
                 let project = config.group_by == GroupBy::Project;
                 let icon = group.rows.first().and_then(|row| row.info.project.as_ref()).and_then(|p| p.icon.clone());
+                let look = group.custom.as_ref().and_then(|id| stored.iter().find(|g| &g.id == id));
                 ListGroup {
                     label: if project { group.project.clone().or(group.label.clone()) } else { group.label.clone() },
                     caps: !project && config.group_by != GroupBy::Custom,
@@ -867,6 +888,8 @@ impl SessionList {
                     host_id: group.host_id.clone(),
                     cwd: group.cwd.clone(),
                     custom: group.custom.clone(),
+                    color: look.map(vm::custom_group_color),
+                    icon: look.and_then(|g| g.icon.clone()),
                     earlier,
                     project_icon_hash: if project {
                         match &icon {
@@ -886,7 +909,7 @@ impl SessionList {
                     },
                     fold_summary: fold.as_ref().map(|f| f.text.clone()),
                     fold_attention: fold.is_some_and(|f| f.attention > 0),
-                    reorderable: reorderable && !earlier,
+                    reorderable: if custom_mode { group.custom.is_some() } else { reorderable && !earlier },
                     key: group.key,
                     collapsed,
                     sessions: summary.sessions as u32,
@@ -904,7 +927,80 @@ impl SessionList {
         let mut state = self.state();
         let rows = state.rows();
         let drawn = state.drawn(&rows);
-        state.config = vm::move_group(&state.config, &drawn, &key, &onto);
+        if state.config.group_by != GroupBy::Custom {
+            state.config = vm::move_group(&state.config, &drawn, &key, &onto);
+            return;
+        }
+        let groups = state.config.custom_groups.clone().unwrap_or_default();
+        let id_of = |k: &str| drawn.iter().find(|g| g.key == k).and_then(|g| g.custom.clone());
+        let (Some(id), Some(onto_id)) = (id_of(&key), id_of(&onto)) else { return };
+        let (Some(from), Some(to)) = (groups.iter().position(|g| g.id == id), groups.iter().position(|g| g.id == onto_id)) else {
+            return;
+        };
+        let rest: Vec<&str> = groups.iter().filter(|g| g.id != id).map(|g| g.id.as_str()).collect();
+        let at = rest.iter().position(|g| *g == onto_id).unwrap_or(0) + usize::from(from < to);
+        let moved = vm::move_custom_group(&groups, &id, rest.get(at).copied());
+        state.config = ViewConfig { custom_groups: Some(moved), ..state.config.clone() };
+    }
+
+    pub fn custom_groups(&self) -> Vec<GroupChoice> {
+        let state = self.state();
+        let groups = state.config.custom_groups.clone().unwrap_or_default();
+        groups.iter().map(|g| GroupChoice { id: g.id.clone(), name: g.name.clone(), color: vm::custom_group_color(g), icon: g.icon.clone() }).collect()
+    }
+
+    // The custom group row `key` (`ListRow.key`) sits in, None when ungrouped.
+    pub fn custom_group_of(&self, key: String) -> Option<String> {
+        let state = self.state();
+        state.config.custom_groups.as_ref()?.iter().find(|g| g.members.contains(&key)).map(|g| g.id.clone())
+    }
+
+    // Appends a group and answers its id.
+    pub fn add_custom_group(&self, name: String) -> String {
+        let mut state = self.state();
+        let groups = state.config.custom_groups.clone().unwrap_or_default();
+        let id = new_group_id(&groups);
+        let name = if name.trim().is_empty() { "New group".to_owned() } else { name.trim().to_owned() };
+        state.config = ViewConfig { custom_groups: Some(vm::add_custom_group(&groups, &name, &id)), ..state.config.clone() };
+        id
+    }
+
+    pub fn rename_custom_group(&self, id: String, name: String) {
+        let name = name.trim();
+        if name.is_empty() {
+            return;
+        }
+        let mut state = self.state();
+        let groups = state.config.custom_groups.clone().unwrap_or_default();
+        state.config = ViewConfig { custom_groups: Some(vm::rename_custom_group(&groups, &id, name)), ..state.config.clone() };
+    }
+
+    // A colour clears the group's image, as the dashboard's swatch does.
+    pub fn set_custom_group_color(&self, id: String, color: String) {
+        self.style_group(&id, vm::CustomGroupLook { color: Some(Some(color)), icon: Some(None) });
+    }
+
+    // A `data:image/` URL of at most `CUSTOM_GROUP_ICON_MAX` units, or None to drop the image.
+    pub fn set_custom_group_icon(&self, id: String, icon: Option<String>) {
+        self.style_group(&id, vm::CustomGroupLook { color: None, icon: Some(icon) });
+    }
+
+    // Its sessions fall back to Ungrouped.
+    pub fn remove_custom_group(&self, id: String) {
+        let mut state = self.state();
+        let groups = state.config.custom_groups.clone().unwrap_or_default();
+        state.config = ViewConfig { custom_groups: Some(vm::remove_custom_group(&groups, &id)), ..state.config.clone() };
+    }
+
+    // Row `key` to the end of group `id`, or out of every group with None.
+    pub fn move_to_custom_group(&self, key: String, id: Option<String>) {
+        let mut state = self.state();
+        let groups = state.config.custom_groups.clone().unwrap_or_default();
+        state.config = ViewConfig { custom_groups: Some(vm::move_to_custom_group(&groups, &key, id.as_deref(), None)), ..state.config.clone() };
+    }
+
+    pub fn group_colors(&self) -> Vec<String> {
+        PROJECT_ACCENTS.iter().map(|c| (*c).to_owned()).collect()
     }
 
     // Back to the facet's own order.
@@ -949,6 +1045,7 @@ impl SessionList {
         for group in &drawn {
             if custom {
                 lanes.insert(format!("head:{}", group.key), (group.key.clone(), DragRowKind::Heading));
+                lanes.insert(format!("empty:{}", group.key), (group.key.clone(), DragRowKind::Empty));
             }
             for row in &group.rows {
                 let row_key = vm::session_key(&row.host_id, &row.info.id);
@@ -1397,4 +1494,30 @@ impl SessionList {
     pub fn marks_json(&self) -> String {
         serde_json::to_string(self.state().marks.all()).unwrap_or_default()
     }
+}
+
+fn new_group_id(groups: &[vm::CustomGroup]) -> String {
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let mut n = nanos;
+    loop {
+        let id = base36(n);
+        if !groups.iter().any(|g| g.id == id) {
+            return id;
+        }
+        n += 1;
+    }
+}
+
+fn base36(mut n: u128) -> String {
+    let digits = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    let mut out = Vec::new();
+    loop {
+        out.push(digits[(n % 36) as usize]);
+        n /= 36;
+        if n == 0 {
+            break;
+        }
+    }
+    out.reverse();
+    String::from_utf8(out).unwrap_or_default()
 }

@@ -357,6 +357,52 @@ final class SessionListModel {
     syncConfig()
   }
 
+  // MARK: - Custom groups
+
+  var customGroups: [GroupChoice] {
+    _ = revision
+    return core.customGroups()
+  }
+
+  var groupColors: [String] { core.groupColors() }
+
+  func customGroup(of item: ListItem) -> String? {
+    _ = revision
+    return core.customGroupOf(key: item.id)
+  }
+
+  @discardableResult
+  func addCustomGroup(_ name: String = "") -> String {
+    let id = core.addCustomGroup(name: name)
+    syncConfig()
+    return id
+  }
+
+  func renameCustomGroup(_ id: String, to name: String) {
+    core.renameCustomGroup(id: id, name: name)
+    syncConfig()
+  }
+
+  func setCustomGroupColor(_ id: String, _ color: String) {
+    core.setCustomGroupColor(id: id, color: color)
+    syncConfig()
+  }
+
+  func setCustomGroupIcon(_ id: String, _ icon: String?) {
+    core.setCustomGroupIcon(id: id, icon: icon)
+    syncConfig()
+  }
+
+  func removeCustomGroup(_ id: String) {
+    core.removeCustomGroup(id: id)
+    syncConfig()
+  }
+
+  func moveToCustomGroup(_ item: ListItem, _ id: String?) {
+    core.moveToCustomGroup(key: item.id, id: id)
+    syncConfig()
+  }
+
   // Agents on the row's gateway it could join, leads first.
   func teamLeads(for item: ListItem) -> [TeamLead] {
     _ = revision

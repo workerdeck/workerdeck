@@ -1485,6 +1485,18 @@ agent section (name, team, sharing, brief); New session has an optional name, wh
 cross-gateway invitations stay on the web and VS Code. `UIPREVIEW=teams`
 draws every state from canned rows.
 
+**Custom groups on iOS** (`Sessions/CustomGroupSheet.swift`). The filter menu's Group by has Custom; the groups are the
+same `ViewConfig.customGroups` the dashboard keeps, stored in the app's own config (not synced between clients). The
+core owns every edit (`SessionList.add_custom_group`, `rename_custom_group`, `set_custom_group_color` (drops the
+image), `set_custom_group_icon` (a 64px PNG data URL, as the web's `iconFromFile`), `remove_custom_group`,
+`move_to_custom_group`); `ListGroup.color`/`icon` draw the heading's badge. A custom heading's `…` menu edits (a sheet:
+name, the eight `PROJECT_ACCENTS`, an image, delete) or deletes; it is a button because SwiftUI wires a List's
+`.contextMenu` for rows only, so a long press on a section heading opens nothing; "New group" closes the list and opens that sheet. A
+row's long-press menu has "Move to group" (each group, Ungrouped, New group). Custom headings drag to reorder
+(`move_group` maps to `move_custom_group`; Ungrouped stays last), and an empty group draws a dashed drop row whose
+`empty:<group>` frame the core reads as that group's end. Pressed by `CustomGroupsUITests` (`UIPREVIEW_GROUP=custom`).
+Android has the core calls but no UI.
+
 **Drag and drop in the iOS list** (`Sessions/ListDrag.swift`). Hold, then move: the card or heading itself rides
 under the finger, vertical only. A lifted heading folds every group over 220 ms and the others slide aside as it passes
 them (`move_group` on release). A lifted card leaves the list and a gap as tall as it slides to where it would land,
