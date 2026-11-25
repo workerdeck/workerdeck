@@ -263,6 +263,21 @@ describe('profile management', () => {
     }
   })
 
+  it('offers Auto only on a Google Cloud Gemini profile and checks its project id', async () => {
+    const root = temp()
+    running = manageableServer({ allowedConfigDirRoots: [root] })
+    const { port } = await running.listen(0, '127.0.0.1')
+    expect((await post(port, { name: 'bad', engine: 'gemini', gcpProject: 'Not A Project' })).status).toBe(400)
+    expect((await post(port, { name: 'loc', engine: 'gemini', gcpLocation: 'global' })).status).toBe(400)
+    const modes = async (body: ProfileInfo) => {
+      expect((await post(port, body)).status).toBe(200)
+      const read = await fetch(`http://127.0.0.1:${port}/v1/profiles/${body.name}`)
+      return ((await read.json()) as { profile: ProfileInfo }).profile.capabilities?.permissionModes ?? []
+    }
+    expect(await modes({ name: 'cloud', engine: 'gemini', gcpProject: 'workerdeck', gcpLocation: 'us-central1' })).toContain('auto')
+    expect(await modes({ name: 'keyed', engine: 'gemini', geminiHome: join(root, 'g') })).not.toContain('auto')
+  })
+
   it('stores a Gemini key 0600 in the home, never answers it, and removes it', async () => {
     const root = temp()
     running = manageableServer({ allowedConfigDirRoots: [root] })

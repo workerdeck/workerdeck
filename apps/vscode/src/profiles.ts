@@ -72,8 +72,8 @@ const ENGINES: readonly EngineChoice[] = [
   {
     engine: 'gemini',
     label: 'Gemini',
-    detail: 'The Antigravity CLI over ACP, against a home holding its gemini-api-key file.',
-    dirPrompt: 'Home directory for this profile - holds its gemini-api-key file (0600).',
+    detail: 'The Antigravity CLI over ACP, on a Google Cloud project or a Gemini API key.',
+    dirPrompt: 'Home directory for this profile - its agy store, and the gemini-api-key file (0600) if it signs in with a key.',
     dirDefault: '~/.workerdeck/profiles/gemini',
   },
 ]
@@ -241,7 +241,7 @@ function accountActions(profile: ProfileInfo): { label: string; description?: st
     ]
   }
   if (engine === 'gemini') {
-    if (!profile.geminiHome) {
+    if (!profile.geminiHome || profile.gcpProject) {
       return []
     }
     const keyed = profile.available === true
@@ -502,6 +502,10 @@ async function create(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
         continue
       }
       const dir = resolveRemotePath(answer.trim(), host)
+      const cloud = engine.engine === 'gemini' ? await pickGeminiCloud(host) : undefined
+      if (cloud === CANCEL) {
+        return
+      }
       let created: ProfileInfo | undefined
       await apply(
         deps,
@@ -511,15 +515,60 @@ async function create(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
             name,
             engine: engine.engine,
             ...(engine.engine === 'codex' ? { codexHome: dir } : engine.engine === 'gemini' ? { geminiHome: dir } : { configDir: dir }),
+            ...cloud,
           })),
         `added ${name}`,
       )
-      if (created?.engine === 'gemini' && created.available !== true) {
+      if (created?.engine === 'gemini' && !created.gcpProject && created.available !== true) {
         await setGeminiKey(deps, host, client, created)
       }
       return
     }
   }
+}
+
+// A Google Cloud project signs agy in with the gateway user's gcloud ADC and is the sign-in that offers Auto mode.
+async function pickGeminiCloud(host: GatewayHost): Promise<{ gcpProject: string; gcpLocation?: string } | undefined | typeof CANCEL> {
+  const how = await showPick(
+    [
+      {
+        label: 'Google Cloud project',
+        detail: "Vertex AI on your project, signed in with the gateway user's gcloud Application Default Credentials. Offers Auto mode.",
+        cloud: true,
+      },
+      { label: 'Gemini API key', detail: 'A key from Google AI Studio, stored 0600 in the home directory. No Auto mode.', cloud: false },
+    ],
+    { title: `New profile - ${host.name}`, placeHolder: 'How this profile signs in to Gemini', step: 1, totalSteps: 1 },
+  )
+  if (how === CANCEL || how === BACK) {
+    return CANCEL
+  }
+  if (!how.cloud) {
+    return undefined
+  }
+  const project = await showInput({
+    title: `New profile - ${host.name}`,
+    prompt: "Google Cloud project id (Vertex AI API enabled; run 'gcloud auth application-default login' on the gateway once).",
+    placeHolder: 'my-project',
+    step: 1,
+    totalSteps: 2,
+    validate: (value) => (/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(value.trim()) ? undefined : 'a project id, e.g. my-project'),
+  })
+  if (project === CANCEL || project === BACK) {
+    return CANCEL
+  }
+  const location = await showInput({
+    title: `New profile - ${host.name}`,
+    prompt: 'Vertex AI location.',
+    value: 'global',
+    step: 2,
+    totalSteps: 2,
+    validate: (value) => (/^[a-z0-9-]{1,40}$/.test(value.trim()) ? undefined : "a region such as 'global' or 'us-central1'"),
+  })
+  if (location === CANCEL || location === BACK) {
+    return CANCEL
+  }
+  return { gcpProject: project.trim(), ...(location.trim() === 'global' ? {} : { gcpLocation: location.trim() }) }
 }
 
 // `~` is this machine's home, which is the wrong home for every gateway but a loopback one - a remote

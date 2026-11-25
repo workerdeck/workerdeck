@@ -14,7 +14,7 @@ import {
 } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { fail, HttpError } from '../lib/http.ts'
-import { engineOf } from '../lib/profile-env.ts'
+import { engineOf, offeredCapabilities } from '../lib/profile-env.ts'
 import { freshRecord, requestedConfig, type ConversationEntry, type SessionCut, type SessionRecord } from './session-records.ts'
 import { durableConfig, isDormant, type DormantSessionRecord, type StoredSessionRecord } from './session-store.ts'
 import { modelFor } from '../lib/models.ts'
@@ -567,7 +567,7 @@ export class ConversationCuts {
         cwd: target.cwd ?? info.cwd,
         ...(target.profile ? { profile: target.profile } : {}),
         engine,
-        capabilities: profile?.capabilities ?? ctx.adapterFor(engine).capabilities,
+        capabilities: profile?.capabilities ?? (profile ? offeredCapabilities(profile, ctx.adapterFor(engine).capabilities) : ctx.adapterFor(engine).capabilities),
         ...(target.model ? { model: target.model } : {}),
         ...(target.permissionMode ? { permissionMode: target.permissionMode } : {}),
         createdAt: info.createdAt,

@@ -6,7 +6,7 @@ import { modelFor, withAccountModels } from '../lib/models.ts'
 import { isOwnerName, isSharing, supportsPermissionMode, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '@workerdeck/core'
 import type { Refusal } from '../lib/http.ts'
-import { cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
+import { cwdAllowed, engineOf, isProviderProfile, offeredCapabilities } from '../lib/profile-env.ts'
 import type { ProfileStore } from './profile-store.ts'
 
 export type { Refusal }
@@ -59,6 +59,12 @@ export class ProfileService {
     } else if (p.engine === 'gemini') {
       if (p.geminiHome && !existsSync(p.geminiHome)) {
         return `profile '${p.name}' geminiHome does not exist: ${p.geminiHome}`
+      }
+      if (p.gcpProject !== undefined && !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(p.gcpProject)) {
+        return `profile '${p.name}' gcpProject is not a Google Cloud project id: ${p.gcpProject}`
+      }
+      if (p.gcpLocation !== undefined && (!p.gcpProject || !/^[a-z0-9-]{1,40}$/.test(p.gcpLocation))) {
+        return `profile '${p.name}' gcpLocation must be a region such as 'global' or 'us-central1', with a gcpProject`
       }
     } else if (!p.configDir || !existsSync(p.configDir)) {
       return `profile '${p.name}' configDir does not exist: ${p.configDir}`
@@ -125,7 +131,7 @@ export class ProfileService {
     const adapter = adapterFor(p.engine)
     const base: ProfileInfo = {
       ...this.withManagedFlag(p),
-      capabilities: adapter.capabilities,
+      capabilities: offeredCapabilities(p, adapter.capabilities),
     }
     const models = withAccountModels(adapter.catalog.models, decorate.models?.(p.name))
     if (models.length > 0) {

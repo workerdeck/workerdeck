@@ -640,7 +640,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
   },
   gemini: {
     interactiveApprovals: true,
-    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+    permissionModes: ['default', 'acceptEdits', 'auto', 'bypassPermissions', 'plan'],
     defaultPermissionMode: 'default',
     resume: true,
     resumeBackfill: true,
@@ -731,6 +731,10 @@ export type ProfileInfo = {
   configDir?: string
   codexHome?: string
   geminiHome?: string
+  // A Gemini profile on a Google Cloud project: agy signs in with the operator's gcloud Application Default
+  // Credentials and bills Vertex AI on this project; it is the only Gemini sign-in that offers Auto mode.
+  gcpProject?: string
+  gcpLocation?: string
   provider?: ProviderConfig
   description?: string
   defaults?: ProfileDefaults

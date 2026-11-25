@@ -132,6 +132,7 @@ comes from `codex login status` alone, and the probe surfaces exit codes and fix
 strings only, never `codex login status` output (it contains a masked key fragment). **The Gemini engine** spawns the official `agy acp`; WorkerDeck never reads agy's keyring or
 `~/.gemini`, never runs its OAuth itself and never spoofs its user agent. A profile authenticates with a
 Gemini API key the operator saved in its `geminiHome` (0600 file, by hand or through `PUT /v1/profiles/:name/gemini-key`;
-injected as `GEMINI_API_KEY`, never in a response or log), or with agy's own cached login. Compliance/legal review is settled (2026-10-07); the README "Auth & Anthropic's terms" section
+injected as `GEMINI_API_KEY`, never in a response or log), with agy's own cached login, or on a Google Cloud project
+(`gcpProject`: agy reads the operator's gcloud ADC itself via `AGY_ADC_AUTH`; WorkerDeck never touches that file). Compliance/legal review is settled (2026-10-07); the README "Auth & Anthropic's terms" section
 and the auth guide say so. Whether OpenAI's terms restrict headless
 ChatGPT-subscription codex use the same way is unresolved and mirrors the same posture.

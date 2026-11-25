@@ -25,7 +25,7 @@ import type { Refusal } from '../lib/http.ts'
 import { bypassDisabled, refusePermissionMode, type BypassOption } from '../lib/permissions.ts'
 import { modelFor } from '../lib/models.ts'
 import { checkScope, sameScope } from '../lib/scope.ts'
-import { cliConfigDir, codexHomeDir, cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
+import { cliConfigDir, codexHomeDir, cwdAllowed, engineOf, isProviderProfile, offeredCapabilities } from '../lib/profile-env.ts'
 import { accountSessionEnv } from '../accounts/session-env.ts'
 import type { EngineRunnerContext, ShellAgentWriteOption } from '../options.ts'
 import type { BridgeHub } from './bridge.ts'
@@ -281,7 +281,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     if (name !== undefined && !profile) {
       throw new Error(`unknown profile: ${name}`)
     }
-    const capabilities = profile?.capabilities ?? adapterFor(profile?.engine).capabilities
+    const capabilities = profile?.capabilities ?? (profile ? offeredCapabilities(profile, adapterFor(profile.engine).capabilities) : adapterFor(undefined).capabilities)
     // Applied here rather than in buildRunnerConfig so a parked record, which stores its config, gets it too. The shell
     // tools are offered only where a shell of this session's could exist at all: enabled on the gateway, host cwd
     // engine. The write tools need, on top, the gateway's say-so and a session an operator created; both are read

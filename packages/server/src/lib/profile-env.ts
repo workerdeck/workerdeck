@@ -1,10 +1,18 @@
-import type { ProfileConfigSnapshot, ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
+import type { EngineCapabilities, ProfileConfigSnapshot, ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve as resolvePath, sep } from 'node:path'
 
 export function isProviderProfile(profile: ProfileInfo): boolean {
   return profile.engine === 'provider'
+}
+
+// agy offers Auto only to a Google Cloud sign-in, so a key or cached-login Gemini profile never shows it.
+export function offeredCapabilities(profile: ProfileInfo, capabilities: EngineCapabilities): EngineCapabilities {
+  if (engineOf(profile) !== 'gemini' || profile.gcpProject) {
+    return capabilities
+  }
+  return { ...capabilities, permissionModes: capabilities.permissionModes.filter((mode) => mode !== 'auto') }
 }
 
 export function engineOf(source: { engine?: ProfileEngine } | undefined): ProfileEngine {

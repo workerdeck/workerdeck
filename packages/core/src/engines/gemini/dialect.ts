@@ -5,6 +5,7 @@ const MODE_IDS: Record<string, string> = {
   default: 'default',
   acceptEdits: 'accept-edits',
   plan: 'plan',
+  auto: 'auto',
   bypassPermissions: 'accept-edits',
 }
 

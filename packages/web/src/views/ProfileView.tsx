@@ -283,7 +283,26 @@ export function ProfileView() {
               </Card>
             ) : null}
 
-            {engine === 'gemini' && profile.managed && profile.geminiHome ? (
+            {engine === 'gemini' && profile.gcpProject ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Google Cloud</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col divide-y divide-border">
+                  <DetailRow label="Project">
+                    <code className="font-mono">{profile.gcpProject}</code>
+                  </DetailRow>
+                  <DetailRow label="Location">
+                    <code className="font-mono">{profile.gcpLocation ?? 'global'}</code>
+                  </DetailRow>
+                  <DetailRow label="Credentials">
+                    <span className="text-fg-4">the gateway user&apos;s gcloud Application Default Credentials</span>
+                  </DetailRow>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {engine === 'gemini' && profile.managed && profile.geminiHome && !profile.gcpProject ? (
               <GeminiKeyCard profile={profile} onSaved={(saved) => loaded.setData({ ...detail!, profile: saved })} />
             ) : null}
 

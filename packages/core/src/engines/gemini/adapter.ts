@@ -17,7 +17,7 @@ async function checkGeminiAvailability(profile: ProfileInfo, env: Record<string,
   if (!resolveAgyExecutable(env)) {
     return { available: false, reason: GEMINI_NOT_INSTALLED }
   }
-  if (!profile.geminiHome) {
+  if (profile.gcpProject || !profile.geminiHome) {
     return { available: 'unknown' }
   }
   if (!existsSync(geminiKeyFile(profile.geminiHome))) {
@@ -43,7 +43,8 @@ export const geminiAdapter: EngineAdapter<GeminiAdapterConfig> = {
     if (!executable) {
       throw new Error(GEMINI_NOT_INSTALLED)
     }
-    const { env, auth } = geminiChildEnv(base, profile?.geminiHome)
+    const cloud = profile?.gcpProject ? { project: profile.gcpProject, location: profile.gcpLocation } : undefined
+    const { env, auth } = geminiChildEnv(base, profile?.geminiHome, cloud)
     const args = geminiArgs(profile?.geminiHome)
     return new AcpRunner(
       {

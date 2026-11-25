@@ -35,6 +35,9 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
   const [codexHome, setCodexHome] = useState('')
   const [geminiHome, setGeminiHome] = useState('')
   const [geminiKey, setGeminiKeyDraft] = useState('')
+  const [geminiAuth, setGeminiAuth] = useState<'cloud' | 'key'>('cloud')
+  const [gcpProject, setGcpProject] = useState('')
+  const [gcpLocation, setGcpLocation] = useState('')
   const [capabilities, setCapabilities] = useState<SessionCapability[]>([])
   const [mcpServers, setMcpServers] = useState('')
   const [instructions, setInstructions] = useState('')
@@ -83,17 +86,28 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
       if (geminiHome.trim()) {
         profile.geminiHome = geminiHome.trim()
       }
+      if (geminiAuth === 'cloud') {
+        if (!gcpProject.trim()) {
+          toast.error('A Google Cloud project id is required')
+          return
+        }
+        profile.gcpProject = gcpProject.trim()
+        if (gcpLocation.trim()) {
+          profile.gcpLocation = gcpLocation.trim()
+        }
+      }
     } else {
       profile.configDir = configDir.trim()
     }
-    if (isGemini && geminiKey.trim() && !geminiHome.trim()) {
+    const sendKey = isGemini && geminiAuth === 'key' && geminiKey.trim() !== ''
+    if (sendKey && !geminiHome.trim()) {
       toast.error('A Gemini key needs a home directory to live in')
       return
     }
     setSaving(true)
     try {
       await client()!.createProfile(profile)
-      if (isGemini && geminiKey.trim()) {
+      if (sendKey) {
         await client()!.setGeminiKey(profile.name, geminiKey.trim())
       }
       toast.success(`Profile '${profile.name}' created`)
@@ -229,31 +243,73 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
       ) : isGemini ? (
         <>
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Home directory">
+            <Field label="Sign in with">
+              <Select
+                items={[
+                  { value: 'cloud', label: 'Google Cloud project' },
+                  { value: 'key', label: 'Gemini API key' },
+                ]}
+                value={geminiAuth}
+                onValueChange={(value) => setGeminiAuth(value as 'cloud' | 'key')}
+              >
+                <SelectTrigger className="min-w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cloud">
+                    <SelectItemText>Google Cloud project (Auto mode)</SelectItemText>
+                  </SelectItem>
+                  <SelectItem value="key">
+                    <SelectItemText>Gemini API key</SelectItemText>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label={geminiAuth === 'cloud' ? 'Home directory (optional)' : 'Home directory'}>
               <Input
                 value={geminiHome}
                 onChange={(e) => setGeminiHome(e.target.value)}
-                placeholder="/Users/you/.workerdeck/profiles/gemini"
+                placeholder="~/.workerdeck/profiles/gemini"
                 spellCheck={false}
                 className="font-mono"
               />
             </Field>
-            <Field label="Gemini API key (optional)">
-              <Input
-                type="password"
-                autoComplete="off"
-                value={geminiKey}
-                onChange={(e) => setGeminiKeyDraft(e.target.value)}
-                placeholder="from aistudio.google.com/apikey"
-                className="font-mono"
-              />
-            </Field>
           </div>
-          <p className="text-label text-fg-4">
-            Must resolve inside the server&apos;s <code className="font-mono">allowedConfigDirRoots</code>; a missing directory is created.
-            The key is stored there as <code className="font-mono">gemini-api-key</code> (mode 0600) and never sent back. Without a key the
-            profile runs on the Antigravity CLI&apos;s own login, and you can set one later on the profile.
-          </p>
+          {geminiAuth === 'cloud' ? (
+            <>
+              <div className="flex flex-wrap items-end gap-3">
+                <Field label="Project id">
+                  <Input value={gcpProject} onChange={(e) => setGcpProject(e.target.value)} placeholder="my-project" className="font-mono" />
+                </Field>
+                <Field label="Location (optional)">
+                  <Input value={gcpLocation} onChange={(e) => setGcpLocation(e.target.value)} placeholder="global" className="font-mono" />
+                </Field>
+              </div>
+              <p className="text-label text-fg-4">
+                The Antigravity CLI signs in with the gateway user&apos;s gcloud Application Default Credentials (run{' '}
+                <code className="font-mono">gcloud auth application-default login</code> there once) and bills Vertex AI on this project, which
+                needs the Vertex AI API enabled. WorkerDeck never reads those credentials. This is the sign-in that offers Auto mode.
+              </p>
+            </>
+          ) : (
+            <>
+              <Field label="Gemini API key (optional)">
+                <Input
+                  type="password"
+                  autoComplete="off"
+                  value={geminiKey}
+                  onChange={(e) => setGeminiKeyDraft(e.target.value)}
+                  placeholder="from aistudio.google.com/apikey"
+                  className="font-mono"
+                />
+              </Field>
+              <p className="text-label text-fg-4">
+                The home must resolve inside the server&apos;s <code className="font-mono">allowedConfigDirRoots</code>; a missing directory is
+                created. The key is stored there as <code className="font-mono">gemini-api-key</code> (mode 0600) and never sent back. Without a
+                key the profile runs on the Antigravity CLI&apos;s own login. Auto mode is not offered on this sign-in.
+              </p>
+            </>
+          )}
         </>
       ) : (
         <>

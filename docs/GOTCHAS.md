@@ -754,6 +754,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `PUT /v1/profiles/:name/gemini-key` (`AccountService.setGeminiKey`, same guard as a Claude connect: managed
   profile, home inside `allowedConfigDirRoots`, `canManageProfiles` or `canConnect`); `DELETE` removes it.
   The route answers the profile, never the key; VS Code and the dashboard both offer it.
+- **Google Cloud sign-in is the only one that offers Auto.** A profile with `gcpProject` (and optional
+  `gcpLocation`, default `global`) runs agy with `AGY_ADC_AUTH=1`, `GOOGLE_CLOUD_PROJECT` and
+  `GOOGLE_CLOUD_LOCATION` and authenticates with `agent-platform`; agy reads the gateway user's gcloud
+  Application Default Credentials and bills Vertex AI on that project (Vertex AI API enabled). agy then
+  advertises `auto` among its modes; on a `gemini_api_key` sign-in `session/set_mode auto` answers "Auto
+  mode is not available: it needs the OS terminal sandbox and may not be rolled out to you yet", whatever
+  `--sandbox` says, so `offeredCapabilities` drops `auto` from every other Gemini profile and session.
 - **A managed profile's missing home is created** (0700) on save, for every engine, only after
   `configDirGuard` accepted the path, so it never makes a directory outside the roots.
 - **`--app-data-dir` must be relative** (agy resolves it under `~/.gemini/` and refuses an absolute
