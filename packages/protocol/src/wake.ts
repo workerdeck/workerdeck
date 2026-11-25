@@ -24,7 +24,10 @@ export function holdsAwake(holders: WakeHolders): boolean {
   return holders.turns > 0 || holders.shells.length > 0
 }
 
-export function wakeSummary(holders: WakeHolders, machine = 'this machine'): string | undefined {
+export function wakeSummary(holders: WakeHolders, machine = 'this machine', always = false): string | undefined {
+  if (always) {
+    return `Keeping ${machine} awake: always on`
+  }
   const parts = [
     holders.turns ? `${holders.turns} turn${holders.turns === 1 ? '' : 's'}` : '',
     holders.shells.length ? `${holders.shells.length} shell${holders.shells.length === 1 ? '' : 's'}` : '',

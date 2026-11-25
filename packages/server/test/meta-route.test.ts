@@ -49,6 +49,22 @@ describe('gateway meta', () => {
     expect(refused.agents).toEqual({ sharing: 'private', allowShared: false })
   })
 
+  it('reports whether the host holds the machine awake, and whether it always does', async () => {
+    const answers: GatewayMeta[] = []
+    for (const mode of [false, true, 'always'] as const) {
+      running = createWorkerServer({ allowUnauthenticated: true, keepsAwake: () => mode })
+      const { port } = await running.listen(0, '127.0.0.1')
+      answers.push((await (await fetch(`http://127.0.0.1:${port}/v1/meta`)).json()) as GatewayMeta)
+      await running.close()
+      running = undefined
+    }
+    expect(answers.map(({ keepAwake, alwaysAwake }) => ({ keepAwake, alwaysAwake }))).toEqual([
+      { keepAwake: undefined, alwaysAwake: undefined },
+      { keepAwake: true, alwaysAwake: undefined },
+      { keepAwake: true, alwaysAwake: true },
+    ])
+  })
+
   it('withholds the fingerprint from a scoped principal and the whole route from an anonymous one', async () => {
     const base = await start(true)
     expect((await fetch(`${base}/meta`)).status).toBe(401)

@@ -21,9 +21,9 @@ export type WorkerDeckConfig = WorkerServerOptions & {
   insecureHosts?: string[]
   webRoot?: string
   web?: boolean
-  // Hold the machine awake while a session is waiting on it. CLI-only by design: an embedding host owns its own
-  // power policy and must not have it changed by a library it imported.
-  keepAwake?: boolean
+  // Hold the machine awake while a session is waiting on it, or for the gateway's whole life with 'always'. CLI-only
+  // by design: an embedding host owns its own power policy and must not have it changed by a library it imported.
+  keepAwake?: KeepAwakeMode
   // Refused unless auth is on: CORS on an open gateway lets any allowlisted page drive it with no credential.
   corsOrigins?: string[]
   apns?: ApnsConfig
@@ -57,13 +57,15 @@ export type CliFlags = {
   parking?: boolean
   insecure?: boolean
   web?: boolean
-  keepAwake?: boolean
+  keepAwake?: KeepAwakeMode
   corsOrigins: string[]
   open?: boolean
   hotReload?: boolean
   help?: boolean
   version?: boolean
 }
+
+export type KeepAwakeMode = boolean | 'always'
 
 export class ConfigError extends Error {}
 
@@ -111,6 +113,7 @@ const VALUED = new Map<string, FlagValue>([
   ['--agent-sharing', (f, v, name) => (f.agentSharing = parseAgentSharing(v, name))],
   ['--state-dir', (f, v) => (f.stateDir = resolve(v))],
   ['--cors-origin', (f, v) => f.corsOrigins.push(v)],
+  ['--keep-awake', (f, v, name) => (f.keepAwake = parseKeepAwake(v, name))],
 ])
 
 // `none`, `0` and anything non-positive all mean the same thing: a prompt that never expires.
@@ -133,6 +136,17 @@ function parseEffortDefault(raw: string, source: string): Record<string, string>
     throw new ConfigError(`${source}: expected <model>=<effort>, like opus=high; got: ${raw}`)
   }
   return { [match[1]!]: match[2]! }
+}
+
+function parseKeepAwake(raw: unknown, source: string): KeepAwakeMode {
+  if (raw === 'always' || raw === true || raw === false) {
+    return raw
+  }
+  const named = { work: true, on: true, off: false } as const
+  if (typeof raw === 'string' && raw in named) {
+    return named[raw as keyof typeof named]
+  }
+  throw new ConfigError(`${source}: expected always, work or off; got: ${String(raw)}`)
 }
 
 function parseAgentContextReset(raw: string, source: string): 'on' | 'off' | 'never' {
@@ -268,7 +282,7 @@ export type ResolvedConfig = {
   allowedHosts: Set<string> | null
   webRoot?: string
   web: boolean
-  keepAwake: boolean
+  keepAwake: KeepAwakeMode
   corsOrigins: string[]
   apns?: ApnsConfig
   open: boolean
@@ -377,7 +391,8 @@ export function resolveInstanceConfig(
       ])
 
   const web = flags.web ?? loaded.options.web ?? true
-  const keepAwake = flags.keepAwake ?? loaded.options.keepAwake ?? true
+  const keepAwake =
+    flags.keepAwake ?? (loaded.options.keepAwake === undefined ? true : parseKeepAwake(loaded.options.keepAwake, 'config keepAwake'))
 
   const corsOrigins = flags.corsOrigins.length ? flags.corsOrigins : (loaded.options.corsOrigins ?? [])
   for (const origin of corsOrigins) {

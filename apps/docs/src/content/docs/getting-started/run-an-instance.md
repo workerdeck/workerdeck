@@ -183,6 +183,7 @@ write flag, and only an operator can create a session that has it or press Run o
 | `--agent-context-reset <on\|off\|never>` | - | `off` - sessions get the `context_reset` tool only when their request or profile asks (config: `agentContextReset`) |
 | `--no-parking-store` | - | durable parking on |
 | `--no-keep-awake` | - | machine held awake while a session waits (config: `keepAwake`) |
+| `--keep-awake <always\|work\|off>` | - | `work`: held while work runs; `always` holds it for the gateway's life (config: `keepAwake`) |
 | `--no-web` | - | dashboard served (config: `web`) |
 | `--config <path>` | - | `./workerdeck.config.mjs` |
 | `--insecure`, `--open`, `--help`, `--version` | | |
@@ -239,6 +240,12 @@ Under the hood it is `caffeinate -i` on macOS and `systemd-inhibit --what=idle:s
 each tied to the gateway's own pid, so even `kill -9` releases within seconds. Elsewhere - or
 where neither tool exists - it does nothing and says so once. `--no-keep-awake`
 (or `keepAwake: false`) turns it off.
+
+A gateway on a box that should never idle to sleep (a Mac mini or a headless server reached from
+elsewhere) can hold the lock for its whole life instead: `--keep-awake always` (or
+`keepAwake: 'always'`). The coffee line then reads "always on". It is still idle sleep only, and
+still released when the gateway exits; a closed lid or a sleep someone asks for still sleeps the
+machine, so set the box's own energy settings too.
 
 This is the CLI's job, not the server's: a standalone gateway owns the machine's session, while
 a host embedding `@workerdeck/server` owns its own power policy and should not have it changed

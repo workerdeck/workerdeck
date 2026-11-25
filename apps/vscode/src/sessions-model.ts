@@ -210,6 +210,7 @@ export class SessionsModel implements vscode.Disposable {
       const snap = this.#snapshots.get(host.id)
       const local = isLocalHostCached(host)
       const relay = relayOfCached(host)
+      const keepAwake = keepAwakeCached(host)
       const folder = scope?.roots.find((r) => (r.hostId ? r.hostId.toLowerCase() === host.id.toLowerCase() : local))?.path
       hosts.push({
         id: host.id,
@@ -221,7 +222,7 @@ export class SessionsModel implements vscode.Disposable {
         cwdSuggestion: folder ?? this.sessionsOf(host.id)[0]?.cwd,
         ...(host.managed ? { managed: true } : {}),
         ...(relay ? { relay } : {}),
-        ...(keepAwakeCached(host) ? { keepAwake: true } : {}),
+        ...(keepAwake ? { keepAwake } : {}),
       })
       if (snap?.probe === 'connected') {
         sessions[host.id] = snap.sessions

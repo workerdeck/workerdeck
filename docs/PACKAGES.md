@@ -2620,7 +2620,9 @@ while a session waits on a person, so a sleep suspends it without costing the tu
 finished agents plus one on an approval card let the machine sleep. It is **recomputed from the registry, never
 refcounted**: a count has to be decremented on every exit a session can take - closed, failed,
 parked, evicted, drained - and one missed path pins the machine awake until the gateway stops.
-A 60s sweep is insurance on that recompute, not the mechanism. Per-platform it is one child
+A 20s sweep is insurance on that recompute, not the mechanism. `--keep-awake always` (`keepAwake: 'always'`)
+skips the observer and the sweep and takes the lock once at startup, for an always-on box; `/meta` adds
+`alwaysAwake: true` and the coffee line reads "always on". Per-platform it is one child
 process (`caffeinate -i -w <pid>` on macOS - never `-d`, keeping the screen lit was not what was
 asked for; `systemd-inhibit --what=idle:sleep --mode=block` on Linux), and both tie the child's
 life to *this* pid rather than to a kill we might not get to make, so a **SIGKILLed gateway

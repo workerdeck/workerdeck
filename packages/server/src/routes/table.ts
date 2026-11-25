@@ -101,7 +101,7 @@ export function httpRoutes(ctx: ServerContext): HttpRoute[] {
                 machineId: machineId(),
                 ...(ctx.relayStatus ? { relay: ctx.relayStatus() } : {}),
                 agents: agentDefaults(ctx),
-                ...(ctx.keepsAwake?.() ? { keepAwake: true } : {}),
+                ...keepAwakeMeta(ctx.keepsAwake?.()),
               }
             : {}),
         } satisfies GatewayMeta),
@@ -180,4 +180,8 @@ function agentDefaults(ctx: ServerContext): GatewayAgentDefaults {
     sharing: allowShared && ctx.options.agentSharing?.default === 'shared' ? 'shared' : 'private',
     allowShared,
   }
+}
+
+function keepAwakeMeta(mode: boolean | 'always' | undefined): Pick<GatewayMeta, 'keepAwake' | 'alwaysAwake'> {
+  return mode === 'always' ? { keepAwake: true, alwaysAwake: true } : mode ? { keepAwake: true } : {}
 }

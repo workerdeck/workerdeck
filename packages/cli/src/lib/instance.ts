@@ -221,7 +221,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
   let wake: WakeLock | undefined
   const server = createWorkerServer({
     ...config.options,
-    keepsAwake: () => wake?.available === true,
+    keepsAwake: () => (wake?.available === true ? config.keepAwake : false),
     ...(profileStore ? { profileStore } : {}),
     agentStore,
     // On by default here, off in the library: a mispointed config dir should say so at startup.
@@ -259,7 +259,9 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
     : undefined
   let sweep: ReturnType<typeof setInterval> | undefined
   const lock = wake
-  if (lock) {
+  if (lock && config.keepAwake === 'always') {
+    lock.set(true)
+  } else if (lock) {
     const shells = (): ShellInfo[] => server.shells?.running() ?? []
     driveWakeLock({ list: () => server.registry.list(), observe: (listener) => server.registry.observe(listener), shells }, lock)
     sweep = setInterval(() => lock.set(sessionsNeedTheMachine(server.registry.list(), shells())), WAKE_SWEEP_MS)
@@ -405,6 +407,8 @@ export function bannerLines({ url, config, generated, authEnabled, push }: Banne
   }
   if (!config.keepAwake) {
     lines.push('  keep-awake: off - this machine may sleep mid-turn')
+  } else if (config.keepAwake === 'always') {
+    lines.push('  keep-awake: always - idle sleep is blocked while the gateway runs')
   }
   if (config.corsOrigins.length) {
     lines.push(`  cors: ${config.corsOrigins.join(', ')} may call /v1 (still key-gated)`)

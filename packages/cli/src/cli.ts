@@ -122,6 +122,10 @@ Options
                             sleeping mid-turn drops the socket and burns the turn.
                             An approval wait does not hold it. The screen is never
                             kept on, and the lock releases when nothing runs.
+      --keep-awake always   hold the machine awake for as long as the gateway
+                            runs, for an always-on box (config: keepAwake:
+                            'always'). Idle sleep only: a closed lid or a sleep
+                            the user asks for still sleeps it.
       --no-web              don't serve the web dashboard (config: web: false).
                             /v1 and the auth routes are unchanged; everything else
                             404s. For a gateway reached only from the VS Code

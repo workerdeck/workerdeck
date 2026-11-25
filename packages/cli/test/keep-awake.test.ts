@@ -1,6 +1,6 @@
 import { wakeHolders, wakeSummary, type SessionInfo } from '@workerdeck/protocol'
 import { describe, expect, it } from 'vitest'
-import { parseArgs, resolveInstanceConfig } from '../src/config.ts'
+import { ConfigError, parseArgs, resolveInstanceConfig } from '../src/config.ts'
 import { createWakeLock, driveWakeLock, sessionsNeedTheMachine } from '../src/lib/keep-awake.ts'
 
 const noConfig = { path: null, options: {} }
@@ -37,6 +37,7 @@ describe('sessionsNeedTheMachine', () => {
     expect(wakeSummary(wakeHolders(sessions))).toBe('Keeping this machine awake: 2 turns, 1 shell')
     expect(wakeSummary(wakeHolders([session('running')]), 'mac')).toBe('Keeping mac awake: 1 turn')
     expect(wakeSummary(wakeHolders([session('awaiting_approval')]))).toBeUndefined()
+    expect(wakeSummary(wakeHolders([]), 'mini', true)).toBe('Keeping mini awake: always on')
   })
 
   it('holds while any one session needs it, not only the first', () => {
@@ -140,10 +141,20 @@ describe('the keep-awake flag', () => {
       ['flag', ['--no-keep-awake'], noConfig, false],
       ['config off, no flag', [], fileOff, false],
       ['config on, flag off', ['--no-keep-awake'], fileOn, false],
+      ['flag always', ['--keep-awake', 'always'], noConfig, 'always'],
+      ['config always', [], { path: null, options: { keepAwake: 'always' } }, 'always'],
+      ['config always, flag work', ['--keep-awake', 'work'], { path: null, options: { keepAwake: 'always' } }, true],
+      ['config on, flag off by name', ['--keep-awake', 'off'], fileOn, false],
     ] as const
     expect(rows.map(([label, argv, file]) => [label, resolveInstanceConfig(parseArgs([...argv]), file).keepAwake])).toEqual(
       rows.map(([label, , , expected]) => [label, expected]),
     )
+  })
+
+  it('refuses a mode it does not know, from the flag or the config file', () => {
+    expect(() => parseArgs(['--keep-awake', 'forever'])).toThrow(ConfigError)
+    const file = { path: null, options: { keepAwake: 'forever' as never } }
+    expect(() => resolveInstanceConfig(parseArgs([]), file)).toThrow(/config keepAwake/)
   })
 
   it('is not passed through to the server, which owns no power policy', () => {

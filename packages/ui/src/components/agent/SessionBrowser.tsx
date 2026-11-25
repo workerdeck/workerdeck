@@ -98,7 +98,7 @@ export interface SessionBrowserProps {
   // Each gateway's `GatewayMeta.relay` by host id: draws a member under a lead on another gateway, and allows the drop.
   relays?: HostRelays
   // Host ids whose gateway reports `GatewayMeta.keepAwake`: draws `KeepAwakeNote` under the list while one holds.
-  keepAwake?: Readonly<Record<string, boolean | undefined>>
+  keepAwake?: Readonly<Record<string, boolean | 'always' | undefined>>
   // Draws a `+` on each project heading: start a session on that gateway, in that project's root.
   onCreateInGroup?: (target: GroupTarget) => void
   emptyState?: ReactNode

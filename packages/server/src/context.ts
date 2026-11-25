@@ -46,7 +46,7 @@ export type ServerContext = {
   // Present when the gateway dials a relay: the cross-gateway half of teams.
   teams?: TeamLinks
   relayStatus?: () => RelayLinkStatus
-  keepsAwake?: () => boolean
+  keepsAwake?: () => boolean | 'always'
 
   registry: SessionRegistry
   parking: SessionParkManager

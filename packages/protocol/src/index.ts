@@ -1303,6 +1303,8 @@ export type GatewayMeta = {
   agents?: GatewayAgentDefaults
   // The gateway holds its machine awake while `wakeHolders` says so (`--no-keep-awake` turns it off).
   keepAwake?: boolean
+  // With `keepAwake`: held for the gateway's whole life (`--keep-awake always`), whatever runs.
+  alwaysAwake?: boolean
 }
 
 export type HostDirEntry = {

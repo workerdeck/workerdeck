@@ -79,7 +79,7 @@ export type WorkerServerOptions = {
   basePath?: string
   fallback?: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
   // Reported as `GatewayMeta.keepAwake` only: the host that holds the machine awake says so. The server holds nothing.
-  keepsAwake?: () => boolean
+  keepsAwake?: () => boolean | 'always'
   cors?: { origins: string[] }
   maxBodyBytes?: number
   // `true` refuses bypassPermissions everywhere. `'sessions'` refuses it for sessions, agents and mode changes but lets an

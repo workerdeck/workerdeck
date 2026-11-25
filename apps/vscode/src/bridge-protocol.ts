@@ -25,7 +25,7 @@ export type WireHost = {
   cwdSuggestion?: string
   managed?: boolean
   relay?: GatewayRelayMeta
-  keepAwake?: boolean
+  keepAwake?: boolean | 'always'
 }
 
 export type WireProfile = {
