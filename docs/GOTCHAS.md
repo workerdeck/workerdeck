@@ -726,6 +726,36 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   since an attributed event whose `parentToolUseId` matches no top-level call renders inline instead
   of as a frame; a late `started` edge fills the name in.
 
+## Agy engine (Antigravity CLI over ACP)
+
+- **The engine spawns the official `agy acp`** and speaks ACP v1 (JSON-RPC 2.0 over stdio, every
+  frame stamped `"jsonrpc":"2.0"`, unlike codex). The ACP layer in `engines/acp/` is generic; what
+  is agy's lives in `AGY_DIALECT` (`engines/agy/dialect.ts`).
+- **Instructions travel only in `_meta.antigravity.systemPrompt.append`** on `session/new`,
+  `session/resume` and `session/load`. The standard ACP `systemPrompt` field and a bare string are
+  accepted and silently ignored (measured on 1.5.16, fixture `system-prompt.ndjson`).
+- **A resumed or loaded session comes back on agy's default model** (`gemini-3.1-pro`, thinking
+  `low`, mode `default`), so the runner sends model, `thought_level` and `mode` again after every
+  open whenever the reported value differs.
+- **A prompt sent mid-turn steers it:** the running `session/prompt` resolves at once with
+  `end_turn` and no usage, and the new one carries the rest of the turn. The turn settles on the
+  prompt sent last.
+- **Text chunks carry no message id** and interleave with tool calls: text and thinking land as an
+  assistant message at each `tool_call` and at turn end. agy repeats the whole call in every
+  `tool_call_update`; the card is emitted once and its result once.
+- **`session/load` replays the conversation before its response** (user, thought, message chunks,
+  tool calls already `completed`); `session/resume` replays nothing. Missing ids: load answers
+  `-32002`, resume `-32603 Failed to read session`; the runner starts a new session with a notice.
+- **Auth:** a profile's `agyHome` holds a 0600 `gemini-api-key` file. The child gets it as
+  `GEMINI_API_KEY` and the runner calls `authenticate {methodId: 'gemini-api-key'}`; inherited
+  `GEMINI_API_KEY`/`GOOGLE_API_KEY` are dropped so a profile bills only its own key. agy accepts any
+  key at `authenticate`; a bad one fails on the first prompt. Without a key file the profile runs on
+  agy's cached Google login. Never pass `--override_user_agent_name`.
+- **`--app-data-dir` must be relative** (agy resolves it under `~/.gemini/` and refuses an absolute
+  path); a profile's store is `antigravity-wd-<basename of agyHome>`.
+- **Not wired yet:** the gateway tools (agy has no client-defined tools; they need an MCP server in
+  `session/new`), archive reads (`history-reader` answers missing for agy), Gemini pricing.
+
 ## Engine adapters & capability records
 
 - **`checkAvailability` and `listSessions` take the profile's complete session environment, never
@@ -741,8 +771,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   needs one is `EngineCapabilities.hostCwd`, resolved at the door by the session factory's
   `checkCwd`. A second copy of the rule inside the queue would refuse the filesystem-less provider
   engine outright.
-- `ProfileEngine` stays a closed union on purpose: both clients switch exhaustively, the Swift
-  mirror ships in lockstep. Adding an engine is a versioned protocol event, not a string.
+- `ProfileEngine` stays a closed union on purpose, but adding a member is additive, not a
+  `PROTOCOL_VERSION` bump (verified when `agy` landed): TS clients read the server-stamped
+  `capabilities` before `ENGINE_CAPABILITIES[engine]`, the Rust core decodes an unknown engine as
+  `Unknown`, and `peers.ts` drops an unknown engine from a relayed origin.
 - The capability record is dual-sourced: `ENGINE_CAPABILITIES` in protocol (browser-safe default)
   and the server-stamped `ProfileInfo.capabilities`/`SessionInfo.capabilities` (wire truth, wins
   when both exist). A conformance test pins the adapters to the protocol record by identity.

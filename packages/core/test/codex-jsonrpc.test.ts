@@ -1,12 +1,12 @@
 import { PassThrough } from 'node:stream'
 import { describe, expect, it } from 'vitest'
-import { JsonRpcError, JsonRpcStdioConnection } from '../src/engines/codex/jsonrpc.ts'
+import { JsonRpcError, codexRpc } from '../src/engines/codex/jsonrpc.ts'
 import { eventually } from './helpers/wait.ts'
 
 function harness() {
   const toClient = new PassThrough() // server stdout → client input
   const fromClient = new PassThrough() // client output → server stdin
-  const connection = new JsonRpcStdioConnection({ input: toClient, output: fromClient })
+  const connection = codexRpc({ input: toClient, output: fromClient })
   const written: Array<Record<string, unknown>> = []
   fromClient.on('data', (chunk: Buffer) => {
     for (const line of String(chunk).split('\n')) {

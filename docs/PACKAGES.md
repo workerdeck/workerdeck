@@ -536,6 +536,13 @@ command: Stop stays `interrupt`. Rules in `docs/GOTCHAS.md` § Session goals.
 
 ## `packages/core`
 
+**ACP engines**: `engines/acp/` is a generic Agent Client Protocol client (`connection.ts` spawns the
+agent, `updates.ts` maps `session/update` to session events, `runner.ts` is `AcpRunner`); an
+`AcpDialect` names what differs per agent. `engines/agy/` is the one dialect so far (adapter,
+catalog, child env and args). `lib/jsonrpc-stdio.ts` is the JSON-RPC connection both codex and ACP
+use (`envelope`, `label`, `traceEnv`, `traceSkip`). Test data recorded from the real binary lives in
+`test/fixtures/acp/agy-<version>/`. Rules in `docs/GOTCHAS.md` §Agy engine.
+
 **Reasoning effort**: `Runner.setEffort?()` on `SessionRunner` and `CodexRunner`; both report the
 effective level as `info().effort` and `effort_changed`, and resolve per-model defaults from
 `EngineRunnerConfig.effortDefaults` through `lib/effort.ts` (`effortDefaultFor`). The provider

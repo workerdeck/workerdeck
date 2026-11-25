@@ -36,7 +36,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 | Package | What it is |
 | --- | --- |
 | `packages/protocol` | Wire types **and the few rules both sides must agree on** (`transcriptActivity`, `transcriptProse`, `transcriptContent`, `replayCoalesceKey`, `logCoalesceKey`, `snapshotRetains`, `replayRetains`, result truncation, image refs, tool titles, `teamReaches`, `projectAccent`, `SessionAddress` and the cut's wire; the sessions-list, unread and usage view models). Dependency-free, browser-safe. Breaking → bump `PROTOCOL_VERSION` (currently **2**: since 4.0.0 a session id spans many conversations and every mutation must name its own, which an older client cannot; **locked**, so every breaking change costs a bump and a mismatch banner). |
-| `packages/core` | The engines, shipped as adapters: `SessionRunner` (Claude SDK), `CodexRunner` (codex app-server), `AiSdkRunner` (provider). No transport. |
+| `packages/core` | The engines, shipped as adapters: `SessionRunner` (Claude SDK), `CodexRunner` (codex app-server), `AiSdkRunner` (provider), `AcpRunner` (`agy acp`, Gemini). No transport. |
 | `packages/sandbox` | Untrusted-code boundary: QuickJS-NG WASM guest, map VFS, by-value host bridge. Leaf. |
 | `packages/queue` | `JobQueue` + `QueueAdapter`. `claimNext` must stay atomic. |
 | `packages/relay-client` | Gateway side of the cross-gateway relay: wire frames, `connectRelay`, the registry publisher. Server-to-server; not in `protocol`. |
@@ -129,6 +129,9 @@ API key into the child or over the app-server's account RPCs - the operator's se
 passed through whole, but no env key is a credential route on this surface (`CODEX_API_KEY` is
 read only by `codex exec`, which we no longer ship; the canary pins that), so availability
 comes from `codex login status` alone, and the probe surfaces exit codes and fixed reason
-strings only, never `codex login status` output (it contains a masked key fragment). Compliance/legal review is settled (2026-10-07); the README "Auth & Anthropic's terms" section
+strings only, never `codex login status` output (it contains a masked key fragment). **The agy engine** spawns the official `agy acp`; WorkerDeck never reads agy's keyring or
+`~/.gemini`, never runs its OAuth itself and never spoofs its user agent. A profile authenticates with a
+Gemini API key the operator saved in its `agyHome` (0600 file, injected as `GEMINI_API_KEY`, never in a
+response or log), or with agy's own cached login. Compliance/legal review is settled (2026-10-07); the README "Auth & Anthropic's terms" section
 and the auth guide say so. Whether OpenAI's terms restrict headless
 ChatGPT-subscription codex use the same way is unresolved and mirrors the same posture.

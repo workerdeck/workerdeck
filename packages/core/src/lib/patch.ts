@@ -88,3 +88,57 @@ export function parseUnifiedDiff(diff: string, path?: string): FilePatch | undef
   const { hunks: kept, truncated } = capHunks(hunks)
   return { ...(path && { path }), hunks: kept, ...(truncated && { truncated }) }
 }
+
+const PATCH_CONTEXT_LINES = 3
+
+function splitLines(text: string): string[] {
+  if (text === '') {
+    return []
+  }
+  const lines = text.split('\n')
+  return lines.at(-1) === '' ? lines.slice(0, -1) : lines
+}
+
+// One hunk around the changed span (common prefix and suffix trimmed): engines that report an edit as whole before
+// and after texts give no hunks of their own.
+export function filePatchFromTexts(path: string | undefined, oldText: string | null | undefined, newText: string): FilePatch | undefined {
+  const before = splitLines(oldText ?? '')
+  const after = splitLines(newText)
+  let head = 0
+  while (head < before.length && head < after.length && before[head] === after[head]) {
+    head++
+  }
+  let tail = 0
+  while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) {
+    tail++
+  }
+  if (head === before.length && head === after.length) {
+    return undefined
+  }
+  const start = Math.max(0, head - PATCH_CONTEXT_LINES)
+  const contextAfter = Math.min(tail, PATCH_CONTEXT_LINES)
+  const removed = before.slice(head, before.length - tail)
+  const added = after.slice(head, after.length - tail)
+  const lines = [
+    ...before.slice(start, head).map((line) => ` ${line}`),
+    ...removed.map((line) => `-${line}`),
+    ...added.map((line) => `+${line}`),
+    ...before.slice(before.length - tail, before.length - tail + contextAfter).map((line) => ` ${line}`),
+  ]
+  const oldLines = head - start + removed.length + contextAfter
+  const newLines = head - start + added.length + contextAfter
+  const truncated = lines.length > MAX_PATCH_LINES
+  const hunk = {
+    oldStart: oldLines === 0 ? 0 : start + 1,
+    oldLines,
+    newStart: newLines === 0 ? 0 : start + 1,
+    newLines,
+    lines: lines.slice(0, MAX_PATCH_LINES),
+  }
+  return {
+    ...(path !== undefined && { path }),
+    kind: oldText === null || oldText === undefined ? 'create' : 'update',
+    hunks: [hunk],
+    ...(truncated && { truncated }),
+  }
+}

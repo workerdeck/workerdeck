@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { APP_SERVER_ARGS } from './connect.ts'
-import { JsonRpcStdioConnection } from './jsonrpc.ts'
+import { codexRpc } from './jsonrpc.ts'
 import type { AppServerConnection } from './types.ts'
 
 const STDERR_TAIL_BYTES = 4096
@@ -10,7 +10,7 @@ export function connectAppServer(options: { executable: string; env: Record<stri
     env: options.env,
     stdio: ['pipe', 'pipe', 'pipe'],
   })
-  const rpc = new JsonRpcStdioConnection({ input: child.stdout, output: child.stdin })
+  const rpc = codexRpc({ input: child.stdout, output: child.stdin })
 
   let stderrTail = ''
   child.stderr.on('data', (chunk: Buffer) => {
