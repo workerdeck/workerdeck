@@ -1829,7 +1829,9 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   **Verified**: `pnpm lint` (119 warnings), typecheck, `turbo run test --concurrency=1` 13/13, gatekeeper; live:
   keep-awake shells on the dev gateway (lock held by a turn or a `keepAwake` shell, released when idle) and
   `--keep-awake always` on a private gateway (held with no sessions, `/meta` `alwaysAwake`, released on kill). iOS UI
-  suites ran in the 119th session, not again here; no paid smokes. Bumped in a worktree.
+  suites ran in the 119th session, not again here; no paid smokes. Bumped in a worktree. **Published** 2026-11-25: tag
+  `v4.7.0` at `cfab85ee`, Publish green first try (run 45596795277), npm 12/12 with `latest` 4.7.0 (nine staged for up
+  to about four minutes), Marketplace job green.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
