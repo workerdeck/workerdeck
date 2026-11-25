@@ -71,6 +71,7 @@ struct FilterMenu: View, Equatable {
           Text("Engine").tag(ListGroupBy.adapter)
           Text("State").tag(ListGroupBy.state)
           Text("Project").tag(ListGroupBy.project)
+          Text("Custom").tag(ListGroupBy.custom)
         }
         .pickerStyle(.menu)
         Picker("Sort by", selection: pick(filter.sortBy) { list.setSortBy(sortBy: $0) }) {

@@ -30,6 +30,7 @@ struct SessionListView: View {
   @State private var statusText = ""
   @State private var pendingDelete: ListItem?
   @State private var history: ConversationsTarget?
+  @State private var groupEdit: GroupEdit?
   @State private var pendingDiscard: PendingDiscard?
   @State private var pendingCrossing: Crossing?
   @State private var dragging: ListDragSession?
@@ -368,6 +369,9 @@ struct SessionListView: View {
     } message: { pending in
       Text(pending.confirmation.detail)
     }
+    .sheet(item: $groupEdit) { edit in
+      CustomGroupSheet(id: edit.id, model: model)
+    }
     .sheet(item: $history) { target in
       ConversationsSheet(target: target, model: model) { route in
         history = nil
@@ -435,6 +439,9 @@ struct SessionListView: View {
               case .spacer(let nest): spacer(nest)
               }
             }
+            if showsEmptyBox(section, dragged: dragged) {
+              emptyGroupBox(section)
+            }
           }
         } header: {
           if section.earlier {
@@ -444,6 +451,9 @@ struct SessionListView: View {
           }
         }
         .listSectionSeparator(.hidden)
+      }
+      if model.filter.groupBy == .custom, liveOrder == nil {
+        newGroupButton(model)
       }
     }
     .listStyle(.plain)
@@ -575,6 +585,9 @@ struct SessionListView: View {
         if settled { model.toggleGroup(group.key) }
       } label: {
         HStack(spacing: 8) {
+          if group.custom != nil {
+            CustomGroupBadge(color: group.color, icon: group.icon)
+          }
           if let glyph = group.projectGlyph {
             Image(systemName: projectSymbol(forLucideName: glyph)).font(.system(size: 11))
           } else if let hash = group.projectIconHash, let image = model.projectIcons.image(forHash: hash) {
@@ -598,6 +611,17 @@ struct SessionListView: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("\(group.collapsed ? "Expand" : "Collapse") \(label)")
+      if group.custom != nil {
+        Menu {
+          headingMenu(group, model: model)
+        } label: {
+          Image(systemName: "ellipsis")
+            .font(.system(size: 12, weight: .medium))
+            .frame(width: 20, height: 20)
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Actions for \(label)")
+      }
       if group.collapsed, group.foldAttention {
         Image(systemName: "exclamationmark.circle")
           .font(.system(size: 12, weight: .medium))
@@ -617,13 +641,59 @@ struct SessionListView: View {
     .foregroundStyle(ListPalette.fg4)
     .frame(minHeight: 20)
     .textCase(nil)
-    .contextMenu {
-      if let hostId = group.hostId.flatMap(UUID.init(uuidString:)), model.filter.groupBy == .project {
-        Button("New session", systemImage: "plus") {
-          path.append(.create(hostId: hostId, seed: CreateSessionSeed(cwd: group.cwd ?? "")))
-        }
+    .contextMenu { headingMenu(group, model: model) }
+  }
+
+  @ViewBuilder
+  private func headingMenu(_ group: ListGroup, model: SessionListModel) -> some View {
+    if let hostId = group.hostId.flatMap(UUID.init(uuidString:)), model.filter.groupBy == .project {
+      Button("New session", systemImage: "plus") {
+        path.append(.create(hostId: hostId, seed: CreateSessionSeed(cwd: group.cwd ?? "")))
       }
     }
+    if let id = group.custom {
+      Button("Edit group…", systemImage: "pencil") { groupEdit = GroupEdit(id: id) }
+      Button("Delete group", systemImage: "trash", role: .destructive) { model.removeCustomGroup(id) }
+    }
+  }
+
+  private func showsEmptyBox(_ section: ListSection, dragged: String?) -> Bool {
+    section.group.custom != nil && section.items.allSatisfy { $0.id == dragged }
+  }
+
+  // `Drag sessions here` under an empty custom group: a drop row the core reads as the group's end.
+  private func emptyGroupBox(_ section: ListSection) -> some View {
+    let targeted = dropTarget?.lane == section.id
+    return Text(dragging == nil ? "Hold a session and drag it here" : "Drop here")
+      .font(ListType.label())
+      .foregroundStyle(ListPalette.fg4)
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, 8)
+      .background(RoundedRectangle(cornerRadius: 6).fill(targeted ? Color.accentColor.opacity(0.1) : .clear))
+      .overlay(
+        RoundedRectangle(cornerRadius: 6)
+          .strokeBorder(targeted ? Color.accentColor : ListPalette.borderStrong, style: StrokeStyle(lineWidth: 1, dash: targeted ? [] : [3, 3])))
+      .listFrame { frames.cards["empty:\(section.id)"] = $0 }
+      .listRowInsets(EdgeInsets(top: 2, leading: CardBackground.edge + 4, bottom: 6, trailing: CardBackground.edge + 4))
+      .listRowSeparator(.hidden)
+      .listRowBackground(Color.clear)
+  }
+
+  private func newGroupButton(_ model: SessionListModel) -> some View {
+    Button {
+      groupEdit = GroupEdit(id: model.addCustomGroup())
+    } label: {
+      Label("New group", systemImage: "plus")
+        .font(ListType.label(.medium))
+        .foregroundStyle(ListPalette.fg3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("NewGroup")
+    .listRowInsets(Self.headingInsets)
+    .listRowSeparator(.hidden)
+    .listRowBackground(Color.clear)
   }
 
   // MARK: - Drag and drop
@@ -692,6 +762,9 @@ struct SessionListView: View {
           let key = row.id
           guard let frame = frames.cards[key] else { continue }
           shown.append(DragFrame(key: key, top: frame.minY, height: frame.height))
+        }
+        if showsEmptyBox(section, dragged: id), let frame = frames.cards["empty:\(section.id)"] {
+          shown.append(DragFrame(key: "empty:\(section.id)", top: frame.minY, height: frame.height))
         }
       }
       let next = model.dragMove(frames: shown, y: point.y)
@@ -888,6 +961,9 @@ struct SessionListView: View {
         Label("Add to team", systemImage: "person.2")
       }
     }
+    if model.filter.groupBy == .custom {
+      moveToGroupMenu(row, model: model)
+    }
     if row.row.member {
       Button {
         model.togglePin(row)
@@ -951,6 +1027,35 @@ struct SessionListView: View {
       Button(role: .destructive) { pendingClose = row } label: {
         Label("Close", systemImage: "xmark.circle")
       }
+    }
+  }
+
+  private func moveToGroupMenu(_ row: ListItem, model: SessionListModel) -> some View {
+    let current = model.customGroup(of: row)
+    return Menu {
+      ForEach(model.customGroups, id: \.id) { group in
+        Button {
+          model.moveToCustomGroup(row, group.id)
+        } label: {
+          if group.id == current {
+            Label(group.name, systemImage: "checkmark")
+          } else {
+            Text(group.name)
+          }
+        }
+        .disabled(group.id == current)
+      }
+      if current != nil {
+        Button("Ungrouped") { model.moveToCustomGroup(row, nil) }
+      }
+      Divider()
+      Button("New group…", systemImage: "plus") {
+        let id = model.addCustomGroup()
+        model.moveToCustomGroup(row, id)
+        groupEdit = GroupEdit(id: id)
+      }
+    } label: {
+      Label("Move to group", systemImage: "folder")
     }
   }
 

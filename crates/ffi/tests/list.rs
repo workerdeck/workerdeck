@@ -459,3 +459,49 @@ fn a_plain_session_dropped_on_a_solo_agent_joins_it() {
     assert_eq!(target.join.as_deref(), Some("h1:solo"));
     assert!(matches!(list.end_drag(true), ListDrop::Team { order: 0.0, .. }));
 }
+
+#[test]
+fn custom_groups_are_made_styled_filled_reordered_and_removed() {
+    let list = SessionList::new(Some(r#"{"groupBy":"custom"}"#.into()), None);
+    list.set_host("h1".into(), "mac".into(), true, body(&[idle("a", ""), idle("b", "")])).unwrap();
+    let heads = |list: &SessionList| list.groups(0.0).into_iter().map(|g| (g.label.unwrap_or_default(), g.rows.len())).collect::<Vec<_>>();
+    assert_eq!(heads(&list), [("Ungrouped".to_owned(), 2)]);
+
+    let one = list.add_custom_group("  ".into());
+    let two = list.add_custom_group("Two".into());
+    assert_ne!(one, two);
+    list.rename_custom_group(one.clone(), "One".into());
+    list.rename_custom_group(one.clone(), " ".into());
+    list.move_to_custom_group("h1:a".into(), Some(two.clone()));
+    assert_eq!(list.custom_group_of("h1:a".into()), Some(two.clone()));
+    assert_eq!(heads(&list), [("One".to_owned(), 0), ("Two".to_owned(), 1), ("Ungrouped".to_owned(), 1)]);
+
+    let groups = list.groups(0.0);
+    assert!(groups[0].reorderable && !groups[0].caps && groups[0].color.is_some());
+    assert!(!groups[2].reorderable && groups[2].color.is_none());
+    let color = list.group_colors()[3].clone();
+    list.set_custom_group_icon(one.clone(), Some("data:image/png;base64,AA".into()));
+    assert_eq!(list.groups(0.0)[0].icon.as_deref(), Some("data:image/png;base64,AA"));
+    list.set_custom_group_color(one.clone(), color.clone());
+    assert_eq!((list.groups(0.0)[0].color.clone(), list.groups(0.0)[0].icon.clone()), (Some(color), None));
+
+    list.move_group(groups[0].key.clone(), groups[1].key.clone());
+    assert_eq!(list.custom_groups().iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["Two", "One"]);
+
+    list.begin_drag("h1:b".into());
+    let frames = vec![
+        DragFrame { key: "h1:b".into(), top: 80.0, height: 36.0 },
+        DragFrame { key: "head:custom:".to_owned() + &two, top: 0.0, height: 20.0 },
+        DragFrame { key: "h1:a".into(), top: 20.0, height: 36.0 },
+        DragFrame { key: "head:custom:".to_owned() + &one, top: 56.0, height: 20.0 },
+        DragFrame { key: "empty:custom:".to_owned() + &one, top: 76.0, height: 36.0 },
+    ];
+    let target = list.drag_move(frames, 94.0).unwrap();
+    assert_eq!(target.lane, format!("custom:{one}"));
+    assert!(matches!(list.end_drag(true), ListDrop::Placed));
+    assert_eq!(list.custom_group_of("h1:b".into()), Some(one.clone()));
+
+    list.move_to_custom_group("h1:b".into(), None);
+    list.remove_custom_group(two);
+    assert_eq!(heads(&list), [("One".to_owned(), 0), ("Ungrouped".to_owned(), 2)]);
+}

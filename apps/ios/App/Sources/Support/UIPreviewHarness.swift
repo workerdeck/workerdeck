@@ -183,7 +183,9 @@ private struct ListPreview: View {
   private static let defaults: UserDefaults = {
     let defaults = UserDefaults(suiteName: suite) ?? .standard
     defaults.removePersistentDomain(forName: suite)
-    defaults.set(#"{"groupBy":"state"}"#, forKey: SessionListModel.configKey)
+    let custom = ProcessInfo.processInfo.environment["UIPREVIEW_GROUP"] == "custom"
+    let config = custom ? #"{"groupBy":"custom","customGroups":[{"id":"g1","name":"Release","members":[]}]}"# : #"{"groupBy":"state"}"#
+    defaults.set(config, forKey: SessionListModel.configKey)
     return defaults
   }()
 
