@@ -707,8 +707,10 @@ under `allow` too. Every engine's `info()` reports `shellAgentWrite` when it hol
 `SessionToolSources.propose`, never the engine's permission step, and runs the command through
 `ShellDirectory.propose` as a `proposed` user shell. `wait: 'exit'` (and `shell_run` `wakeOnExit`)
 wake the session with `shellExitedText` through a gateway-only `synthetic` send when the shell ends
-after the call returned; `wait: 'run'` flushes the shell like a `$`. `docs/GOTCHAS.md` § Shell
-sessions has the rules.
+after the call returned; `wait: 'run'` flushes the shell like a `$`. `shell_run` `keepAwake`
+(omitted means the call's `wakeOnExit`) reaches `ShellDirectory.run` as `keepAwake: true` or not at
+all, and the shell's `ShellInfo.keepAwake` is what protocol's `wakeHolders` counts while it runs.
+`docs/GOTCHAS.md` § Shell sessions has the rules.
 
 `src/lib/instructions.ts` is the host-instruction seam: `SessionInstructions`
 (`string | ((context) => string)`), `resolveInstructions` and `composeInstructions`. All three
@@ -1229,7 +1231,11 @@ provider engine therefore never gets the tools. `shellAgentWrite` is stamped bes
 true. `lib/provider-runner.ts`
 supplies the `shouldApprove` default (`shellToolNeedsCard`). `registry.setAgentWrite` is the grant:
 running user shells only, persisted, listeners fired so the row redraws; `settle` clears it.
-`POST /sessions/:id/shells/:shellId/agent-write { enabled }` is the operator's grant and revoke. Invariants in
+`POST /sessions/:id/shells/:shellId/agent-write { enabled }` is the operator's grant and revoke.
+`registry.setKeepAwake` and `POST .../keep-awake { enabled }` are the same shape for `ShellInfo.keepAwake`
+on any owner's shell (enabling only while it runs, no agent write tools needed); a `$` starts without
+it, an agent's `run` sets it from `ShellRunOptions.keepAwake`, and `settle` and a restart's hydrate
+clear it. Invariants in
 `docs/GOTCHAS.md` §Shell sessions.
 
 `POST /sessions/:id/tasks[/:toolUseId]/background` and the WS `background_task` frame route to `Runner.backgroundTask` (501 when the engine has none, 404 when nothing matched), beside stop-task.
@@ -2606,9 +2612,12 @@ Also **holds the machine awake** while a session is waiting on it (`keep-awake.t
 `--no-keep-awake` / `keepAwake: false`), because a laptop sleeping mid-turn drops the socket and
 burns the turn. CLI-only by design: a standalone gateway owns the machine's session, an
 embedding host does not and must not have its power policy changed by a library it imported -
-so there is no protocol and no server option, only `SessionRegistry.observe()` to watch
-registrations from outside the constructor. The predicate is the same set `guard` calls busy
-(`starting`, `running`, `awaiting_approval`) and is **recomputed from the registry, never
+so the server holds nothing: it only reports the lock in `GatewayMeta.keepAwake` (the `keepsAwake`
+option), and `SessionRegistry.observe()` watches registrations from outside the constructor. The
+predicate is protocol's `wakeHolders`: a turn in flight (`starting`, `running`) or a running shell
+marked `keepAwake`. **Not** an approval wait, unlike `guard`'s busy set: no model request is open
+while a session waits on a person, so a sleep suspends it without costing the turn, and three
+finished agents plus one on an approval card let the machine sleep. It is **recomputed from the registry, never
 refcounted**: a count has to be decremented on every exit a session can take - closed, failed,
 parked, evicted, drained - and one missed path pins the machine awake until the gateway stops.
 A 60s sweep is insurance on that recompute, not the mechanism. Per-platform it is one child

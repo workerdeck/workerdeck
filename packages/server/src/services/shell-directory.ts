@@ -131,7 +131,12 @@ export function createShellDirectory(registry: ShellRegistry, deps: ShellDirecto
       if (!runner || !takesLocalCommands(runner)) {
         throw new Error(SHELL_REFUSAL)
       }
-      const { shell, source } = await startShell(registry, { runner, command: options.command, owner: 'agent' })
+      const { shell, source } = await startShell(registry, {
+        runner,
+        command: options.command,
+        owner: 'agent',
+        ...(options.keepAwake ? { keepAwake: true } : {}),
+      })
       const result = await settle(from, shell.id, { waitFor: options.waitFor, timeoutMs: options.timeoutMs })
       if (!result) {
         throw new Error(`shell ${shell.id} vanished as it started`)

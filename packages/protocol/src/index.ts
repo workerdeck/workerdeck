@@ -377,6 +377,8 @@ export type ShellInfo = {
   agentWrite?: boolean
   interactive?: boolean
   proposed?: boolean
+  // A running shell that holds the gateway's machine awake (`wakeHolders`). An agent's defaults to its `wakeOnExit`.
+  keepAwake?: boolean
 }
 
 export type SessionCommand =
@@ -1299,6 +1301,8 @@ export type GatewayMeta = {
   machineId?: string
   relay?: GatewayRelayMeta
   agents?: GatewayAgentDefaults
+  // The gateway holds its machine awake while `wakeHolders` says so (`--no-keep-awake` turns it off).
+  keepAwake?: boolean
 }
 
 export type HostDirEntry = {
@@ -1490,6 +1494,7 @@ export * from './errors.ts'
 export * from './paths.ts'
 export * from './model-menu.ts'
 export * from './pricing.ts'
+export * from './wake.ts'
 export * from './peer-mentions.ts'
 export * from './search.ts'
 export * from './session-list.ts'

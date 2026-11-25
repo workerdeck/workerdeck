@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Bot, BotOff, Check, Copy, Maximize2, SquareTerminal, Star, X, type LucideIcon } from 'lucide-react'
+import { ArrowDownToLine, Bot, BotOff, Check, Coffee, Copy, Maximize2, SquareTerminal, Star, X, type LucideIcon } from 'lucide-react'
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { copyText } from '../../lib/clipboard.ts'
 import { cn } from '../../lib/utils.ts'
@@ -189,6 +189,19 @@ export function AgentWriteAction({ granted, label, onToggle }: { granted: boolea
       label={label}
       tone={granted ? 'yellow' : undefined}
       pressed={granted}
+      onPress={onToggle}
+    />
+  )
+}
+
+export function KeepAwakeAction({ held, label, onToggle }: { held: boolean; label: string; onToggle: () => void }) {
+  return (
+    <ActionButton
+      icon={Coffee}
+      word={held ? 'keeping awake' : 'keep awake'}
+      label={label}
+      pressed={held}
+      filled={held}
       onPress={onToggle}
     />
   )

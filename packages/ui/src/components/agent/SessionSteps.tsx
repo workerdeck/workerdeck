@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, Check, Circle, CircleAlert, ListChecks, SquareTerminal } from 'lucide-react'
+import { ArrowRight, Bot, Check, Circle, CircleAlert, Coffee, ListChecks, SquareTerminal } from 'lucide-react'
 import { displayedTasks, isAgentRecord, runningSubagents, stepChips, subagentLabel, visibleShells } from '@workerdeck/protocol'
 import type { FoldableStepKind, SessionInfo, SessionTask, ShellInfo, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
@@ -13,6 +13,7 @@ import {
   shellInfoFailed,
   shellInfoLabel,
   shellInfoStatusText,
+  shellKeepAwakeLabel,
   shellTitle,
 } from '../terminal/shell-row.ts'
 
@@ -32,6 +33,7 @@ export type Step = {
   onKill?: () => void
   killLabel?: string
   agentWrite?: { granted: boolean; label: string; toggle: () => void }
+  keepAwake?: { held: boolean; label: string; toggle?: () => void }
 }
 
 export type ShellStepOptions = {
@@ -40,6 +42,7 @@ export type ShellStepOptions = {
   onKill?: (shellId: string) => void
   // Offered only where the session's agent holds the shell write tools.
   onAgentWrite?: (shellId: string, enabled: boolean) => void
+  onKeepAwake?: (shellId: string, enabled: boolean) => void
 }
 
 export type TaskStepOptions = {
@@ -118,6 +121,14 @@ function shellStep(shell: ShellInfo, options: ShellStepOptions, grants: boolean)
             toggle: () => options.onAgentWrite?.(shell.id, shell.agentWrite !== true),
           }
         : undefined,
+    keepAwake:
+      running && (options.onKeepAwake || shell.keepAwake)
+        ? {
+            held: shell.keepAwake === true,
+            label: shellKeepAwakeLabel(shell),
+            ...(options.onKeepAwake ? { toggle: () => options.onKeepAwake?.(shell.id, shell.keepAwake !== true) } : {}),
+          }
+        : undefined,
   }
 }
 
@@ -147,7 +158,9 @@ export function StepRow({ step, active = false, onSelect }: { step: Step; active
             : 'text-fg-2'
           : 'text-success'
   return (
-    <div className={cn('flex w-full items-center rounded-[4px] pr-1.5', active ? 'bg-row-selected' : 'hover:bg-row-active', body)}>
+    <div
+      className={cn('group/step flex w-full items-center rounded-[4px] pr-1.5', active ? 'bg-row-selected' : 'hover:bg-row-active', body)}
+    >
       <button
         type="button"
         title={step.title}
@@ -179,6 +192,25 @@ export function StepRow({ step, active = false, onSelect }: { step: Step; active
           )}
         >
           <AgentWriteIcon granted={step.agentWrite.granted} className="size-3.5" />
+        </button>
+      ) : null}
+      {step.keepAwake ? (
+        <button
+          type="button"
+          aria-label={step.keepAwake.label}
+          aria-pressed={step.keepAwake.held}
+          disabled={!step.keepAwake.toggle}
+          title={step.keepAwake.toggle ? step.keepAwake.label : 'Keeping this machine awake'}
+          onClick={(e) => {
+            e.stopPropagation()
+            step.keepAwake?.toggle?.()
+          }}
+          className={cn(
+            'shrink-0 px-1 text-micro leading-none outline-none hover:text-fg-1',
+            step.keepAwake.held ? 'text-fg-3' : 'text-fg-4 opacity-0 group-hover/step:opacity-100 focus-visible:opacity-100',
+          )}
+        >
+          <Coffee aria-hidden fill={step.keepAwake.held ? 'currentColor' : 'none'} className="size-3.5" />
         </button>
       ) : null}
       {step.onKill ? (

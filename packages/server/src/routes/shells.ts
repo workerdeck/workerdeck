@@ -5,7 +5,7 @@ import type { SessionItemRoute } from '../lib/parse-route.ts'
 import { shellPermitted, SHELL_REFUSAL, type ShellRegistry } from '../services/shells.ts'
 import type { ServerContext } from '../context.ts'
 
-const AGENT_WRITE_BODY_MAX = 1024
+const TOGGLE_BODY_MAX = 1024
 
 export async function handleShells(
   ctx: ServerContext,
@@ -39,21 +39,25 @@ export async function handleShells(
   }
   if (route.shellAction === 'agent-write') {
     const live = requirePermittedPost(shells, req, runner)
-    let body: Record<string, unknown>
-    try {
-      body = await readJsonBody(req, AGENT_WRITE_BODY_MAX)
-    } catch {
-      fail(400, 'invalid JSON body')
-    }
-    if (typeof body.enabled !== 'boolean') {
-      fail(400, 'enabled must be a boolean')
-    }
-    if (body.enabled && live.info().shellAgentWrite === undefined) {
+    const enabled = await readEnabled(req)
+    if (enabled && live.info().shellAgentWrite === undefined) {
       fail(409, 'the agent has no shell write tools on this session (shell.agentWrite is read-only)')
     }
     let shell
     try {
-      shell = shells.setAgentWrite(sessionId, route.shellId, body.enabled)
+      shell = shells.setAgentWrite(sessionId, route.shellId, enabled)
+    } catch (error) {
+      fail(409, error instanceof Error ? error.message : String(error))
+    }
+    json(res, 200, { shell: found(shell) })
+    return
+  }
+  if (route.shellAction === 'keep-awake') {
+    requirePermittedPost(shells, req, runner)
+    const enabled = await readEnabled(req)
+    let shell
+    try {
+      shell = shells.setKeepAwake(sessionId, route.shellId, enabled)
     } catch (error) {
       fail(409, error instanceof Error ? error.message : String(error))
     }
@@ -75,6 +79,19 @@ export async function handleShells(
     return
   }
   json(res, 200, { shell: found(shells.get(sessionId, route.shellId)) })
+}
+
+async function readEnabled(req: IncomingMessage): Promise<boolean> {
+  let body: Record<string, unknown>
+  try {
+    body = await readJsonBody(req, TOGGLE_BODY_MAX)
+  } catch {
+    fail(400, 'invalid JSON body')
+  }
+  if (typeof body.enabled !== 'boolean') {
+    fail(400, 'enabled must be a boolean')
+  }
+  return body.enabled
 }
 
 function requirePermittedPost(shells: ShellRegistry, req: IncomingMessage, runner: Runner | null): Runner {

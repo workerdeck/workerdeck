@@ -248,6 +248,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       case 'wd-shell-agent-write': {
         return this.#shellAgentWrite(msg.hostId, msg.sessionId, msg.shellId, msg.enabled)
       }
+      case 'wd-shell-keep-awake': {
+        return this.#shellKeepAwake(msg.hostId, msg.sessionId, msg.shellId, msg.enabled)
+      }
       case 'wd-stop-session': {
         return this.#stopSession(msg.hostId, msg.sessionId)
       }
@@ -909,6 +912,20 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     } catch (err) {
       const verb = enabled ? 'grant' : 'revoke'
       void vscode.window.showErrorMessage(`WorkerDeck: ${verb} failed - ${errorMessage(err)}`)
+    }
+    await this.#model.refresh()
+  }
+
+  async #shellKeepAwake(hostId: string, sessionId: string, shellId: string, enabled: boolean): Promise<void> {
+    const host = this.#store.get(hostId)
+    const client = host && (await clientFor(this.#store, host))
+    if (!client) {
+      return
+    }
+    try {
+      await client.setShellKeepAwake(sessionId, shellId, enabled)
+    } catch (err) {
+      void vscode.window.showErrorMessage(`WorkerDeck: keep awake failed - ${errorMessage(err)}`)
     }
     await this.#model.refresh()
   }

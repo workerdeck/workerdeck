@@ -29,7 +29,16 @@ const ID_CHARS = 12
 
 export type ChildHooks = { persist: () => void; notify: () => void; exit: () => void }
 
-export function newShellInfo(state: SessionShells, sessionId: string, command: string, cwd: string, owner: ShellOwner, proposed = false): ShellInfo {
+export type ShellMarks = { proposed?: boolean; keepAwake?: boolean }
+
+export function newShellInfo(
+  state: SessionShells,
+  sessionId: string,
+  command: string,
+  cwd: string,
+  owner: ShellOwner,
+  marks: ShellMarks = {},
+): ShellInfo {
   return {
     id: mintShellId(),
     sessionId,
@@ -43,7 +52,8 @@ export function newShellInfo(state: SessionShells, sessionId: string, command: s
     bytes: 0,
     cols: SHELL_COLS,
     rows: SHELL_ROWS,
-    ...(proposed ? { proposed: true } : {}),
+    ...(marks.proposed ? { proposed: true } : {}),
+    ...(marks.keepAwake ? { keepAwake: true } : {}),
   }
 }
 
@@ -102,6 +112,7 @@ export function endEntry(entry: ShellEntry, reason: ShellEndReason): void {
   entry.info.endedAt = Date.now()
   entry.info.endReason = reason
   delete entry.info.agentWrite
+  delete entry.info.keepAwake
   clearTimeout(entry.clock)
   clearTimeout(entry.notify)
   clearInterval(entry.tailTimer)
@@ -183,6 +194,21 @@ export function applyAgentWrite(entry: ShellEntry, shellId: string, enabled: boo
     entry.info.agentWrite = true
   } else {
     delete entry.info.agentWrite
+  }
+  return true
+}
+
+export function applyKeepAwake(entry: ShellEntry, shellId: string, enabled: boolean): boolean {
+  if (enabled && entry.info.status !== 'running') {
+    throw new Error(`shell ${shellId} has already ended; there is nothing to keep awake for`)
+  }
+  if ((entry.info.keepAwake === true) === enabled) {
+    return false
+  }
+  if (enabled) {
+    entry.info.keepAwake = true
+  } else {
+    delete entry.info.keepAwake
   }
   return true
 }

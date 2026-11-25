@@ -41,6 +41,7 @@ export interface SessionItemProps {
   onSelectShell?: (shellId: string) => void
   onKillShell?: (shellId: string) => void
   onShellAgentWrite?: (shellId: string, enabled: boolean) => void
+  onShellKeepAwake?: (shellId: string, enabled: boolean) => void
   now?: number
   showTime?: boolean
   rootAttributes?: Record<`data-${string}`, string>
@@ -81,6 +82,7 @@ export function SessionItem({
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
+  onShellKeepAwake,
   now,
   showTime = true,
   rootAttributes,
@@ -140,6 +142,7 @@ export function SessionItem({
       onSelect: (shellId) => (onSelectShell ? onSelectShell(shellId) : onSelect?.(NO_MODIFIERS)),
       onKill: onKillShell,
       onAgentWrite: onShellAgentWrite,
+      onKeepAwake: onShellKeepAwake,
     },
     {
       live: info.status === 'running' || info.status === 'starting' || info.status === 'awaiting_approval',

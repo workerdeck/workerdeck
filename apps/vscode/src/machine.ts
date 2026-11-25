@@ -22,11 +22,16 @@ function localMachineId(): string {
 const known = new Map<string, { baseUrl: string; local: boolean }>()
 const inFlight = new Map<string, Promise<boolean>>()
 // The relay identity rides the same `/meta` read; a team spanning two configured gateways needs both.
-const relays = new Map<string, { baseUrl: string; relay?: GatewayRelayMeta; agents?: GatewayAgentDefaults }>()
+const relays = new Map<string, { baseUrl: string; relay?: GatewayRelayMeta; agents?: GatewayAgentDefaults; keepAwake?: boolean }>()
 
 export function relayOfCached(host: GatewayHost): GatewayRelayMeta | undefined {
   const hit = relays.get(host.id)
   return hit?.baseUrl === host.baseUrl ? hit.relay : undefined
+}
+
+export function keepAwakeCached(host: GatewayHost): boolean {
+  const hit = relays.get(host.id)
+  return hit?.baseUrl === host.baseUrl && hit.keepAwake === true
 }
 
 export function agentDefaultsCached(host: GatewayHost): GatewayAgentDefaults | undefined {
@@ -67,7 +72,7 @@ export async function refreshLocality(store: HostStore, host: GatewayHost): Prom
     try {
       const client = await clientFor(store, host)
       const meta = await client?.meta()
-      relays.set(host.id, { baseUrl: host.baseUrl, relay: meta?.relay, agents: meta?.agents })
+      relays.set(host.id, { baseUrl: host.baseUrl, relay: meta?.relay, agents: meta?.agents, keepAwake: meta?.keepAwake })
       if (loopback) {
         return true
       }

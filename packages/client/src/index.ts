@@ -536,6 +536,10 @@ export class WorkerDeckClient {
     return await this.#pick('POST', this.#shell(sessionId, shellId, '/agent-write'), 'shell', { enabled })
   }
 
+  async setShellKeepAwake(sessionId: string, shellId: string, enabled: boolean): Promise<ShellInfo> {
+    return await this.#pick('POST', this.#shell(sessionId, shellId, '/keep-awake'), 'shell', { enabled })
+  }
+
   // The last conversation this client saw a session on: the token every mutating call for it carries.
   conversationOf(sessionId: string): number | undefined {
     return this.#conversations.get(sessionId)

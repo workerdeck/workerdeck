@@ -84,6 +84,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
 
   const hosts = state?.hosts ?? []
   const relays = useMemo(() => Object.fromEntries(hosts.map((host) => [host.id, host.relay])), [hosts])
+  const keepAwake = useMemo(() => Object.fromEntries(hosts.map((host) => [host.id, host.keepAwake])), [hosts])
   const scope = state?.scope
   const rows = useMemo(() => buildRows(state), [state])
   const gateways = useMemo(() => hosts.map((host) => ({ id: host.id, name: host.name })), [hosts])
@@ -158,6 +159,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             showTime={false}
             gatewayCount={hosts.length}
             relays={relays}
+            keepAwake={keepAwake}
             projectIcons={projectIcons}
             isActive={isActive}
             activeSubagentId={selected?.subagentToolUseId}
@@ -176,6 +178,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             onSelectShell={(row, shellId) => postRow('wd-select-session', row, { shellId })}
             onKillShell={(row, shellId) => postRow('wd-kill-shell', row, { shellId })}
             onShellAgentWrite={(row, shellId, enabled) => postRow('wd-shell-agent-write', row, { shellId, enabled })}
+            onShellKeepAwake={(row, shellId, enabled) => postRow('wd-shell-keep-awake', row, { shellId, enabled })}
             onRename={(row, title) => postRow('wd-rename-session', row, { title })}
             onRenameAgent={(row, name) => postRow('wd-rename-agent', row, { name })}
             onTeamMove={(move) =>

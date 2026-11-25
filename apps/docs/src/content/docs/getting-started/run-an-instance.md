@@ -228,10 +228,11 @@ says `dashboard: off` so the URL it prints doesn't read as a broken install.
 ## Sleeping mid-turn
 
 A laptop that idles to sleep while a turn is running drops the socket and burns the turn, so the
-CLI holds the machine awake for as long as a session is waiting on it - a turn in flight, or a
-session blocked on a permission prompt you are coming back to. It releases the moment nothing is:
-idle, parked and closed sessions hold nothing, and a gateway left running overnight will not pin
-the machine.
+CLI holds the machine awake while work runs on it: a turn in flight, or a shell marked keep-awake
+(an agent's `shell_run` build it waits on, or one of your `$` shells you switched on with its coffee
+icon; a dev server stays off). It releases the moment nothing is: a session waiting on an approval,
+idle, parked and closed sessions hold nothing, so a gateway left running overnight will not pin
+the machine. The dashboard and VS Code show a coffee line under the list while it holds.
 
 Only idle sleep is blocked; the display is never kept on, and closing the lid still sleeps.
 Under the hood it is `caffeinate -i` on macOS and `systemd-inhibit --what=idle:sleep` on Linux,

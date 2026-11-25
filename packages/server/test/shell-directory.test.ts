@@ -301,6 +301,33 @@ describe('createShellDirectory', () => {
     expect(() => registry.setAgentWrite('s1', mine.shell.id, true)).toThrow(/started by the agent/)
   })
 
+  it('marks an agent shell keepAwake only when the run asks, toggles any running shell, and drops the mark at exit', async () => {
+    const registry = makeScripted()
+    const owner = agentRunner('s1')
+    const directory = agentDirectory(registry, owner)
+    const plain = await directory.run('s1', { command: 'vite' })
+    const held = await directory.run('s1', { command: 'make', keepAwake: true })
+    expect(registry.get('s1', plain.shell.id)).not.toHaveProperty('keepAwake')
+    expect(registry.get('s1', held.shell.id)?.keepAwake).toBe(true)
+    expect(held.shell.keepAwake).toBe(true)
+
+    const user = await registry.spawn({ runner: owner, command: 'sleep 30', owner: 'user' })
+    expect(user.shell).not.toHaveProperty('keepAwake')
+    const redraws = vi.fn()
+    user.source.subscribe(redraws)
+    expect(registry.setKeepAwake('s2', user.shell.id, true)).toBeUndefined()
+    expect(registry.setKeepAwake('s1', user.shell.id, true)).toMatchObject({ keepAwake: true })
+    expect(registry.setKeepAwake('s1', user.shell.id, true)).toMatchObject({ keepAwake: true })
+    expect(redraws).toHaveBeenCalledTimes(1)
+    expect(registry.setKeepAwake('s1', user.shell.id, false)).not.toHaveProperty('keepAwake')
+    expect(redraws).toHaveBeenCalledTimes(2)
+
+    registry.kill('s1', held.shell.id)
+    expect(registry.get('s1', held.shell.id)).not.toHaveProperty('keepAwake')
+    expect(() => registry.setKeepAwake('s1', held.shell.id, true)).toThrow(/already ended/)
+    expect(registry.setKeepAwake('s1', held.shell.id, false)).toMatchObject({ status: 'exited' })
+  })
+
   it('clamps an absurd tail and defaults an absent one', async () => {
     const registry = makeScripted()
     const directory = createShellDirectory(registry)

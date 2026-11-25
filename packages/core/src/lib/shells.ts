@@ -39,6 +39,7 @@ export type ShellSummary = {
   interactive?: boolean
   agentWrite?: boolean
   proposed?: boolean
+  keepAwake?: boolean
 }
 
 export type ShellView = 'lines' | 'screen'
@@ -57,7 +58,7 @@ export type ShellReadResult = {
 
 export type ShellReadOptions = { tail?: number; view?: ShellView; waitFor?: string[]; timeoutMs?: number }
 
-export type ShellRunOptions = { command: string; waitFor?: string[]; timeoutMs?: number; wakeOnExit?: boolean }
+export type ShellRunOptions = { command: string; waitFor?: string[]; timeoutMs?: number; wakeOnExit?: boolean; keepAwake?: boolean }
 
 export type ShellWriteOptions = { data?: string; keys?: string[]; waitFor?: string[]; timeoutMs?: number }
 
@@ -252,6 +253,13 @@ export const SHELL_TOOL_SHAPES = {
           'Default false. True: when the command ends after this call has returned, you get its exit code and output ' +
             'tail in a new message, even if your turn is over. For a build or a job you want to follow up on, not a dev server.',
         ),
+      keepAwake: z
+        .boolean()
+        .optional()
+        .describe(
+          'Defaults to wakeOnExit. While it runs, a shell with keepAwake holds the machine awake (no idle sleep). Pass ' +
+            'false for a dev server or a watcher, true for a build or a test run you wait on.',
+        ),
     },
   },
   shell_write: {
@@ -376,8 +384,14 @@ const SHELL_TOOLS = defineToolFamily<typeof SHELL_TOOL_SHAPES, ShellToolContext 
     }
     return { text: shellReadText(result), isError: false }
   },
-  shell_run: async ({ shells }, from, { command, waitFor, timeoutMs, wakeOnExit }) => {
-    const result = await shells.run(from, { command, waitFor: needles(waitFor), timeoutMs, ...(wakeOnExit ? { wakeOnExit: true } : {}) })
+  shell_run: async ({ shells }, from, { command, waitFor, timeoutMs, wakeOnExit, keepAwake }) => {
+    const result = await shells.run(from, {
+      command,
+      waitFor: needles(waitFor),
+      timeoutMs,
+      ...(wakeOnExit ? { wakeOnExit: true } : {}),
+      ...((keepAwake ?? wakeOnExit) ? { keepAwake: true } : {}),
+    })
     const wake = wakeOnExit && result.shell.status === 'running' ? `\n${SHELL_WAKE_PROMISE}` : ''
     return { text: `${shellReadText(result, 'started')}${wake}`, isError: false }
   },
@@ -597,6 +611,7 @@ export function shellSummary(info: ShellInfo): ShellSummary {
     interactive: info.interactive,
     agentWrite: info.agentWrite,
     proposed: info.proposed,
+    keepAwake: info.keepAwake,
   }
 }
 

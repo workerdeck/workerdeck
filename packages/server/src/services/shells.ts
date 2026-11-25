@@ -21,6 +21,7 @@ import { readProcessTable, type TreeKillDeps } from './process-tree.ts'
 import { artifactPaths, LiveArtifact, type ArtifactLimits } from './shell-artifact.ts'
 import {
   applyAgentWrite,
+  applyKeepAwake,
   attachEntry,
   endEntry,
   fireListeners,
@@ -189,10 +190,19 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     return { state, cwd, pty }
   }
 
-  const spawn = async ({ runner, command, owner, proposed, stdin, interactive, flush }: ShellSpawnInput): Promise<ShellSpawned> => {
+  const spawn = async ({
+    runner,
+    command,
+    owner,
+    proposed,
+    stdin,
+    interactive,
+    flush,
+    keepAwake,
+  }: ShellSpawnInput): Promise<ShellSpawned> => {
     const { state, cwd, pty } = await admit(runner)
     const secret = stdin === undefined ? undefined : await writeStdinFile(stdin)
-    const info = newShellInfo(state, runner.id, command, cwd, owner, proposed)
+    const info = newShellInfo(state, runner.id, command, cwd, owner, { proposed, keepAwake })
     const artifact = new LiveArtifact(artifactPaths(base, info.sessionId, info.id), limits, (error) =>
       report(error, { op: 'artifact', sessionId: info.sessionId, shellId: info.id }),
     )
@@ -293,6 +303,17 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
         return undefined
       }
       if (applyAgentWrite(target.entry, shellId, enabled)) {
+        persist(target.state)
+        fire(target.entry)
+      }
+      return { ...target.entry.info }
+    },
+    setKeepAwake: (sessionId, shellId, enabled) => {
+      const target = located(sessionId, shellId)
+      if (!target) {
+        return undefined
+      }
+      if (applyKeepAwake(target.entry, shellId, enabled)) {
         persist(target.state)
         fire(target.entry)
       }

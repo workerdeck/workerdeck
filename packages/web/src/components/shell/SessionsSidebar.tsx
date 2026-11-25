@@ -79,7 +79,7 @@ export function SessionsSidebar() {
   const activeSubagentId = useSearch({ strict: false }).subagent
   const activeShellId = useSearch({ strict: false }).shell
   const { snapshots, refresh } = useSessions()
-  const { relays, agentDefaults } = useHostMeta()
+  const { relays, agentDefaults, keepAwake } = useHostMeta()
   const rows = useSessionRows(snapshots)
   // `clientFor` is module scope and stable, so it is not a dependency that would re-fire the fetch.
   const projectIcons = useProjectIcons(rows, clientFor)
@@ -173,6 +173,13 @@ export function SessionsSidebar() {
       ?.setShellAgentWrite(row.info.id, shellId, enabled)
       .then(() => refresh())
       .catch((e: unknown) => toast.error(errorMessage(e, enabled ? 'Grant failed' : 'Revoke failed')))
+  }
+
+  const shellKeepAwake = (row: SessionRow, shellId: string, enabled: boolean) => {
+    void clientFor(row.hostId)
+      ?.setShellKeepAwake(row.info.id, shellId, enabled)
+      .then(() => refresh())
+      .catch((e: unknown) => toast.error(errorMessage(e, 'Keep awake failed')))
   }
 
   const rename = (row: SessionRow, title: string) => {
@@ -519,11 +526,13 @@ export function SessionsSidebar() {
             onSelectShell={openShell}
             onKillShell={killShell}
             onShellAgentWrite={shellAgentWrite}
+            onShellKeepAwake={shellKeepAwake}
             onCreateInGroup={startCreate}
             onRename={rename}
             onRenameAgent={renameAgent}
             onTeamMove={teamMove}
             relays={relays}
+            keepAwake={keepAwake}
             onAgentConversations={(row) => setConversationsOf(conversationsTarget(row))}
             rowMenu={(row) => (
               <SessionCardMenu

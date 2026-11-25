@@ -7,7 +7,7 @@ import { SessionBrowser } from '../src/components/agent/SessionBrowser.tsx'
 import { MenuItem, MenuSeparator } from '../src/components/ui/Menu.tsx'
 import { AgentHeading } from '../src/components/agent/AgentAvatar.tsx'
 import type { TeamMove } from '../src/lib/team-drop.ts'
-import { AGENTS, makeRow } from './session-fixtures.ts'
+import { AGENTS, SHELLS, makeRow } from './session-fixtures.ts'
 
 const meta: Meta<typeof SessionBrowser> = {
   title: 'Sessions/SessionBrowser',
@@ -322,5 +322,20 @@ export const Heading: Story = {
       <AgentHeading row={TEAM_ROWS[2]!} conversation={1} />
       <AgentHeading row={TEAM_ROWS[4]!} />
     </div>
+  ),
+}
+
+const BUILD = { ...SHELLS[0]!, id: 'sh9', ordinal: 9, command: 'pnpm build', label: 'pnpm build', owner: 'agent' as const, keepAwake: true }
+
+export const KeepAwake: Story = {
+  render: () => (
+    <Browser
+      showControls={false}
+      keepAwake={{ [ROWS[0]!.hostId]: true }}
+      rows={[
+        ...ROWS.slice(0, 2),
+        makeRow({ id: 'ka', title: 'Shells: a dev server and a build', status: 'idle', shells: [SHELLS[0]!, BUILD] } as never),
+      ]}
+    />
   ),
 }

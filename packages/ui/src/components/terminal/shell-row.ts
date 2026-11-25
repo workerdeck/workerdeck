@@ -16,6 +16,10 @@ export function shellGrantable(shell: ShellInfo): boolean {
   return shell.status === 'running' && shell.owner === 'user'
 }
 
+export function shellKeepAwakeLabel(shell: ShellInfo): string {
+  return shell.keepAwake === true ? 'Keeping this machine awake (click to allow sleep)' : 'Keep this machine awake while this runs'
+}
+
 export function shellAgentWriteLabel(shell: ShellInfo): string {
   return shell.agentWrite === true ? 'Revoke the agent’s access to this shell' : 'Let the agent type into this shell'
 }

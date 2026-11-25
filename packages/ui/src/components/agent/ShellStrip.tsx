@@ -1,8 +1,15 @@
-import { X } from 'lucide-react'
+import { Coffee, X } from 'lucide-react'
 import type { ShellInfo } from '@workerdeck/protocol'
 import { cn } from '../../lib/utils.ts'
-import { shellAgentWriteLabel, shellGrantable, shellInfoFailed, shellInfoStatusText, shellTitle } from '../terminal/shell-row.ts'
-import { AgentWriteAction, AgentWriteIcon, KillShellAction } from '../terminal/affordances.tsx'
+import {
+  shellAgentWriteLabel,
+  shellGrantable,
+  shellInfoFailed,
+  shellInfoStatusText,
+  shellKeepAwakeLabel,
+  shellTitle,
+} from '../terminal/shell-row.ts'
+import { AgentWriteAction, AgentWriteIcon, KeepAwakeAction, KillShellAction } from '../terminal/affordances.tsx'
 import { FrameStrip } from './FrameStrip.tsx'
 
 export interface ShellStripProps {
@@ -12,12 +19,14 @@ export interface ShellStripProps {
   onBack: () => void
   onKill?: () => void
   onAgentWrite?: (enabled: boolean) => void
+  onKeepAwake?: (enabled: boolean) => void
   terminal: boolean
   fontSize?: number
   lineHeight?: number
 }
 
-export function ShellStrip({ shell, label, cols, onBack, onKill, onAgentWrite, terminal, fontSize, lineHeight }: ShellStripProps) {
+export function ShellStrip(props: ShellStripProps) {
+  const { shell, label, cols, onBack, onKill, onAgentWrite, onKeepAwake, terminal, fontSize, lineHeight } = props
   const running = shell?.status === 'running'
   const failed = shell ? shellInfoFailed(shell) : false
   const name = shell ? shellTitle(shell) : label
@@ -26,10 +35,13 @@ export function ShellStrip({ shell, label, cols, onBack, onKill, onAgentWrite, t
   const detail = width === undefined ? undefined : `${width} cols`
   const granted = shell?.agentWrite === true
   const grant = shell && onAgentWrite && shellGrantable(shell) ? () => onAgentWrite(!granted) : undefined
+  const held = shell?.keepAwake === true
+  const hold = running && onKeepAwake ? () => onKeepAwake(!held) : undefined
 
   const actions = terminal ? (
     <>
       {grant && shell ? <AgentWriteAction granted={granted} label={shellAgentWriteLabel(shell)} onToggle={grant} /> : null}
+      {hold && shell ? <KeepAwakeAction held={held} label={shellKeepAwakeLabel(shell)} onToggle={hold} /> : null}
       {running && onKill ? <KillShellAction onKill={onKill} /> : null}
     </>
   ) : (
@@ -44,6 +56,18 @@ export function ShellStrip({ shell, label, cols, onBack, onKill, onAgentWrite, t
           onClick={grant}
         >
           <AgentWriteIcon granted={granted} className="size-3.5" />
+        </button>
+      ) : null}
+      {hold && shell ? (
+        <button
+          type="button"
+          aria-label={shellKeepAwakeLabel(shell)}
+          aria-pressed={held}
+          title={shellKeepAwakeLabel(shell)}
+          className={cn('shrink-0 text-label hover:text-fg-1', held ? 'text-fg-3' : 'text-fg-4')}
+          onClick={hold}
+        >
+          <Coffee aria-hidden fill={held ? 'currentColor' : 'none'} className="size-3.5" />
         </button>
       ) : null}
       {running && onKill ? (

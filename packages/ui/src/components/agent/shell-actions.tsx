@@ -1,7 +1,14 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import type { ShellItem } from '@workerdeck/react'
-import { AgentWriteAction, BookmarkAction, CopyAction, KillShellAction, OpenShellAction } from '../terminal/affordances.tsx'
-import { shellAgentWriteLabel, shellGrantable } from '../terminal/shell-row.ts'
+import {
+  AgentWriteAction,
+  BookmarkAction,
+  CopyAction,
+  KeepAwakeAction,
+  KillShellAction,
+  OpenShellAction,
+} from '../terminal/affordances.tsx'
+import { shellAgentWriteLabel, shellGrantable, shellKeepAwakeLabel } from '../terminal/shell-row.ts'
 
 export type ShellActions = {
   loadOutput: (shellId: string) => Promise<boolean>
@@ -11,6 +18,7 @@ export type ShellActions = {
   open?: (shellId: string) => void
   // Grant or revoke the agent's hand on a shell the user started. Absent where the agent holds no write tools.
   agentWrite?: (shellId: string, enabled: boolean) => Promise<boolean>
+  keepAwake?: (shellId: string, enabled: boolean) => Promise<boolean>
 }
 
 const NOOP: ShellActions = {
@@ -52,6 +60,13 @@ export function ShellItemActions({ item }: { item: ShellItem }) {
           granted={item.shell.agentWrite === true}
           label={shellAgentWriteLabel(item.shell)}
           onToggle={() => void actions.agentWrite?.(shellId, item.shell.agentWrite !== true)}
+        />
+      ) : null}
+      {actions.keepAwake && item.shell.status === 'running' ? (
+        <KeepAwakeAction
+          held={item.shell.keepAwake === true}
+          label={shellKeepAwakeLabel(item.shell)}
+          onToggle={() => void actions.keepAwake?.(shellId, item.shell.keepAwake !== true)}
         />
       ) : null}
       {item.shell.status === 'running' ? <KillShellAction onKill={() => void actions.kill(shellId)} /> : null}

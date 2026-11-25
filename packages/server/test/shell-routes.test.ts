@@ -252,6 +252,34 @@ withPty('shell_command spawns a tracked PTY', () => {
     ws.close()
   })
 
+  it('toggles keepAwake on a running user shell over REST, re-emitting the row, with no agent write tools needed', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await startShellServer(harness)
+    const id = await createSession(base, 'operator', { cwd: tempDir() })
+    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
+    ws.send(JSON.stringify({ generation: 1, type: 'shell_command', command: 'sleep 30' }))
+    const started = await collector.waitFor((f) => shellRow(f)?.shell.command === 'sleep 30')
+    const shellId = shellRow(started)!.shell.id
+    expect(shellRow(started)!.shell.keepAwake).toBeUndefined()
+    const post = (enabled: unknown) =>
+      fetch(`${base}/sessions/${id}/shells/${shellId}/keep-awake`, {
+        method: 'POST',
+        headers: { 'x-workerdeck-generation': '1', authorization: 'Bearer operator', 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+
+    expect((await post('yes')).status).toBe(400)
+    const held = await post(true)
+    expect(held.status).toBe(200)
+    expect(((await held.json()) as { shell: ShellInfo }).shell).toMatchObject({ id: shellId, keepAwake: true })
+    await collector.waitFor((f) => shellRow(f)?.shell.id === shellId && shellRow(f)?.shell.keepAwake === true)
+
+    const released = await post(false)
+    expect(((await released.json()) as { shell: ShellInfo }).shell.keepAwake).toBeUndefined()
+    await collector.waitFor((f) => shellRow(f)?.shell.id === shellId && shellRow(f)?.shell.keepAwake === undefined && f !== started)
+    ws.close()
+  })
+
   it('refuses a grant where the agent holds no write tools', async () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness)

@@ -25,6 +25,7 @@ export type WireHost = {
   cwdSuggestion?: string
   managed?: boolean
   relay?: GatewayRelayMeta
+  keepAwake?: boolean
 }
 
 export type WireProfile = {
@@ -188,6 +189,13 @@ export type SidebarToHost =
     }
   | {
       kind: 'wd-shell-agent-write'
+      hostId: string
+      sessionId: string
+      shellId: string
+      enabled: boolean
+    }
+  | {
+      kind: 'wd-shell-keep-awake'
       hostId: string
       sessionId: string
       shellId: string

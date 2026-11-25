@@ -11,6 +11,7 @@ import {
   type WorkerServer,
   type WorkerServerOptions,
 } from '@workerdeck/server'
+import type { ShellInfo } from '@workerdeck/protocol'
 import { dashboardDir } from '@workerdeck/web'
 import { createApnsRoute } from '../apns/routes.ts'
 import { createApnsForwarder } from '../apns/forwarder.ts'
@@ -20,12 +21,12 @@ import { createAuthSessionStore } from '../auth/auth-sessions.ts'
 import { createCliAuth, type CliAuth } from '../auth/auth.ts'
 import { hostnameOf, isLoopbackHostname, type ResolvedConfig } from '../config.ts'
 import { renderLoginPage } from '../auth/login-page.ts'
-import { createWakeLock, driveWakeLock, sessionsNeedTheMachine } from './keep-awake.ts'
+import { createWakeLock, driveWakeLock, sessionsNeedTheMachine, type WakeLock } from './keep-awake.ts'
 import { looksLikeAsset, resolveWithinRoot, sendHtml, serveFile } from './static.ts'
 
 // The backstop, not the mechanism: the lock is driven by session transitions, and this only has to catch a release
 // that no event announced. Long, because holding a laptop awake for one extra minute is the cheap failure.
-const WAKE_SWEEP_MS = 60_000
+const WAKE_SWEEP_MS = 20_000
 
 export type StartOptions = {
   quiet?: boolean
@@ -217,8 +218,10 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
 
   const { agentStore, profileStore, sessions: sessionRecords, shell, spend } = stateDirDefaults(config)
 
+  let wake: WakeLock | undefined
   const server = createWorkerServer({
     ...config.options,
+    keepsAwake: () => wake?.available === true,
     ...(profileStore ? { profileStore } : {}),
     agentStore,
     // On by default here, off in the library: a mispointed config dir should say so at startup.
@@ -245,7 +248,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
     authenticate: (req) => (hostAllowed(req) ? authenticateRequest(req) : null),
   })
 
-  const wake = config.keepAwake
+  wake = config.keepAwake
     ? createWakeLock({
         onUnavailable: (reason) => {
           if (!options.quiet) {
@@ -255,9 +258,11 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
       })
     : undefined
   let sweep: ReturnType<typeof setInterval> | undefined
-  if (wake) {
-    driveWakeLock(server.registry, wake)
-    sweep = setInterval(() => wake.set(sessionsNeedTheMachine(server.registry.list())), WAKE_SWEEP_MS)
+  const lock = wake
+  if (lock) {
+    const shells = (): ShellInfo[] => server.shells?.running() ?? []
+    driveWakeLock({ list: () => server.registry.list(), observe: (listener) => server.registry.observe(listener), shells }, lock)
+    sweep = setInterval(() => lock.set(sessionsNeedTheMachine(server.registry.list(), shells())), WAKE_SWEEP_MS)
     sweep.unref()
   }
 
