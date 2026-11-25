@@ -69,6 +69,13 @@ const ENGINES: readonly EngineChoice[] = [
     dirPrompt: 'Home directory for this profile - its CODEX_HOME.',
     dirDefault: '~/.codex',
   },
+  {
+    engine: 'agy',
+    label: 'Gemini (agy)',
+    detail: 'The Antigravity CLI over ACP, against a home holding its gemini-api-key file.',
+    dirPrompt: 'Home directory for this profile - holds its gemini-api-key file (0600).',
+    dirDefault: '~/.workerdeck/profiles/agy-gemini',
+  },
 ]
 
 const TOTAL_STEPS = 3
@@ -97,7 +104,7 @@ async function browse(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
     ...listed.profiles.map((profile) => ({
       label: profile.name,
       description: describeProfile(profile),
-      detail: profile.configDir ?? profile.codexHome ?? profile.description,
+      detail: profile.configDir ?? profile.codexHome ?? profile.agyHome ?? profile.description,
       profile,
     })),
     ...(listed.canManage ? [{ label: '$(add) New profile…', description: undefined, detail: undefined, profile: undefined }] : []),
@@ -461,7 +468,7 @@ async function create(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
           client.createProfile({
             name,
             engine: engine.engine,
-            ...(engine.engine === 'codex' ? { codexHome: dir } : { configDir: dir }),
+            ...(engine.engine === 'codex' ? { codexHome: dir } : engine.engine === 'agy' ? { agyHome: dir } : { configDir: dir }),
           }),
         `added ${name}`,
       )
