@@ -88,20 +88,10 @@ export type FileSessionRecordStoreOptions = {
 
 const FORMAT_VERSION = 1
 
-// Old state shares format number 1, so it is told apart by shape: a pre-4.0 file is the bare runtime record, with
-// `kind` (or, before kinds, `parkedAt`) on top and no `conversation`.
-export function isPreMergeRecord(value: unknown): boolean {
-  const record = (value as { record?: unknown } | null)?.record as Record<string, unknown> | null | undefined
-  if (!record || typeof record !== 'object' || record.conversation !== undefined) {
-    return false
-  }
-  return typeof record.kind === 'string' || 'parkedAt' in record
-}
-
 export class UnsupportedStateError extends Error {
   constructor(
     readonly path: string,
-    reason = 'was written by WorkerDeck before 4.0.0 and must be migrated before this gateway can start',
+    reason: string,
   ) {
     super(`${path} ${reason}`)
   }
@@ -481,9 +471,6 @@ export function createFileSessionRecordStore(options: FileSessionRecordStoreOpti
     } catch (error) {
       options.onError?.(error, { path, op: 'read' })
       return null
-    }
-    if (isPreMergeRecord(parsed)) {
-      throw new UnsupportedStateError(path)
     }
     const version = (parsed as { version?: unknown } | null)?.version
     if (version !== FORMAT_VERSION) {

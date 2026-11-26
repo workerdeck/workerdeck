@@ -16,11 +16,6 @@ export type StoredAgent = Omit<AgentInfo, 'undelivered' | 'startFailed'> & {
 
 export const AGENT_SCHEMA = 1
 
-// Old rows share schema numbers with new ones, so they are told apart by shape: only a pre-4.0 row carries these.
-export function isPreMergeAgent(agent: object): boolean {
-  return 'sessionId' in agent || 'pastSessions' in agent
-}
-
 export type AgentStoreChanges = { saves: StoredAgent[]; deletes: string[] }
 
 // `apply` is one atomic write: every save and delete of a change lands together or not at all.

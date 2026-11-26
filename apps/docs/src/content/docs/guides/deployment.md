@@ -55,10 +55,9 @@ createWorkerServer({
 ```
 
 `listen()` first runs `preflight()`, which reads every record and refuses the start on state it
-cannot read (a record from before 4.0.0, another format number, a JSON file that is not a
-record; a file that is not valid JSON or an incomplete record is reported to `onError` and
+cannot read (another format number, a JSON file that is not a record; a file that is not valid JSON or an incomplete record is reported to `onError` and
 skipped), then re-indexes the records and re-arms their watchdogs before the server
-accepts a request. Four things to know:
+accepts a request. Three things to know:
 
 - **The directory holds plaintext transcripts.** Each record is one parked session's whole event
   log and tool I/O. Protect it like the SDK's own `~/.claude/projects`.
@@ -67,9 +66,6 @@ accepts a request. Four things to know:
   credentials through `createEngineRunner` from the environment, exactly as the first build did.
 - **One process per directory, and nothing else in it.** Two servers sharing it would both
   hydrate and both rebuild the same sessions. Give the store a directory of its own.
-- **State from before 4.0.0 is refused.** A gateway on 4.0.0 or later will not start on session
-  records or an agent store written by an earlier release (the error names the file). Migrate an
-  older install once before 4.0.0 starts on it.
 
 Durability doesn't make a restart free. A turn actually in flight dies with the process, as does
 a pending permission request, and a running job is left claimed. `workerdeck guard` asks a live

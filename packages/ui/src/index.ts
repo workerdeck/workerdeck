@@ -122,7 +122,6 @@ export { PermissionPrompt, type PermissionPromptProps } from './components/agent
 export {
   QuestionPrompt,
   QUESTION_BEHAVIORS,
-  parseUserQuestions,
   type QuestionPromptProps,
   type QuestionBehaviorMeta,
 } from './components/agent/QuestionPrompt.tsx'

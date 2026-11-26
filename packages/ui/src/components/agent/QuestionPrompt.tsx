@@ -1,15 +1,11 @@
 import { parseUserQuestions, type PermissionRequest, type QuestionBehavior } from '@workerdeck/protocol'
 
-// Re-exported, not redefined: the parse moved to protocol so the CLI's Live Activity builder could
-// share it. Kept on this path because `@workerdeck/ui` has published it since 1.0.0.
 import { MessageCircleQuestion, X } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { Button } from '../ui/Button.tsx'
 import { Textarea } from '../ui/Textarea.tsx'
 import { useQuestionAnswers } from '../../lib/question-answers.ts'
 import { cn } from '../../lib/utils.ts'
-
-export { parseUserQuestions }
 
 export type QuestionBehaviorMeta = {
   value: QuestionBehavior

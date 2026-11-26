@@ -349,9 +349,7 @@ action. **WorkerDeck Host: Copy Auth Key** (also in the status item's menu) copi
 
 **One key store: `<state-dir>/auth-key` (0600).** It is the same file a CLI started on that state
 dir reads, so a hand-started `workerdeck --remote` and Host Mode agree on one key, and `workerdeck
-pair-link` can print it. Before 4.8 the key lived in `SecretStorage`; `#resolveAuthKey` moves it into
-the file once, and when both exist and differ it asks which to keep (devices paired with the other
-must pair again). Turning the key off keeps the file, so turning it back on unpairs nobody.
+pair-link` can print it. Turning the key off keeps the file, so turning it back on unpairs nobody.
 
 **Remote access runs the CLI, never a second implementation.** **Enable Remote Access** checks
 Tailscale with `workerdeck remote status`, sets `workerdeck.host.remote` and restarts through the

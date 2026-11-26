@@ -1948,8 +1948,6 @@ session, named or not, cuts the same way (§ Conversation cut).
 - **Startup reconciliation** (`reconcileIdentity`, before `cuts.recover`): a tombstone whose record
   is still open finishes its close; an index row with no record is dropped with a diagnostic. The
   drop runs only with a durable `sessions.store`: on the memory default every row would look orphaned.
-  Rows and records from before 4.0.0 never get this far: the preflight refuses the start
-  (`docs/ARCHITECTURE.md` § Version numbers).
 - **The index store must apply atomically.** `AgentStore` is `{ list, apply }`, one
   transition's rows in one write, so a retire with released members can never land half.
 - **Runtime absent is not a status.** `GET /sessions` lists from the records: a runner or runtime

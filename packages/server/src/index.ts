@@ -37,7 +37,6 @@ export {
   createFileSessionRecordStore,
   MemorySessionRecordStore,
   SessionRecords,
-  isPreMergeRecord,
   MissingConversationError,
   UnsupportedStateError,
   StaleConversationError,

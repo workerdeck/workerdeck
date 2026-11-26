@@ -3,8 +3,8 @@ import { join } from 'node:path'
 
 export type HostLock = {
   pid: number
-  // The pid leads a process group whose server is a grandchild (npx). Absent on older locks: treated as true.
-  group?: boolean
+  // The pid leads a process group whose server is a grandchild (npx).
+  group: boolean
   port: number
   bindAddress: string
   url: string
@@ -33,7 +33,7 @@ export async function readLock(stateDir: string): Promise<HostLock | undefined> 
   try {
     const raw = await readFile(lockPath(stateDir), 'utf8')
     const lock = JSON.parse(raw) as HostLock
-    return typeof lock?.pid === 'number' && typeof lock.port === 'number' ? lock : undefined
+    return typeof lock?.pid === 'number' && typeof lock.port === 'number' && typeof lock.group === 'boolean' ? lock : undefined
   } catch {
     return undefined
   }

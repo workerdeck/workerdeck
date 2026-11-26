@@ -23,8 +23,6 @@ import {
 
 export const MANAGED_HOST_ID = 'workerdeck-managed'
 
-// Before 4.8 the key lived here; `#resolveAuthKey` moves it into `<state-dir>/auth-key` once.
-const AUTH_KEY_SECRET = 'workerdeck.host.managedAuthKey'
 const READY_INTERVAL_MS = 400
 const DRAIN_GRACE_MS = 30_000
 const HARD_GRACE_MS = 5_000
@@ -49,7 +47,6 @@ function sleep(ms: number): Promise<void> {
 }
 
 export class HostSupervisor implements vscode.Disposable {
-  readonly #context: vscode.ExtensionContext
   readonly #store: HostStore
   readonly #deps: SupervisorDeps
   readonly #onDidChangeState = new vscode.EventEmitter<HostState>()
@@ -66,7 +63,6 @@ export class HostSupervisor implements vscode.Disposable {
   #busy: Promise<void> = Promise.resolve()
 
   constructor(context: vscode.ExtensionContext, store: HostStore, deps: SupervisorDeps) {
-    this.#context = context
     this.#store = store
     this.#deps = deps
     this.#version = (context.extension.packageJSON as { version?: string }).version ?? 'latest'
@@ -293,7 +289,7 @@ export class HostSupervisor implements vscode.Disposable {
     if (!keyRequired(settings)) {
       return undefined
     }
-    return (await readStateKey(settings.stateDir)) ?? (await this.#context.secrets.get(AUTH_KEY_SECRET))
+    return await readStateKey(settings.stateDir)
   }
 
   async #probeUrl(url: string): Promise<'connected' | 'unauthorized' | 'unreachable'> {
@@ -407,7 +403,7 @@ export class HostSupervisor implements vscode.Disposable {
   async #stopNow(settings: HostSettings, confirm: boolean, verb: 'Stop' | 'Restart'): Promise<boolean> {
     const lock = await ownedLock(settings.stateDir)
     const pid = this.#child?.pid ?? (lock?.port === settings.port ? lock.pid : undefined)
-    const group = this.#child ? this.#childViaNpx : (lock?.group ?? true)
+    const group = this.#child ? this.#childViaNpx : lock?.group === true
     if (pid === undefined) {
       if (this.#state.kind === 'running') {
         void vscode.window.showWarningMessage(
@@ -528,45 +524,11 @@ export class HostSupervisor implements vscode.Disposable {
       return undefined
     }
     const stored = await readStateKey(settings.stateDir)
-    const legacy = await this.#context.secrets.get(AUTH_KEY_SECRET)
-    let key = stored ?? legacy
-    if (stored && legacy && stored !== legacy) {
-      key = await this.#chooseKey(settings, stored, legacy)
-    }
-    if (key === undefined) {
-      key = generateKey()
-    }
+    const key = stored ?? generateKey()
     if (key !== stored) {
       await writeStateKey(settings.stateDir, key)
     }
-    if (legacy !== undefined) {
-      await this.#context.secrets.delete(AUTH_KEY_SECRET)
-    }
     return key
-  }
-
-  async #chooseKey(settings: HostSettings, stored: string, legacy: string): Promise<string> {
-    const useFile = 'Use the State-Dir Key'
-    const useVsCode = 'Use the VS Code Key'
-    const answer = await vscode.window.showWarningMessage(
-      'WorkerDeck: this server has two different keys.',
-      {
-        modal: true,
-        detail:
-          `VS Code kept one in the keychain, and ${settings.stateDir}/auth-key holds another (a server started from a ` +
-          'terminal writes it). From now on the server uses one key, kept in that file. Devices and editors paired ' +
-          'with the other key have to pair again.',
-      },
-      useFile,
-      useVsCode,
-    )
-    if (answer === useFile) {
-      return stored
-    }
-    if (answer === useVsCode) {
-      return legacy
-    }
-    throw new Error('no key chosen; the server was not started')
   }
 
   async #register(url: string, name: string): Promise<void> {

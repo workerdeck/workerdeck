@@ -16,8 +16,7 @@ import {
   type UpdateAgentRequest,
 } from '@workerdeck/protocol'
 import { parseRelayPeerId, type RelayAgentEntry } from '@workerdeck/relay-client'
-import { AGENT_SCHEMA, isPreMergeAgent, type AgentStore, type StoredAgent } from './agent-store.ts'
-import { UnsupportedStateError } from './session-records.ts'
+import { AGENT_SCHEMA, type AgentStore, type StoredAgent } from './agent-store.ts'
 
 export type AgentServiceOptions = {
   store: AgentStore
@@ -166,13 +165,6 @@ export class AgentService {
     }
     this.#agents = agents
     this.#hydrated = true
-  }
-
-  // Read only: refuses rows this gateway cannot read before any startup step writes.
-  async preflight(): Promise<void> {
-    if ((await this.#store.list()).some(isPreMergeAgent)) {
-      throw new UnsupportedStateError('the agent store')
-    }
   }
 
   // Until the store is read, this gateway knows no agent, and must not answer another gateway as if it knew them all.

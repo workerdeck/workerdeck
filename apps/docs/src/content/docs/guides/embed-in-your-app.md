@@ -298,15 +298,12 @@ should *not* solve for you.
   stores and go dormant instead, remembering only an id to resume from.
 
   The store's directory holds session records and **nothing else**: give it a directory of its
-  own. A record written before 4.0.0, a file of another format number, or any other JSON file in it
-  refuses the start; a file that is not valid JSON or an incomplete current-format record is
+  own. A file of another format number, or any other JSON file in it, refuses the start; a file that is not valid JSON or an incomplete current-format record is
   reported to `onError` and skipped. A store of your own implements
   `SessionRecordStore` (`save`, `get`, `list`, `delete`) and validates its own raw data.
   `WorkerServer.preflight()` reads the stored state and throws for what refuses the start,
   writing nothing; `listen()` runs it first, so call it yourself only if your app writes
-  state of its own at startup, before those writes. State from a WorkerDeck release before 4.0.0
-  (`parking.store`, `createFileSessionStore`) is refused this way: migrate it once before 4.0.0
-  starts on it.
+  state of its own at startup, before those writes.
 - **Mutations name their conversation.** A session keeps its id across *New conversation*, so every
   mutating call says which conversation it meant and a stale one is a 409, never applied to the
   next conversation. Ordinary session mutations carry the `x-workerdeck-generation` header set to

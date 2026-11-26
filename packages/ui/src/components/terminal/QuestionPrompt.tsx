@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { PermissionRequest, UserQuestion } from '@workerdeck/protocol'
-import { parseUserQuestions } from '../agent/QuestionPrompt.tsx'
+import { parseUserQuestions } from '@workerdeck/protocol'
 import { answerFor, useQuestionAnswers, type Selection } from '../../lib/question-answers.ts'
 import { Box, Choices, Hint, PromptInput, Rule, TabStrip, type Choice } from './prompt.tsx'
 import { Blank, Ink, Row } from './row.tsx'

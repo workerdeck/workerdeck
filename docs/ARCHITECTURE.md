@@ -379,8 +379,8 @@ conversation as `SessionAddress = { id, conversation? }` (absent = current).
 Closing an unnamed session (`DELETE`) appends the current conversation to the history and sets
 `closedAt`: the record stays, its history readable, listed under `GET /sessions?closed=1`. A job run
 is an unnamed session that never cuts. Invariants in `docs/GOTCHAS.md` § Conversation cut; named
-sessions in § Agents and teams below. Which storage format this record is, and what happens to state
-from before 4.0.0, is § Version numbers.
+sessions in § Agents and teams below. Which storage format this record is, and what happens to a file
+in another format, is § Version numbers.
 
 ## Embedding: sandboxed sessions and session scope
 
@@ -624,13 +624,11 @@ Four independent numbers, each bumped only by a breaking change to what it versi
 
 The `/v1/` REST prefix and the `v1:` prefix of derived team op ids are names, not any of these.
 
-State from before 4.0.0 reuses the storage numbers, so it is told apart by shape (`isPreMergeRecord`,
-`isPreMergeAgent`), and a gateway refuses to start on it (`UnsupportedStateError`) rather than skip it: an
-unmigrated install fails loudly instead of looking empty, and no new write lands on an old file's id. A record
-file in any other format number refuses the same way. The check is `WorkerServer.preflight()`: read only, first
-in `listen`, and run by the CLI before its own startup writes (APNs). It covers the built-in stores; a host's
-custom `SessionRecordStore` returns canonical records and validates its own raw data. 4.0.0 ships no migration
-in the repo; the few installs before it were migrated once by a one-off tool.
+A record file in another format number refuses the start (`UnsupportedStateError`) rather than being skipped,
+so a mismatched install fails loudly instead of looking empty. The check is `WorkerServer.preflight()`: read
+only, first in `listen`, and run by the CLI before its own startup writes (APNs). It covers the built-in stores;
+a host's custom `SessionRecordStore` returns canonical records and validates its own raw data. There is no
+pre-4.0 detection or migration.
 
 ## Tooling conventions
 
