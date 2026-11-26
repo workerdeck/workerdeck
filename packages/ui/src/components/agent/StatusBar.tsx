@@ -162,7 +162,7 @@ export function StatusBar({
     <div
       data-slot="status-bar"
       className={cn(
-        'flex h-[var(--wd-status-bar-height)] items-baseline gap-2 border-border bg-surface p-1.5',
+        'flex h-[var(--wd-status-bar-height)] items-baseline gap-2 overflow-x-auto overflow-y-hidden border-border bg-surface p-1.5 whitespace-nowrap [scrollbar-width:none] [&>*]:shrink-0',
         placement === 'bottom' ? (terminal ? undefined : 'border-t') : 'border-b',
         className,
       )}

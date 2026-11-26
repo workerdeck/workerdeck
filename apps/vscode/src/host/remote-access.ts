@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { renderSVG } from 'uqr'
 import * as vscode from 'vscode'
 import { readHostSettings } from './settings.ts'
@@ -80,6 +81,7 @@ export async function disableRemoteAccess(supervisor: HostSupervisor): Promise<v
 }
 
 let pairingPanel: vscode.WebviewPanel | undefined
+let pairingLink: string | undefined
 
 export async function showPairingLink(supervisor: HostSupervisor): Promise<void> {
   const result = await supervisor.runCli(['pair-link', '--no-qr'])
@@ -94,35 +96,37 @@ export async function showPairingLink(supervisor: HostSupervisor): Promise<void>
     }
     return
   }
-  const panel =
-    pairingPanel ?? vscode.window.createWebviewPanel('workerdeck.pairing', 'WorkerDeck: Pair a Device', vscode.ViewColumn.Active, {})
-  pairingPanel = panel
-  panel.onDidDispose(() => {
-    pairingPanel = undefined
-  })
-  panel.webview.html = pairingHtml(link)
-  panel.reveal()
-  const answer = await vscode.window.showInformationMessage(
-    'WorkerDeck: scan the code with your phone, or copy the link into another editor or browser. It holds the server key.',
-    'Copy Link',
-  )
-  if (answer === 'Copy Link') {
-    await vscode.env.clipboard.writeText(link)
-    void vscode.window.setStatusBarMessage('$(key) WorkerDeck: pairing link copied', 2000)
+  pairingLink = link
+  if (!pairingPanel) {
+    const panel = vscode.window.createWebviewPanel('workerdeck.pairing', 'WorkerDeck: Pair a Device', vscode.ViewColumn.Active, {
+      enableScripts: true,
+    })
+    panel.onDidDispose(() => {
+      pairingPanel = undefined
+    })
+    panel.webview.onDidReceiveMessage(async (message: unknown) => {
+      if (message === 'copy' && pairingLink) {
+        await vscode.env.clipboard.writeText(pairingLink)
+        void vscode.window.setStatusBarMessage('$(key) WorkerDeck: pairing link copied', 2000)
+      }
+    })
+    pairingPanel = panel
   }
+  pairingPanel.webview.html = pairingHtml(link, randomBytes(16).toString('base64'))
+  pairingPanel.reveal()
 }
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 }
 
-function pairingHtml(link: string): string {
+function pairingHtml(link: string, nonce: string): string {
   const origin = escapeHtml(link.slice(0, link.indexOf('/#pair=')))
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'nonce-${nonce}'">
 <style>
   body { display: grid; place-items: center; min-height: 90vh; font-family: var(--vscode-font-family); color: var(--vscode-foreground); }
   .card { text-align: center; max-width: 22rem; }
@@ -130,14 +134,27 @@ function pairingHtml(link: string): string {
   .qr svg { width: 100%; height: 100%; }
   p { color: var(--vscode-descriptionForeground); }
   code { word-break: break-all; }
+  button { margin: 0.5rem 0 1rem; padding: 0.4rem 1rem; border: none; border-radius: 2px; cursor: pointer;
+    color: var(--vscode-button-foreground); background: var(--vscode-button-background); font: inherit; }
+  button:hover { background: var(--vscode-button-hoverBackground); }
 </style>
 </head>
 <body>
   <div class="card">
     <div class="qr">${renderSVG(link, { border: 2 })}</div>
     <p>Scan with your phone's camera to open <code>${origin}</code> and sign in.</p>
+    <button id="copy">Copy Link</button>
     <p>Anyone with this code or link can run agents on this machine. Show it only to your own devices.</p>
   </div>
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi()
+    const button = document.getElementById('copy')
+    button.addEventListener('click', () => {
+      vscode.postMessage('copy')
+      button.textContent = 'Copied'
+      setTimeout(() => (button.textContent = 'Copy Link'), 1500)
+    })
+  </script>
 </body>
 </html>`
 }

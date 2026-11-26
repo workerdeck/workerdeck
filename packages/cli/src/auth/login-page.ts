@@ -12,7 +12,7 @@ function escapeHtml(value: string): string {
 
 // A pairing link carries the key in the fragment, which never reaches a server or a proxy log. It is stripped from the
 // address bar and history before the form posts it, so the key does not linger in the URL.
-const PAIR_SCRIPT = `(function(){var h=location.hash;if(h.indexOf('#pair=')!==0)return;var k=decodeURIComponent(h.slice(6));history.replaceState(null,'',location.pathname+location.search);if(!k)return;var f=document.querySelector('form'),i=document.getElementById('key');if(!f||!i)return;i.value=k;f.submit();})()`
+const PAIR_SCRIPT = `(function(){var h=location.hash;if(h.indexOf('#pair=')!==0)return;var k=decodeURIComponent(h.slice(6));history.replaceState(null,'',location.pathname+location.search);if(!k)return;var f=document.querySelector('form'),i=document.getElementById('key');if(!f||!i)return;i.value=k;var b=f.querySelector('button');if(b){b.disabled=true;b.textContent='Signing in…';}f.submit();})()`
 
 export function renderLoginPage(options: LoginPageOptions): string {
   const { action, field, error, redirectTo, redirectField } = options

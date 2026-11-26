@@ -1,7 +1,7 @@
 import { errorMessage, parsePairingLink } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import { randomUUID } from 'node:crypto'
-import { apiUrl, type HostStore } from './hosts.ts'
+import { apiUrl, type GatewayHost, type HostStore } from './hosts.ts'
 import { BACK, CANCEL, showInput } from './quick-input.ts'
 
 export type GatewayFlowDeps = {
@@ -59,6 +59,14 @@ async function run(deps: GatewayFlowDeps, editing: Editing | undefined): Promise
       const paired = parsePairingLink(picked)
       baseUrl = paired?.baseUrl ?? picked.trim()
       pairedKey = paired?.key
+      const known = await resolveDuplicate(deps, editing?.id, baseUrl, pairedKey)
+      if (known === CANCEL) {
+        return
+      }
+      if (known) {
+        await save(deps, { ...known, baseUrl }, pairedKey ?? (await deps.store.authKey(known.id)) ?? '')
+        return
+      }
       step = 1
     } else if (step === 1) {
       const picked = await showInput({
@@ -100,10 +108,56 @@ async function run(deps: GatewayFlowDeps, editing: Editing | undefined): Promise
         step = 1
         continue
       }
-      await save(deps, { id: editing?.id ?? randomUUID(), name, baseUrl }, picked.trim())
+      const known = await resolveDuplicate(deps, editing?.id, baseUrl, picked.trim() || undefined)
+      if (known === CANCEL) {
+        return
+      }
+      await save(deps, known ? { ...known, baseUrl } : { id: editing?.id ?? randomUUID(), name, baseUrl }, picked.trim())
       return
     }
   }
+}
+
+function sameUrl(a: string, b: string): boolean {
+  const left = apiUrl({ baseUrl: a })
+  return left !== undefined && left.toLowerCase() === apiUrl({ baseUrl: b })?.toLowerCase()
+}
+
+// Until gateways carry an id (MESH phase 3) the key is the identity: Host Mode's loopback URL and the tailnet URL of a
+// pairing link name the same server, and only the key says so.
+async function findDuplicate(deps: GatewayFlowDeps, exceptId: string | undefined, baseUrl: string, key: string | undefined) {
+  const others = deps.store.all().filter((h) => h.id !== exceptId)
+  for (const host of others) {
+    if (sameUrl(host.baseUrl, baseUrl) || (key !== undefined && (await deps.store.authKey(host.id)) === key)) {
+      return host
+    }
+  }
+  return undefined
+}
+
+async function resolveDuplicate(
+  deps: GatewayFlowDeps,
+  exceptId: string | undefined,
+  baseUrl: string,
+  key: string | undefined,
+): Promise<GatewayHost | typeof CANCEL | undefined> {
+  const host = await findDuplicate(deps, exceptId, baseUrl, key)
+  if (!host) {
+    return undefined
+  }
+  if (host.managed) {
+    void vscode.window.showInformationMessage(
+      `WorkerDeck: this is the server Host Mode runs on this machine, already listed as "${host.name}".`,
+    )
+    return CANCEL
+  }
+  const update = 'Update It'
+  const answer = await vscode.window.showWarningMessage(
+    `WorkerDeck: this gateway is already listed as "${host.name}".`,
+    { modal: true, detail: 'Update it to the address and key you entered, or cancel to keep it as it is.' },
+    update,
+  )
+  return answer === update ? host : CANCEL
 }
 
 async function save(deps: GatewayFlowDeps, host: { id: string; name: string; baseUrl: string }, authKey: string): Promise<void> {

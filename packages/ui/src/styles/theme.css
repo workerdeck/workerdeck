@@ -1308,8 +1308,8 @@ span.wd-face:is(.st-asleep, .st-closed, .st-failed) .wave.crest {
   font-size: var(--wd-font-size, var(--text-body-sm));
   color: var(--fg-2);
   background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   user-select: none;
   visibility: hidden;
