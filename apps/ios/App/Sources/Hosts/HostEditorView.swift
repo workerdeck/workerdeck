@@ -1,4 +1,5 @@
 import SwiftUI
+import WorkerDeckCore
 
 /// Add/edit form for one gateway. The same view for both - `Host` carries its own
 /// id, so "new" is just a `Host()` with empty fields.
@@ -25,15 +26,16 @@ struct HostEditorView: View {
       }
 
       Section {
-        TextField("http://your-mac.tailnet-name.ts.net:8787", text: $draft.baseURL)
+        TextField("https://your-mac.tailnet-name.ts.net", text: $draft.baseURL)
           .keyboardType(.URL)
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
+          .onChange(of: draft.baseURL) { _, text in applyPairingLink(text) }
       } header: {
         Text("Server address")
       } footer: {
         // The API prefix is protocol plumbing, not something to memorize.
-        Text("The gateway root. `/v1` is appended automatically.")
+        Text("The gateway root, or paste a pairing link from Enable Remote Access. `/v1` is appended automatically.")
       }
 
       Section {
@@ -59,6 +61,16 @@ struct HostEditorView: View {
         }
         .disabled(!draft.isValid)
       }
+    }
+  }
+
+  // A pairing link carries the key in its fragment: split it into the two fields so the key never sits in the address.
+  private func applyPairingLink(_ text: String) {
+    guard let link = parsePairingLink(text: text) else { return }
+    draft.baseURL = link.baseUrl
+    draft.authKey = link.key
+    if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
+      draft.name = gatewayName(baseUrl: link.baseUrl)
     }
   }
 }

@@ -2327,6 +2327,54 @@ sessions). `docs/ARCHITECTURE.md` § Agents and teams has the shape.
   (verified live 2026-10-01). A module the config itself imports is still cached for the life of
   the process: the hot-reload resolve hook only versions URLs under `packages/`.
 
+## Remote mode (`tailscale serve`)
+
+Verified 2026-11-26 against tailscale 1.104.7 (macOS) with a header-echo server behind
+`tailscale serve --bg --https 8443 http://127.0.0.1:<port>`.
+
+- **`serve` replaces the forwarding headers, it never appends.** A client-sent `X-Forwarded-For:
+  1.2.3.4`, `X-Forwarded-Proto: http` or `X-Forwarded-Host: evil.com` arrives as the caller's
+  tailnet IP, `https` and the real `<host>.ts.net:<port>`. The socket peer is always `127.0.0.1`,
+  so without `trustProxy` every tailnet client looks like loopback (one throttle bucket, no
+  `Secure` cookie, a refused https Origin).
+- **`Host` passes through unchanged** (`<host>.ts.net:8443`, port included unless 443), and so does
+  the browser's `Origin`.
+- **`Tailscale-User-Login` / `-Name` / `-Profile-Pic` are overwritten for an untagged user**, also on a
+  WebSocket upgrade: a forged `Tailscale-User-Login: evil@x.com` arrived as the real login. A
+  request from a tagged device carries none (Tailscale's docs; not reproduced here). A local process
+  that dials the loopback port directly can still send any of these headers, so they are
+  attribution, never authentication.
+- **WebSocket upgrades pass over HTTP/1.1.** curl's default HTTP/2 to the ts.net name gets a plain 200
+  instead (no extended CONNECT); browsers fall back to HTTP/1.1 for `ws`, so the dashboard is fine.
+- **`serve --bg --https <port>` silently overwrites whatever that port served.** Read
+  `tailscale serve status --json` first (`TCP["<port>"].HTTPS`, `Web["<host>:<port>"].Handlers["/"].Proxy`)
+  and pick another port when the existing route is not ours. A route may point at a dead port and
+  still be someone's: this Mac carries a `:443 -> 127.0.0.1:8190` route with nothing listening.
+- **Removing a route that does not exist fails** (`tailscale serve --https=<port> off` exits 1,
+  "handler does not exist"), so removal checks status first. A `--bg` route persists in tailscaled's
+  own state across restarts and reboots until removed.
+- **`--remote` forces auth where every other loopback rule waives it.** `generateAuthKey` is true in
+  remote mode whatever `allowUnauthenticated`, `--insecure` or `insecureHosts` say, and those three
+  (plus a non-loopback `--host` and `auth.trustProxy: false`) are refused with a `ConfigError`
+  rather than overridden: a remote gateway that ran keyless would be a shell for the whole tailnet.
+  `startInstance` asserts it again on the live auth. `allowedHosts` stays `null` (auth is on).
+- **`trustProxy` is what makes the browser login work through `serve`**: without it `expectedOrigin`
+  computes `http://127.0.0.1` against the browser's `https://<host>.ts.net` Origin, the cookie loses
+  `Secure`, and the key throttle exempts every tailnet client as loopback. With it, a direct local
+  client sends no `X-Forwarded-*` and is treated exactly as before.
+- **`workerdeck remote enable` checks the live process, never the config.** `/auth/status` reports
+  `remote: true` only from a remote-mode gateway; then `/v1/meta` must answer 401 without the key and
+  200 with the state dir's key, and only then does `serve` run. A published URL that never answers
+  as the gateway removes the route again. Disable removes the route first.
+- **A pairing link's key lives in the fragment, and two places strip it.** The login page's inline
+  script (`PAIR_SCRIPT`, admitted by the CSP's per-document hash) `replaceState`s it away before it
+  submits the form. The dashboard strips it in `lib/strip-pair.ts`, imported **first** by `main.tsx`,
+  because the router uses hash history and reads the hash at module load: a signed-in dashboard
+  opened with `#pair=...` would otherwise route to it. Every client parses the link with
+  `parsePairingLink` (protocol) or its Rust mirror `parse_pairing_link`; change both together.
+- **The node's own requests to its ts.net name go through `serve`** and carry its own tailnet IP and
+  login, which makes a local end-to-end probe possible without a second device.
+
 ## Server, profiles & auth
 
 - **`watchAuthSource` rides the registry's `onRegister`, so every door gets it.** It used to be

@@ -38,6 +38,8 @@ export type CliAuthOptions = {
   allowedOrigins?: string[]
   throttle?: { windowMs?: number; maxFailuresPerIp?: number; maxFailuresGlobal?: number }
   sessions?: CliSessionStore
+  // Reported by `/auth/status` so `workerdeck remote enable` can check the live process before publishing it.
+  remote?: boolean
 }
 
 export type CliPrincipal = {
@@ -62,6 +64,7 @@ type AuthState = {
   sessions: CookieSessions
   throttle: LoginThrottle
   secretMatches: (candidate: string) => boolean
+  remote: boolean
 }
 
 const MIN_SECRET_LENGTH = 12
@@ -123,6 +126,7 @@ function authState(options: CliAuthOptions): AuthState {
     sessions: createCookieSessions({ secret, cookieName, ttlMs, trustProxy, store: options.sessions }),
     throttle,
     secretMatches: secretMatcher(secret),
+    remote: options.remote === true,
   }
 }
 
@@ -165,7 +169,11 @@ async function handleAuthRoute(state: AuthState, pathname: string, req: Incoming
     if (req.method !== 'GET') {
       respondJson(res, 405, { error: 'method not allowed' }, { allow: 'GET' })
     } else {
-      respondJson(res, 200, { enabled: state.enabled, authenticated: state.enabled ? hasSession(state.sessions, req) : true })
+      respondJson(res, 200, {
+        enabled: state.enabled,
+        authenticated: state.enabled ? hasSession(state.sessions, req) : true,
+        ...(state.remote ? { remote: true } : {}),
+      })
     }
     return
   }

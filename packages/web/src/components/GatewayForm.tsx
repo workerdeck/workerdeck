@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { apiUrl } from '@workerdeck/client'
+import { parsePairingLink } from '@workerdeck/protocol'
 import { Button, Dialog, DialogBody, DialogContent, DialogHeader, Input, toast } from '@workerdeck/ui'
 import { keyFor, newHostId, removeHost, saveHost, type GatewayHost } from '@/lib/hosts.ts'
 
@@ -17,6 +18,20 @@ export function GatewayFields({
   const [name, setName] = useState(host.name)
   const [baseUrl, setBaseUrl] = useState(host.baseUrl)
   const [key, setKey] = useState(() => keyFor(host.id))
+
+  // A pasted pairing link fills the address and the key at once; the key never stays in the address field.
+  const changeAddress = (value: string) => {
+    const paired = parsePairingLink(value)
+    if (!paired) {
+      setBaseUrl(value)
+      return
+    }
+    setBaseUrl(paired.baseUrl)
+    setKey(paired.key)
+    if (!name.trim()) {
+      setName(new URL(paired.baseUrl).hostname.split('.')[0] ?? '')
+    }
+  }
 
   const submit = () => {
     if (apiUrl({ baseUrl }) === undefined) {
@@ -42,8 +57,8 @@ export function GatewayFields({
         <span className="text-label text-fg-3">Address</span>
         <Input
           value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder="http://toby.ts.net:8787"
+          onChange={(e) => changeAddress(e.target.value)}
+          placeholder="https://toby.ts.net, or a pairing link"
           spellCheck={false}
           className="font-mono"
         />

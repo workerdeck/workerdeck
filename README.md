@@ -34,8 +34,23 @@ npx workerdeck
 directory, give it a prompt, and watch the transcript stream while you approve or deny the tool
 calls it wants to make.
 
-To reach it from another machine (your phone on the same tailnet, say), bind it and give it a
-secret:
+### Use it from your phone
+
+Agents run where the code is; every other device is a screen. With [Tailscale](https://tailscale.com)
+on each device:
+
+```bash
+npx workerdeck --remote          # loopback only, key always required, trusts the tailscale proxy
+npx workerdeck remote enable     # checks the live gateway refuses a keyless request, then runs tailscale serve
+npx workerdeck pair-link         # prints a QR code and an https link with the key in its fragment
+```
+
+Scan the QR with the phone's camera (the dashboard opens and signs in), or paste the link into
+another editor, the iOS or Android app. In VS Code, **WorkerDeck Host: Enable Remote Access** does
+all three. The gateway is reachable from your tailnet only. Closing VS Code or the phone keeps turns
+running; `workerdeck remote disable` removes the route.
+
+To reach it any other way, bind it and give it a secret:
 
 ```bash
 npx workerdeck --host 0.0.0.0 --auth-key "$SECRET" --cwd-root ~/projects

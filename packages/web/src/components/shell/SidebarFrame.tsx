@@ -11,6 +11,7 @@ import {
   setSidebarWidth,
   type SidebarSection,
 } from '@/lib/sidebar.ts'
+import { useNarrow } from '@/hooks/useNarrow.ts'
 
 export interface SidebarFrameProps {
   section: SidebarSection
@@ -26,10 +27,26 @@ export interface SidebarFrameProps {
 export function SidebarFrame({ section, title, badge, actions, children, rail, railActions }: SidebarFrameProps) {
   const [width, setWidth] = useState(() => getSidebarWidth(section))
   const [collapsed, setCollapsed] = useState(() => getSidebarCollapsed(section))
+  const narrow = useNarrow()
 
   const toggle = (next: boolean) => {
     setCollapsed(next)
     setSidebarCollapsed(section, next)
+  }
+
+  // The list is the whole screen on a phone: no width to drag, nothing to collapse into.
+  if (narrow) {
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+        <header className="flex h-11 shrink-0 items-center gap-1 pr-1 pl-3">
+          <span className="truncate text-label font-medium tracking-wide text-fg-3 uppercase">{title}</span>
+          {badge}
+          <span className="flex-1" />
+          {actions}
+        </header>
+        {children}
+      </div>
+    )
   }
 
   if (collapsed) {

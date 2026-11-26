@@ -333,6 +333,38 @@ describe('resolveInstanceConfig', () => {
   })
 })
 
+describe('--remote', () => {
+  it('forces a key on loopback and trusts the proxy', () => {
+    const config = resolveInstanceConfig(parseArgs(['--remote']), noConfig, {})
+    expect(config.remote).toBe(true)
+    expect(config.host).toBe('127.0.0.1')
+    expect(config.generateAuthKey).toBe(true)
+    expect(config.allowedHosts).toBeNull()
+    expect(config.auth.trustProxy).toBe(true)
+  })
+
+  it('keeps a key it was given and reads the config key and env', () => {
+    const keyed = resolveInstanceConfig(parseArgs(['--remote', '--auth-key', 'a-long-shared-key']), noConfig, {})
+    expect(keyed.generateAuthKey).toBe(false)
+    expect(keyed.authKey).toBe('a-long-shared-key')
+    expect(resolveInstanceConfig(parseArgs([]), { path: null, options: { remote: true } }, {}).generateAuthKey).toBe(true)
+    expect(resolveInstanceConfig(parseArgs([]), noConfig, { WORKERDECK_REMOTE: '1' }).remote).toBe(true)
+    expect(resolveInstanceConfig(parseArgs([]), { path: null, options: { remote: true } }, {}).options).not.toHaveProperty('remote')
+  })
+
+  it('refuses every way to open or move it', () => {
+    expect(() => resolveInstanceConfig(parseArgs(['--remote', '--host', '0.0.0.0']), noConfig, {})).toThrow(ConfigError)
+    expect(() => resolveInstanceConfig(parseArgs(['--remote', '--insecure']), noConfig, {})).toThrow(ConfigError)
+    expect(() => resolveInstanceConfig(parseArgs(['--remote']), { path: null, options: { allowUnauthenticated: true } }, {})).toThrow(
+      ConfigError,
+    )
+    expect(() => resolveInstanceConfig(parseArgs(['--remote']), { path: null, options: { auth: { trustProxy: false } } }, {})).toThrow(
+      ConfigError,
+    )
+    expect(() => resolveInstanceConfig(parseArgs(['--remote']), noConfig, { WORKERDECK_HOST: '0.0.0.0' })).toThrow(ConfigError)
+  })
+})
+
 describe('insecureHosts', () => {
   const withInsecure = (hosts: string[]) => ({
     path: '/x/c.mjs',

@@ -27,6 +27,8 @@ export type WorkerDeckConfig = WorkerServerOptions & {
   // Refused unless auth is on: CORS on an open gateway lets any allowlisted page drive it with no credential.
   corsOrigins?: string[]
   apns?: ApnsConfig
+  // Published to the tailnet by `tailscale serve`: loopback bind, auth forced whatever else is set, `trustProxy` on.
+  remote?: boolean
 }
 
 export type CliFlags = {
@@ -46,6 +48,7 @@ export type CliFlags = {
   allowedHosts: string[]
   insecureHosts: string[]
   trustProxy?: boolean
+  remote?: boolean
   approvalTimeoutMs?: number | null
   engineSleepAfterMs?: number
   agentSleepAfterMs?: number
@@ -81,6 +84,7 @@ const SWITCHES = new Map<string, FlagSwitch>([
   ['--fs-write', (f) => (f.fsWrite = true)],
   ['--shell', (f) => (f.shell = true)],
   ['--trust-proxy', (f) => (f.trustProxy = true)],
+  ['--remote', (f) => (f.remote = true)],
   ['--no-parking-store', (f) => (f.parking = false)],
   ['--insecure', (f) => (f.insecure = true)],
   ['--no-web', (f) => (f.web = false)],
@@ -276,6 +280,7 @@ export type ResolvedConfig = {
   stateDir: string | null
   configPath: string | null
   hostAuthenticates: boolean
+  remote: boolean
   // A promise rather than a key, because resolution stays I/O-free; `startInstance` must keep it.
   generateAuthKey: boolean
   // Host header values to accept, or null to accept any; non-null only for an unauthenticated instance.
@@ -344,6 +349,11 @@ export function resolveInstanceConfig(
   const authKey = flags.authKey || env.WORKERDECK_AUTH_KEY || loaded.options.auth?.secret || undefined
   const hostAuthenticates = typeof loaded.options.authenticate === 'function'
 
+  const remote = flags.remote ?? (env.WORKERDECK_REMOTE === '1' || env.WORKERDECK_REMOTE === 'true' || loaded.options.remote === true)
+  if (remote) {
+    assertRemoteCompatible(host, flags, loaded)
+  }
+
   const insecureHosts = new Set([...flags.insecureHosts, ...(loaded.options.insecureHosts ?? [])].map(normalizeInsecureHost))
   const bindHost = host
     .trim()
@@ -352,13 +362,11 @@ export function resolveInstanceConfig(
 
   // An unauthenticated gateway on a routable interface is a shell for anyone who can reach the port, so serving one
   // takes an explicit opt-out; absent all three of them auth goes on and a key is generated.
+  // Remote mode is the exception: it binds loopback, yet everything it serves arrives from the tailnet through the proxy.
   const generateAuthKey =
     !authKey &&
     !hostAuthenticates &&
-    !loaded.options.allowUnauthenticated &&
-    !isLoopback(host) &&
-    !flags.insecure &&
-    !insecureHosts.has(bindHost)
+    (remote || (!loaded.options.allowUnauthenticated && !isLoopback(host) && !flags.insecure && !insecureHosts.has(bindHost)))
 
   const stateDir =
     flags.parking === false || loaded.options.stateDir === null
@@ -376,7 +384,7 @@ export function resolveInstanceConfig(
   const auth: CliAuthOptions = {
     ...loaded.options.auth,
     secret: authKey,
-    trustProxy: flags.trustProxy ?? loaded.options.auth?.trustProxy,
+    trustProxy: remote || (flags.trustProxy ?? loaded.options.auth?.trustProxy),
     allowedOrigins: [...(loaded.options.auth?.allowedOrigins ?? []), ...flags.allowedOrigins],
   }
 
@@ -426,6 +434,7 @@ export function resolveInstanceConfig(
     keepAwake: _ka,
     corsOrigins: _cors,
     apns: _ap,
+    remote: _remote,
     ...serverOptions
   } = loaded.options
   const options: WorkerServerOptions = { ...serverOptions }
@@ -503,6 +512,7 @@ export function resolveInstanceConfig(
     stateDir,
     configPath: loaded.path,
     hostAuthenticates,
+    remote,
     generateAuthKey,
     allowedHosts,
     webRoot: loaded.options.webRoot,
@@ -513,6 +523,27 @@ export function resolveInstanceConfig(
     open: flags.open ?? false,
     profileStore,
     options,
+  }
+}
+
+// Every way to open the gateway is refused rather than quietly overridden: a remote gateway that ran keyless because a
+// config file also said `allowUnauthenticated` would be a shell for the whole tailnet.
+function assertRemoteCompatible(host: string, flags: CliFlags, loaded: LoadedConfig): void {
+  const bindHost = host
+    .trim()
+    .replace(/^\[|\]$/g, '')
+    .toLowerCase()
+  if (!isLoopbackHostname(bindHost)) {
+    throw new ConfigError(`--remote binds loopback only (tailscale serve publishes it); drop --host ${host}`)
+  }
+  if (flags.insecure) {
+    throw new ConfigError('--remote always requires the key; it cannot be combined with --insecure')
+  }
+  if (loaded.options.allowUnauthenticated) {
+    throw new ConfigError('--remote always requires the key; the config file sets allowUnauthenticated')
+  }
+  if (loaded.options.auth?.trustProxy === false) {
+    throw new ConfigError('--remote runs behind tailscale serve and needs trustProxy; the config file sets it to false')
   }
 }
 

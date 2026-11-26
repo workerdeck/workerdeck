@@ -613,3 +613,45 @@ describe('durable sessions', () => {
     expect(store.rows).toHaveLength(0)
   })
 })
+
+describe('remote mode behind tailscale serve', () => {
+  const TS = 'home.tail1234.ts.net:8443'
+  const serve = (ip: string, extra: Record<string, string> = {}): Record<string, string> => ({
+    host: TS,
+    origin: `https://${TS}`,
+    'x-forwarded-for': ip,
+    'x-forwarded-host': TS,
+    'x-forwarded-proto': 'https',
+    ...extra,
+  })
+
+  it('reports remote in /auth/status', async () => {
+    const base = await startHost(createCliAuth({ secret: SECRET, trustProxy: true, remote: true }))
+    expect(JSON.parse((await request(`${base}/auth/status`)).body)).toEqual({ enabled: true, authenticated: false, remote: true })
+  })
+
+  it('logs a serve-proxied browser in with a Secure cookie and accepts its upgrade origin', async () => {
+    const base = await startHost(createCliAuth({ secret: SECRET, trustProxy: true, remote: true }))
+    const res = await request(`${base}/auth/login`, {
+      method: 'POST',
+      headers: serve('100.64.0.7', { 'content-type': 'application/x-www-form-urlencoded' }),
+      body: new URLSearchParams({ secret: SECRET }).toString(),
+    })
+    expect(res.status).toBe(303)
+    expect(res.setCookies[0]).toMatch(/; Secure/)
+    const cookie = res.setCookies[0]!.split(';')[0]!
+    const attach = await request(`${base}/v1/sessions`, { method: 'POST', headers: serve('100.64.0.7', { cookie }) })
+    expect(attach.status).toBe(200)
+  })
+
+  it('throttles each tailnet client on its own, never as loopback', async () => {
+    const base = await startHost(createCliAuth({ secret: SECRET, trustProxy: true, remote: true, throttle: { maxFailuresPerIp: 1 } }))
+    const wrong = (ip: string): Promise<RawResponse> =>
+      request(`${base}/v1/meta`, { headers: serve(ip, { 'x-workerdeck-key': 'wrong-secret-value' }) })
+    expect((await wrong('100.64.0.7')).status).toBe(401)
+    const blocked = await request(`${base}/v1/meta`, { headers: serve('100.64.0.7', { 'x-workerdeck-key': SECRET }) })
+    expect(blocked.status).toBe(401)
+    const other = await request(`${base}/v1/meta`, { headers: serve('100.64.0.8', { 'x-workerdeck-key': SECRET }) })
+    expect(other.status).toBe(200)
+  })
+})

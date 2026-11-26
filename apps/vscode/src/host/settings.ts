@@ -9,6 +9,7 @@ export type HostSettings = {
   port: number
   bindAddress: string
   requireAuthKey: boolean
+  remote: boolean
   stateDir: string
   configPath: string | undefined
   binaryPath: string | undefined
@@ -73,6 +74,7 @@ export function readHostSettings(): HostSettings {
     port: config.get<number>('port', 8787),
     bindAddress: config.get<string>('bindAddress', '127.0.0.1').trim() || '127.0.0.1',
     requireAuthKey: config.get<boolean>('requireAuthKey', false),
+    remote: config.get<boolean>('remote', false),
     stateDir: stateDir || join(homedir(), '.workerdeck'),
     configPath: configPath || undefined,
     binaryPath: binaryPath || undefined,
@@ -98,6 +100,7 @@ export function readHostSettings(): HostSettings {
 const RESTART_KEYS = [
   'bindAddress',
   'requireAuthKey',
+  'remote',
   'configPath',
   'cwdRoots',
   'dashboard',
@@ -143,7 +146,17 @@ export function settingsProblem(settings: HostSettings): string | undefined {
   if (!Number.isInteger(settings.port) || settings.port < 1 || settings.port > 65535) {
     return `\`workerdeck.host.port\` is not a valid port: ${settings.port}`
   }
+  if (settings.remote && !REMOTE_BINDS.has(settings.bindAddress)) {
+    return '`workerdeck.host.remote` serves on loopback only (tailscale serve publishes it); set `workerdeck.host.bindAddress` back to 127.0.0.1'
+  }
   return undefined
+}
+
+const REMOTE_BINDS = new Set(['127.0.0.1', 'localhost', '::1'])
+
+// Remote mode reaches every client through a loopback proxy, so loopback stops meaning "only this machine".
+export function keyRequired(settings: HostSettings): boolean {
+  return settings.remote || settings.requireAuthKey || bindsPublicly(settings)
 }
 
 export function bindsPublicly(settings: HostSettings): boolean {

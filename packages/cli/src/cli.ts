@@ -15,6 +15,8 @@ Usage
   workerdeck owners rename <from> <to>   move agents and sessions to another owner
   workerdeck reload [options]    hot-reload a gateway started with --hot-reload
   workerdeck relay <command>     run or manage a cross-gateway peer relay (relay --help)
+  workerdeck remote <command>    publish a --remote gateway to your tailnet (remote --help)
+  workerdeck pair-link [options] print the pairing link and QR code for a published gateway
 
 Options
   -p, --port <n>            port to listen on (default 8787, WORKERDECK_PORT)
@@ -29,6 +31,12 @@ Options
                             proxy. Required behind TLS termination, or the session
                             cookie loses its Secure flag and the origin check
                             computes http:// where the browser says https://.
+      --remote              reach this gateway from your other devices over Tailscale:
+                            binds loopback, always requires the key (generated if
+                            unset) and trusts the tailscale serve proxy (config:
+                            remote, WORKERDECK_REMOTE=1). Publish it with
+                            \`workerdeck remote enable\`, then pair a device with
+                            \`workerdeck pair-link\`.
       --allowed-origin <o>  extra origin accepted on browser requests, for when a
                             proxy rewrites Host (repeatable)
       --allowed-host <name> extra Host header accepted when running without auth
@@ -197,6 +205,16 @@ async function main(argv: string[]): Promise<number> {
   if (argv[0] === 'relay') {
     const { runRelayCli } = await import('@workerdeck/relay')
     return await runRelayCli(argv.slice(1))
+  }
+
+  if (argv[0] === 'remote') {
+    const { runRemote } = await import('./lib/remote.ts')
+    return await runRemote(argv.slice(1))
+  }
+
+  if (argv[0] === 'pair-link') {
+    const { runPairLink } = await import('./lib/remote.ts')
+    return await runPairLink(argv.slice(1))
   }
 
   if (argv[0] === 'owners') {

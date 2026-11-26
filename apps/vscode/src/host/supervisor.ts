@@ -1,6 +1,5 @@
 import { errorMessage } from '@workerdeck/protocol'
-import { randomBytes } from 'node:crypto'
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import * as vscode from 'vscode'
@@ -10,11 +9,21 @@ import type { HostStore } from '../hosts.ts'
 import { confirmDisruption, summarizeBusy } from './busy.ts'
 import { clearLock, logPath, ownedLock, pidAlive, writeLock } from './lock.ts'
 import { LogTail } from './log-tail.ts'
+import { generateKey, readStateKey, writeStateKey } from './key-store.ts'
 import { resolveLaunch, type LaunchSpec } from './runtime.ts'
-import { AGENT_SLEEP_AFTER_MINUTES, bindsPublicly, managedUrl, readHostSettings, settingsProblem, type HostSettings } from './settings.ts'
+import {
+  AGENT_SLEEP_AFTER_MINUTES,
+  bindsPublicly,
+  keyRequired,
+  managedUrl,
+  readHostSettings,
+  settingsProblem,
+  type HostSettings,
+} from './settings.ts'
 
 export const MANAGED_HOST_ID = 'workerdeck-managed'
 
+// Before 4.8 the key lived here; `#resolveAuthKey` moves it into `<state-dir>/auth-key` once.
 const AUTH_KEY_SECRET = 'workerdeck.host.managedAuthKey'
 const READY_INTERVAL_MS = 400
 const DRAIN_GRACE_MS = 30_000
@@ -27,6 +36,8 @@ export type HostState =
   | { kind: 'running'; url: string; owned: boolean; pid: number | undefined }
   | { kind: 'stopping' }
   | { kind: 'error'; message: string }
+
+export type CliResult = { code: number; stdout: string; stderr: string }
 
 export type SupervisorDeps = {
   sessionsOf: (hostId: string) => SessionInfo[]
@@ -48,6 +59,8 @@ export class HostSupervisor implements vscode.Disposable {
   readonly #version: string
   #state: HostState = { kind: 'disabled' }
   #restartOffered = false
+  // Set while Enable/Disable Remote Access changes the setting and restarts itself, so the generic offer stays quiet.
+  #switchingRemote = false
   #child: ChildProcess | undefined
   #childViaNpx = false
   #busy: Promise<void> = Promise.resolve()
@@ -138,7 +151,7 @@ export class HostSupervisor implements vscode.Disposable {
   // change, and a server started by hand in a terminal never read these settings at all.
   offerRestart(): void {
     const state = this.#state
-    if (state.kind !== 'running' || !state.owned || !vscode.window.state.focused || this.#restartOffered) {
+    if (state.kind !== 'running' || !state.owned || !vscode.window.state.focused || this.#restartOffered || this.#switchingRemote) {
       return
     }
     this.#restartOffered = true
@@ -152,14 +165,55 @@ export class HostSupervisor implements vscode.Disposable {
       })
   }
 
-  restart(): Promise<void> {
+  restart(): Promise<boolean> {
     return this.#queue(async () => {
       const settings = readHostSettings()
       if (!(await this.#stopNow(settings, true, 'Restart'))) {
-        return
+        return false
       }
       await this.#launch(settings)
+      return true
     })
+  }
+
+  // Runs the same CLI the server is launched with, so the remote and pairing logic exists once, in `workerdeck`.
+  async runCli(args: string[]): Promise<CliResult> {
+    const settings = readHostSettings()
+    const launch = resolveLaunch({
+      binaryPath: settings.binaryPath,
+      npxSpec: settings.npxSpec ?? `workerdeck@${this.#version}`,
+      allowNpx: settings.useNpx,
+    })
+    if ('error' in launch) {
+      return { code: 127, stdout: '', stderr: launch.error }
+    }
+    const full = [...launch.args, ...args, '--port', String(settings.port), '--state-dir', settings.stateDir]
+    return await new Promise((resolve) => {
+      execFile(launch.command, full, { timeout: launch.readyTimeoutMs + 60_000 }, (error, stdout, stderr) => {
+        const code = error ? (typeof error.code === 'number' ? error.code : 1) : 0
+        resolve({ code, stdout: String(stdout), stderr: String(stderr) })
+      })
+    })
+  }
+
+  // Changes `workerdeck.host.remote` and restarts through the busy confirmation; a declined restart puts it back.
+  async switchRemote(remote: boolean): Promise<boolean> {
+    const config = vscode.workspace.getConfiguration('workerdeck.host')
+    const previous = config.get<boolean>('remote', false)
+    if (previous === remote && this.#state.kind === 'running') {
+      return true
+    }
+    this.#switchingRemote = true
+    try {
+      await config.update('remote', remote, vscode.ConfigurationTarget.Global)
+      if (await this.restart()) {
+        return true
+      }
+      await config.update('remote', previous, vscode.ConfigurationTarget.Global)
+      return false
+    } finally {
+      this.#switchingRemote = false
+    }
   }
 
   // Addressed through <state-dir>/gateway.pid rather than the ownership lock: only a gateway started with
@@ -201,7 +255,7 @@ export class HostSupervisor implements vscode.Disposable {
   }
 
   async copyAuthKey(): Promise<void> {
-    const key = await this.#context.secrets.get(AUTH_KEY_SECRET)
+    const key = await this.#currentKey(readHostSettings())
     if (!key) {
       void vscode.window.showInformationMessage('WorkerDeck: this server has no auth key.')
       return
@@ -235,8 +289,15 @@ export class HostSupervisor implements vscode.Disposable {
     return true
   }
 
+  async #currentKey(settings: HostSettings): Promise<string | undefined> {
+    if (!keyRequired(settings)) {
+      return undefined
+    }
+    return (await readStateKey(settings.stateDir)) ?? (await this.#context.secrets.get(AUTH_KEY_SECRET))
+  }
+
   async #probeUrl(url: string): Promise<'connected' | 'unauthorized' | 'unreachable'> {
-    const key = await this.#context.secrets.get(AUTH_KEY_SECRET)
+    const key = await this.#currentKey(readHostSettings())
     const client = clientForUrl(url, key ? { authorization: `Bearer ${key}` } : {})
     return client ? probe(client) : 'unreachable'
   }
@@ -421,6 +482,9 @@ export class HostSupervisor implements vscode.Disposable {
 
   #argv(settings: HostSettings): string[] {
     const args = ['--port', String(settings.port), '--host', settings.bindAddress, '--state-dir', settings.stateDir]
+    if (settings.remote) {
+      args.push('--remote')
+    }
     if (settings.configPath) {
       args.push('--config', settings.configPath)
     }
@@ -457,24 +521,57 @@ export class HostSupervisor implements vscode.Disposable {
     return args
   }
 
-  // The key never reaches argv: `ps` is world-readable on every platform this runs on.
+  // The key never reaches argv: `ps` is world-readable on every platform this runs on. The file is kept when the key
+  // is turned off, so turning it back on does not unpair every device.
   async #resolveAuthKey(settings: HostSettings): Promise<string | undefined> {
-    if (!settings.requireAuthKey && !bindsPublicly(settings)) {
-      await this.#context.secrets.delete(AUTH_KEY_SECRET)
+    if (!keyRequired(settings)) {
       return undefined
     }
-    const existing = await this.#context.secrets.get(AUTH_KEY_SECRET)
-    if (existing) {
-      return existing
+    const stored = await readStateKey(settings.stateDir)
+    const legacy = await this.#context.secrets.get(AUTH_KEY_SECRET)
+    let key = stored ?? legacy
+    if (stored && legacy && stored !== legacy) {
+      key = await this.#chooseKey(settings, stored, legacy)
     }
-    const generated = randomBytes(24).toString('base64url')
-    await this.#context.secrets.store(AUTH_KEY_SECRET, generated)
-    return generated
+    if (key === undefined) {
+      key = generateKey()
+    }
+    if (key !== stored) {
+      await writeStateKey(settings.stateDir, key)
+    }
+    if (legacy !== undefined) {
+      await this.#context.secrets.delete(AUTH_KEY_SECRET)
+    }
+    return key
+  }
+
+  async #chooseKey(settings: HostSettings, stored: string, legacy: string): Promise<string> {
+    const useFile = 'Use the State-Dir Key'
+    const useVsCode = 'Use the VS Code Key'
+    const answer = await vscode.window.showWarningMessage(
+      'WorkerDeck: this server has two different keys.',
+      {
+        modal: true,
+        detail:
+          `VS Code kept one in the keychain, and ${settings.stateDir}/auth-key holds another (a server started from a ` +
+          'terminal writes it). From now on the server uses one key, kept in that file. Devices and editors paired ' +
+          'with the other key have to pair again.',
+      },
+      useFile,
+      useVsCode,
+    )
+    if (answer === useFile) {
+      return stored
+    }
+    if (answer === useVsCode) {
+      return legacy
+    }
+    throw new Error('no key chosen; the server was not started')
   }
 
   async #register(url: string, name: string): Promise<void> {
     const existing = this.#store.get(MANAGED_HOST_ID)
-    const key = await this.#context.secrets.get(AUTH_KEY_SECRET)
+    const key = await this.#currentKey(readHostSettings())
     if (existing?.baseUrl === url && existing.name === name && existing.managed && (await this.#store.authKey(MANAGED_HOST_ID)) === key) {
       return
     }

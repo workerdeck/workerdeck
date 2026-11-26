@@ -1,4 +1,4 @@
-import { errorMessage } from '@workerdeck/protocol'
+import { errorMessage, parsePairingLink } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import { randomUUID } from 'node:crypto'
 import { apiUrl, type HostStore } from './hosts.ts'
@@ -37,23 +37,28 @@ async function run(deps: GatewayFlowDeps, editing: Editing | undefined): Promise
   // The first gateway is nearly always this machine's, so the flow is three `enter`s there too.
   let baseUrl = editing?.baseUrl ?? (deps.store.all().length === 0 ? LOCAL_GATEWAY_URL : '')
   let name = editing?.name ?? ''
+  // A pasted pairing link carries the key, so the key step is skipped.
+  let pairedKey: string | undefined
   let step = 0
 
   while (step < TOTAL_STEPS) {
     if (step === 0) {
       const picked = await showInput({
         title,
-        prompt: 'The server root - /v1 is implied.',
-        placeHolder: 'http://mac-mini.tailnet.ts.net:8787',
+        prompt: 'The server root (/v1 is implied), or a pairing link from Enable Remote Access.',
+        placeHolder: 'https://mac-mini.tailnet.ts.net/#pair=…',
         value: baseUrl,
         step: 1,
         totalSteps: TOTAL_STEPS,
-        validate: (value) => (apiUrl({ baseUrl: value.trim() }) ? undefined : 'not a valid gateway URL'),
+        validate: (value) =>
+          parsePairingLink(value) || apiUrl({ baseUrl: value.trim() }) ? undefined : 'not a valid gateway URL or pairing link',
       })
       if (picked === CANCEL || picked === BACK) {
         return
       }
-      baseUrl = picked.trim()
+      const paired = parsePairingLink(picked)
+      baseUrl = paired?.baseUrl ?? picked.trim()
+      pairedKey = paired?.key
       step = 1
     } else if (step === 1) {
       const picked = await showInput({
@@ -73,6 +78,10 @@ async function run(deps: GatewayFlowDeps, editing: Editing | undefined): Promise
         continue
       }
       name = picked.trim()
+      if (pairedKey !== undefined) {
+        await save(deps, { id: editing?.id ?? randomUUID(), name, baseUrl }, pairedKey)
+        return
+      }
       step = 2
     } else {
       const picked = await showInput({

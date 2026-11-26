@@ -92,6 +92,12 @@ export async function hostActions(state: HostState): Promise<void> {
           ...(readHostSettings().hotReload ? [{ label: '$(sync) Hot-Reload Server', command: 'workerdeck.host.reload' }] : []),
           { label: '$(globe) Open Dashboard in Browser', description: state.url, command: 'workerdeck.host.openDashboard' },
           { label: '$(key) Copy Auth Key', command: 'workerdeck.host.copyAuthKey' },
+          ...(readHostSettings().remote
+            ? [
+                { label: '$(device-mobile) Pair a Device', command: 'workerdeck.host.showPairingLink' },
+                { label: '$(lock) Disable Remote Access', command: 'workerdeck.host.disableRemote' },
+              ]
+            : [{ label: '$(broadcast) Enable Remote Access', description: 'Tailscale', command: 'workerdeck.host.enableRemote' }]),
         ]
       : [{ label: '$(play) Start Server', command: 'workerdeck.host.start' }]),
     // The badge counts every gateway, not just this machine's, so its menu has to reach them.

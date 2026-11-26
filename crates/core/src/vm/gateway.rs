@@ -10,6 +10,56 @@ pub fn normalize_base_url(raw: &str) -> String {
     with_scheme.strip_suffix("/v1").map(str::to_owned).unwrap_or(with_scheme)
 }
 
+// Mirrors `parsePairingLink` in packages/protocol: `https://<host>[:port]/#pair=<key>`, the key in the fragment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PairingLink {
+    pub base_url: String,
+    pub key: String,
+}
+
+pub fn parse_pairing_link(text: &str) -> Option<PairingLink> {
+    let trimmed = text.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.starts_with("https://") && !lower.starts_with("http://") {
+        return None;
+    }
+    let (before, fragment) = trimmed.split_once('#')?;
+    let encoded = fragment.strip_prefix("pair=")?;
+    let key = percent_decode(encoded)?;
+    if key.len() < 12 || !key.bytes().all(|b| (0x21..=0x7e).contains(&b)) {
+        return None;
+    }
+    let base = before.split_once('?').map_or(before, |(path, _)| path).trim_end_matches('/');
+    let (scheme, rest) = base.split_once("://")?;
+    if rest.is_empty() || rest.starts_with('/') || rest.contains(char::is_whitespace) {
+        return None;
+    }
+    let scheme = scheme.to_ascii_lowercase();
+    let (authority, path) = rest.split_once('/').map_or((rest, ""), |(host, path)| (host, path));
+    let authority = authority.to_ascii_lowercase();
+    let default_port = if scheme == "https" { ":443" } else { ":80" };
+    let authority = authority.strip_suffix(default_port).filter(|host| !host.is_empty()).unwrap_or(&authority);
+    let base_url = if path.is_empty() { format!("{scheme}://{authority}") } else { format!("{scheme}://{authority}/{path}") };
+    Some(PairingLink { base_url, key })
+}
+
+fn percent_decode(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = text.get(i + 1..i + 3)?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
 pub fn api_base(base_url: &str) -> String {
     format!("{}/v1", normalize_base_url(base_url))
 }
@@ -176,6 +226,20 @@ mod tests {
     #[test]
     fn a_result_image_path_encodes_both_ids() {
         assert_eq!(result_image_path("a b", 12, "toolu/1", 0), "/sessions/a%20b/events/12/result?toolUseId=toolu%2F1&part=0");
+    }
+
+    #[test]
+    fn a_pairing_link_parses_like_the_typescript_rule() {
+        let link = super::parse_pairing_link(" https://Home.tail1.ts.net:8443/#pair=k3y-for-the-tests\n").unwrap();
+        assert_eq!(link.base_url, "https://home.tail1.ts.net:8443");
+        assert_eq!(link.key, "k3y-for-the-tests");
+        let default_port = super::parse_pairing_link("https://home.tail1.ts.net:443/#pair=a%2Bb%2Fc%25d-123456").unwrap();
+        assert_eq!(default_port.base_url, "https://home.tail1.ts.net");
+        assert_eq!(default_port.key, "a+b/c%d-123456");
+        assert!(super::parse_pairing_link("https://home.tail1.ts.net/#/sessions").is_none());
+        assert!(super::parse_pairing_link("https://home.tail1.ts.net/#pair=short").is_none());
+        assert!(super::parse_pairing_link("ftp://home.tail1.ts.net/#pair=k3y-for-the-tests").is_none());
+        assert!(super::parse_pairing_link("https://home.tail1.ts.net/#pair=bad%zz-escape-1234").is_none());
     }
 
     #[test]

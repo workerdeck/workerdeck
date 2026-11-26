@@ -176,7 +176,12 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
       : config.auth
   const sessions =
     authOptions.secret !== undefined && config.stateDir ? await createAuthSessionStore({ stateDir: config.stateDir }) : undefined
-  const auth = createCliAuth(sessions ? { ...authOptions, sessions } : authOptions)
+  const auth = createCliAuth({ ...authOptions, ...(sessions ? { sessions } : {}), remote: config.remote })
+  // The tailnet reaches a remote gateway through a loopback proxy, so every check keyed on "loopback means local" is
+  // void there; only the key stands between the tailnet and a shell.
+  if (config.remote && (!auth.enabled || config.hostAuthenticates)) {
+    throw new Error('refusing to serve: remote mode needs the built-in key, and this instance resolved none')
+  }
   // Keep this assert: it is the only thing between "the config stood the Host-header guard down expecting auth" and
   // "createCliAuth got no secret", which is an instance wide open while reporting itself authenticated.
   if (config.allowedHosts === null && !config.hostAuthenticates && !auth.enabled) {
@@ -389,6 +394,9 @@ export type BannerInput = {
 
 export function bannerLines({ url, config, generated, authEnabled, push }: BannerInput): string[] {
   const lines = ['', `  workerdeck  ${url}`]
+  if (config.remote) {
+    lines.push('  remote: on - publish with `workerdeck remote enable`, then `workerdeck pair-link`')
+  }
   if (config.hostAuthenticates) {
     lines.push('  auth: the config file supplies its own `authenticate`')
   } else if (generated?.source === 'created') {

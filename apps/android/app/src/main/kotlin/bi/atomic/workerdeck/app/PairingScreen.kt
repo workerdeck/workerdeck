@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import bi.atomic.workerdeck.BuildConfig
+import bi.atomic.workerdeck.core.ffi.parsePairingLink
 import kotlinx.coroutines.launch
 
 // `onPair` probes the gateway and answers an error to show, or null once the pairing is saved.
@@ -40,9 +41,14 @@ fun PairingScreen(onPair: suspend (url: String, key: String) -> String?) {
         Text("Connect a gateway", style = MaterialTheme.typography.headlineSmall)
         OutlinedTextField(
             url,
-            { url = it },
-            label = { Text("Gateway URL") },
-            placeholder = { Text("http://host:8787") },
+            { text ->
+                // A pasted pairing link fills both fields; the key never stays in the address.
+                val link = parsePairingLink(text)
+                url = link?.baseUrl ?: text
+                if (link != null) key = link.key
+            },
+            label = { Text("Gateway URL or pairing link") },
+            placeholder = { Text("https://host.tailnet.ts.net") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             modifier = Modifier.fillMaxWidth(),

@@ -8,6 +8,7 @@ import type { SelectOptions, SidebarProvider } from './sidebar.ts'
 import { currentModel, modelLabel } from './status-bar.ts'
 import { pickModel } from './model-pick.ts'
 import type { SurfaceRegistry } from './surfaces.ts'
+import { disableRemoteAccess, enableRemoteAccess, showPairingLink } from './host/remote-access.ts'
 import { hostActions } from './host/status-item.ts'
 import type { HostSupervisor } from './host/supervisor.ts'
 import { HOST_SECTION } from './host/settings.ts'
@@ -39,6 +40,13 @@ export function registerCommands(...tables: CommandTable[]): vscode.Disposable[]
   return tables.flatMap((table) => Object.entries(table).map(([id, run]) => vscode.commands.registerCommand(id, run)))
 }
 
+function withSupervisor(
+  supervisor: HostSupervisor | undefined,
+  run: (supervisor: HostSupervisor) => Promise<void>,
+): Promise<void> | undefined {
+  return supervisor ? run(supervisor) : undefined
+}
+
 export function hostCommands({ extensionId, supervisor, require }: HostCommandDeps): CommandTable {
   return {
     'workerdeck.host.start': () => require()?.start(),
@@ -48,6 +56,9 @@ export function hostCommands({ extensionId, supervisor, require }: HostCommandDe
     'workerdeck.host.openDashboard': () => require()?.openDashboard(),
     'workerdeck.host.copyAuthKey': () => require()?.copyAuthKey(),
     'workerdeck.host.showLog': () => require()?.showLog(),
+    'workerdeck.host.enableRemote': () => withSupervisor(require(), enableRemoteAccess),
+    'workerdeck.host.disableRemote': () => withSupervisor(require(), disableRemoteAccess),
+    'workerdeck.host.showPairingLink': () => withSupervisor(require(), showPairingLink),
     'workerdeck.host.actions': () => hostActions(supervisor?.state ?? { kind: 'disabled' }),
     'workerdeck.openSettings': () => vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${extensionId}`),
     'workerdeck.host.openSettings': () =>

@@ -67,6 +67,10 @@ means the all-interfaces bind itself, not "any host". The Host-header fence stay
 an unauthenticated instance answers only to loopback names plus what you declared, which is what
 stands between it and DNS rebinding.
 
+To use the gateway from your phone or another computer over Tailscale, see
+[Remote access](/workerdeck/docs/guides/remote-access/): `--remote`, `workerdeck remote enable` and
+`workerdeck pair-link`.
+
 Behind TLS termination, add `--trust-proxy` - otherwise the session cookie loses its `Secure`
 flag and the origin check computes `http://` where the browser says `https://`.
 
@@ -172,6 +176,7 @@ write flag, and only an operator can create a session that has it or press Run o
 | `--profile <name=dir>` (repeatable) | - | auto-detected from `~/.claude` |
 | `--state-dir <path>` | `WORKERDECK_STATE_DIR` | beside the config file, else `~/.workerdeck` |
 | `--trust-proxy` | - | off |
+| `--remote` | `WORKERDECK_REMOTE=1` | off (config: `remote`); see [Remote access](/workerdeck/docs/guides/remote-access/) |
 | `--allowed-origin <o>` / `--allowed-host <name>` (repeatable) | - | loopback names only |
 | `--insecure-host <name>` (repeatable) | - | none (config: `insecureHosts`) |
 | `--approval-timeout <d>` | - | `none` - prompts and questions never expire (config: `approvalTimeoutMs`) |

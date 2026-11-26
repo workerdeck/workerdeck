@@ -15,12 +15,13 @@ import {
   toast,
 } from '@workerdeck/ui'
 import { SessionWorkspace } from '@workerdeck/ui/workspace'
-import { Trash2 } from 'lucide-react'
+import { ChevronLeft, Trash2 } from 'lucide-react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import { clientFor, useHosts } from '@/lib/hosts.ts'
 import { getActionStyle, getCatchUp, getFontSize, getThinking, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
+import { useNarrow } from '@/hooks/useNarrow.ts'
 import { nudgeSessions, useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { DeleteAgentDialog, type DeleteAgentTarget } from '@/components/DeleteAgentDialog.tsx'
 
@@ -100,7 +101,10 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
   const { snapshots } = useSessions()
   const rows = useSessionRows(snapshots)
   const agentRow = rows.find((row) => row.hostId === hostId && row.info.id === sessionId && row.info.agent)
-  const peerRows = useMemo(() => Object.fromEntries(rows.filter((row) => row.hostId === hostId).map((row) => [row.info.id, row])), [rows, hostId])
+  const peerRows = useMemo(
+    () => Object.fromEntries(rows.filter((row) => row.hostId === hostId).map((row) => [row.info.id, row])),
+    [rows, hostId],
+  )
   const polled = useMemo(
     () => snapshots.find((s) => s.host.id === hostId)?.sessions.find((s) => s.id === sessionId),
     [snapshots, hostId, sessionId],
@@ -121,6 +125,7 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
 
   const [deleting, setDeleting] = useState<DeleteAgentTarget>()
   const project = info?.cwd?.split('/').filter(Boolean).pop()
+  const narrow = useNarrow()
 
   return (
     <>
@@ -148,7 +153,10 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
           void navigate({
             to: '/sessions/$hostId/$sessionId',
             params: { hostId, sessionId },
-            search: (prev) => (toolUseId === undefined ? { conversation: prev.conversation } : { subagent: toolUseId, sn: prev.sn, conversation: prev.conversation }),
+            search: (prev) =>
+              toolUseId === undefined
+                ? { conversation: prev.conversation }
+                : { subagent: toolUseId, sn: prev.sn, conversation: prev.conversation },
             replace: true,
           })
         }}
@@ -174,8 +182,9 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
         statusPlacement="bottom"
         controlsSurface="status"
         defaultRailWidth={rail.width}
-        defaultRailCollapsed={rail.collapsed}
-        onRailChange={setRail}
+        // A phone starts with the rail shut and never writes its choice over the desktop's.
+        defaultRailCollapsed={narrow || rail.collapsed}
+        onRailChange={narrow ? undefined : setRail}
         conversation={conversation}
         onGoToCurrent={() =>
           void navigate({
@@ -192,6 +201,11 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
         }}
         header={({ actions }) => (
           <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
+            {narrow ? (
+              <Button variant="ghost" size="icon-sm" aria-label="Back to sessions" onClick={() => void navigate({ to: '/sessions' })}>
+                <ChevronLeft className="size-4" />
+              </Button>
+            ) : null}
             {agentRow ? (
               <AgentHeading row={agentRow} className="shrink-0" />
             ) : (
@@ -202,7 +216,7 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
                 {info.engine}
               </Badge>
             ) : null}
-            {info?.cwd ? (
+            {info?.cwd && !narrow ? (
               <span className="min-w-0 truncate font-mono text-label text-fg-4" title={info.cwd}>
                 {info.cwd}
               </span>
@@ -215,7 +229,9 @@ function SessionViewInner({ hostId, sessionId, conversation, client }: SessionVi
                 size="icon-sm"
                 aria-label="Delete agent"
                 title="Delete agent…"
-                onClick={() => setDeleting({ hostId, agentId: info.agent!.id, name: info.agent!.name, conversation: info.conversation ?? 1 })}
+                onClick={() =>
+                  setDeleting({ hostId, agentId: info.agent!.id, name: info.agent!.name, conversation: info.conversation ?? 1 })
+                }
               >
                 <Trash2 className="size-4 text-fg-3" />
               </Button>

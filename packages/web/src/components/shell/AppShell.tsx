@@ -11,6 +11,7 @@ import { SessionsSidebar } from './SessionsSidebar.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
 import { readPref, writePref } from '@/lib/storage.ts'
 import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
+import { useNarrow } from '@/hooks/useNarrow.ts'
 import { useUnseenTotal } from '@/hooks/useUnseen.ts'
 
 // The tab most likely to hold unread work is a background one, and a background tab shows
@@ -41,6 +42,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
   const section = [...NAV].sort((a, b) => b.path.length - a.path.length).find((item) => pathname.startsWith(item.path))
   const Sidebar = section?.sidebar
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const narrow = useNarrow()
   const [collapsed, setCollapsed] = useState(() => readPref(COLLAPSED_KEY) === '1')
   const toggle = () => {
     setCollapsed((prev) => {
@@ -56,6 +58,45 @@ export function AppShell({ children }: { children?: ReactNode }) {
       collapsed ? 'justify-center p-2' : 'gap-2 px-2 py-1.5',
       active ? 'bg-surface font-medium text-fg-1 shadow-(--shadow-xs)' : 'text-fg-3 hover:bg-row-hover hover:text-fg-1',
     )
+  if (narrow) {
+    // One pane at a time: the section's list at its root, the open item below it.
+    const detailOpen = section !== undefined && pathname !== section.path
+    return (
+      <div className="flex h-dvh flex-col bg-sidebar">
+        <div className="app-frame flex min-h-0 flex-1 overflow-hidden">
+          {Sidebar && !detailOpen ? <Sidebar key={section?.id} /> : null}
+          {detailOpen || !Sidebar ? <main className="flex min-w-0 flex-1 flex-col overflow-hidden">{children ?? <Outlet />}</main> : null}
+        </div>
+        <nav className="flex shrink-0 items-stretch justify-around border-t border-border pb-[env(safe-area-inset-bottom)]">
+          {NAV.map((item) => (
+            <Link
+              key={item.id}
+              to={item.path}
+              aria-label={item.label}
+              className={cn(
+                'flex flex-1 flex-col items-center gap-0.5 py-2 text-label outline-none',
+                item.id === section?.id ? 'font-medium text-fg-1' : 'text-fg-3',
+              )}
+            >
+              <item.icon className="size-5" />
+              {item.label}
+            </Link>
+          ))}
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Settings"
+            className="flex flex-1 flex-col items-center gap-0.5 py-2 text-label text-fg-3 outline-none"
+          >
+            <Settings className="size-5" />
+            Settings
+          </button>
+        </nav>
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-dvh bg-sidebar">
       <aside className={cn('flex shrink-0 flex-col gap-1 p-3 transition-[width] duration-150', collapsed ? 'w-14 items-center' : 'w-52')}>

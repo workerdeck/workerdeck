@@ -856,6 +856,18 @@ pub fn normalize_base_url(raw: String) -> String {
     wd_native::vm::gateway::normalize_base_url(&raw)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PairingLink {
+    pub base_url: String,
+    pub key: String,
+}
+
+// A pasted or scanned pairing link: the gateway address and its key in one string.
+#[uniffi::export]
+pub fn parse_pairing_link(text: String) -> Option<PairingLink> {
+    wd_native::vm::gateway::parse_pairing_link(&text).map(|link| PairingLink { base_url: link.base_url, key: link.key })
+}
+
 #[uniffi::export]
 pub fn api_base(base_url: String) -> String {
     wd_native::vm::gateway::api_base(&base_url)

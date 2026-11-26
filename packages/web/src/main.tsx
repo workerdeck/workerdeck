@@ -1,3 +1,4 @@
+import '@/lib/strip-pair.ts'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/globals.css'
