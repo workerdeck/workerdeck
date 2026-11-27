@@ -109,7 +109,7 @@ describe('CodexRunner: process contract, usage and rate limits', () => {
     expect(info.title).toBe('hello world')
   })
 
-  it('measures context occupancy from `last`, never the cumulative `total`', async () => {
+  it('measures context occupancy from `last`, never the cumulative `total`, on every update mid-turn', async () => {
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {
       emit('thread/tokenUsage/updated', {
@@ -132,8 +132,9 @@ describe('CodexRunner: process contract, usage and rate limits', () => {
     const events = collect(runner)
     await runner.start()
 
-    const [usage] = ofType(events, 'context_usage')
-    expect(usage).toBeDefined()
+    const updates = ofType(events, 'context_usage')
+    expect(updates.map((e) => e.usage.totalTokens)).toEqual([USAGE_A.totalTokens, USAGE_B.totalTokens])
+    const usage = updates.at(-1)
     expect(usage!.usage.totalTokens).toBe(USAGE_B.totalTokens)
     expect(usage!.usage.maxTokens).toBe(1000)
     expect(usage!.usage.percentage).toBeCloseTo(45)
