@@ -3,6 +3,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
+import { parseArgs } from '../config.ts'
 import { runGuard } from './guard.ts'
 
 const HELP = `usage: workerdeck service <install|uninstall|start|stop|restart|status> [options] [-- gateway flags]
@@ -310,6 +311,11 @@ async function install(ctx: Ctx, gateway: string[], self: { node: string; execAr
   }
   if (await answers(target.port, ctx.http)) {
     throw new ServiceError(`a gateway already answers on port ${target.port}; stop it first, then install`)
+  }
+  try {
+    parseArgs(gateway)
+  } catch (error) {
+    throw new ServiceError(`the gateway would not start with these flags: ${(error as Error).message}`)
   }
   const flags = [...gateway]
   if (!flags.includes('--port') && !flags.includes('-p')) {
