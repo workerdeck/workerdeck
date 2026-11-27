@@ -132,14 +132,18 @@ enum ListPalette {
 }
 
 // The dashboard's type scale in points, fixed like the web's rem sizes (Tobias, 2026-10-29: phones match web).
+// The web's list type scale, two points up on the phone (one for micro): read at arm's length, tapped with a finger.
 enum ListType {
   static let tracking: CGFloat = -0.005
-  // `text-body-sm` 13/20: names and a card's second line.
-  static func body(_ weight: Font.Weight = .regular) -> Font { .system(size: 13, weight: weight) }
-  // `text-label` 12/16: a Member's second line, headings, the unread pill, tray counts.
-  static func label(_ weight: Font.Weight = .regular) -> Font { .system(size: 12, weight: weight) }
-  // `text-micro` 11/14: step chips and step rows.
-  static func micro(_ weight: Font.Weight = .regular) -> Font { .system(size: 11, weight: weight) }
+  static let bodySize: CGFloat = 15
+  static let labelSize: CGFloat = 13
+  static let microSize: CGFloat = 12
+  // `text-body-sm`: names.
+  static func body(_ weight: Font.Weight = .regular) -> Font { .system(size: bodySize, weight: weight) }
+  // `text-label`: a row's status, headings, the unread count, tray counts.
+  static func label(_ weight: Font.Weight = .regular) -> Font { .system(size: labelSize, weight: weight) }
+  // `text-micro`: step chips and step rows.
+  static func micro(_ weight: Font.Weight = .regular) -> Font { .system(size: microSize, weight: weight) }
 }
 
 private extension UIColor {

@@ -10,7 +10,7 @@ struct SessionStepRow: View {
   let onOpen: () -> Void
   var onKill: (() -> Void)?
 
-  static let height: CGFloat = 28
+  static let height: CGFloat = 32
 
   private var tone: Color {
     if step.state == .failed { return ListPalette.danger }
@@ -30,7 +30,7 @@ struct SessionStepRow: View {
             .foregroundStyle(tone)
             .frame(width: 16)
           Text(step.label)
-            .font(step.kind == .shell ? .system(size: 11, design: .monospaced) : ListType.micro())
+            .font(step.kind == .shell ? .system(size: ListType.microSize, design: .monospaced) : ListType.micro())
             .lineLimit(1)
             .truncationMode(.tail)
             .foregroundStyle(tone)

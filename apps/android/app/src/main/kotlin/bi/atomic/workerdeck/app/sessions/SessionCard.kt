@@ -124,9 +124,10 @@ fun rememberListTones(): ListTones {
     return remember(dark) { listTones(dark) }
 }
 
-private val BODY = TextStyle(fontSize = 13.sp, lineHeight = 20.sp, letterSpacing = (-0.005).em)
-private val LABEL = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = (-0.005).em)
-private val MICRO = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = (-0.005).em)
+// The web's list type scale, two points up on the phone (one for micro), the same as iOS's `ListType`.
+private val BODY = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, letterSpacing = (-0.005).em)
+private val LABEL = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, letterSpacing = (-0.005).em)
+private val MICRO = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = (-0.005).em)
 
 val CARD_SHAPE = RoundedCornerShape(8.dp)
 val MEMBER_SHAPE = RoundedCornerShape(4.dp)
@@ -197,7 +198,8 @@ fun SessionCard(row: ListRow, tones: ListTones, events: CardEvents, icons: Map<S
     }
 }
 
-// A Member inside its team card: one 20 row, a 20 face, then name, badge and status (the status truncates first).
+// A Member inside its team card: one 44 row (6 padding, a 32 face), then name, badge and status (the status truncates
+// first).
 @Composable
 fun MemberCard(row: ListRow, tones: ListTones, events: CardEvents) {
     Column(
@@ -206,17 +208,17 @@ fun MemberCard(row: ListRow, tones: ListTones, events: CardEvents) {
             .testTag("session-row")
             .clip(MEMBER_SHAPE)
             .background(if (needsYou(row)) tones.attention else Color.Transparent)
-            .padding(4.dp),
+            .padding(6.dp),
     ) {
-        Row(Modifier.height(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            AgentAvatar(row, 20.dp)
+        Row(Modifier.height(32.dp), verticalAlignment = Alignment.CenterVertically) {
+            AgentAvatar(row, 32.dp)
             Spacer(Modifier.width(8.dp))
             BoxWithConstraints(Modifier.weight(1f).alpha(if (row.asleep) 0.6f else 1f)) {
                 val nameMax = maxWidth * 0.6f
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Name(row, tones, BODY, Modifier.widthIn(max = nameMax))
-                        ModelBadge(row, tones, 12.sp)
+                        ModelBadge(row, tones, 13.sp)
                         CardStatus(row, tones, LABEL, Modifier.weight(1f, fill = false))
                     }
                     ReasonChips(row.reasons, tones)
@@ -418,7 +420,7 @@ private fun StepLine(step: ListStep, tones: ListTones, onOpen: () -> Unit, onSto
         else -> tones.success
     }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 22.dp).clip(MEMBER_SHAPE).clickable(onClick = onOpen).semantics { contentDescription = step.title }
+        Modifier.fillMaxWidth().heightIn(min = 32.dp).clip(MEMBER_SHAPE).clickable(onClick = onOpen).semantics { contentDescription = step.title }
             .padding(start = 14.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -445,7 +447,7 @@ private fun StepLine(step: ListStep, tones: ListTones, onOpen: () -> Unit, onSto
         if (step.kind == StepKind.AGENT) Icon(painterResource(R.drawable.chevron_right), contentDescription = null, tint = tones.fg4, modifier = Modifier.size(14.dp))
         if (step.killable) {
             Box(
-                Modifier.size(22.dp).clip(MEMBER_SHAPE).clickable(onClick = onStop)
+                Modifier.size(32.dp).clip(MEMBER_SHAPE).clickable(onClick = onStop)
                     .semantics { contentDescription = if (step.kind == StepKind.TASK) "Stop ${step.label}" else "Kill ${step.label}" },
                 contentAlignment = Alignment.Center,
             ) { Text("✕", style = MICRO, color = tones.fg4) }

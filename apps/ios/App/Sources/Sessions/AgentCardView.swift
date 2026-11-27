@@ -16,8 +16,8 @@ struct CardActions {
   var killStep: (ListStep) -> (() -> Void)? = { _ in nil }
 }
 
-// `SessionItem` from packages/ui: every row is one 36 line (4 padding, a 28 avatar), lead, Member and plain session
-// alike. Name, model badge, then the status, which truncates first; right of the slack the step chips, the reason icons
+// `SessionItem` from packages/ui, sized up for a finger: every row is one 44 line (6 padding, a 32 avatar), lead,
+// Member and plain session alike. Name, model badge, then the status, which truncates first; right of the slack the step chips, the reason icons
 // or a Member's unread count, and the team caret.
 struct SessionCard: View {
   let item: ListItem
@@ -35,22 +35,22 @@ struct SessionCard: View {
       }
       .buttonStyle(.plain)
       ForEach(row.steps) { step in
-        SessionStepRow(step: step, indent: 36, onOpen: { actions.openStep(step) }, onKill: actions.killStep(step))
+        SessionStepRow(step: step, indent: 40, onOpen: { actions.openStep(step) }, onKill: actions.killStep(step))
       }
     }
-    .padding(4)
+    .padding(6)
   }
 
   private var head: some View {
     HStack(spacing: 8) {
-      AgentAvatarView(row: row, size: 28, context: row.depth == 0)
+      AgentAvatarView(row: row, size: 32, context: row.depth == 0)
         .grayscale(quiet ? 1 : 0)
         .opacity(quiet ? 0.5 : 1)
         .accessibilityHidden(true)
       HStack(spacing: 6) {
         name
         if let badge = row.modelBadge, let label = row.modelLabel {
-          ModelBadgeView(badge: badge, name: label, mark: row.mark, tinted: row.markTinted, size: 12)
+          ModelBadgeView(badge: badge, name: label, mark: row.mark, tinted: row.markTinted, size: 13)
         }
         if row.shared {
           Image(systemName: "globe")
@@ -60,7 +60,7 @@ struct SessionCard: View {
         }
         status
           .font(ListType.label())
-          .tracking(ListType.tracking * 12)
+          .tracking(ListType.tracking * ListType.labelSize)
           .lineLimit(1)
           .truncationMode(.tail)
         Spacer(minLength: 0)
@@ -81,7 +81,7 @@ struct SessionCard: View {
       }
       .opacity(row.asleep ? 0.6 : 1)
     }
-    .frame(height: 28)
+    .frame(height: 32)
   }
 
   // Nothing here for a person right now: the face greys out so the cards that do want attention stand out.
@@ -94,7 +94,7 @@ struct SessionCard: View {
   private var name: some View {
     let text = Text(row.agent ?? row.title)
       .font(ListType.body(.medium))
-      .tracking(ListType.tracking * 13)
+      .tracking(ListType.tracking * ListType.bodySize)
       .lineLimit(1)
     if let agent = row.agent {
       text
@@ -288,9 +288,9 @@ struct CardBackground: View {
   var teamSelected = false
   static let edge: CGFloat = 8
   static let radius: CGFloat = 6
-  // The lead's avatar spans 4 to 32 inside its card and a Member's starts at 24: the trunk runs under its left third.
-  private static let trunk: CGFloat = edge + 11
-  private static let indent: CGFloat = 20
+  // The lead's avatar spans 6 to 38 inside its card and a Member's starts at 30: the trunk runs under its left third.
+  private static let trunk: CGFloat = edge + 15
+  private static let indent: CGFloat = 24
 
   init(item: ListItem) {
     nest = item.nest
@@ -336,13 +336,13 @@ struct CardBackground: View {
       let line = ListPalette.borderStrong
       switch nest {
       case .lead:
-        ctx.fill(Path(CGRect(x: Self.trunk, y: 34, width: 2, height: max(0, size.height - 34))), with: .color(line))
+        ctx.fill(Path(CGRect(x: Self.trunk, y: 40, width: 2, height: max(0, size.height - 40))), with: .color(line))
       case .member, .lastMember:
-        let mid: CGFloat = 4 + 18
+        let mid: CGFloat = 4 + 22
         let bottom = nest == .lastMember ? mid + 1 : size.height
         ctx.fill(Path(CGRect(x: Self.trunk, y: 0, width: 2, height: bottom)), with: .color(line))
         ctx.fill(
-          Path(CGRect(x: Self.trunk, y: mid - 1, width: Self.edge + Self.indent + 4 - Self.trunk, height: 2)),
+          Path(CGRect(x: Self.trunk, y: mid - 1, width: Self.edge + Self.indent + 6 - Self.trunk, height: 2)),
           with: .color(line))
       case nil:
         break
