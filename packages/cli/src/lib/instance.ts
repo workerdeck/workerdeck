@@ -23,6 +23,7 @@ import { hostnameOf, isLoopbackHostname, type ResolvedConfig } from '../config.t
 import { renderLoginPage } from '../auth/login-page.ts'
 import { createWakeLock, driveWakeLock, sessionsNeedTheMachine, type WakeLock } from './keep-awake.ts'
 import { looksLikeAsset, resolveWithinRoot, sendHtml, serveFile } from './static.ts'
+import { gatewayRoute, type RouteState } from './tailscale.ts'
 
 // The backstop, not the mechanism: the lock is driven by session transitions, and this only has to catch a release
 // that no event announced. Long, because holding a laptop awake for one extra minute is the cheap failure.
@@ -321,7 +322,8 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
 
   if (!options.quiet) {
     const push = apns && { topic: config.apns?.topic, devices: apns.deviceCount(), cards: apns.activity.count() }
-    process.stdout.write(bannerLines({ url, config, generated, authEnabled: auth.enabled, push }).join('\n') + '\n')
+    const route = config.remote ? await routeWithin(port, 3_000) : undefined
+    process.stdout.write(bannerLines({ url, config, generated, authEnabled: auth.enabled, push, route }).join('\n') + '\n')
   }
 
   return {
@@ -384,18 +386,32 @@ export function stateDirDefaults(config: ResolvedConfig): StateDirDefaults {
   return { sessions, shell, spend, agentStore, ...(profileStore ? { profileStore } : {}) }
 }
 
+function remoteLine(route: RouteState | undefined): string {
+  if (route === undefined) {
+    return '  remote: on'
+  }
+  if (route.published) {
+    return `  remote: ${route.url} - pair a device with \`workerdeck pair-link\``
+  }
+  if (route.reason !== undefined) {
+    return `  remote: on, not published - ${route.reason}`
+  }
+  return '  remote: on, not published to your tailnet yet - `workerdeck remote enable`'
+}
+
 export type BannerInput = {
   url: string
   config: ResolvedConfig
   generated: MaterializedAuthKey | null
   authEnabled: boolean
   push: { topic: string | undefined; devices: number; cards: number } | undefined
+  route?: RouteState | undefined
 }
 
-export function bannerLines({ url, config, generated, authEnabled, push }: BannerInput): string[] {
+export function bannerLines({ url, config, generated, authEnabled, push, route }: BannerInput): string[] {
   const lines = ['', `  workerdeck  ${url}`]
   if (config.remote) {
-    lines.push('  remote: on - publish with `workerdeck remote enable`, then `workerdeck pair-link`')
+    lines.push(remoteLine(route))
   }
   if (config.hostAuthenticates) {
     lines.push('  auth: the config file supplies its own `authenticate`')
@@ -438,4 +454,9 @@ export function bannerLines({ url, config, generated, authEnabled, push }: Banne
   }
   lines.push('')
   return lines
+}
+
+function routeWithin(port: number, ms: number): Promise<RouteState | undefined> {
+  const late = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms).unref())
+  return Promise.race([gatewayRoute(port).catch(() => undefined), late])
 }

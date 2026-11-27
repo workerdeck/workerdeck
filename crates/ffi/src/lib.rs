@@ -45,8 +45,8 @@ pub use files::{
     HostEntry, HostEntryKind, HostFileContent, HostFileEditor, HostFileState, HostFiles, HostFilesAvailability, HostListing, HostRoot,
 };
 pub use list::{
-    DragFrame, FleetRetry, GroupChoice, ListChip, ListDragTarget, ListDrop, ListError, ListFacet, ListFilter, ListGroup, ListGroupBy, ListRow,
-    ListSortBy, Mark, NewAgentSeed, ReasonChip, RowState, SessionList, SiblingMove, StepFold, StepKind,
+    DragFrame, FleetRetry, GroupChoice, ListChip, ListDragTarget, ListDrop, ListError, ListFacet, ListFilter, ListGroup, ListGroupBy,
+    ListRow, ListSortBy, Mark, NewAgentSeed, ReasonChip, RowState, SessionList, SiblingMove, StepFold, StepKind,
 };
 pub use pickers::{ModePicker, ModeRow, ModelPicker, PickerRow};
 pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};
@@ -905,6 +905,20 @@ pub fn host_image_base64(body: String, path: String) -> Option<String> {
 #[uniffi::export]
 pub fn image_unavailable() -> String {
     wd_native::planner::IMAGE_UNAVAILABLE.to_owned()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct GatewayIdentity {
+    pub base_url: String,
+    pub key: String,
+}
+
+// The index in `others` of a gateway the same URL or key already names.
+#[uniffi::export]
+pub fn duplicate_gateway(others: Vec<GatewayIdentity>, base_url: String, key: String) -> Option<u32> {
+    let others: Vec<_> =
+        others.into_iter().map(|other| wd_native::vm::gateway::GatewayIdentity { base_url: other.base_url, key: other.key }).collect();
+    wd_native::vm::gateway::duplicate_gateway(&others, &base_url, &key).map(|index| index as u32)
 }
 
 #[uniffi::export]

@@ -55,7 +55,10 @@ struct HostListView: View {
     }
     .sheet(item: $editing) { host in
       NavigationStack {
-        HostEditorView(host: host) { edited in
+        HostEditorView(host: host, others: hosts.hosts) { edited in
+          if edited.id != host.id, hosts.hosts.contains(where: { $0.id == host.id }) {
+            hosts.delete(host)
+          }
           hosts.upsert(edited)
         }
       }

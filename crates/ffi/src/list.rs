@@ -8,11 +8,11 @@ use wd_native::vm::agents::{PROJECT_ACCENTS, new_agent_owner, new_agent_sharing}
 use wd_native::vm::conversations::{clear_context_offered, new_conversation_gate};
 use wd_native::vm::create_form::{AgentSeed as FormSeed, SeedLead};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
+use wd_native::vm::list_drag::{self as drag, DragRow, DragRowKind, DragTarget, Joinable, SessionDragContext, Slot, TeamBlock};
 use wd_native::vm::session_list::{
     self as vm, FoldableStepKind, GroupBy, GroupOptions, SessionGroup, SessionRow, SessionState, SortBy, ViewConfig, filter_rows,
     group_rows, normalize_view_config,
 };
-use wd_native::vm::list_drag::{self as drag, DragRow, DragRowKind, DragTarget, Joinable, SessionDragContext, Slot, TeamBlock};
 use wd_native::vm::steps;
 use wd_native::vm::watermarks::{Seen, Watermarks, unseen_count};
 
@@ -356,7 +356,14 @@ pub struct SiblingMove {
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
 pub enum ListDrop {
     Nothing,
-    Team { lead_session_id: String, lead_agent_id: String, order: f64, siblings: Vec<SiblingMove>, cross_owner: bool, confirm_owner: Option<String> },
+    Team {
+        lead_session_id: String,
+        lead_agent_id: String,
+        order: f64,
+        siblings: Vec<SiblingMove>,
+        cross_owner: bool,
+        confirm_owner: Option<String>,
+    },
     Leave,
     Placed,
 }
@@ -856,8 +863,7 @@ impl SessionList {
         let stored = config.custom_groups.clone().unwrap_or_default();
         let selected = state.selected.clone();
         let dragging = state.drag.as_ref().map(|d| d.key.clone());
-        let look =
-            RowLook { show_gateway: vm::shows_gateway(state.hosts.len(), &config), selected: selected.as_deref(), config: &config };
+        let look = RowLook { show_gateway: vm::shows_gateway(state.hosts.len(), &config), selected: selected.as_deref(), config: &config };
         drawn
             .into_iter()
             .map(|group| {
@@ -946,7 +952,10 @@ impl SessionList {
     pub fn custom_groups(&self) -> Vec<GroupChoice> {
         let state = self.state();
         let groups = state.config.custom_groups.clone().unwrap_or_default();
-        groups.iter().map(|g| GroupChoice { id: g.id.clone(), name: g.name.clone(), color: vm::custom_group_color(g), icon: g.icon.clone() }).collect()
+        groups
+            .iter()
+            .map(|g| GroupChoice { id: g.id.clone(), name: g.name.clone(), color: vm::custom_group_color(g), icon: g.icon.clone() })
+            .collect()
     }
 
     // The custom group row `key` (`ListRow.key`) sits in, None when ungrouped.
@@ -996,7 +1005,8 @@ impl SessionList {
     pub fn move_to_custom_group(&self, key: String, id: Option<String>) {
         let mut state = self.state();
         let groups = state.config.custom_groups.clone().unwrap_or_default();
-        state.config = ViewConfig { custom_groups: Some(vm::move_to_custom_group(&groups, &key, id.as_deref(), None)), ..state.config.clone() };
+        state.config =
+            ViewConfig { custom_groups: Some(vm::move_to_custom_group(&groups, &key, id.as_deref(), None)), ..state.config.clone() };
     }
 
     pub fn group_colors(&self) -> Vec<String> {
@@ -1111,10 +1121,10 @@ impl SessionList {
         let Some(dragged) = row_of(&key) else { return ListDrop::Nothing };
         let team_move = |lead: &SessionRow, before: Option<&str>, joining: bool| -> ListDrop {
             let Some(lead_agent) = lead.info.agent.as_ref() else { return ListDrop::Nothing };
-            let others: Vec<&SessionRow> = lead.members.iter().flatten().filter(|m| vm::session_key(&m.host_id, &m.info.id) != key).collect();
-            let index = before
-                .and_then(|b| others.iter().position(|m| vm::session_key(&m.host_id, &m.info.id) == b))
-                .unwrap_or(others.len());
+            let others: Vec<&SessionRow> =
+                lead.members.iter().flatten().filter(|m| vm::session_key(&m.host_id, &m.info.id) != key).collect();
+            let index =
+                before.and_then(|b| others.iter().position(|m| vm::session_key(&m.host_id, &m.info.id) == b)).unwrap_or(others.len());
             let orders: Vec<Option<f64>> = others.iter().map(|m| m.info.agent.as_ref().and_then(|a| a.order).map(|o| o as f64)).collect();
             let place = drag::place_member(&orders, index);
             let crossing = dragged.info.owner != lead.info.owner;

@@ -82,6 +82,7 @@ async function drainSessions(registry: SessionRegistry, shells: ShellRegistry | 
   const { timeoutMs = 30_000, pollMs = 250, onProgress } = options
   const deadline = Date.now() + timeoutMs
   let report = surveyDrain(registry, shells)
+  let spoken = report
   onProgress?.(report)
   while (report.working.length > 0 && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, pollMs))
@@ -90,12 +91,15 @@ async function drainSessions(registry: SessionRegistry, shells: ShellRegistry | 
     // readable, not a per-tick redraw of the same two lines.
     if (!sameDrain(next, report)) {
       onProgress?.(next)
+      spoken = next
     }
     report = next
   }
   report = { ...surveyDrain(registry, shells), timedOut: false }
   report.timedOut = report.working.length > 0
-  onProgress?.(report)
+  if (report.timedOut || !sameDrain(report, spoken)) {
+    onProgress?.(report)
+  }
   return report
 }
 

@@ -48,6 +48,13 @@ describe('drain', () => {
     expect(report).toEqual({ working: [], awaitingHuman: [], timedOut: false, shells: [] })
   })
 
+  it('reports an unchanged drain once', async () => {
+    const { server } = await startWith('idle')
+    const seen: string[][] = []
+    await server.drain({ timeoutMs: 2_000, pollMs: 10, onProgress: (r) => seen.push(r.working) })
+    expect(seen).toEqual([[]])
+  })
+
   it('waits for a running turn and reports when it finishes', async () => {
     const { server, steer } = await startWith('running')
     const seen: string[][] = []
@@ -61,7 +68,7 @@ describe('drain', () => {
     })
     expect(report.working).toEqual([])
     expect(report.timedOut).toBe(false)
-    expect(seen[0]).toEqual(['s-1'])
+    expect(seen).toEqual([['s-1'], []])
   })
 
   // The decision that makes or breaks the feature: a session blocked on a human will never resolve on its own, so

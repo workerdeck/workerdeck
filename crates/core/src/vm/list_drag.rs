@@ -123,9 +123,7 @@ fn hit_at<'a>(rows: &'a [DragRow], y: f64, dragged: &str) -> Option<&'a DragRow>
 }
 
 fn lane_rows<'a>(rows: &'a [DragRow], lane: &str, dragged: &str) -> Vec<&'a DragRow> {
-    rows.iter()
-        .filter(|row| row.lane == lane && row.key != dragged && matches!(row.kind, DragRowKind::Row | DragRowKind::Pinned))
-        .collect()
+    rows.iter().filter(|row| row.lane == lane && row.key != dragged && matches!(row.kind, DragRowKind::Row | DragRowKind::Pinned)).collect()
 }
 
 fn next_in(rows: &[DragRow], hit: &DragRow, dragged: &str) -> Option<String> {

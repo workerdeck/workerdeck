@@ -906,13 +906,9 @@ pub fn team_view(lead: &SessionRow, config: &ViewConfig, selected: Option<&str>)
     if expanded || has_facet_filter(config) {
         return TeamView { expanded, shown: members, tray: Vec::new() };
     }
-    let (shown, tray) = members
-        .into_iter()
-        .partition(|member| {
-            !attention_of(&member.info).reasons.is_empty()
-                || selected == Some(row_key(member).as_str())
-                || is_member_pinned(config, member)
-        });
+    let (shown, tray) = members.into_iter().partition(|member| {
+        !attention_of(&member.info).reasons.is_empty() || selected == Some(row_key(member).as_str()) || is_member_pinned(config, member)
+    });
     TeamView { expanded, shown, tray }
 }
 

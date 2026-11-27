@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { parsePairingLink } from '@workerdeck/protocol'
 import { afterAll, describe, expect, it } from 'vitest'
 import { runPairLink, runRemote } from '../src/lib/remote.ts'
-import { chooseServePort, findGatewayRoute, pairingLink, versionAtLeast, type Exec, type ServeStatus } from '../src/lib/tailscale.ts'
+import { chooseServePort, findGatewayRoute, gatewayRoute, pairingLink, versionAtLeast, type Exec, type ServeStatus } from '../src/lib/tailscale.ts'
 
 const DNS = 'home.tail1234.ts.net'
 const KEY = 'k3y-for-the-remote-tests'
@@ -115,6 +115,14 @@ describe('tailscale helpers', () => {
     // The same cases as the Rust core's `a_pairing_link_parses_like_the_typescript_rule`.
     expect(parsePairingLink(`https://Home.tail1.ts.net:443/#pair=${KEY}`)).toEqual({ baseUrl: 'https://home.tail1.ts.net', key: KEY })
     expect(parsePairingLink(`https://${DNS}/#pair=bad%zz-escape-1234`)).toBeNull()
+  })
+
+  it('reports where a gateway port is published, if anywhere', async () => {
+    const published = fakeTailscale({ TCP: { 8443: { HTTPS: true } }, Web: { [`${DNS}:8443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:8787' } } } } })
+    expect(await gatewayRoute(8787, published.exec)).toEqual({ published: true, url: `https://${DNS}:8443` })
+    expect(await gatewayRoute(9000, published.exec)).toEqual({ published: false })
+    const old = fakeTailscale({}, { version: '1.90.0' })
+    expect(await gatewayRoute(8787, old.exec)).toMatchObject({ published: false, reason: expect.stringContaining('too old') })
   })
 
   it('puts the key in the fragment', () => {

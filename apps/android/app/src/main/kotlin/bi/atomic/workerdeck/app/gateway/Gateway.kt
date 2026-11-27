@@ -4,7 +4,9 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import bi.atomic.workerdeck.core.ffi.GatewayIdentity
 import bi.atomic.workerdeck.core.ffi.apiBase
+import bi.atomic.workerdeck.core.ffi.duplicateGateway
 import bi.atomic.workerdeck.core.ffi.gatewayName
 import bi.atomic.workerdeck.core.ffi.gatewayNames
 import java.util.UUID
@@ -45,10 +47,12 @@ class GatewayStore(context: Context) {
         return opened.mapIndexed { i, (id, url, key) -> Gateway(id, url, key, names[i]) }
     }
 
-    // Pairing a gateway that is already paired replaces its key in place and keeps its id, so its read marks survive.
+    // Pairing a gateway that is already paired (same URL or same key) replaces it in place and keeps its id, so its
+    // read marks survive.
     fun add(baseUrl: String, key: String): Gateway {
         val items = stored()
-        val same = items.indexOfFirst { apiBase(it.getString("url")) == apiBase(baseUrl) }
+        val known = items.map { GatewayIdentity(it.getString("url"), runCatching { open(it.getString("key")) }.getOrDefault("")) }
+        val same = duplicateGateway(known, baseUrl, key)?.toInt() ?: -1
         val gateway = Gateway(if (same < 0) UUID.randomUUID().toString() else items[same].getString("id"), baseUrl, key)
         val fresh = entry(gateway.id, baseUrl, seal(key))
         write(if (same < 0) items + fresh else items.mapIndexed { i, item -> if (i == same) fresh else item })

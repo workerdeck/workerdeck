@@ -143,6 +143,22 @@ pub fn gateway_names(base_urls: &[String]) -> Vec<String> {
         .collect()
 }
 
+// Mirrors the VS Code Add Gateway rule: until gateways carry an id (MESH phase 3) the key is the identity, so the
+// same URL or the same non-empty key is the same gateway. `others` excludes the entry being edited.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GatewayIdentity {
+    pub base_url: String,
+    pub key: String,
+}
+
+pub fn duplicate_gateway(others: &[GatewayIdentity], base_url: &str, key: &str) -> Option<usize> {
+    let url = normalize_base_url(base_url).to_ascii_lowercase();
+    let key = key.trim();
+    others
+        .iter()
+        .position(|other| normalize_base_url(&other.base_url).to_ascii_lowercase() == url || (!key.is_empty() && other.key.trim() == key))
+}
+
 // The auth key rides every request, so plain `http` is only for a host the network itself keeps private: loopback,
 // a LAN, link-local, a tailnet (WireGuard encrypts it; `*.ts.net` and Tailscale's 100.64.0.0/10), `*.local`.
 pub fn cleartext_refusal(base_url: &str) -> Option<String> {
@@ -226,6 +242,15 @@ mod tests {
     #[test]
     fn a_result_image_path_encodes_both_ids() {
         assert_eq!(result_image_path("a b", 12, "toolu/1", 0), "/sessions/a%20b/events/12/result?toolUseId=toolu%2F1&part=0");
+    }
+
+    #[test]
+    fn the_same_url_or_key_is_the_same_gateway() {
+        let id = |url: &str, key: &str| GatewayIdentity { base_url: url.to_owned(), key: key.to_owned() };
+        let others = [id("http://127.0.0.1:8787", "k3y-for-the-tests"), id("https://Home.tail1.ts.net:8443/", "")];
+        assert_eq!(duplicate_gateway(&others, "https://home.tail1.ts.net:8443/v1", "other-key-1234"), Some(1));
+        assert_eq!(duplicate_gateway(&others, "https://home.tail1.ts.net", " k3y-for-the-tests "), Some(0));
+        assert_eq!(duplicate_gateway(&others, "https://mini.tail1.ts.net", ""), None);
     }
 
     #[test]

@@ -141,6 +141,21 @@ export function publicUrl(dnsName: string, servePort: number): string {
   return servePort === 443 ? `https://${dnsName}` : `https://${dnsName}:${servePort}`
 }
 
+export type RouteState = { published: true; url: string } | { published: false; reason?: string }
+
+export async function gatewayRoute(gatewayPort: number, exec: Exec = execTailscale): Promise<RouteState> {
+  try {
+    const self = await inspectTailscale(exec)
+    const servePort = findGatewayRoute(await serveStatus(exec), self.dnsName, gatewayPort)
+    return servePort === null ? { published: false } : { published: true, url: publicUrl(self.dnsName, servePort) }
+  } catch (error) {
+    if (error instanceof TailscaleError) {
+      return { published: false, reason: error.message }
+    }
+    throw error
+  }
+}
+
 // The key rides in the fragment, which browsers never send: no server or proxy log ever sees it.
 export function pairingLink(dnsName: string, servePort: number, key: string): string {
   return `${publicUrl(dnsName, servePort)}/#pair=${encodeURIComponent(key)}`
