@@ -51,6 +51,9 @@ all three. The gateway is reachable from your tailnet only. Closing VS Code or t
 running; `workerdeck remote disable` removes the route. Behind any other proxy or VPN,
 `--public-url https://deck.example.com` gives pairing links that address instead of a Tailscale route.
 
+To keep it running without an editor or terminal open, `workerdeck service install -- --remote` (macOS) installs
+it as a LaunchAgent that starts at login and survives a crash.
+
 To reach it any other way, bind it and give it a secret:
 
 ```bash

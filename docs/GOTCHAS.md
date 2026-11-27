@@ -2376,6 +2376,17 @@ Verified 2026-11-26 against tailscale 1.104.7 (macOS) with a header-echo server 
   rewrites `Host` otherwise fails the Origin check for the declared address). `--remote` still binds
   loopback and trusts the proxy, which suits a proxy on the same machine; a VPN that reaches the host
   directly needs `--host` and a key, without `--remote`.
+- **`workerdeck service` runs the build that installed it, from that build's own folder.** The agent's argv is
+  `process.execPath`, `process.execArgv` and the realpath of the CLI script, so a source run keeps its
+  `--conditions` and swc flags; its `WorkingDirectory` is the script's directory because swc-node's register hook
+  resolves itself from the working directory (a state-dir cwd fails with `ERR_MODULE_NOT_FOUND`). Install refuses an
+  npx cache or fnm per-shell path, which vanish later. `restart`/`status` without `--state-dir` read it back from
+  the plist. `KeepAlive` is `SuccessfulExit: false`: a crash comes back after `ThrottleInterval`, a clean exit stays
+  down.
+- **A LaunchAgent can read the login Keychain** (verified 2026-11-27, macOS 26): a `gui/<uid>` agent with a
+  bare `PATH` ran `claude -p` on the Keychain login (`Claude Code-credentials`) with no prompt. LaunchAgents start
+  only after the user logs in; a machine that boots to the login window runs nothing, so the setup-token broker
+  (0600 file) is the fallback for an unattended box, not a Keychain workaround.
 - **The node's own requests to its ts.net name go through `serve`** and carry its own tailnet IP and
   login, which makes a local end-to-end probe possible without a second device.
 
