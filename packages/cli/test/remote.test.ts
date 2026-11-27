@@ -57,14 +57,19 @@ function fakeTailscale(initial: ServeStatus, options: { https?: boolean; version
   return { exec, calls, status: () => status }
 }
 
-function fakeGateway(options: { remote?: boolean; openMeta?: boolean; published?: boolean } = {}): typeof fetch {
+function fakeGateway(options: { remote?: boolean; openMeta?: boolean; published?: boolean; publicUrl?: string } = {}): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input))
     if (url.hostname === DNS && options.published === false) {
       throw new TypeError('fetch failed')
     }
     if (url.pathname === '/auth/status') {
-      return Response.json({ enabled: true, authenticated: false, ...(options.remote === false ? {} : { remote: true }) })
+      return Response.json({
+        enabled: true,
+        authenticated: false,
+        ...(options.remote === false ? {} : { remote: true }),
+        ...(options.publicUrl ? { publicUrl: options.publicUrl } : {}),
+      })
     }
     if (url.pathname === '/v1/meta') {
       const key = new Headers(init?.headers).get('x-workerdeck-key')
@@ -188,10 +193,28 @@ describe('workerdeck remote', () => {
     const ts = fakeTailscale(UNRELATED)
     const dir = await stateDir()
     const before = capture()
-    expect(await runPairLink(['--state-dir', dir], { exec: ts.exec, env: {}, ...before })).toBe(1)
+    expect(await runPairLink(['--state-dir', dir], { exec: ts.exec, fetch: fakeGateway(), env: {}, ...before })).toBe(1)
     await runRemote(['enable', '--state-dir', dir], { exec: ts.exec, fetch: fakeGateway(), env: {}, ...capture() })
     const io = capture()
-    expect(await runPairLink(['--state-dir', dir, '--no-qr'], { exec: ts.exec, env: {}, ...io })).toBe(0)
+    expect(await runPairLink(['--state-dir', dir, '--no-qr'], { exec: ts.exec, fetch: fakeGateway(), env: {}, ...io })).toBe(0)
     expect(io.lines[0]).toBe(`https://${DNS}:8443/#pair=${KEY}`)
+  })
+
+  it('pair-link prefers a declared public URL over tailscale', async () => {
+    const ts = fakeTailscale({})
+    const dir = await stateDir()
+    const flagged = capture()
+    const args = ['--state-dir', dir, '--no-qr']
+    expect(await runPairLink([...args, '--public-url', 'https://deck.example.com/wd/'], { exec: ts.exec, env: {}, ...flagged })).toBe(0)
+    expect(flagged.lines[0]).toBe(`https://deck.example.com/wd/#pair=${KEY}`)
+    expect(parsePairingLink(flagged.lines[0]!)).toEqual({ baseUrl: 'https://deck.example.com/wd', key: KEY })
+    const reported = capture()
+    const gateway = fakeGateway({ publicUrl: 'https://vpn.example:9000' })
+    expect(await runPairLink(args, { exec: ts.exec, fetch: gateway, env: {}, ...reported })).toBe(0)
+    expect(reported.lines[0]).toBe(`https://vpn.example:9000/#pair=${KEY}`)
+    expect(ts.calls).toEqual([])
+    const bad = capture()
+    expect(await runPairLink([...args, '--public-url', 'ftp://deck'], { exec: ts.exec, env: {}, ...bad })).toBe(1)
+    expect(bad.errors[0]).toContain('--public-url')
   })
 })

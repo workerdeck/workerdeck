@@ -67,9 +67,9 @@ means the all-interfaces bind itself, not "any host". The Host-header fence stay
 an unauthenticated instance answers only to loopback names plus what you declared, which is what
 stands between it and DNS rebinding.
 
-To use the gateway from your phone or another computer over Tailscale, see
-[Remote access](/workerdeck/docs/guides/remote-access/): `--remote`, `workerdeck remote enable` and
-`workerdeck pair-link`.
+To use the gateway from your phone or another computer over Tailscale or your own proxy, see
+[Remote access](/workerdeck/docs/guides/remote-access/): `--remote`, `workerdeck remote enable`,
+`--public-url` and `workerdeck pair-link`.
 
 Behind TLS termination, add `--trust-proxy` - otherwise the session cookie loses its `Secure`
 flag and the origin check computes `http://` where the browser says `https://`.

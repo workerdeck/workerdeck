@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { formatPairingLink } from '@workerdeck/protocol'
 
 // The version the header and route behaviour in `docs/GOTCHAS.md` § Remote mode was verified against.
 export const MIN_TAILSCALE_VERSION = '1.104.0'
@@ -158,5 +159,5 @@ export async function gatewayRoute(gatewayPort: number, exec: Exec = execTailsca
 
 // The key rides in the fragment, which browsers never send: no server or proxy log ever sees it.
 export function pairingLink(dnsName: string, servePort: number, key: string): string {
-  return `${publicUrl(dnsName, servePort)}/#pair=${encodeURIComponent(key)}`
+  return formatPairingLink(publicUrl(dnsName, servePort), key)
 }

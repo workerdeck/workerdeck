@@ -333,6 +333,26 @@ describe('resolveInstanceConfig', () => {
   })
 })
 
+describe('--public-url', () => {
+  it('normalizes the address and accepts its origin on browser requests', () => {
+    const config = resolveInstanceConfig(parseArgs(['--public-url', 'https://Deck.Example.com:8443/wd/']), noConfig, {})
+    expect(config.publicUrl).toBe('https://deck.example.com:8443/wd')
+    expect(config.auth.allowedOrigins).toContain('https://deck.example.com:8443')
+    expect(config.auth.publicUrl).toBe('https://deck.example.com:8443/wd')
+    expect(resolveInstanceConfig(parseArgs([]), noConfig, { WORKERDECK_PUBLIC_URL: 'https://a.example' }).publicUrl).toBe('https://a.example')
+    const fromFile = resolveInstanceConfig(parseArgs([]), { path: null, options: { publicUrl: 'http://10.0.0.5:8787' } }, {})
+    expect(fromFile.publicUrl).toBe('http://10.0.0.5:8787')
+    expect(fromFile.options).not.toHaveProperty('publicUrl')
+    expect(resolveInstanceConfig(parseArgs([]), noConfig, {}).publicUrl).toBeNull()
+  })
+
+  it('refuses anything but a plain http(s) URL', () => {
+    for (const bad of ['deck.example.com', 'ftp://deck', 'https://u:p@deck', 'https://deck/?a=1', 'https://deck/#x']) {
+      expect(() => resolveInstanceConfig(parseArgs(['--public-url', bad]), noConfig, {})).toThrow(ConfigError)
+    }
+  })
+})
+
 describe('--remote', () => {
   it('forces a key on loopback and trusts the proxy', () => {
     const config = resolveInstanceConfig(parseArgs(['--remote']), noConfig, {})

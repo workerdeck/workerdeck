@@ -1618,7 +1618,14 @@
             "default": false,
             "scope": "machine",
             "order": 5,
-            "markdownDescription": "Remote mode: reach this server from your phone and other computers over Tailscale. The server stays on loopback, always requires its key and trusts the `tailscale serve` proxy in front of it. Turn it on with **WorkerDeck Host: Enable Remote Access**, which also publishes the server and shows the pairing code."
+            "markdownDescription": "Remote mode: reach this server from your phone and other computers over Tailscale or your own proxy. The server stays on loopback, always requires its key and trusts the proxy in front of it. Turn it on with **WorkerDeck Host: Enable Remote Access**, which also publishes the server and shows the pairing code. With `#workerdeck.host.publicUrl#` set, your own proxy publishes it instead of Tailscale."
+          },
+          "workerdeck.host.publicUrl": {
+            "type": "string",
+            "default": "",
+            "scope": "machine",
+            "order": 5,
+            "markdownDescription": "The address your other devices reach this server at, when a proxy, tunnel or VPN other than Tailscale publishes it (for example `https://deck.example.com`). Pairing links and the QR code use it. Empty: the `tailscale serve` route."
           },
           "workerdeck.host.stateDir": {
             "type": "string",

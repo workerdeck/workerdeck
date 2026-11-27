@@ -2370,6 +2370,12 @@ Verified 2026-11-26 against tailscale 1.104.7 (macOS) with a header-echo server 
   because the router uses hash history and reads the hash at module load: a signed-in dashboard
   opened with `#pair=...` would otherwise route to it. Every client parses the link with
   `parsePairingLink` (protocol) or its Rust mirror `parse_pairing_link`; change both together.
+- **`publicUrl` replaces Tailscale for pairing, not the remote-mode rules.** `pair-link` takes the address
+  from `--public-url`, then the live gateway's `/auth/status` `publicUrl`, then the `serve` route, so
+  VS Code's Pair a Device works unchanged. The config adds its origin to `allowedOrigins` (a proxy that
+  rewrites `Host` otherwise fails the Origin check for the declared address). `--remote` still binds
+  loopback and trusts the proxy, which suits a proxy on the same machine; a VPN that reaches the host
+  directly needs `--host` and a key, without `--remote`.
 - **The node's own requests to its ts.net name go through `serve`** and carry its own tailnet IP and
   login, which makes a local end-to-end probe possible without a second device.
 

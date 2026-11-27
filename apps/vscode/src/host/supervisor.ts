@@ -481,6 +481,9 @@ export class HostSupervisor implements vscode.Disposable {
     if (settings.remote) {
       args.push('--remote')
     }
+    if (settings.publicUrl) {
+      args.push('--public-url', settings.publicUrl)
+    }
     if (settings.configPath) {
       args.push('--config', settings.configPath)
     }

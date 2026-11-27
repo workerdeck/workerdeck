@@ -4,7 +4,7 @@ import * as vscode from 'vscode'
 import { readHostSettings } from './settings.ts'
 import type { CliResult, HostSupervisor } from './supervisor.ts'
 
-const PAIR_LINK = /^https:\/\/\S+\/#pair=\S+$/m
+const PAIR_LINK = /^https?:\/\/\S+\/#pair=\S+$/m
 
 function cliError(result: CliResult): string {
   const text = (result.stderr || result.stdout).trim()
@@ -16,7 +16,8 @@ async function withProgress<T>(title: string, work: () => Promise<T>): Promise<T
 }
 
 // The safe enable sequence of MESH.md 5.1: key and setting first, a restart the user confirms, then the CLI checks
-// the live process refuses a keyless request before `tailscale serve` publishes it.
+// the live process refuses a keyless request before `tailscale serve` publishes it. With `publicUrl` set, the
+// operator's own proxy publishes it and Tailscale is never touched.
 export async function enableRemoteAccess(supervisor: HostSupervisor): Promise<void> {
   const settings = readHostSettings()
   if (!settings.enabled) {
@@ -30,10 +31,13 @@ export async function enableRemoteAccess(supervisor: HostSupervisor): Promise<vo
     return
   }
 
-  const check = await withProgress('WorkerDeck: checking Tailscale…', () => supervisor.runCli(['remote', 'status']))
-  if (check.code !== 0) {
-    void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(check)}`)
-    return
+  const proxied = settings.publicUrl !== undefined
+  if (!proxied) {
+    const check = await withProgress('WorkerDeck: checking Tailscale…', () => supervisor.runCli(['remote', 'status']))
+    if (check.code !== 0) {
+      void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(check)}`)
+      return
+    }
   }
 
   if (!settings.remote || supervisor.state.kind !== 'running') {
@@ -42,7 +46,9 @@ export async function enableRemoteAccess(supervisor: HostSupervisor): Promise<vo
       {
         modal: true,
         detail:
-          'The server restarts with its key always required, then tailscale serve publishes it to your tailnet only. ' +
+          (proxied
+            ? `The server restarts with its key always required, on loopback for your proxy at ${settings.publicUrl}. `
+            : 'The server restarts with its key always required, then tailscale serve publishes it to your tailnet only. ') +
           'Your phone and other computers pair with a link. Closing VS Code keeps turns running.',
       },
       'Enable',
@@ -59,19 +65,23 @@ export async function enableRemoteAccess(supervisor: HostSupervisor): Promise<vo
     return
   }
 
-  const enabled = await withProgress('WorkerDeck: publishing to your tailnet…', () => supervisor.runCli(['remote', 'enable']))
-  if (enabled.code !== 0) {
-    void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(enabled)}`)
-    return
+  if (!proxied) {
+    const enabled = await withProgress('WorkerDeck: publishing to your tailnet…', () => supervisor.runCli(['remote', 'enable']))
+    if (enabled.code !== 0) {
+      void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(enabled)}`)
+      return
+    }
   }
   await showPairingLink(supervisor)
 }
 
 export async function disableRemoteAccess(supervisor: HostSupervisor): Promise<void> {
-  const result = await withProgress('WorkerDeck: removing the tailnet route…', () => supervisor.runCli(['remote', 'disable']))
-  if (result.code !== 0) {
-    void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(result)}`)
-    return
+  if (readHostSettings().publicUrl === undefined) {
+    const result = await withProgress('WorkerDeck: removing the tailnet route…', () => supervisor.runCli(['remote', 'disable']))
+    if (result.code !== 0) {
+      void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(result)}`)
+      return
+    }
   }
   if (readHostSettings().remote && !(await supervisor.switchRemote(false))) {
     void vscode.window.showInformationMessage('WorkerDeck: the tailnet route is gone. The server leaves remote mode on its next restart.')

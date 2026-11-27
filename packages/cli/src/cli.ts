@@ -31,12 +31,18 @@ Options
                             proxy. Required behind TLS termination, or the session
                             cookie loses its Secure flag and the origin check
                             computes http:// where the browser says https://.
-      --remote              reach this gateway from your other devices over Tailscale:
-                            binds loopback, always requires the key (generated if
-                            unset) and trusts the tailscale serve proxy (config:
-                            remote, WORKERDECK_REMOTE=1). Publish it with
-                            \`workerdeck remote enable\`, then pair a device with
+      --remote              reach this gateway from your other devices through a proxy
+                            on this machine: binds loopback, always requires the key
+                            (generated if unset) and trusts the proxy (config: remote,
+                            WORKERDECK_REMOTE=1). Publish it over Tailscale with
+                            \`workerdeck remote enable\`, or behind any other proxy
+                            with --public-url, then pair a device with
                             \`workerdeck pair-link\`.
+      --public-url <url>    the address other devices reach this gateway at (any
+                            proxy, tunnel or VPN); pairing links and the QR code use
+                            it instead of the tailscale serve route, and its origin
+                            is accepted on browser requests (config: publicUrl,
+                            WORKERDECK_PUBLIC_URL).
       --allowed-origin <o>  extra origin accepted on browser requests, for when a
                             proxy rewrites Host (repeatable)
       --allowed-host <name> extra Host header accepted when running without auth

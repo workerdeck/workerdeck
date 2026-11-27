@@ -1,6 +1,6 @@
 ---
 title: Remote access
-description: Use the gateway on your computer from your phone, laptop or another editor over Tailscale, with a pairing link.
+description: Use the gateway on your computer from your phone, laptop or another editor over Tailscale or your own proxy, with a pairing link.
 order: 14
 ---
 
@@ -40,6 +40,24 @@ the key, then runs `tailscale serve` on port 443, or on the next free port when 
 something else (it never replaces a route it did not make). `remote status` shows the state,
 `remote disable` removes the route. All three take `--port` and `--state-dir` when the gateway does
 not run on the defaults.
+
+## Behind another proxy, tunnel or VPN
+
+Tailscale is the default, not a requirement. Set the address your devices reach the gateway at and
+pairing uses it instead of a `tailscale serve` route:
+
+```bash
+npx workerdeck --remote --public-url https://deck.example.com
+npx workerdeck pair-link
+```
+
+`--public-url` (config `publicUrl`, env `WORKERDECK_PUBLIC_URL`) takes an http(s) address with an
+optional path prefix. `pair-link` uses it (or its own `--public-url`), the banner prints it, and its
+origin is accepted on browser requests, so a proxy that rewrites `Host` still lets the dashboard
+sign in. With a proxy on the same computer (Caddy, nginx, cloudflared), keep `--remote`: loopback,
+key required, proxy headers trusted. For a VPN that reaches the computer directly, run the gateway
+on that interface with `--host` and a key instead. In VS Code, set `workerdeck.host.publicUrl`:
+**Enable Remote Access** then leaves Tailscale alone and goes straight to the QR code.
 
 ## The pairing link
 

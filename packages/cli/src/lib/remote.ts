@@ -1,14 +1,14 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { defaultStateDir } from '../config.ts'
+import { formatPairingLink } from '@workerdeck/protocol'
+import { defaultStateDir, parsePublicUrl } from '../config.ts'
 import {
   addServeRoute,
   chooseServePort,
   execTailscale,
   findGatewayRoute,
   inspectTailscale,
-  pairingLink,
   publicUrl,
   removeServeRoute,
   serveStatus,
@@ -26,9 +26,10 @@ const REMOTE_HELP = `usage: workerdeck remote <enable|disable|status> [--port N]
 exit 0 = done, 1 = refused or failed
 `
 
-const PAIR_HELP = `usage: workerdeck pair-link [--port N] [--state-dir PATH] [--no-qr]
+const PAIR_HELP = `usage: workerdeck pair-link [--port N] [--state-dir PATH] [--public-url URL] [--no-qr]
 
-Prints the pairing link for a published remote gateway, and a QR code a phone camera can scan.
+Prints the pairing link for a gateway, and a QR code a phone camera can scan. The address is
+--public-url, else the publicUrl the running gateway reports, else its tailscale serve route.
 The link holds the gateway's key: anyone who has it can run agents on this machine.
 `
 
@@ -78,13 +79,18 @@ async function readKey(target: Target, env: NodeJS.ProcessEnv): Promise<string> 
   throw new RemoteError(`no gateway key at ${path} (or in WORKERDECK_AUTH_KEY); start the gateway with --remote first`)
 }
 
-type GatewayMode = { reachable: false } | { reachable: true; auth: boolean; remote: boolean }
+type GatewayMode = { reachable: false } | { reachable: true; auth: boolean; remote: boolean; publicUrl?: string }
 
 async function gatewayMode(base: string, http: typeof fetch): Promise<GatewayMode> {
   try {
     const res = await http(`${base}/auth/status`, { signal: AbortSignal.timeout(5_000) })
-    const body = (await res.json()) as { enabled?: unknown; remote?: unknown }
-    return { reachable: true, auth: body.enabled === true, remote: body.remote === true }
+    const body = (await res.json()) as { enabled?: unknown; remote?: unknown; publicUrl?: unknown }
+    return {
+      reachable: true,
+      auth: body.enabled === true,
+      remote: body.remote === true,
+      ...(typeof body.publicUrl === 'string' ? { publicUrl: body.publicUrl } : {}),
+    }
   } catch {
     return { reachable: false }
   }
@@ -218,6 +224,9 @@ async function status(target: Target, exec: Exec, http: typeof fetch, out: (text
       ? `gateway: nothing answers on port ${target.port}`
       : `gateway: port ${target.port}, ${mode.remote ? 'remote mode' : mode.auth ? 'not remote (key on)' : 'not remote, no key'}`,
   )
+  if (mode.reachable && mode.publicUrl) {
+    out(`public url: ${mode.publicUrl}`)
+  }
   return 0
 }
 
@@ -230,6 +239,7 @@ export async function runPairLink(argv: string[], deps: RemoteDeps = {}): Promis
       options: {
         port: { type: 'string', short: 'p' },
         'state-dir': { type: 'string' },
+        'public-url': { type: 'string' },
         'no-qr': { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
@@ -241,13 +251,8 @@ export async function runPairLink(argv: string[], deps: RemoteDeps = {}): Promis
     }
     const env = deps.env ?? process.env
     const target = targetOf(values, env)
-    const exec = deps.exec ?? execTailscale
-    const self = await inspectTailscale(exec)
-    const servePort = findGatewayRoute(await serveStatus(exec), self.dnsName, target.port)
-    if (servePort === null) {
-      throw new RemoteError(`port ${target.port} is not published to your tailnet; run: workerdeck remote enable`)
-    }
-    const link = pairingLink(self.dnsName, servePort, await readKey(target, env))
+    const base = await pairingBase(values['public-url'], target, env, deps.exec ?? execTailscale, deps.fetch ?? fetch)
+    const link = formatPairingLink(base, await readKey(target, env))
     if (!values['no-qr']) {
       const { renderUnicodeCompact } = await import('uqr')
       out(renderUnicodeCompact(link, { border: 2 }))
@@ -262,4 +267,27 @@ export async function runPairLink(argv: string[], deps: RemoteDeps = {}): Promis
     }
     throw error
   }
+}
+
+async function pairingBase(flag: string | undefined, target: Target, env: NodeJS.ProcessEnv, exec: Exec, http: typeof fetch): Promise<string> {
+  const declared = flag ?? (env.WORKERDECK_PUBLIC_URL || undefined)
+  if (declared !== undefined) {
+    try {
+      return parsePublicUrl(declared, flag !== undefined ? '--public-url' : 'WORKERDECK_PUBLIC_URL')
+    } catch (error) {
+      throw new RemoteError((error as Error).message)
+    }
+  }
+  const mode = await gatewayMode(`http://127.0.0.1:${target.port}`, http)
+  if (mode.reachable && mode.publicUrl) {
+    return mode.publicUrl
+  }
+  const self = await inspectTailscale(exec)
+  const servePort = findGatewayRoute(await serveStatus(exec), self.dnsName, target.port)
+  if (servePort === null) {
+    throw new RemoteError(
+      `port ${target.port} is not published to your tailnet and declares no publicUrl; run: workerdeck remote enable, or pass --public-url`,
+    )
+  }
+  return publicUrl(self.dnsName, servePort)
 }

@@ -48,7 +48,8 @@ npx workerdeck pair-link         # prints a QR code and an https link with the k
 Scan the QR with the phone's camera (the dashboard opens and signs in), or paste the link into
 another editor, the iOS or Android app. In VS Code, **WorkerDeck Host: Enable Remote Access** does
 all three. The gateway is reachable from your tailnet only. Closing VS Code or the phone keeps turns
-running; `workerdeck remote disable` removes the route.
+running; `workerdeck remote disable` removes the route. Behind any other proxy or VPN,
+`--public-url https://deck.example.com` gives pairing links that address instead of a Tailscale route.
 
 To reach it any other way, bind it and give it a secret:
 

@@ -27,8 +27,11 @@ export type WorkerDeckConfig = WorkerServerOptions & {
   // Refused unless auth is on: CORS on an open gateway lets any allowlisted page drive it with no credential.
   corsOrigins?: string[]
   apns?: ApnsConfig
-  // Published to the tailnet by `tailscale serve`: loopback bind, auth forced whatever else is set, `trustProxy` on.
+  // Published by a proxy on this machine (`tailscale serve` by default): loopback bind, auth forced whatever else is
+  // set, `trustProxy` on.
   remote?: boolean
+  // The address other devices reach this gateway at, for pairing links: any proxy, tunnel or VPN, not only Tailscale.
+  publicUrl?: string
 }
 
 export type CliFlags = {
@@ -49,6 +52,7 @@ export type CliFlags = {
   insecureHosts: string[]
   trustProxy?: boolean
   remote?: boolean
+  publicUrl?: string
   approvalTimeoutMs?: number | null
   engineSleepAfterMs?: number
   agentSleepAfterMs?: number
@@ -118,6 +122,7 @@ const VALUED = new Map<string, FlagValue>([
   ['--state-dir', (f, v) => (f.stateDir = resolve(v))],
   ['--cors-origin', (f, v) => f.corsOrigins.push(v)],
   ['--keep-awake', (f, v, name) => (f.keepAwake = parseKeepAwake(v, name))],
+  ['--public-url', (f, v) => (f.publicUrl = v)],
 ])
 
 // `none`, `0` and anything non-positive all mean the same thing: a prompt that never expires.
@@ -140,6 +145,21 @@ function parseEffortDefault(raw: string, source: string): Record<string, string>
     throw new ConfigError(`${source}: expected <model>=<effort>, like opus=high; got: ${raw}`)
   }
   return { [match[1]!]: match[2]! }
+}
+
+// The scheme, host, port and an optional path prefix: a pairing link appends `/#pair=<key>` to it.
+export function parsePublicUrl(raw: string, source: string): string {
+  const trimmed = raw.trim()
+  let url: URL
+  try {
+    url = new URL(trimmed)
+  } catch {
+    throw new ConfigError(`${source}: expected an http(s) URL like https://deck.example.com; got: ${raw}`)
+  }
+  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password || url.search || url.hash) {
+    throw new ConfigError(`${source}: expected a plain http(s) URL without credentials, query or fragment; got: ${raw}`)
+  }
+  return `${url.origin}${url.pathname.replace(/\/+$/, '')}`
 }
 
 function parseKeepAwake(raw: unknown, source: string): KeepAwakeMode {
@@ -281,6 +301,7 @@ export type ResolvedConfig = {
   configPath: string | null
   hostAuthenticates: boolean
   remote: boolean
+  publicUrl: string | null
   // A promise rather than a key, because resolution stays I/O-free; `startInstance` must keep it.
   generateAuthKey: boolean
   // Host header values to accept, or null to accept any; non-null only for an unauthenticated instance.
@@ -354,6 +375,12 @@ export function resolveInstanceConfig(
     assertRemoteCompatible(host, flags, loaded)
   }
 
+  const rawPublicUrl = flags.publicUrl ?? (env.WORKERDECK_PUBLIC_URL || undefined) ?? loaded.options.publicUrl
+  const publicUrl =
+    rawPublicUrl === undefined
+      ? null
+      : parsePublicUrl(rawPublicUrl, flags.publicUrl !== undefined ? '--public-url' : env.WORKERDECK_PUBLIC_URL ? 'WORKERDECK_PUBLIC_URL' : 'publicUrl')
+
   const insecureHosts = new Set([...flags.insecureHosts, ...(loaded.options.insecureHosts ?? [])].map(normalizeInsecureHost))
   const bindHost = host
     .trim()
@@ -385,7 +412,13 @@ export function resolveInstanceConfig(
     ...loaded.options.auth,
     secret: authKey,
     trustProxy: remote || (flags.trustProxy ?? loaded.options.auth?.trustProxy),
-    allowedOrigins: [...(loaded.options.auth?.allowedOrigins ?? []), ...flags.allowedOrigins],
+    // A proxy that rewrites Host would otherwise fail the origin check for the very address the operator declared.
+    allowedOrigins: [
+      ...(loaded.options.auth?.allowedOrigins ?? []),
+      ...flags.allowedOrigins,
+      ...(publicUrl ? [new URL(publicUrl).origin] : []),
+    ],
+    ...(publicUrl ? { publicUrl } : {}),
   }
 
   // `generateAuthKey` counts as auth here on the promise that `startInstance` materializes the key, which it asserts.
@@ -435,6 +468,7 @@ export function resolveInstanceConfig(
     corsOrigins: _cors,
     apns: _ap,
     remote: _remote,
+    publicUrl: _publicUrl,
     ...serverOptions
   } = loaded.options
   const options: WorkerServerOptions = { ...serverOptions }
@@ -513,6 +547,7 @@ export function resolveInstanceConfig(
     configPath: loaded.path,
     hostAuthenticates,
     remote,
+    publicUrl,
     generateAuthKey,
     allowedHosts,
     webRoot: loaded.options.webRoot,

@@ -293,7 +293,8 @@ boundary: anything a client needs must be expressible as protocol events and com
   share a port, and why `--auth-key` can protect both with one shared secret - a login page trades
   it for an `HttpOnly` cookie for browsers, while services keep sending it as a header. Also hosts
   `workerdeck guard`, the restart guard, and remote mode: `--remote`, `workerdeck remote
-  enable|disable|status` (`tailscale serve` around a loopback gateway) and `workerdeck pair-link`.
+  enable|disable|status` (`tailscale serve` around a loopback gateway), `--public-url` for any other
+  proxy, and `workerdeck pair-link`.
 - **`packages/relay-client`** and **`packages/relay`** - the gateway side of the cross-gateway
   relay (wire frames, `connectRelay`, the registry publisher) and the relay itself
   (`workerdeck-relay`, also `workerdeck relay`); see § Across gateways: the relay below.

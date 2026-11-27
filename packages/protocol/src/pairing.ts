@@ -5,6 +5,10 @@ export type PairingLink = { baseUrl: string; key: string }
 
 export const PAIR_FRAGMENT = '#pair='
 
+export function formatPairingLink(baseUrl: string, key: string): string {
+  return `${baseUrl.replace(/\/+$/, '')}/${PAIR_FRAGMENT}${encodeURIComponent(key)}`
+}
+
 export function parsePairingLink(text: string): PairingLink | null {
   const trimmed = text.trim()
   const lower = trimmed.toLowerCase()

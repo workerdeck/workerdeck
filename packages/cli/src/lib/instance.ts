@@ -322,7 +322,11 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
 
   if (!options.quiet) {
     const push = apns && { topic: config.apns?.topic, devices: apns.deviceCount(), cards: apns.activity.count() }
-    const route = config.remote ? await routeWithin(port, 3_000) : undefined
+    const route = config.publicUrl
+      ? ({ published: true, url: config.publicUrl } as const)
+      : config.remote
+        ? await routeWithin(port, 3_000)
+        : undefined
     process.stdout.write(bannerLines({ url, config, generated, authEnabled: auth.enabled, push, route }).join('\n') + '\n')
   }
 
@@ -412,6 +416,8 @@ export function bannerLines({ url, config, generated, authEnabled, push, route }
   const lines = ['', `  workerdeck  ${url}`]
   if (config.remote) {
     lines.push(remoteLine(route))
+  } else if (config.publicUrl) {
+    lines.push(`  public: ${config.publicUrl} - pair a device with \`workerdeck pair-link\``)
   }
   if (config.hostAuthenticates) {
     lines.push('  auth: the config file supplies its own `authenticate`')

@@ -358,7 +358,9 @@ generic restart offer quiet meanwhile), then runs `workerdeck remote enable`, wh
 process before `tailscale serve` publishes it (`docs/GOTCHAS.md` § Remote mode). **Pair a Device**
 runs `pair-link --no-qr` and draws the QR in a script-free webview with `uqr`. **Disable Remote
 Access** removes the route first, then leaves remote mode on a confirmed restart. **Add Gateway**
-accepts a pasted pairing link and skips the key step.
+accepts a pasted pairing link and skips the key step. With `workerdeck.host.publicUrl` set (passed as
+`--public-url`), Enable and Disable skip every Tailscale step: the operator's proxy publishes the server,
+and Pair a Device reads the address from the gateway.
 
 Profiles are **not** Host Mode's business. `/v1/profiles` is a live CRUD surface on every
 gateway, so **WorkerDeck: Profiles** (`src/profiles.ts`) is a native multi-step QuickPick over the

@@ -40,6 +40,8 @@ export type CliAuthOptions = {
   sessions?: CliSessionStore
   // Reported by `/auth/status` so `workerdeck remote enable` can check the live process before publishing it.
   remote?: boolean
+  // Reported by `/auth/status` so `workerdeck pair-link` builds its link on the address the operator declared.
+  publicUrl?: string
 }
 
 export type CliPrincipal = {
@@ -65,6 +67,7 @@ type AuthState = {
   throttle: LoginThrottle
   secretMatches: (candidate: string) => boolean
   remote: boolean
+  publicUrl: string | undefined
 }
 
 const MIN_SECRET_LENGTH = 12
@@ -127,6 +130,7 @@ function authState(options: CliAuthOptions): AuthState {
     throttle,
     secretMatches: secretMatcher(secret),
     remote: options.remote === true,
+    publicUrl: options.publicUrl,
   }
 }
 
@@ -173,6 +177,7 @@ async function handleAuthRoute(state: AuthState, pathname: string, req: Incoming
         enabled: state.enabled,
         authenticated: state.enabled ? hasSession(state.sessions, req) : true,
         ...(state.remote ? { remote: true } : {}),
+        ...(state.publicUrl ? { publicUrl: state.publicUrl } : {}),
       })
     }
     return

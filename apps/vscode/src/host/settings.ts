@@ -10,6 +10,7 @@ export type HostSettings = {
   bindAddress: string
   requireAuthKey: boolean
   remote: boolean
+  publicUrl: string | undefined
   stateDir: string
   configPath: string | undefined
   binaryPath: string | undefined
@@ -75,6 +76,7 @@ export function readHostSettings(): HostSettings {
     bindAddress: config.get<string>('bindAddress', '127.0.0.1').trim() || '127.0.0.1',
     requireAuthKey: config.get<boolean>('requireAuthKey', false),
     remote: config.get<boolean>('remote', false),
+    publicUrl: config.get<string>('publicUrl', '').trim() || undefined,
     stateDir: stateDir || join(homedir(), '.workerdeck'),
     configPath: configPath || undefined,
     binaryPath: binaryPath || undefined,
@@ -101,6 +103,7 @@ const RESTART_KEYS = [
   'bindAddress',
   'requireAuthKey',
   'remote',
+  'publicUrl',
   'configPath',
   'cwdRoots',
   'dashboard',
