@@ -1845,7 +1845,9 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   **Verified**: `pnpm lint`, typecheck, `turbo run test --concurrency=1` 13/13, gatekeeper; live in the 124th
   session in an isolated VS Code (enable on 8443, QR, Copy Link, Add Gateway from a link, Disable removes only its
   route) and a real phone over 5G signing in through a pairing link and running a turn. The iOS and Android
-  pairing-link paste only compiled; no paid smokes. Bumped in a worktree.
+  pairing-link paste only compiled; no paid smokes. Bumped in a worktree. **Published** 2026-11-27: tag
+  `v4.8.0` at `cd14a527`, Publish green first try (run 45941186611), npm 12/12 with `latest` 4.8.0 (nine staged for
+  about eight minutes), Marketplace job green. Decks upgraded the same day (mini deck + relay, MAGWIN; nothing to migrate).
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
