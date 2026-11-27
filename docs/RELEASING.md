@@ -1832,6 +1832,20 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   suites ran in the 119th session, not again here; no paid smokes. Bumped in a worktree. **Published** 2026-11-25: tag
   `v4.7.0` at `cfab85ee`, Publish green first try (run 45596795277), npm 12/12 with `latest` 4.7.0 (nine staged for up
   to about four minutes), Marketplace job green.
+  **4.8.0** - **Remote mode and pairing links** (Mesh phase 1a), a **minor**: protocol stays **2** (every wire
+  addition optional), relay wire **2**. CLI: `--remote` (config `remote`, `WORKERDECK_REMOTE=1`) binds loopback,
+  forces the key and trusts the `tailscale serve` proxy; `workerdeck remote enable|disable|status` publishes the
+  gateway on the tailnet only after it refuses a keyless request, never replaces a foreign route and rolls back an
+  unreachable one; `workerdeck pair-link` prints a terminal QR and `https://<host>/#pair=<key>`. Protocol
+  `parsePairingLink` (Rust `parse_pairing_link`): paste a link in the dashboard, VS Code Add Gateway, iOS and
+  Android; the login page trades `#pair=` for the cookie. VS Code Host Mode keeps its key in `<state-dir>/auth-key`
+  with Enable/Disable Remote Access and Pair a Device (QR); **no migration**: the key is new once, so paired devices
+  and editors pair again. The dashboard gains a narrow layout under 768px. Legacy removed (no users before launch):
+  the SecretStorage key migration, pre-4.0 state guards, the `parseUserQuestions` ui re-export, iOS's 405 case.
+  **Verified**: `pnpm lint`, typecheck, `turbo run test --concurrency=1` 13/13, gatekeeper; live in the 124th
+  session in an isolated VS Code (enable on 8443, QR, Copy Link, Add Gateway from a link, Disable removes only its
+  route) and a real phone over 5G signing in through a pairing link and running a turn. The iOS and Android
+  pairing-link paste only compiled; no paid smokes. Bumped in a worktree.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
