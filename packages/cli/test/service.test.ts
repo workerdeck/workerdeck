@@ -3,7 +3,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { renderPlist, runService, servicePath, type ExecResult } from '../src/lib/service.ts'
+import { createServer } from 'node:net'
+import { portTaken, renderPlist, runService, servicePath, type ExecResult } from '../src/lib/service.ts'
 
 const dirs: string[] = []
 afterAll(async () => {
@@ -49,7 +50,8 @@ function fakeLaunchd() {
     }
     return Response.json({ enabled: true })
   }) as unknown as typeof fetch
-  return { exec, http, calls, setUp: (value: boolean) => (up = value) }
+  const portTaken = async () => up
+  return { exec, http, portTaken, calls, setUp: (value: boolean) => (up = value) }
 }
 
 function io() {
@@ -63,7 +65,7 @@ describe('workerdeck service', () => {
     const h = await home()
     const launchd = fakeLaunchd()
     const capture = io()
-    const deps = { exec: launchd.exec, fetch: launchd.http, home: h, platform: 'darwin' as const, uid: 501, self: SELF, env: { PATH: '/x/bin' } }
+    const deps = { exec: launchd.exec, fetch: launchd.http, portTaken: launchd.portTaken, home: h, platform: 'darwin' as const, uid: 501, self: SELF, env: { PATH: '/x/bin' } }
     expect(await runService(['install', '--', '--remote', '--port', '8790'], { ...deps, ...capture })).toBe(0)
     const plist = await readFile(join(h, 'Library/LaunchAgents/dev.workerdeck.gateway.8790.plist'), 'utf8')
     expect(plist).toContain('<string>/opt/lib/workerdeck/build/cli.mjs</string>\n    <string>--remote</string>')
@@ -80,7 +82,7 @@ describe('workerdeck service', () => {
   it('refuses a temporary npx path, a busy port and other platforms', async () => {
     const h = await home()
     const launchd = fakeLaunchd()
-    const base = { exec: launchd.exec, fetch: launchd.http, home: h, platform: 'darwin' as const, uid: 501, env: {} }
+    const base = { exec: launchd.exec, fetch: launchd.http, portTaken: launchd.portTaken, home: h, platform: 'darwin' as const, uid: 501, env: {} }
     const npx = io()
     const self = { ...SELF, script: '/Users/a/.npm/_npx/123/node_modules/workerdeck/build/cli.mjs' }
     expect(await runService(['install'], { ...base, self, ...npx })).toBe(1)
@@ -88,7 +90,7 @@ describe('workerdeck service', () => {
     launchd.setUp(true)
     const busy = io()
     expect(await runService(['install'], { ...base, self: SELF, ...busy })).toBe(1)
-    expect(busy.errors[0]).toContain('already answers on port 8787')
+    expect(busy.errors[0]).toContain('port 8787 is already in use')
     launchd.setUp(false)
     const quoted = io()
     expect(await runService(['install', '--', '--port 8794 --state-dir /tmp/x'], { ...base, self: SELF, ...quoted })).toBe(1)
@@ -108,7 +110,7 @@ describe('workerdeck service', () => {
       guardCalls.push(argv)
       return verdict
     }
-    const deps = { exec: launchd.exec, fetch: launchd.http, home: h, platform: 'darwin' as const, uid: 501, self: SELF, env: {}, guard }
+    const deps = { exec: launchd.exec, fetch: launchd.http, portTaken: launchd.portTaken, home: h, platform: 'darwin' as const, uid: 501, self: SELF, env: {}, guard }
     await runService(['install'], { ...deps, ...io() })
     const busy = io()
     expect(await runService(['stop'], { ...deps, ...busy })).toBe(1)
@@ -136,5 +138,14 @@ describe('workerdeck service', () => {
     const plist = renderPlist({ label: 'l', programArguments: ['a&b', '<c>'], path: '/p', stateDir: '/s', workingDirectory: '/s' })
     expect(plist).toContain('<string>a&amp;b</string>')
     expect(plist).toContain('<string>&lt;c&gt;</string>')
+  })
+
+  it('sees a port held on one address only', async () => {
+    const server = createServer()
+    await new Promise<void>((done) => server.listen({ port: 0, host: '127.0.0.1' }, done))
+    const { port } = server.address() as { port: number }
+    expect(await portTaken(port)).toBe(true)
+    await new Promise((done) => server.close(done))
+    expect(await portTaken(port)).toBe(false)
   })
 })

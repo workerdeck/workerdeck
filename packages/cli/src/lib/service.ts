@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { createServer } from 'node:net'
+import { homedir, networkInterfaces } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { parseArgs } from '../config.ts'
 import { runGuard } from './guard.ts'
@@ -28,6 +29,7 @@ export type ExecResult = { code: number; stdout: string; stderr: string }
 export type ServiceDeps = {
   exec?: (command: string, args: string[]) => Promise<ExecResult>
   fetch?: typeof fetch
+  portTaken?: (port: number) => Promise<boolean>
   env?: NodeJS.ProcessEnv
   home?: string
   platform?: NodeJS.Platform
@@ -189,6 +191,29 @@ async function answers(port: number, http: typeof fetch): Promise<boolean> {
   }
 }
 
+function bindFails(port: number, host: string): Promise<boolean> {
+  return new Promise((done) => {
+    const server = createServer()
+    server.once('error', (error: NodeJS.ErrnoException) => done(error.code === 'EADDRINUSE'))
+    server.listen({ port, host }, () => server.close(() => done(false)))
+  })
+}
+
+// A gateway may bind one address only (the tailnet IP), which a probe of 127.0.0.1 never reaches. A specific address
+// held elsewhere still lets a wildcard bind succeed under SO_REUSEADDR, so every local address is tried on its own.
+export async function portTaken(port: number): Promise<boolean> {
+  const hosts = new Set(['0.0.0.0', '::'])
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (!(entry.family === 'IPv6' && entry.scopeid)) {
+        hosts.add(entry.address)
+      }
+    }
+  }
+  const results = await Promise.all([...hosts].map((host) => bindFails(port, host)))
+  return results.some(Boolean)
+}
+
 export async function runService(argv: string[], deps: ServiceDeps = {}): Promise<number> {
   const out = deps.out ?? ((text: string) => process.stdout.write(`${text}\n`))
   const err = deps.err ?? ((text: string) => process.stderr.write(`[workerdeck] ${text}\n`))
@@ -217,6 +242,7 @@ export async function runService(argv: string[], deps: ServiceDeps = {}): Promis
       force,
       exec: deps.exec ?? run,
       http: deps.fetch ?? fetch,
+      portTaken: deps.portTaken ?? portTaken,
       domain: `gui/${deps.uid ?? process.getuid?.() ?? 501}`,
       guard: deps.guard ?? runGuard,
       out,
@@ -250,6 +276,7 @@ type Ctx = {
   force: boolean
   exec: (command: string, args: string[]) => Promise<ExecResult>
   http: typeof fetch
+  portTaken: (port: number) => Promise<boolean>
   domain: string
   guard: (argv: string[]) => Promise<number>
   out: (text: string) => void
@@ -309,8 +336,8 @@ async function install(ctx: Ctx, gateway: string[], self: { node: string; execAr
   if (existsSync(target.plist) || (await loaded(ctx)).loaded) {
     throw new ServiceError(`already installed (${target.label}); run workerdeck service uninstall first to change it`)
   }
-  if (await answers(target.port, ctx.http)) {
-    throw new ServiceError(`a gateway already answers on port ${target.port}; stop it first, then install`)
+  if ((await answers(target.port, ctx.http)) || (await ctx.portTaken(target.port))) {
+    throw new ServiceError(`port ${target.port} is already in use (a gateway on any address counts); stop it first, then install`)
   }
   try {
     parseArgs(gateway)
