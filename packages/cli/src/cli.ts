@@ -28,6 +28,8 @@ Options
                             on any other interface a key is generated instead,
                             printed once, and stored in <state-dir>/auth-key for
                             later starts to reuse.
+      --require-auth-key    require the key on loopback too: the stored
+                            <state-dir>/auth-key, generated on first start
       --trust-proxy         trust x-forwarded-proto/-host/-for from one reverse
                             proxy. Required behind TLS termination, or the session
                             cookie loses its Secure flag and the origin check

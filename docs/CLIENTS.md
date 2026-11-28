@@ -371,9 +371,9 @@ restart whose `gatewayArgv` no longer matches the plist reinstalls (`uninstall`,
 apply changed settings. **Keep This Computer Available** confirms, sets `workerdeck.host.keepAwake`
 to `always`, stops Host Mode's own child through the same busy confirmation, makes sure
 `<state-dir>/auth-key` exists and runs `service install -- <gateway argv>`; the service child gets
-no `WORKERDECK_AUTH_KEY`, so the gateway reads that file, which it only does in remote mode or on a
-public bind. A loopback `requireAuthKey` alone therefore refuses, as does an npx launch (install needs
-a stable executable). **Stop Keeping This Computer Available** runs `service uninstall --force`, puts
+no `WORKERDECK_AUTH_KEY`, so the gateway reads that file: remote mode and a public bind always do, and
+a loopback `requireAuthKey` passes `--require-auth-key` for it. An npx launch refuses (install needs a
+stable executable). **Stop Keeping This Computer Available** runs `service uninstall --force`, puts
 `keepAwake` back to `work` and lets Host Mode launch its own child again. The `workerdeck.host.service`
 context key picks which of the two the palette shows.
 

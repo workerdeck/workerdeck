@@ -254,6 +254,16 @@ describe('resolveInstanceConfig', () => {
     expect(loopback.authKey).toBeUndefined()
   })
 
+  it('plans the stored key on loopback with --require-auth-key, never with --insecure', () => {
+    const config = resolveInstanceConfig(parseArgs(['--require-auth-key']), noConfig, {})
+    expect(config.generateAuthKey).toBe(true)
+    expect(config.allowedHosts).toBeNull()
+    const withKey = resolveInstanceConfig(parseArgs(['--require-auth-key']), noConfig, { WORKERDECK_AUTH_KEY: 'from-env-key' })
+    expect(withKey.generateAuthKey).toBe(false)
+    expect(withKey.authKey).toBe('from-env-key')
+    expect(() => resolveInstanceConfig(parseArgs(['--require-auth-key', '--insecure']), noConfig, {})).toThrow(/--insecure/)
+  })
+
   it('keeps the zero-config loopback instance keyless', () => {
     const config = resolveInstanceConfig(parseArgs([]), noConfig, {})
     expect(config.generateAuthKey).toBe(false)

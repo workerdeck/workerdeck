@@ -81,6 +81,14 @@ describe('gatewayArgv keepAwake', () => {
   })
 })
 
+describe('gatewayArgv requireAuthKey', () => {
+  it('asks for the stored key on loopback, and leaves it to --remote there', () => {
+    expect(gatewayArgv(settings({ requireAuthKey: true }))).toContain('--require-auth-key')
+    expect(gatewayArgv(settings({ requireAuthKey: true, remote: true }))).not.toContain('--require-auth-key')
+    expect(gatewayArgv(settings())).not.toContain('--require-auth-key')
+  })
+})
+
 describe('service commands', () => {
   it('forces stop, restart and uninstall, never naming the port or state dir runCli appends', () => {
     expect(serviceCommand('stop')).toEqual(['service', 'stop', '--force'])

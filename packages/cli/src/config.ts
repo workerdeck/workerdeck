@@ -39,6 +39,7 @@ export type CliFlags = {
   port?: number
   host?: string
   authKey?: string
+  requireAuthKey?: boolean
   profiles: ProfileInfo[]
   cwdRoots: string[]
   fsRoots: string[]
@@ -89,6 +90,7 @@ const SWITCHES = new Map<string, FlagSwitch>([
   ['--shell', (f) => (f.shell = true)],
   ['--trust-proxy', (f) => (f.trustProxy = true)],
   ['--remote', (f) => (f.remote = true)],
+  ['--require-auth-key', (f) => (f.requireAuthKey = true)],
   ['--no-parking-store', (f) => (f.parking = false)],
   ['--insecure', (f) => (f.insecure = true)],
   ['--no-web', (f) => (f.web = false)],
@@ -390,10 +392,13 @@ export function resolveInstanceConfig(
   // An unauthenticated gateway on a routable interface is a shell for anyone who can reach the port, so serving one
   // takes an explicit opt-out; absent all three of them auth goes on and a key is generated.
   // Remote mode is the exception: it binds loopback, yet everything it serves arrives from the tailnet through the proxy.
+  if (flags.requireAuthKey && flags.insecure) {
+    throw new ConfigError('--require-auth-key cannot be combined with --insecure')
+  }
   const generateAuthKey =
     !authKey &&
     !hostAuthenticates &&
-    (remote || (!loaded.options.allowUnauthenticated && !isLoopback(host) && !flags.insecure && !insecureHosts.has(bindHost)))
+    (remote || flags.requireAuthKey === true || (!loaded.options.allowUnauthenticated && !isLoopback(host) && !flags.insecure && !insecureHosts.has(bindHost)))
 
   const stateDir =
     flags.parking === false || loaded.options.stateDir === null

@@ -7,6 +7,8 @@ export function gatewayArgv(settings: HostSettings): string[] {
   const args = ['--port', String(settings.port), '--host', settings.bindAddress, '--state-dir', settings.stateDir]
   if (settings.remote) {
     args.push('--remote')
+  } else if (settings.requireAuthKey) {
+    args.push('--require-auth-key')
   }
   if (settings.publicUrl) {
     args.push('--public-url', settings.publicUrl)

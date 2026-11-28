@@ -327,19 +327,11 @@ export class HostSupervisor implements vscode.Disposable {
     return true
   }
 
-  // A service child gets no WORKERDECK_AUTH_KEY, and the key never goes on argv, so the gateway reads
-  // <state-dir>/auth-key. It only does that in remote mode or on a public bind; `requireAuthKey` alone needs the env.
+  // A service child gets no WORKERDECK_AUTH_KEY, and the key never goes on argv, so the gateway reads <state-dir>/auth-key.
   #refuseService(settings: HostSettings): boolean {
     const problem = settingsProblem(settings)
     if (problem) {
       void vscode.window.showErrorMessage(`WorkerDeck: ${problem}`)
-      return true
-    }
-    if (settings.requireAuthKey && !settings.remote && !bindsPublicly(settings)) {
-      void vscode.window.showErrorMessage(
-        'WorkerDeck: a login item cannot carry the key `workerdeck.host.requireAuthKey` asks for on loopback. ' +
-          'Turn on Remote Access (which always requires the key) or turn `workerdeck.host.requireAuthKey` off first.',
-      )
       return true
     }
     const launch = resolveLaunch({

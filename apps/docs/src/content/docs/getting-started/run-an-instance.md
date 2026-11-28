@@ -168,6 +168,7 @@ write flag, and only an operator can create a session that has it or press Run o
 | `--port <n>` | `WORKERDECK_PORT` | `8787` |
 | `--host <addr>` | `WORKERDECK_HOST` | `127.0.0.1` |
 | `--auth-key <secret>` | `WORKERDECK_AUTH_KEY` | none - no auth on loopback, generated elsewhere |
+| `--require-auth-key` | - | off; requires the key on loopback too, the stored `<state-dir>/auth-key` (generated on first start) |
 | `--cwd-root <path>` (repeatable) | `WORKERDECK_CWD_ROOTS` (`:`-separated) | unrestricted |
 | `--fs-root <path>` (repeatable) | `WORKERDECK_FS_ROOTS` (`:`-separated) | narrows `/v1/fs`; unset, reading follows `--cwd-root` |
 | `--fs-write` | - | off (read-only) |
