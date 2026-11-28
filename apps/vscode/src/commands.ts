@@ -59,6 +59,8 @@ export function hostCommands({ extensionId, supervisor, require }: HostCommandDe
     'workerdeck.host.enableRemote': () => withSupervisor(require(), enableRemoteAccess),
     'workerdeck.host.disableRemote': () => withSupervisor(require(), disableRemoteAccess),
     'workerdeck.host.showPairingLink': () => withSupervisor(require(), showPairingLink),
+    'workerdeck.host.keepAvailable': () => require()?.keepAvailable(),
+    'workerdeck.host.stopKeepingAvailable': () => require()?.stopKeepingAvailable(),
     'workerdeck.host.actions': () => hostActions(supervisor?.state ?? { kind: 'disabled' }),
     'workerdeck.openSettings': () => vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${extensionId}`),
     'workerdeck.host.openSettings': () =>

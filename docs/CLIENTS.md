@@ -353,7 +353,7 @@ pair-link` can print it. Turning the key off keeps the file, so turning it back 
 
 **Remote access runs the CLI, never a second implementation.** **Enable Remote Access** checks
 Tailscale with `workerdeck remote status`, sets `workerdeck.host.remote` and restarts through the
-busy-sessions confirmation (a declined restart puts the setting back; `#switchingRemote` keeps the
+busy-sessions confirmation (a declined restart puts the setting back; `#switchingSettings` keeps the
 generic restart offer quiet meanwhile), then runs `workerdeck remote enable`, which verifies the live
 process before `tailscale serve` publishes it (`docs/GOTCHAS.md` § Remote mode). **Pair a Device**
 runs `pair-link --no-qr` and draws the QR in a script-free webview with `uqr`. **Disable Remote
@@ -361,6 +361,21 @@ Access** removes the route first, then leaves remote mode on a confirmed restart
 accepts a pasted pairing link and skips the key step. With `workerdeck.host.publicUrl` set (passed as
 `--public-url`), Enable and Disable skip every Tailscale step: the operator's proxy publishes the server,
 and Pair a Device reads the address from the gateway.
+
+**A service owns the port when its LaunchAgent exists (macOS).** Host Mode treats the gateway on its
+port as service-owned while `~/Library/LaunchAgents/dev.workerdeck.gateway.<port>.plist` exists: it
+adopts it, never launches or signals a child of its own for that port, and routes Stop, Start and
+Restart through `workerdeck service stop|start|restart --force` (the extension's busy-sessions
+confirmation replaces the CLI's guard, hence `--force`). The agent's argv is fixed at install, so a
+restart whose `gatewayArgv` no longer matches the plist reinstalls (`uninstall`, then `install`) to
+apply changed settings. **Keep This Computer Available** confirms, sets `workerdeck.host.keepAwake`
+to `always`, stops Host Mode's own child through the same busy confirmation, makes sure
+`<state-dir>/auth-key` exists and runs `service install -- <gateway argv>`; the service child gets
+no `WORKERDECK_AUTH_KEY`, so the gateway reads that file, which it only does in remote mode or on a
+public bind. A loopback `requireAuthKey` alone therefore refuses, as does an npx launch (install needs
+a stable executable). **Stop Keeping This Computer Available** runs `service uninstall --force`, puts
+`keepAwake` back to `work` and lets Host Mode launch its own child again. The `workerdeck.host.service`
+context key picks which of the two the palette shows.
 
 Profiles are **not** Host Mode's business. `/v1/profiles` is a live CRUD surface on every
 gateway, so **WorkerDeck: Profiles** (`src/profiles.ts`) is a native multi-step QuickPick over the

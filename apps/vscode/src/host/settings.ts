@@ -28,6 +28,7 @@ export type HostSettings = {
   effortDefaults: Record<string, string>
   agentContextReset: AgentContextReset
   agentSharing: AgentSharing
+  keepAwake: KeepAwake
 }
 
 export const HOST_SECTION = 'workerdeck.host'
@@ -47,6 +48,10 @@ const AGENT_CONTEXT_RESET: readonly AgentContextReset[] = ['off', 'on', 'never']
 export type AgentSharing = 'private' | 'shared' | 'never'
 
 const AGENT_SHARING: readonly AgentSharing[] = ['private', 'shared', 'never']
+
+export type KeepAwake = 'work' | 'always' | 'off'
+
+const KEEP_AWAKE: readonly KeepAwake[] = ['work', 'always', 'off']
 
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '0.0.0.0', '::'])
 
@@ -94,6 +99,7 @@ export function readHostSettings(): HostSettings {
     effortDefaults: effortDefaults(config.get<Record<string, unknown>>('effortDefaults', {})),
     agentContextReset: agentContextReset(config.get<string>('agentContextReset', 'off')),
     agentSharing: AGENT_SHARING.find((value) => value === config.get<string>('agentSharing', 'private')) ?? 'private',
+    keepAwake: KEEP_AWAKE.find((value) => value === config.get<string>('keepAwake', 'work')) ?? 'work',
   }
 }
 
@@ -118,6 +124,7 @@ const RESTART_KEYS = [
   'effortDefaults',
   'agentContextReset',
   'agentSharing',
+  'keepAwake',
 ]
 
 export function needsRestart(event: vscode.ConfigurationChangeEvent): boolean {

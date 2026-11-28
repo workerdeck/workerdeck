@@ -349,6 +349,18 @@
         "category": "WorkerDeck Host"
       },
       {
+        "command": "workerdeck.host.keepAvailable",
+        "title": "Keep This Computer Available",
+        "category": "WorkerDeck Host",
+        "enablement": "isMac"
+      },
+      {
+        "command": "workerdeck.host.stopKeepingAvailable",
+        "title": "Stop Keeping This Computer Available",
+        "category": "WorkerDeck Host",
+        "enablement": "isMac"
+      },
+      {
         "command": "workerdeck.openSettings",
         "title": "Open Settings",
         "category": "WorkerDeck",
@@ -956,6 +968,14 @@
         {
           "command": "workerdeck.host.openSettings",
           "when": "false"
+        },
+        {
+          "command": "workerdeck.host.keepAvailable",
+          "when": "isMac && !workerdeck.host.service"
+        },
+        {
+          "command": "workerdeck.host.stopKeepingAvailable",
+          "when": "isMac && workerdeck.host.service"
         },
         {
           "command": "workerdeck.files.findInFolder",
@@ -1627,6 +1647,23 @@
             "order": 5,
             "markdownDescription": "The address your other devices reach this server at, when a proxy, tunnel or VPN other than Tailscale publishes it (for example `https://deck.example.com`). Pairing links and the QR code use it. Empty: the `tailscale serve` route."
           },
+          "workerdeck.host.keepAwake": {
+            "type": "string",
+            "enum": [
+              "work",
+              "always",
+              "off"
+            ],
+            "enumDescriptions": [
+              "Hold idle sleep off while a turn runs or a keep-awake shell is open.",
+              "Hold idle sleep off for as long as the server runs, for an always-on machine.",
+              "Never hold the machine awake."
+            ],
+            "default": "work",
+            "scope": "machine",
+            "order": 5,
+            "markdownDescription": "When the server keeps this computer from idle sleep. `work` (the default) holds it awake while work runs, `always` for as long as the server runs (passed as `--keep-awake always`), `off` never (`--no-keep-awake`). **WorkerDeck Host: Keep This Computer Available** sets `always`."
+          },
           "workerdeck.host.stateDir": {
             "type": "string",
             "default": "",
@@ -1851,6 +1888,7 @@
     "build": "node esbuild.mjs && vite build",
     "dev": "concurrently -n ext,webview -c cyan,magenta \"node esbuild.mjs --watch\" \"vite build --watch\"",
     "typecheck": "tsgo -p tsconfig.json && tsgo -p tsconfig.webview.json",
+    "test": "vitest run",
     "package": "vsce package --no-dependencies -o workerdeck.vsix",
     "dev:host": "node scripts/dev-host.mjs",
     "install:vscode": "pnpm package && code --install-extension workerdeck.vsix --force",

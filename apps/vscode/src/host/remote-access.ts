@@ -2,14 +2,9 @@ import { randomBytes } from 'node:crypto'
 import { renderSVG } from 'uqr'
 import * as vscode from 'vscode'
 import { readHostSettings } from './settings.ts'
-import type { CliResult, HostSupervisor } from './supervisor.ts'
+import { cliError, type HostSupervisor } from './supervisor.ts'
 
 const PAIR_LINK = /^https?:\/\/\S+\/#pair=\S+$/m
-
-function cliError(result: CliResult): string {
-  const text = (result.stderr || result.stdout).trim()
-  return text.replace(/^\[workerdeck\] /gm, '') || `the workerdeck CLI exited with code ${result.code}`
-}
 
 async function withProgress<T>(title: string, work: () => Promise<T>): Promise<T> {
   return await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title, cancellable: false }, work)

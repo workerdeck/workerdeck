@@ -275,6 +275,12 @@ login window needs auto-login or a [profile token](/workerdeck/docs/guides/auth/
 back. Install refuses to run from an npx cache, which disappears on the next cache clean. On Linux, use a systemd
 user unit for now (`loginctl enable-linger` keeps it running after you log out).
 
+From VS Code, run **WorkerDeck Host: Keep This Computer Available**: it moves Host Mode's server into the same
+LaunchAgent, with `workerdeck.host.keepAwake` set to `always` (the setting also takes `work`, the default, and `off`).
+Host Mode then stops, starts and restarts the server through `workerdeck service`, still asking first when sessions are
+busy. **Stop Keeping This Computer Available** removes the agent and hands the server back to VS Code. Both need
+`workerdeck` installed (`npm install -g workerdeck` or `workerdeck.host.binaryPath`), not fetched by npx.
+
 ## Restarting safely
 
 ```bash

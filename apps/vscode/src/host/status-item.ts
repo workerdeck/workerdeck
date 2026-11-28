@@ -67,7 +67,11 @@ export class HostStatusItem implements vscode.Disposable {
     if (state.kind === 'running') {
       tip.appendMarkdown(`serving [${state.url}](${state.url})\n\n`)
       tip.appendMarkdown(
-        state.owned ? `Started by VS Code (pid ${state.pid ?? '?'}).` : 'Started outside VS Code - this window will not stop it.',
+        state.service
+          ? 'Runs as a login item (`workerdeck service`); it keeps running with VS Code closed.'
+          : state.owned
+            ? `Started by VS Code (pid ${state.pid ?? '?'}).`
+            : 'Started outside VS Code - this window will not stop it.',
       )
     } else {
       tip.appendMarkdown(state.kind === 'disabled' ? 'off for this window.' : 'the server is not running.')
@@ -98,6 +102,13 @@ export async function hostActions(state: HostState): Promise<void> {
                 { label: '$(lock) Disable Remote Access', command: 'workerdeck.host.disableRemote' },
               ]
             : [{ label: '$(broadcast) Enable Remote Access', description: 'Tailscale', command: 'workerdeck.host.enableRemote' }]),
+          ...(process.platform === 'darwin'
+            ? [
+                state.service
+                  ? { label: '$(circle-slash) Stop Keeping This Computer Available', command: 'workerdeck.host.stopKeepingAvailable' }
+                  : { label: '$(pass) Keep This Computer Available', description: 'login item', command: 'workerdeck.host.keepAvailable' },
+              ]
+            : []),
         ]
       : [{ label: '$(play) Start Server', command: 'workerdeck.host.start' }]),
     // The badge counts every gateway, not just this machine's, so its menu has to reach them.

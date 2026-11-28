@@ -21,6 +21,6 @@
     "noEmit": true,
     "types": ["node", "vscode"]
   },
-  "include": ["src/**/*.ts", "esbuild.mjs"],
+  "include": ["src/**/*.ts", "test/**/*.ts", "esbuild.mjs", "vitest.config.ts"],
   "exclude": ["node_modules", "dist", "webview"]
 }
