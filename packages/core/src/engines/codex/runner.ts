@@ -1661,6 +1661,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       const update = params as AppServerTokenUsageUpdate
       active.contextTokens = last.totalTokens ?? undefined
       active.contextWindow = update.tokenUsage?.modelContextWindow ?? undefined
+      this.#emitContextUsage(active)
     },
     'mcpServer/startupStatus/updated': (params) => {
       const update = params as AppServerMcpStatusUpdate
@@ -1835,7 +1836,6 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       byModel: wire ? { [this.#model ?? this.#resolvedModel ?? 'unknown']: tokenUsageFromWire(wire) } : undefined,
       costs: true,
     })
-    this.#emitContextUsage(active)
     if (!superseded) {
       this.core.setStatus('idle')
     }

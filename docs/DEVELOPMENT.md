@@ -260,6 +260,9 @@ bugs, which is the whole argument.
 `apps/demo` tests the scripted gateway (attach replay, beat timing, command routing, unread) and
 the tour controller (the step count dry run, hints, Back as fast-forward) with no DOM; the
 overlay and the journeys themselves are checked by running them in a browser.
+`apps/vscode` tests only modules that do not import `vscode`: Host Mode's gateway argv and the
+`workerdeck service` glue (plist path, command lines, whether the installed argv is current). The
+supervisor itself is checked by running the extension.
 Peer messaging is pinned in three places: `core/test/peers.test.ts` (the dispatcher, envelope
 and digest), `claude-peers` / `codex-peers` (each engine's declaration and delivery, through the
 fake harness and the scripted peer) and `server/test/peers.test.ts` (scope, wake, the three

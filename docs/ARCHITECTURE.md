@@ -294,7 +294,7 @@ boundary: anything a client needs must be expressible as protocol events and com
   it for an `HttpOnly` cookie for browsers, while services keep sending it as a header. Also hosts
   `workerdeck guard`, the restart guard, and remote mode: `--remote`, `workerdeck remote
   enable|disable|status` (`tailscale serve` around a loopback gateway), `--public-url` for any other
-  proxy, and `workerdeck pair-link`.
+  proxy, `workerdeck pair-link`, and `workerdeck service` (the gateway as a macOS LaunchAgent).
 - **`packages/relay-client`** and **`packages/relay`** - the gateway side of the cross-gateway
   relay (wire frames, `connectRelay`, the registry publisher) and the relay itself
   (`workerdeck-relay`, also `workerdeck relay`); see § Across gateways: the relay below.

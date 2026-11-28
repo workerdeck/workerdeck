@@ -256,6 +256,31 @@ This is the CLI's job, not the server's: a standalone gateway owns the machine's
 a host embedding `@workerdeck/server` owns its own power policy and should not have it changed
 by a library it imported.
 
+## Keeping it running (macOS)
+
+```bash
+npm install -g workerdeck
+workerdeck service install -- --remote --keep-awake always
+```
+
+`service install` writes a LaunchAgent for your user (`~/Library/LaunchAgents/dev.workerdeck.gateway.<port>.plist`)
+and starts it: the gateway starts at every login, comes back after a crash and keeps running when every editor and
+terminal is closed. Flags after `--` go to the gateway. It runs as you, so the CLI logins Claude Code and Codex keep
+in the Keychain work as they do in a terminal; a LaunchAgent starts only after you log in, so a box that boots to the
+login window needs auto-login or a [profile token](/workerdeck/docs/guides/auth/). The log is
+`<state-dir>/logs/gateway.log`.
+
+`service status` shows the agent and whether the gateway answers; `service restart`, `stop` and `uninstall` check
+`workerdeck guard` first and refuse while a turn runs (`--force` skips that); `service start` brings a stopped one
+back. Install refuses to run from an npx cache, which disappears on the next cache clean. On Linux, use a systemd
+user unit for now (`loginctl enable-linger` keeps it running after you log out).
+
+From VS Code, run **WorkerDeck Host: Keep This Computer Available**: it moves Host Mode's server into the same
+LaunchAgent, with `workerdeck.host.keepAwake` set to `always` (the setting also takes `work`, the default, and `off`).
+Host Mode then stops, starts and restarts the server through `workerdeck service`, still asking first when sessions are
+busy. **Stop Keeping This Computer Available** removes the agent and hands the server back to VS Code. Both need
+`workerdeck` installed (`npm install -g workerdeck` or `workerdeck.host.binaryPath`), not fetched by npx.
+
 ## Restarting safely
 
 ```bash

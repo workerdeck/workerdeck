@@ -11,17 +11,13 @@ import { clearLock, logPath, ownedLock, pidAlive, writeLock } from './lock.ts'
 import { LogTail } from './log-tail.ts'
 import { generateKey, readStateKey, writeStateKey } from './key-store.ts'
 import { resolveLaunch, type LaunchSpec } from './runtime.ts'
-import {
-  AGENT_SLEEP_AFTER_MINUTES,
-  bindsPublicly,
-  keyRequired,
-  managedUrl,
-  readHostSettings,
-  settingsProblem,
-  type HostSettings,
-} from './settings.ts'
+import { gatewayArgv } from './argv.ts'
+import { serviceArgvCurrent, serviceCommand, serviceInstallCommand, serviceLogPath, serviceOwned, servicePlistPath } from './service.ts'
+import { bindsPublicly, HOST_SECTION, keyRequired, managedUrl, readHostSettings, settingsProblem, type HostSettings } from './settings.ts'
 
 export const MANAGED_HOST_ID = 'workerdeck-managed'
+
+export const SERVICE_CONTEXT_KEY = 'workerdeck.host.service'
 
 const READY_INTERVAL_MS = 400
 const DRAIN_GRACE_MS = 30_000
@@ -31,11 +27,16 @@ export type HostState =
   | { kind: 'disabled' }
   | { kind: 'stopped' }
   | { kind: 'starting' }
-  | { kind: 'running'; url: string; owned: boolean; pid: number | undefined }
+  | { kind: 'running'; url: string; owned: boolean; service: boolean; pid: number | undefined }
   | { kind: 'stopping' }
   | { kind: 'error'; message: string }
 
 export type CliResult = { code: number; stdout: string; stderr: string }
+
+export function cliError(result: CliResult): string {
+  const text = (result.stderr || result.stdout).trim()
+  return text.replace(/^\[workerdeck\] /gm, '') || `the workerdeck CLI exited with code ${result.code}`
+}
 
 export type SupervisorDeps = {
   sessionsOf: (hostId: string) => SessionInfo[]
@@ -56,8 +57,8 @@ export class HostSupervisor implements vscode.Disposable {
   readonly #version: string
   #state: HostState = { kind: 'disabled' }
   #restartOffered = false
-  // Set while Enable/Disable Remote Access changes the setting and restarts itself, so the generic offer stays quiet.
-  #switchingRemote = false
+  // Set while a command changes a setting and restarts by itself, so the generic offer stays quiet.
+  #switchingSettings = false
   #child: ChildProcess | undefined
   #childViaNpx = false
   #busy: Promise<void> = Promise.resolve()
@@ -74,6 +75,7 @@ export class HostSupervisor implements vscode.Disposable {
 
   #set(state: HostState): void {
     this.#state = state
+    void vscode.commands.executeCommand('setContext', SERVICE_CONTEXT_KEY, serviceOwned(readHostSettings().port))
     this.#onDidChangeState.fire(state)
   }
 
@@ -101,7 +103,7 @@ export class HostSupervisor implements vscode.Disposable {
         return
       }
       const adopted = await this.#adopt(settings)
-      if (adopted || !settings.autoStart) {
+      if (adopted || !settings.autoStart || serviceOwned(settings.port)) {
         if (!adopted && this.#state.kind !== 'error') {
           this.#set({ kind: 'stopped' })
         }
@@ -133,6 +135,10 @@ export class HostSupervisor implements vscode.Disposable {
       if (await this.#adopt(settings)) {
         return
       }
+      if (serviceOwned(settings.port)) {
+        await this.#serviceStart(settings)
+        return
+      }
       await this.#launch(settings)
     })
   }
@@ -147,7 +153,13 @@ export class HostSupervisor implements vscode.Disposable {
   // change, and a server started by hand in a terminal never read these settings at all.
   offerRestart(): void {
     const state = this.#state
-    if (state.kind !== 'running' || !state.owned || !vscode.window.state.focused || this.#restartOffered || this.#switchingRemote) {
+    if (
+      state.kind !== 'running' ||
+      !(state.owned || state.service) ||
+      !vscode.window.state.focused ||
+      this.#restartOffered ||
+      this.#switchingSettings
+    ) {
       return
     }
     this.#restartOffered = true
@@ -164,6 +176,9 @@ export class HostSupervisor implements vscode.Disposable {
   restart(): Promise<boolean> {
     return this.#queue(async () => {
       const settings = readHostSettings()
+      if (serviceOwned(settings.port)) {
+        return await this.#serviceRestart(settings)
+      }
       if (!(await this.#stopNow(settings, true, 'Restart'))) {
         return false
       }
@@ -199,7 +214,7 @@ export class HostSupervisor implements vscode.Disposable {
     if (previous === remote && this.#state.kind === 'running') {
       return true
     }
-    this.#switchingRemote = true
+    this.#switchingSettings = true
     try {
       await config.update('remote', remote, vscode.ConfigurationTarget.Global)
       if (await this.restart()) {
@@ -208,8 +223,241 @@ export class HostSupervisor implements vscode.Disposable {
       await config.update('remote', previous, vscode.ConfigurationTarget.Global)
       return false
     } finally {
-      this.#switchingRemote = false
+      this.#switchingSettings = false
     }
+  }
+
+  // MESH.md 5.2: the gateway becomes a LaunchAgent (`workerdeck service`), so it outlives VS Code and holds idle sleep off.
+  async keepAvailable(): Promise<void> {
+    const settings = readHostSettings()
+    if (process.platform !== 'darwin') {
+      void vscode.window.showWarningMessage(
+        'WorkerDeck: keeping this computer available runs the server as a macOS login item; it is macOS only for now.',
+      )
+      return
+    }
+    if (!settings.enabled) {
+      void vscode.window.showInformationMessage(
+        'WorkerDeck: turn Host Mode on first; the login item runs the server Host Mode is set up for.',
+      )
+      return
+    }
+    if (serviceOwned(settings.port)) {
+      void vscode.window.showInformationMessage(`WorkerDeck: the server on port ${settings.port} already runs as a login item.`)
+      return
+    }
+    if (this.#refuseService(settings)) {
+      return
+    }
+    const answer = await vscode.window.showInformationMessage(
+      'WorkerDeck: Keep this computer available?',
+      {
+        modal: true,
+        detail:
+          'The server moves out of VS Code into a login item: it starts when you log in, keeps running with VS Code closed and ' +
+          'restarts if it crashes. It holds idle sleep off for as long as it runs (`workerdeck.host.keepAwake` becomes `always`).',
+      },
+      'Keep Available',
+    )
+    if (answer !== 'Keep Available') {
+      return
+    }
+    const config = vscode.workspace.getConfiguration(HOST_SECTION)
+    const previous = config.get<string>('keepAwake', 'work')
+    this.#switchingSettings = true
+    try {
+      await config.update('keepAwake', 'always', vscode.ConfigurationTarget.Global)
+      if (await this.#queue(() => this.#handOver(readHostSettings()))) {
+        return
+      }
+      await config.update('keepAwake', previous, vscode.ConfigurationTarget.Global)
+    } finally {
+      this.#switchingSettings = false
+    }
+    await this.sync()
+  }
+
+  async stopKeepingAvailable(): Promise<void> {
+    const settings = readHostSettings()
+    if (!serviceOwned(settings.port)) {
+      void vscode.window.showInformationMessage(`WorkerDeck: no login item runs the server on port ${settings.port}.`)
+      return
+    }
+    const removed = await this.#queue(async () => {
+      if (!(await this.#confirmBusy('Stop'))) {
+        return false
+      }
+      this.#set({ kind: 'stopping' })
+      const result = await this.#serviceCli('WorkerDeck: removing the login item…', serviceCommand('uninstall'))
+      if (result.code !== 0) {
+        void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(result)}`)
+        await this.#readopt(settings)
+        return false
+      }
+      await this.#unregister()
+      this.#set({ kind: 'stopped' })
+      void this.#deps.refresh()
+      return true
+    })
+    if (!removed) {
+      return
+    }
+    const config = vscode.workspace.getConfiguration(HOST_SECTION)
+    if (config.get<string>('keepAwake', 'work') === 'always') {
+      this.#switchingSettings = true
+      try {
+        await config.update('keepAwake', 'work', vscode.ConfigurationTarget.Global)
+      } finally {
+        this.#switchingSettings = false
+      }
+    }
+    await this.sync()
+  }
+
+  async #handOver(settings: HostSettings): Promise<boolean> {
+    if (!(await this.#stopNow(settings, true, 'Stop'))) {
+      return false
+    }
+    this.#set({ kind: 'starting' })
+    if (!(await this.#installService(settings))) {
+      this.#set({ kind: 'stopped' })
+      return false
+    }
+    await this.#readopt(settings)
+    return true
+  }
+
+  // A service child gets no WORKERDECK_AUTH_KEY, and the key never goes on argv, so the gateway reads
+  // <state-dir>/auth-key. It only does that in remote mode or on a public bind; `requireAuthKey` alone needs the env.
+  #refuseService(settings: HostSettings): boolean {
+    const problem = settingsProblem(settings)
+    if (problem) {
+      void vscode.window.showErrorMessage(`WorkerDeck: ${problem}`)
+      return true
+    }
+    if (settings.requireAuthKey && !settings.remote && !bindsPublicly(settings)) {
+      void vscode.window.showErrorMessage(
+        'WorkerDeck: a login item cannot carry the key `workerdeck.host.requireAuthKey` asks for on loopback. ' +
+          'Turn on Remote Access (which always requires the key) or turn `workerdeck.host.requireAuthKey` off first.',
+      )
+      return true
+    }
+    const launch = resolveLaunch({
+      binaryPath: settings.binaryPath,
+      npxSpec: settings.npxSpec ?? `workerdeck@${this.#version}`,
+      allowNpx: settings.useNpx,
+    })
+    if ('error' in launch) {
+      void this.#offerInstall(launch.error)
+      return true
+    }
+    if (launch.viaNpx) {
+      void this.#offerInstall(
+        'a login item needs an installed workerdeck, not one npx fetches: run `npm install -g workerdeck` or set `workerdeck.host.binaryPath`',
+      )
+      return true
+    }
+    return false
+  }
+
+  async #installService(settings: HostSettings): Promise<boolean> {
+    try {
+      await this.#resolveAuthKey(settings)
+    } catch (err) {
+      void vscode.window.showErrorMessage(`WorkerDeck: ${errorMessage(err)}`)
+      return false
+    }
+    const result = await this.#serviceCli(
+      'WorkerDeck: installing the server as a login item…',
+      serviceInstallCommand(gatewayArgv(settings)),
+    )
+    if (result.code === 0) {
+      return true
+    }
+    const installed = serviceOwned(settings.port)
+    void (installed ? vscode.window.showWarningMessage : vscode.window.showErrorMessage)(`WorkerDeck: ${cliError(result)}`)
+    return installed
+  }
+
+  async #serviceStart(settings: HostSettings): Promise<void> {
+    this.#set({ kind: 'starting' })
+    const result = await this.#serviceCli('WorkerDeck: starting the login item…', serviceCommand('start'))
+    if (result.code !== 0) {
+      this.#set({ kind: 'error', message: cliError(result) })
+      void this.#reportFailure()
+      return
+    }
+    await this.#readopt(settings)
+  }
+
+  async #serviceStop(settings: HostSettings, confirm: boolean, verb: 'Stop' | 'Restart'): Promise<boolean> {
+    if (confirm && !(await this.#confirmBusy(verb))) {
+      return false
+    }
+    this.#set({ kind: 'stopping' })
+    const result = await this.#serviceCli('WorkerDeck: stopping the server…', serviceCommand('stop'))
+    if (result.code !== 0) {
+      void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(result)}`)
+      await this.#readopt(settings)
+      return false
+    }
+    await this.#unregister()
+    this.#set({ kind: 'stopped' })
+    void this.#deps.refresh()
+    return true
+  }
+
+  async #serviceRestart(settings: HostSettings): Promise<boolean> {
+    const argv = gatewayArgv(settings)
+    const plist = await readFile(servicePlistPath(settings.port), 'utf8').catch(() => '')
+    const current = serviceArgvCurrent(plist, argv)
+    if (!current && this.#refuseService(settings)) {
+      return false
+    }
+    if (!(await this.#confirmBusy('Restart'))) {
+      return false
+    }
+    this.#set({ kind: 'starting' })
+    if (current) {
+      const result = await this.#serviceCli('WorkerDeck: restarting the server…', serviceCommand('restart'))
+      if (result.code !== 0) {
+        void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(result)}`)
+      }
+    } else {
+      const removed = await this.#serviceCli('WorkerDeck: reinstalling the login item with the new settings…', serviceCommand('uninstall'))
+      if (removed.code !== 0) {
+        void vscode.window.showErrorMessage(`WorkerDeck: ${cliError(removed)}`)
+        await this.#readopt(settings)
+        return false
+      }
+      if (!(await this.#installService(settings))) {
+        await this.#launch(settings)
+        return false
+      }
+    }
+    await this.#readopt(settings)
+    return this.#state.kind === 'running'
+  }
+
+  async #readopt(settings: HostSettings): Promise<void> {
+    if (!(await this.#adopt(settings))) {
+      await this.#unregister()
+      this.#set({ kind: 'stopped' })
+    }
+  }
+
+  async #serviceCli(title: string, args: string[]): Promise<CliResult> {
+    return await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title, cancellable: false }, () =>
+      this.runCli(args),
+    )
+  }
+
+  async #confirmBusy(verb: 'Stop' | 'Restart'): Promise<boolean> {
+    return await confirmDisruption(verb, summarizeBusy(this.#deps.sessionsOf(MANAGED_HOST_ID)))
+  }
+
+  #logPath(settings: HostSettings): string {
+    return serviceOwned(settings.port) ? serviceLogPath(settings.stateDir) : logPath(settings.stateDir)
   }
 
   // Addressed through <state-dir>/gateway.pid rather than the ownership lock: only a gateway started with
@@ -261,7 +509,7 @@ export class HostSupervisor implements vscode.Disposable {
   }
 
   async showLog(): Promise<void> {
-    await this.#log.follow(logPath(readHostSettings().stateDir))
+    await this.#log.follow(this.#logPath(readHostSettings()))
     this.#log.show()
   }
 
@@ -277,10 +525,11 @@ export class HostSupervisor implements vscode.Disposable {
       return true
     }
     await this.#register(url, settings.name)
-    void this.#log.follow(logPath(settings.stateDir))
-    const lock = await ownedLock(settings.stateDir)
+    void this.#log.follow(this.#logPath(settings))
+    const service = serviceOwned(settings.port)
+    const lock = service ? undefined : await ownedLock(settings.stateDir)
     const owned = lock?.port === settings.port
-    this.#set({ kind: 'running', url, owned, pid: owned ? lock?.pid : undefined })
+    this.#set({ kind: 'running', url, owned, service, pid: owned ? lock?.pid : undefined })
     void this.#deps.refresh()
     return true
   }
@@ -316,7 +565,7 @@ export class HostSupervisor implements vscode.Disposable {
     let authKey: string | undefined
     try {
       authKey = await this.#resolveAuthKey(settings)
-      const args = [...launch.args, ...this.#argv(settings)]
+      const args = [...launch.args, ...gatewayArgv(settings)]
       await mkdir(settings.stateDir, { recursive: true })
       const log = await open(logPath(settings.stateDir), 'a')
       try {
@@ -376,7 +625,7 @@ export class HostSupervisor implements vscode.Disposable {
           })
         }
         await this.#register(url, settings.name)
-        this.#set({ kind: 'running', url, owned: this.#child === child, pid: child.pid })
+        this.#set({ kind: 'running', url, owned: this.#child === child, service: false, pid: child.pid })
         void this.#deps.refresh()
         this.#announce(settings, keyed)
         return
@@ -401,6 +650,9 @@ export class HostSupervisor implements vscode.Disposable {
   }
 
   async #stopNow(settings: HostSettings, confirm: boolean, verb: 'Stop' | 'Restart'): Promise<boolean> {
+    if (serviceOwned(settings.port)) {
+      return await this.#serviceStop(settings, confirm, verb)
+    }
     const lock = await ownedLock(settings.stateDir)
     const pid = this.#child?.pid ?? (lock?.port === settings.port ? lock.pid : undefined)
     const group = this.#child ? this.#childViaNpx : lock?.group === true
@@ -415,7 +667,7 @@ export class HostSupervisor implements vscode.Disposable {
       this.#set({ kind: 'stopped' })
       return true
     }
-    if (confirm && !(await confirmDisruption(verb, summarizeBusy(this.#deps.sessionsOf(MANAGED_HOST_ID))))) {
+    if (confirm && !(await this.#confirmBusy(verb))) {
       return false
     }
 
@@ -474,50 +726,6 @@ export class HostSupervisor implements vscode.Disposable {
       await sleep(200)
     }
     return !pidAlive(pid)
-  }
-
-  #argv(settings: HostSettings): string[] {
-    const args = ['--port', String(settings.port), '--host', settings.bindAddress, '--state-dir', settings.stateDir]
-    if (settings.remote) {
-      args.push('--remote')
-    }
-    if (settings.publicUrl) {
-      args.push('--public-url', settings.publicUrl)
-    }
-    if (settings.configPath) {
-      args.push('--config', settings.configPath)
-    }
-    if (!settings.dashboard) {
-      args.push('--no-web')
-    }
-    if (settings.shell) {
-      args.push('--shell')
-      if (settings.shellAgentWrite !== 'read-only') {
-        args.push('--shell-agent-write', settings.shellAgentWrite)
-      }
-    }
-    if (settings.hotReload) {
-      args.push('--hot-reload')
-    }
-    for (const root of settings.cwdRoots) {
-      args.push('--cwd-root', root)
-    }
-    if (settings.engineSleepAfterMinutes > 0) {
-      args.push('--engine-sleep-after', `${settings.engineSleepAfterMinutes}m`)
-    }
-    if (settings.agentSleepAfterMinutes !== AGENT_SLEEP_AFTER_MINUTES) {
-      args.push('--agent-sleep-after', settings.agentSleepAfterMinutes > 0 ? `${settings.agentSleepAfterMinutes}m` : 'never')
-    }
-    for (const [model, effort] of Object.entries(settings.effortDefaults)) {
-      args.push('--effort-default', `${model}=${effort}`)
-    }
-    if (settings.agentContextReset !== 'off') {
-      args.push('--agent-context-reset', settings.agentContextReset)
-    }
-    if (settings.agentSharing !== 'private') {
-      args.push('--agent-sharing', settings.agentSharing)
-    }
-    return args
   }
 
   // The key never reaches argv: `ps` is world-readable on every platform this runs on. The file is kept when the key

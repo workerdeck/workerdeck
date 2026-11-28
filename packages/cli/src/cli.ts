@@ -17,6 +17,7 @@ Usage
   workerdeck relay <command>     run or manage a cross-gateway peer relay (relay --help)
   workerdeck remote <command>    publish a --remote gateway to your tailnet (remote --help)
   workerdeck pair-link [options] print the pairing link and QR code for a published gateway
+  workerdeck service <command>   run the gateway as a macOS LaunchAgent (service --help)
 
 Options
   -p, --port <n>            port to listen on (default 8787, WORKERDECK_PORT)
@@ -216,6 +217,11 @@ async function main(argv: string[]): Promise<number> {
   if (argv[0] === 'remote') {
     const { runRemote } = await import('./lib/remote.ts')
     return await runRemote(argv.slice(1))
+  }
+
+  if (argv[0] === 'service') {
+    const { runService } = await import('./lib/service.ts')
+    return await runService(argv.slice(1))
   }
 
   if (argv[0] === 'pair-link') {
